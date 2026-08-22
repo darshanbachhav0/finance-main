@@ -1,0 +1,23 @@
+{
+  "name": "erp-financial-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "test": "node test/run.js",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@floating-ui/react": "^0.27.20",
+    "@vitejs/plugin-react": "^4.2.1",
+    "axios": "^1.6.7",
+    "lucide-react": "^0.468.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.1",
+    "recharts": "^3.10.1",
+    "vite": "^5.1.4"
+  }
+}

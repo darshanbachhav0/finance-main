@@ -1,0 +1,43 @@
+{
+  "name": "erp-financial-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "start:public": "node public-server.js",
+    "seed": "node src/seed/seed.js",
+    "seed:reset": "node scripts/resetDevelopment.js --confirm --purge-files",
+    "migrate:workflow": "node scripts/migrateCanonicalWorkflow.js",
+    "migrate:workflow:apply": "node scripts/migrateCanonicalWorkflow.js --apply",
+    "migrate:official-formats": "node scripts/migrateOfficialUmaFormatsFoundation.js",
+    "migrate:official-formats:apply": "node scripts/migrateOfficialUmaFormatsFoundation.js --apply",
+    "backup": "node scripts/backupLocalData.js",
+    "verify:data": "node scripts/verifyCanonicalData.js",
+    "verify:uma-demo": "node scripts/verifyUmaDemoData.js",
+    "rotate:deployment-passwords": "node scripts/rotateDeploymentPasswords.js",
+    "test": "node test/run.js",
+    "worker:batch": "node src/workers/batchInvoiceWorker.js",
+    "migrate:triple-track": "node scripts/migrateTripleTrackWorkflow.js",
+    "migrate:triple-track:apply": "node scripts/migrateTripleTrackWorkflow.js --apply",
+    "sunat:padron:sync": "node scripts/syncSunatPadron.js",
+    "sunat:padron:sync:force": "node scripts/syncSunatPadron.js --force"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "express-rate-limit": "^8.6.0",
+    "fast-xml-parser": "^4.3.5",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.2.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

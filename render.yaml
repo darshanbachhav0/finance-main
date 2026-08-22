@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: uma-financial-access
+    runtime: static
+    repo: https://github.com/darshanbachhav0/finance
+    branch: main
+    buildCommand: echo "Static access portal ready"
+    staticPublishPath: ./link-site
+    autoDeployTrigger: commit
+    renderSubdomainPolicy: enabled
+    routes:
+      - type: rewrite
+        source: /*
+        destination: https://biotechnology-sport-buses-desirable.trycloudflare.com/*
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; script-src 'self'; style-src 'self'"
+      - path: /link.json
+        name: Cache-Control
+        value: no-store, no-cache, must-revalidate, max-age=0

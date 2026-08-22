@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+backend/uploads/*
+backend/generated/*
+backend/migration-reports/*.json
+backend/backups/
+backend/data/sunat-padron/
+.tmp/
+.docx_render/
+documentation/~$*
+erp-financial-request-payment-control-system.zip
+deployment-credentials.txt

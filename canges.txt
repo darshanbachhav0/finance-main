@@ -1,0 +1,8 @@
+maybe the bank can deny the payment so ad one more terminology where you can track whether the payment was done or bounced back or what to keep track on those things
+
+
+for the 2 times payment add exception for some categories
+
+
+add the status for the flow and to notify all people
+

@@ -1,0 +1,44 @@
+{
+  "name": "erp-financial-request-payment-control-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack ERP financial request and payment control system.",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "npm test --workspace backend",
+    "test:frontend": "npm test --workspace frontend",
+    "verify": "npm test && npm run build",
+    "seed": "npm run seed --workspace backend",
+    "seed:reset": "npm run seed:reset --workspace backend",
+    "backup": "npm run backup --workspace backend",
+    "migrate:workflow": "npm run migrate:workflow --workspace backend",
+    "migrate:workflow:apply": "npm run migrate:workflow:apply --workspace backend",
+    "migrate:official-formats": "npm run migrate:official-formats --workspace backend",
+    "migrate:official-formats:apply": "npm run migrate:official-formats:apply --workspace backend",
+    "verify:data": "npm run verify:data --workspace backend",
+    "verify:uma-demo": "npm run verify:uma-demo --workspace backend",
+    "build": "npm run build --workspace frontend",
+    "start": "npm start --workspace backend",
+    "start:public": "npm run start:public --workspace backend",
+    "share": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/share-cloudflare.ps1 start",
+    "share:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/share-cloudflare.ps1 status",
+    "share:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/share-cloudflare.ps1 stop",
+    "share:publish": "npm run share && npm run link:publish",
+    "link:update": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-render-link.ps1",
+    "link:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-render-link.ps1 -Publish",
+    "rotate:deployment-passwords": "npm run rotate:deployment-passwords --workspace backend",
+    "worker:batch": "npm run worker:batch --workspace backend",
+    "migrate:triple-track": "npm run migrate:triple-track --workspace backend",
+    "migrate:triple-track:apply": "npm run migrate:triple-track:apply --workspace backend",
+    "sunat:padron:sync": "npm run sunat:padron:sync --workspace backend",
+    "sunat:padron:sync:force": "npm run sunat:padron:sync:force --workspace backend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
