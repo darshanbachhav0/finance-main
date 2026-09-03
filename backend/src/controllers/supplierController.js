@@ -1,8 +1,14 @@
-import { asyncHandler } from "../middleware/asyncHandler.js";
+import {
+  asyncHandler
+} from "../middleware/asyncHandler.js";
 
 import {
   getSupplierPadronPrefill
 } from "../services/supplierPadronLookupService.js";
+
+import {
+  lookupSunatLegalRepresentatives
+} from "../services/sunatConsultaRucRepresentativesService.js";
 
 import {
   addSupplierBankAccount,
@@ -24,7 +30,10 @@ import {
 
 export const listSuppliers =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       res.json(
         await listSuppliersPage(
           req.query,
@@ -36,7 +45,10 @@ export const listSuppliers =
 
 export const lookupSupplier =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       res.json(
         await lookupSupplierByIdentifier(
           req.params.identifier,
@@ -46,9 +58,16 @@ export const lookupSupplier =
     }
   );
 
+/*
+ * Fast lookup from the locally downloaded SUNAT
+ * Padron Reducido.
+ */
 export const lookupSupplierPadron =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       res.json(
         await getSupplierPadronPrefill(
           req.params.ruc
@@ -57,9 +76,41 @@ export const lookupSupplierPadron =
     }
   );
 
+/*
+ * Additional public SUNAT Consulta RUC lookup.
+ *
+ * This retrieves legal representatives separately so that
+ * supplier creation does not have to wait for SUNAT's website
+ * before showing Padron data.
+ */
+export const lookupSupplierLegalRepresentatives =
+  asyncHandler(
+    async (
+      req,
+      res
+    ) => {
+      const legalName =
+        String(
+          req.query
+            .legalName ||
+          ""
+        ).trim();
+
+      res.json(
+        await lookupSunatLegalRepresentatives(
+          req.params.ruc,
+          legalName
+        )
+      );
+    }
+  );
+
 export const getSupplier =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       res.json({
         data:
           await getSupplierDetailPayload(
@@ -72,7 +123,10 @@ export const getSupplier =
 
 export const getHomologationReadiness =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       res.json({
         data:
           await getSupplierHomologationReadiness(
@@ -84,7 +138,10 @@ export const getHomologationReadiness =
 
 export const createSupplier =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       const result =
         await createSupplierProposal({
           payload:
@@ -104,7 +161,9 @@ export const createSupplier =
         .json({
           data:
             await getSupplierDetailPayload(
-              result.supplier._id,
+              result
+                .supplier
+                ._id,
               req.user
             ),
 
@@ -116,7 +175,10 @@ export const createSupplier =
 
 export const updateSupplierProposalFields =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       const result =
         await updateSupplierProposal({
           supplierId:
@@ -137,7 +199,9 @@ export const updateSupplierProposalFields =
       res.json({
         data:
           await getSupplierDetailPayload(
-            result.supplier._id,
+            result
+              .supplier
+              ._id,
             req.user
           ),
 
@@ -149,7 +213,10 @@ export const updateSupplierProposalFields =
 
 export const updateSupplier =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       const result =
         await updateAndReviewSupplier({
           supplierId:
@@ -170,7 +237,9 @@ export const updateSupplier =
       res.json({
         data:
           await getSupplierDetailPayload(
-            result.supplier._id,
+            result
+              .supplier
+              ._id,
             req.user
           ),
 
@@ -182,7 +251,10 @@ export const updateSupplier =
 
 export const addBankAccount =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       const result =
         await addSupplierBankAccount({
           supplierId:
@@ -214,7 +286,10 @@ export const addBankAccount =
 
 export const verifyBankAccount =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       await verifySupplierBankAccount({
         supplierId:
           req.params.id,
@@ -243,7 +318,10 @@ export const verifyBankAccount =
 
 export const selectPreferredBankAccount =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       await setPreferredSupplierBankAccount({
         supplierId:
           req.params.id,
@@ -269,7 +347,10 @@ export const selectPreferredBankAccount =
 
 export const removeBankAccount =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       await deactivateSupplierBankAccount({
         supplierId:
           req.params.id,
@@ -295,7 +376,10 @@ export const removeBankAccount =
 
 export const validateTaxpayer =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       await validateSupplierTaxpayer({
         supplierId:
           req.params.id,
@@ -321,7 +405,10 @@ export const validateTaxpayer =
 
 export const reviewSupplier =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       await reviewSupplierCompliance({
         supplierId:
           req.params.id,
@@ -347,7 +434,10 @@ export const reviewSupplier =
 
 export const homologate =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       const result =
         await homologateSupplier({
           supplierId:
@@ -374,7 +464,10 @@ export const homologate =
 
 export const deleteSupplier =
   asyncHandler(
-    async (req, res) => {
+    async (
+      req,
+      res
+    ) => {
       const supplier =
         await deactivateSupplier({
           supplierId:

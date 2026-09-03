@@ -4,13 +4,16 @@ import {
   CheckCircle2,
   FileCheck2,
   Landmark,
+  RefreshCw,
   Save,
   ShieldCheck,
   Truck,
+  UserCheck,
   Users
 } from "lucide-react";
 
 import {
+  useEffect,
   useState
 } from "react";
 
@@ -24,6 +27,37 @@ const emptyContact = {
   phone: "",
   email: ""
 };
+
+function normalizeRepresentativeDocumentType(
+  value
+) {
+  const normalized =
+    String(
+      value || ""
+    )
+      .trim()
+      .toUpperCase();
+
+  if (
+    normalized ===
+    "DNI"
+  ) {
+    return "DNI";
+  }
+
+  if (
+    normalized ===
+      "CE" ||
+    normalized.includes(
+      "EXTRANJER"
+    )
+  ) {
+    return "CE";
+  }
+
+  return normalized ||
+    "DNI";
+}
 
 function initialValues(
   supplier,
@@ -115,6 +149,7 @@ function initialValues(
 
     commercialContact: {
       ...emptyContact,
+
       ...(
         supplier
           ?.commercialContact ||
@@ -124,6 +159,7 @@ function initialValues(
 
     operationsContact: {
       ...emptyContact,
+
       ...(
         supplier
           ?.operationsContact ||
@@ -222,8 +258,10 @@ function initialValues(
     accountHolderName:
       supplier?.legalName ||
       supplier?.name ||
-      padron?.accountHolderName ||
-      padron?.legalName ||
+      padron
+        ?.accountHolderName ||
+      padron
+        ?.legalName ||
       ""
   };
 }
@@ -287,7 +325,9 @@ function ContactFields({
 
       <label className="field">
         <span>
-          {t("Contact name")}
+          {t(
+            "Contact name"
+          )}
         </span>
 
         <input
@@ -298,7 +338,9 @@ function ContactFields({
             (event) =>
               onChange(
                 "name",
-                event.target.value
+                event
+                  .target
+                  .value
               )
           }
         />
@@ -306,7 +348,9 @@ function ContactFields({
 
       <label className="field">
         <span>
-          {t("Position")}
+          {t(
+            "Position"
+          )}
         </span>
 
         <input
@@ -317,7 +361,9 @@ function ContactFields({
             (event) =>
               onChange(
                 "position",
-                event.target.value
+                event
+                  .target
+                  .value
               )
           }
         />
@@ -325,7 +371,9 @@ function ContactFields({
 
       <label className="field">
         <span>
-          {t("Mobile phone")}
+          {t(
+            "Mobile phone"
+          )}
         </span>
 
         <input
@@ -336,7 +384,9 @@ function ContactFields({
             (event) =>
               onChange(
                 "phone",
-                event.target.value
+                event
+                  .target
+                  .value
               )
           }
           inputMode="tel"
@@ -345,7 +395,9 @@ function ContactFields({
 
       <label className="field">
         <span>
-          {t("Email")}
+          {t(
+            "Email"
+          )}
         </span>
 
         <input
@@ -357,7 +409,9 @@ function ContactFields({
             (event) =>
               onChange(
                 "email",
-                event.target.value
+                event
+                  .target
+                  .value
               )
           }
         />
@@ -370,6 +424,7 @@ export default function SupplierForm({
   supplier,
   identifier,
   padronLookup = null,
+  representativeLookup = null,
   includeInitialBank = false,
   loading = false,
   onSubmit,
@@ -405,6 +460,75 @@ export default function SupplierForm({
   ] =
     useState("");
 
+  const padronData =
+    padronLookup?.found
+      ? padronLookup.data
+      : null;
+
+  const legalRepresentatives =
+    representativeLookup
+      ?.data
+      ?.representatives ||
+    [];
+
+  /*
+   * When SUNAT reports exactly one legal representative,
+   * automatically fill the existing legal-representative fields.
+   *
+   * When there is more than one representative we do NOT guess
+   * which person UMA should treat as primary. The user chooses.
+   */
+  useEffect(
+    () => {
+      if (
+        supplier ||
+        legalRepresentatives.length !==
+          1
+      ) {
+        return;
+      }
+
+      const representative =
+        legalRepresentatives[0];
+
+      setForm(
+        (current) => {
+          if (
+            current
+              .legalRepresentative ||
+            current
+              .representativeDocumentNumber
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+
+            legalRepresentative:
+              representative.fullName ||
+              "",
+
+            representativeDocumentType:
+              normalizeRepresentativeDocumentType(
+                representative.documentType
+              ),
+
+            representativeDocumentNumber:
+              representative.documentNumber ||
+              ""
+          };
+        }
+      );
+    },
+    [
+      supplier,
+      representativeLookup
+        ?.data
+        ?.queriedAt
+    ]
+  );
+
   function setValue(
     field,
     value
@@ -412,6 +536,7 @@ export default function SupplierForm({
     setForm(
       (current) => ({
         ...current,
+
         [field]:
           value
       })
@@ -435,6 +560,29 @@ export default function SupplierForm({
           [field]:
             value
         }
+      })
+    );
+  }
+
+  function useLegalRepresentative(
+    representative
+  ) {
+    setForm(
+      (current) => ({
+        ...current,
+
+        legalRepresentative:
+          representative.fullName ||
+          "",
+
+        representativeDocumentType:
+          normalizeRepresentativeDocumentType(
+            representative.documentType
+          ),
+
+        representativeDocumentNumber:
+          representative.documentNumber ||
+          ""
       })
     );
   }
@@ -477,11 +625,13 @@ export default function SupplierForm({
     }
 
     if (
-      form.paymentTermOption ===
+      form
+        .paymentTermOption ===
         "CUSTOM" &&
       !(
         Number(
-          form.paymentTermDays
+          form
+            .paymentTermDays
         ) > 0
       )
     ) {
@@ -495,7 +645,8 @@ export default function SupplierForm({
     }
 
     if (
-      form.deliveryMethod ===
+      form
+        .deliveryMethod ===
         "OTHER" &&
       !form
         .deliveryOther
@@ -559,24 +710,28 @@ export default function SupplierForm({
       "legalRepresentativeDocument",
       JSON.stringify({
         type:
-          form.representativeDocumentType,
+          form
+            .representativeDocumentType,
 
         number:
-          form.representativeDocumentNumber
+          form
+            .representativeDocumentNumber
       })
     );
 
     payload.append(
       "commercialContact",
       JSON.stringify(
-        form.commercialContact
+        form
+          .commercialContact
       )
     );
 
     payload.append(
       "operationsContact",
       JSON.stringify(
-        form.operationsContact
+        form
+          .operationsContact
       )
     );
 
@@ -584,15 +739,18 @@ export default function SupplierForm({
       "paymentTerms",
       JSON.stringify({
         option:
-          form.paymentTermOption,
+          form
+            .paymentTermOption,
 
         days:
           Number(
-            form.paymentTermDays
+            form
+              .paymentTermDays
           ),
 
         comments:
-          form.paymentTermComments
+          form
+            .paymentTermComments
       })
     );
 
@@ -600,10 +758,12 @@ export default function SupplierForm({
       "delivery",
       JSON.stringify({
         method:
-          form.deliveryMethod,
+          form
+            .deliveryMethod,
 
         other:
-          form.deliveryOther
+          form
+            .deliveryOther
       })
     );
 
@@ -612,18 +772,22 @@ export default function SupplierForm({
       JSON.stringify({
         stateSanctions: {
           answer:
-            form.stateSanctionsAnswer,
+            form
+              .stateSanctionsAnswer,
 
           comments:
-            form.stateSanctionsComments
+            form
+              .stateSanctionsComments
         },
 
         complianceModel: {
           answer:
-            form.complianceModelAnswer,
+            form
+              .complianceModelAnswer,
 
           comments:
-            form.complianceModelComments
+            form
+              .complianceModelComments
         }
       })
     );
@@ -650,10 +814,12 @@ export default function SupplierForm({
             form.cci,
 
           accountHolderName:
-            form.accountHolderName,
+            form
+              .accountHolderName,
 
           currency:
-            form.accountCurrency
+            form
+              .accountCurrency
         })
       ) {
         payload.append(
@@ -671,7 +837,9 @@ export default function SupplierForm({
         files
       )
     ) {
-      if (file) {
+      if (
+        file
+      ) {
         payload.append(
           field,
           file
@@ -697,15 +865,12 @@ export default function SupplierForm({
       )
     );
 
-  const padronData =
-    padronLookup?.found
-      ? padronLookup.data
-      : null;
-
   return (
     <form
       className="supplier-official-form"
-      onSubmit={submit}
+      onSubmit={
+        submit
+      }
       noValidate
     >
       {
@@ -721,7 +886,8 @@ export default function SupplierForm({
 
       {
         !supplier &&
-        padronLookup?.found && (
+        padronLookup
+          ?.found && (
           <div
             className={`inline-alert ${
               padronData
@@ -736,13 +902,17 @@ export default function SupplierForm({
                 ?.eligibleForHomologation
                 ? (
                   <CheckCircle2
-                    size={18}
+                    size={
+                      18
+                    }
                     aria-hidden="true"
                   />
                 )
                 : (
                   <AlertTriangle
-                    size={18}
+                    size={
+                      18
+                    }
                     aria-hidden="true"
                   />
                 )
@@ -759,12 +929,15 @@ export default function SupplierForm({
                 {
                   padronData
                     ?.legalName ||
-                  form.legalName
+                  form
+                    .legalName
                 }
 
                 {" · "}
 
-                {t("Status")}:
+                {t(
+                  "Status"
+                )}:
                 {" "}
                 {
                   padronData
@@ -807,7 +980,8 @@ export default function SupplierForm({
       {
         !supplier &&
         padronLookup &&
-        !padronLookup.found && (
+        !padronLookup
+          .found && (
           <div
             className="inline-alert alert-warning"
             role="status"
@@ -826,7 +1000,8 @@ export default function SupplierForm({
 
               <span>
                 {
-                  padronLookup.message ||
+                  padronLookup
+                    .message ||
                   t(
                     "You can continue entering the proposal manually, but SUNAT validation will still be required before homologation."
                   )
@@ -834,6 +1009,296 @@ export default function SupplierForm({
               </span>
             </div>
           </div>
+        )
+      }
+
+      {
+        !supplier &&
+        representativeLookup
+          ?.loading && (
+          <div className="inline-alert alert-info">
+            <RefreshCw
+              size={18}
+              className="spin"
+              aria-hidden="true"
+            />
+
+            <div>
+              <strong>
+                {t(
+                  "Checking SUNAT legal representatives..."
+                )}
+              </strong>
+
+              <span>
+                {t(
+                  "The supplier form is already available while Consulta RUC is checked in the background."
+                )}
+              </span>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        !supplier &&
+        representativeLookup
+          ?.error && (
+          <div
+            className="inline-alert alert-warning"
+            role="status"
+          >
+            <AlertTriangle
+              size={18}
+              aria-hidden="true"
+            />
+
+            <div>
+              <strong>
+                {t(
+                  "SUNAT representative lookup temporarily unavailable"
+                )}
+              </strong>
+
+              <span>
+                {
+                  representativeLookup
+                    .error
+                }
+
+                {" "}
+
+                {t(
+                  "The Padrón validation above remains valid and supplier creation can continue."
+                )}
+              </span>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        !supplier &&
+        representativeLookup
+          ?.data && (
+          <Section
+            icon={
+              UserCheck
+            }
+            title="SUNAT Legal Representatives"
+            status="Consulta RUC · Additional public validation"
+          >
+            <div className="inline-alert alert-info">
+              <ShieldCheck
+                size={18}
+                aria-hidden="true"
+              />
+
+              <div>
+                <strong>
+                  REPRESENTANTES LEGALES DE{" "}
+                  {
+                    representativeLookup
+                      .data
+                      .ruc
+                  }
+                  {" - "}
+                  {
+                    representativeLookup
+                      .data
+                      .legalName ||
+                    form
+                      .legalName
+                  }
+                </strong>
+
+                <span>
+                  La información exhibida en esta consulta corresponde a lo declarado por el contribuyente ante la Administración Tributaria.
+                </span>
+              </div>
+            </div>
+
+            {
+              legalRepresentatives.length >
+              0
+                ? (
+                  <div className="detail-stack">
+                    {
+                      legalRepresentatives.map(
+                        (
+                          representative,
+                          index
+                        ) => (
+                          <div
+                            className="detail-section"
+                            key={
+                              `${representative.documentType}-${representative.documentNumber}-${index}`
+                            }
+                          >
+                            <dl className="supplier-detail-grid">
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Document"
+                                  )}
+                                </dt>
+
+                                <dd>
+                                  {
+                                    representative.documentType ||
+                                    "-"
+                                  }
+                                </dd>
+                              </div>
+
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Document number"
+                                  )}
+                                </dt>
+
+                                <dd>
+                                  {
+                                    representative.documentNumber ||
+                                    "-"
+                                  }
+                                </dd>
+                              </div>
+
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Name"
+                                  )}
+                                </dt>
+
+                                <dd>
+                                  <strong>
+                                    {
+                                      representative.fullName ||
+                                      "-"
+                                    }
+                                  </strong>
+                                </dd>
+                              </div>
+
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Position"
+                                  )}
+                                </dt>
+
+                                <dd>
+                                  {
+                                    representative.position ||
+                                    "-"
+                                  }
+                                </dd>
+                              </div>
+
+                              <div>
+                                <dt>
+                                  {t(
+                                    "Effective From"
+                                  )}
+                                </dt>
+
+                                <dd>
+                                  {
+                                    representative.dateFrom ||
+                                    "-"
+                                  }
+                                </dd>
+                              </div>
+                            </dl>
+
+                            <div className="supplier-form-actions">
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={
+                                  () =>
+                                    useLegalRepresentative(
+                                      representative
+                                    )
+                                }
+                              >
+                                <UserCheck
+                                  size={
+                                    16
+                                  }
+                                />
+
+                                <span>
+                                  {t(
+                                    "Use as legal representative"
+                                  )}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      )
+                    }
+
+                    {
+                      legalRepresentatives.length ===
+                        1 && (
+                        <div className="inline-alert alert-success">
+                          <CheckCircle2
+                            size={18}
+                          />
+
+                          <span>
+                            {t(
+                              "The single SUNAT representative was automatically copied into the Legal Representative fields below."
+                            )}
+                          </span>
+                        </div>
+                      )
+                    }
+
+                    {
+                      legalRepresentatives.length >
+                        1 && (
+                        <div className="inline-alert alert-info">
+                          <Users
+                            size={18}
+                          />
+
+                          <span>
+                            {t(
+                              "SUNAT reports multiple representatives. Select the person UMA wants to record as the primary representative; the system will not guess automatically."
+                            )}
+                          </span>
+                        </div>
+                      )
+                    }
+                  </div>
+                )
+                : (
+                  <div className="inline-alert alert-warning">
+                    <AlertTriangle
+                      size={18}
+                    />
+
+                    <span>
+                      {t(
+                        "SUNAT Consulta RUC did not return legal representatives for this RUC."
+                      )}
+                    </span>
+                  </div>
+                )
+            }
+
+            <p className="section-note">
+              {t(
+                "Source: SUNAT Consulta RUC public portal. This is additional validation and does not replace the supplier's supporting legal documentation."
+              )}
+            </p>
+          </Section>
         )
       }
 
@@ -858,7 +1323,9 @@ export default function SupplierForm({
                 (event) =>
                   setValue(
                     "rucDni",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
               inputMode="numeric"
@@ -887,7 +1354,9 @@ export default function SupplierForm({
                 (event) =>
                   setValue(
                     "personType",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             >
@@ -920,13 +1389,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.legalName
+                form
+                  .legalName
               }
               onChange={
                 (event) =>
                   setValue(
                     "legalName",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
               required
@@ -942,13 +1414,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.commercialName
+                form
+                  .commercialName
               }
               onChange={
                 (event) =>
                   setValue(
                     "commercialName",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -963,13 +1438,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.fiscalAddress
+                form
+                  .fiscalAddress
               }
               onChange={
                 (event) =>
                   setValue(
                     "fiscalAddress",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -990,7 +1468,9 @@ export default function SupplierForm({
                 (event) =>
                   setValue(
                     "district",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1005,13 +1485,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.province
+                form
+                  .province
               }
               onChange={
                 (event) =>
                   setValue(
                     "province",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1026,13 +1509,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.department
+                form
+                  .department
               }
               onChange={
                 (event) =>
                   setValue(
                     "department",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1051,7 +1537,9 @@ export default function SupplierForm({
                 (event) =>
                   setValue(
                     "ubigeo",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
               inputMode="numeric"
@@ -1061,7 +1549,9 @@ export default function SupplierForm({
 
           <label className="field">
             <span>
-              {t("Website")}
+              {t(
+                "Website"
+              )}
             </span>
 
             <input
@@ -1073,7 +1563,9 @@ export default function SupplierForm({
                 (event) =>
                   setValue(
                     "website",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
               placeholder="https://"
@@ -1089,13 +1581,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.legalRepresentative
+                form
+                  .legalRepresentative
               }
               onChange={
                 (event) =>
                   setValue(
                     "legalRepresentative",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1110,13 +1605,16 @@ export default function SupplierForm({
 
             <select
               value={
-                form.representativeDocumentType
+                form
+                  .representativeDocumentType
               }
               onChange={
                 (event) =>
                   setValue(
                     "representativeDocumentType",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             >
@@ -1126,6 +1624,10 @@ export default function SupplierForm({
 
               <option value="CE">
                 CE
+              </option>
+
+              <option value="PASAPORTE">
+                PASAPORTE
               </option>
             </select>
           </label>
@@ -1139,13 +1641,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.representativeDocumentNumber
+                form
+                  .representativeDocumentNumber
               }
               onChange={
                 (event) =>
                   setValue(
                     "representativeDocumentNumber",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1161,7 +1666,8 @@ export default function SupplierForm({
         <ContactFields
           legend="Commercial Contact"
           value={
-            form.commercialContact
+            form
+              .commercialContact
           }
           onChange={
             (
@@ -1185,7 +1691,8 @@ export default function SupplierForm({
         <ContactFields
           legend="Operations / Logistics Contact"
           value={
-            form.operationsContact
+            form
+              .operationsContact
           }
           onChange={
             (
@@ -1216,13 +1723,16 @@ export default function SupplierForm({
 
             <select
               value={
-                form.currency
+                form
+                  .currency
               }
               onChange={
                 (event) =>
                   setValue(
                     "currency",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             >
@@ -1245,13 +1755,16 @@ export default function SupplierForm({
 
             <select
               value={
-                form.paymentTermOption
+                form
+                  .paymentTermOption
               }
               onChange={
                 (event) =>
                   setValue(
                     "paymentTermOption",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             >
@@ -1276,7 +1789,8 @@ export default function SupplierForm({
           </label>
 
           {
-            form.paymentTermOption ===
+            form
+              .paymentTermOption ===
               "CUSTOM" && (
               <label className="field">
                 <span>
@@ -1289,13 +1803,16 @@ export default function SupplierForm({
                   type="number"
                   min="1"
                   value={
-                    form.paymentTermDays
+                    form
+                      .paymentTermDays
                   }
                   onChange={
                     (event) =>
                       setValue(
                         "paymentTermDays",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                 />
@@ -1312,13 +1829,16 @@ export default function SupplierForm({
 
             <input
               value={
-                form.paymentTermComments
+                form
+                  .paymentTermComments
               }
               onChange={
                 (event) =>
                   setValue(
                     "paymentTermComments",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1334,13 +1854,16 @@ export default function SupplierForm({
             <textarea
               rows="2"
               value={
-                form.goodsServicesProfile
+                form
+                  .goodsServicesProfile
               }
               onChange={
                 (event) =>
                   setValue(
                     "goodsServicesProfile",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             />
@@ -1355,13 +1878,16 @@ export default function SupplierForm({
 
             <select
               value={
-                form.deliveryMethod
+                form
+                  .deliveryMethod
               }
               onChange={
                 (event) =>
                   setValue(
                     "deliveryMethod",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
             >
@@ -1386,7 +1912,8 @@ export default function SupplierForm({
           </label>
 
           {
-            form.deliveryMethod ===
+            form
+              .deliveryMethod ===
               "OTHER" && (
               <label className="field">
                 <span>
@@ -1397,13 +1924,16 @@ export default function SupplierForm({
 
                 <input
                   value={
-                    form.deliveryOther
+                    form
+                      .deliveryOther
                   }
                   onChange={
                     (event) =>
                       setValue(
                         "deliveryOther",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                 />
@@ -1421,13 +1951,16 @@ export default function SupplierForm({
             <textarea
               rows="3"
               value={
-                form.proposalJustification
+                form
+                  .proposalJustification
               }
               onChange={
                 (event) =>
                   setValue(
                     "proposalJustification",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
               }
               required
@@ -1446,7 +1979,9 @@ export default function SupplierForm({
             <div className="form-grid supplier-form-grid">
               <label className="field">
                 <span>
-                  {t("Bank")}
+                  {t(
+                    "Bank"
+                  )}
                 </span>
 
                 <select
@@ -1457,7 +1992,9 @@ export default function SupplierForm({
                     (event) =>
                       setValue(
                         "bank",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                 >
@@ -1484,7 +2021,9 @@ export default function SupplierForm({
                             item
                           }
                         >
-                          {t(item)}
+                          {t(
+                            item
+                          )}
                         </option>
                       )
                     )
@@ -1501,13 +2040,16 @@ export default function SupplierForm({
 
                 <select
                   value={
-                    form.accountType
+                    form
+                      .accountType
                   }
                   onChange={
                     (event) =>
                       setValue(
                         "accountType",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                 >
@@ -1534,13 +2076,16 @@ export default function SupplierForm({
 
                 <input
                   value={
-                    form.accountNumber
+                    form
+                      .accountNumber
                   }
                   onChange={
                     (event) =>
                       setValue(
                         "accountNumber",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                   inputMode="numeric"
@@ -1562,7 +2107,9 @@ export default function SupplierForm({
                     (event) =>
                       setValue(
                         "cci",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                   inputMode="numeric"
@@ -1579,13 +2126,16 @@ export default function SupplierForm({
 
                 <select
                   value={
-                    form.accountCurrency
+                    form
+                      .accountCurrency
                   }
                   onChange={
                     (event) =>
                       setValue(
                         "accountCurrency",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                 >
@@ -1608,13 +2158,16 @@ export default function SupplierForm({
 
                 <input
                   value={
-                    form.accountHolderName
+                    form
+                      .accountHolderName
                   }
                   onChange={
                     (event) =>
                       setValue(
                         "accountHolderName",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                   }
                 />
@@ -1622,7 +2175,8 @@ export default function SupplierForm({
             </div>
 
             {
-              form.accountType ===
+              form
+                .accountType ===
                 "DETRACTION" && (
                 <p className="section-note warning-note">
                   {t(
@@ -1651,11 +2205,6 @@ export default function SupplierForm({
             <div
               className="segmented-control"
               role="group"
-              aria-label={
-                t(
-                  "State sanctions declaration"
-                )
-              }
             >
               {
                 [
@@ -1663,14 +2212,17 @@ export default function SupplierForm({
                   "NO",
                   "NOT_DECLARED"
                 ].map(
-                  (answer) => (
+                  (
+                    answer
+                  ) => (
                     <button
                       key={
                         answer
                       }
                       type="button"
                       className={
-                        form.stateSanctionsAnswer ===
+                        form
+                          .stateSanctionsAnswer ===
                         answer
                           ? "active"
                           : ""
@@ -1683,7 +2235,9 @@ export default function SupplierForm({
                           )
                       }
                     >
-                      {t(answer)}
+                      {t(
+                        answer
+                      )}
                     </button>
                   )
                 )
@@ -1700,13 +2254,16 @@ export default function SupplierForm({
               <textarea
                 rows="2"
                 value={
-                  form.stateSanctionsComments
+                  form
+                    .stateSanctionsComments
                 }
                 onChange={
                   (event) =>
                     setValue(
                       "stateSanctionsComments",
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                 }
               />
@@ -1723,11 +2280,6 @@ export default function SupplierForm({
             <div
               className="segmented-control"
               role="group"
-              aria-label={
-                t(
-                  "Compliance model declaration"
-                )
-              }
             >
               {
                 [
@@ -1735,14 +2287,17 @@ export default function SupplierForm({
                   "NO",
                   "NOT_DECLARED"
                 ].map(
-                  (answer) => (
+                  (
+                    answer
+                  ) => (
                     <button
                       key={
                         answer
                       }
                       type="button"
                       className={
-                        form.complianceModelAnswer ===
+                        form
+                          .complianceModelAnswer ===
                         answer
                           ? "active"
                           : ""
@@ -1755,7 +2310,9 @@ export default function SupplierForm({
                           )
                       }
                     >
-                      {t(answer)}
+                      {t(
+                        answer
+                      )}
                     </button>
                   )
                 )
@@ -1772,13 +2329,16 @@ export default function SupplierForm({
               <textarea
                 rows="2"
                 value={
-                  form.complianceModelComments
+                  form
+                    .complianceModelComments
                 }
                 onChange={
                   (event) =>
                     setValue(
                       "complianceModelComments",
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                 }
               />
@@ -1825,7 +2385,9 @@ export default function SupplierForm({
                   }
                 >
                   <span>
-                    {t(label)}
+                    {t(
+                      label
+                    )}
                   </span>
 
                   <small
@@ -1858,7 +2420,8 @@ export default function SupplierForm({
                             ...current,
 
                             [field]:
-                              event.target
+                              event
+                                .target
                                 .files
                                 ?.[0]
                           })
@@ -1883,7 +2446,9 @@ export default function SupplierForm({
             loading
           }
         >
-          {t("Cancel")}
+          {t(
+            "Cancel"
+          )}
         </button>
 
         <button

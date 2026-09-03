@@ -44,13 +44,35 @@ import {
 
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 
-const emptyLookup = {
-  checked: false,
-  loading: false,
-  result: null,
-  padron: null,
-  error: ""
-};
+function freshLookupState() {
+  return {
+    checked:
+      false,
+
+    loading:
+      false,
+
+    result:
+      null,
+
+    padron:
+      null,
+
+    representatives: {
+      loading:
+        false,
+
+      data:
+        null,
+
+      error:
+        ""
+    },
+
+    error:
+      ""
+  };
+}
 
 export default function Suppliers() {
   const {
@@ -110,8 +132,11 @@ export default function Suppliers() {
     setDrawer
   ] =
     useState({
-      open: false,
-      mode: "view"
+      open:
+        false,
+
+      mode:
+        "view"
     });
 
   const [
@@ -137,7 +162,7 @@ export default function Suppliers() {
     setLookup
   ] =
     useState(
-      emptyLookup
+      freshLookupState
     );
 
   const [
@@ -176,14 +201,12 @@ export default function Suppliers() {
   );
 
   /*
-   * Automatic lookup:
+   * After 11 RUC digits have been entered, automatically:
    *
-   * As soon as 11 digits have been entered, wait 600ms.
-   * If the user did not continue typing, automatically:
-   *
-   * 1. Search UMA Supplier Master.
-   * 2. If not found, search local SUNAT Padrón.
-   * 3. Open the supplier form with SUNAT values prefilled.
+   * 1. Check UMA Supplier Master.
+   * 2. Check local SUNAT Padron.
+   * 3. Open the form immediately.
+   * 4. Retrieve SUNAT legal representatives in background.
    */
   useEffect(
     () => {
@@ -250,7 +273,8 @@ export default function Suppliers() {
             (row) => (
               <strong className="mono-reference">
                 {
-                  row.supplierCode ||
+                  row
+                    .supplierCode ||
                   "-"
                 }
               </strong>
@@ -269,18 +293,25 @@ export default function Suppliers() {
               <div className="table-primary-cell">
                 <strong>
                   {
-                    row.legalName ||
-                    row.name
+                    row
+                      .legalName ||
+                    row
+                      .name
                   }
                 </strong>
 
                 <span>
                   {
-                    row.commercialName &&
-                    row.commercialName !==
-                      row.legalName
-                      ? row.commercialName
-                      : row.rucDni
+                    row
+                      .commercialName &&
+                    row
+                      .commercialName !==
+                      row
+                        .legalName
+                      ? row
+                          .commercialName
+                      : row
+                          .rucDni
                   }
                 </span>
               </div>
@@ -312,7 +343,8 @@ export default function Suppliers() {
             (row) => (
               <StatusBadge
                 status={
-                  row.homologationStatus
+                  row
+                    .homologationStatus
                 }
               />
             )
@@ -330,7 +362,8 @@ export default function Suppliers() {
 
           getValue:
             (row) =>
-              row.complianceReview
+              row
+                .complianceReview
                 ?.result ||
               "PENDING",
 
@@ -338,7 +371,8 @@ export default function Suppliers() {
             (row) => (
               <StatusBadge
                 status={
-                  row.complianceReview
+                  row
+                    .complianceReview
                     ?.result ||
                   "PENDING"
                 }
@@ -364,7 +398,8 @@ export default function Suppliers() {
               <div className="table-primary-cell numeric-cell">
                 <strong>
                   {
-                    row.activeBankAccountCount ||
+                    row
+                      .activeBankAccountCount ||
                     0
                   }
                 </strong>
@@ -375,7 +410,8 @@ export default function Suppliers() {
                       "{count} verified"
                     ).replace(
                       "{count}",
-                      row.verifiedBankAccountCount ||
+                      row
+                        .verifiedBankAccountCount ||
                         0
                     )
                   }
@@ -384,7 +420,9 @@ export default function Suppliers() {
             )
         }
       ],
-      [t]
+      [
+        t
+      ]
     );
 
   async function loadSupplier(
@@ -392,7 +430,9 @@ export default function Suppliers() {
     mode = "view"
   ) {
     setDrawer({
-      open: true,
+      open:
+        true,
+
       mode
     });
 
@@ -435,8 +475,11 @@ export default function Suppliers() {
       );
 
       setDrawer({
-        open: false,
-        mode: "view"
+        open:
+          false,
+
+        mode:
+          "view"
       });
     } finally {
       setLoadingDetail(
@@ -483,7 +526,9 @@ export default function Suppliers() {
     work,
     successMessage
   ) {
-    if (saving) {
+    if (
+      saving
+    ) {
       return;
     }
 
@@ -527,7 +572,7 @@ export default function Suppliers() {
     setIdentifier("");
 
     setLookup(
-      emptyLookup
+      freshLookupState()
     );
 
     setDetail(null);
@@ -535,8 +580,11 @@ export default function Suppliers() {
     setReadiness(null);
 
     setDrawer({
-      open: true,
-      mode: "create"
+      open:
+        true,
+
+      mode:
+        "create"
     });
   }
 
@@ -545,7 +593,8 @@ export default function Suppliers() {
   ) {
     const digitsOnly =
       String(
-        value || ""
+        value ||
+        ""
       )
         .replace(
           /\D/g,
@@ -564,8 +613,106 @@ export default function Suppliers() {
     );
 
     setLookup(
-      emptyLookup
+      freshLookupState()
     );
+  }
+
+  /*
+   * Legal representative lookup is intentionally separate
+   * from the local Padron call.
+   *
+   * That means SUNAT's web portal can be slow/unavailable
+   * without preventing the supplier form from opening.
+   */
+  async function loadLegalRepresentatives(
+    sequence,
+    ruc,
+    legalName
+  ) {
+    if (
+      !legalName
+    ) {
+      return;
+    }
+
+    setLookup(
+      (current) => ({
+        ...current,
+
+        representatives: {
+          loading:
+            true,
+
+          data:
+            null,
+
+          error:
+            ""
+        }
+      })
+    );
+
+    try {
+      const response =
+        await api.get(
+          `/suppliers/consulta-ruc/${ruc}/representatives?legalName=${encodeURIComponent(
+            legalName
+          )}`
+        );
+
+      if (
+        sequence !==
+        lookupSequence.current
+      ) {
+        return;
+      }
+
+      setLookup(
+        (current) => ({
+          ...current,
+
+          representatives: {
+            loading:
+              false,
+
+            data:
+              response.data,
+
+            error:
+              ""
+          }
+        })
+      );
+    } catch (
+      error
+    ) {
+      if (
+        sequence !==
+        lookupSequence.current
+      ) {
+        return;
+      }
+
+      setLookup(
+        (current) => ({
+          ...current,
+
+          representatives: {
+            loading:
+              false,
+
+            data:
+              null,
+
+            error:
+              error.message ||
+              t(
+                "SUNAT Consulta RUC could not be reached."
+              )
+          }
+        })
+      );
+    }
   }
 
   async function runIdentifierLookup(
@@ -573,7 +720,8 @@ export default function Suppliers() {
   ) {
     const normalized =
       String(
-        value || ""
+        value ||
+        ""
       ).replace(
         /\D/g,
         ""
@@ -585,7 +733,7 @@ export default function Suppliers() {
       )
     ) {
       setLookup({
-        ...emptyLookup,
+        ...freshLookupState(),
 
         error:
           t(
@@ -600,14 +748,16 @@ export default function Suppliers() {
       ++lookupSequence.current;
 
     setLookup({
-      ...emptyLookup,
-      loading: true
+      ...freshLookupState(),
+
+      loading:
+        true
     });
 
     try {
       /*
-       * First:
-       * protect against duplicate suppliers.
+       * STEP 1
+       * Avoid duplicate suppliers.
        */
       const response =
         await api.get(
@@ -622,13 +772,16 @@ export default function Suppliers() {
       }
 
       setIdentifier(
-        response.data
+        response
+          .data
           .normalizedIdentifier ||
         normalized
       );
 
       if (
-        response.data.found
+        response
+          .data
+          .found
       ) {
         setLookup({
           checked:
@@ -638,10 +791,23 @@ export default function Suppliers() {
             false,
 
           result:
-            response.data.data,
+            response
+              .data
+              .data,
 
           padron:
             null,
+
+          representatives: {
+            loading:
+              false,
+
+            data:
+              null,
+
+            error:
+              ""
+          },
 
           error:
             ""
@@ -651,111 +817,166 @@ export default function Suppliers() {
       }
 
       /*
-       * Second:
-       * for an 11-digit RUC,
-       * automatically query SUNAT Padrón.
+       * 8-digit DNI:
+       * SUNAT Padron RUC lookup does not apply.
        */
       if (
-        normalized.length ===
+        normalized.length !==
         11
       ) {
-        try {
-          const padronResponse =
-            await api.get(
-              `/suppliers/padron/${normalized}`
-            );
+        setLookup({
+          checked:
+            true,
 
-          if (
-            sequence !==
-            lookupSequence.current
-          ) {
-            return;
-          }
+          loading:
+            false,
 
-          setLookup({
-            checked:
-              true,
+          result:
+            null,
 
+          padron:
+            null,
+
+          representatives: {
             loading:
               false,
 
-            result:
+            data:
               null,
-
-            padron:
-              padronResponse.data,
 
             error:
               ""
-          });
+          },
 
-          return;
-        } catch (
-          padronError
-        ) {
-          if (
-            sequence !==
-            lookupSequence.current
-          ) {
-            return;
-          }
+          error:
+            ""
+        });
 
-          /*
-           * Do not prevent supplier onboarding merely because
-           * the lookup endpoint was temporarily unavailable.
-           *
-           * The form opens, but a clear warning is displayed.
-           */
-          setLookup({
-            checked:
-              true,
-
-            loading:
-              false,
-
-            result:
-              null,
-
-            padron: {
-              found:
-                false,
-
-              ruc:
-                normalized,
-
-              message:
-                padronError.message ||
-                "SUNAT Padrón lookup could not be completed."
-            },
-
-            error:
-              ""
-          });
-
-          return;
-        }
+        return;
       }
 
       /*
-       * 8-digit DNI:
-       * there is no RUC Padrón lookup.
+       * STEP 2
+       * Fast local SUNAT Padron lookup.
        */
-      setLookup({
-        checked:
-          true,
+      try {
+        const padronResponse =
+          await api.get(
+            `/suppliers/padron/${normalized}`
+          );
 
-        loading:
-          false,
+        if (
+          sequence !==
+          lookupSequence.current
+        ) {
+          return;
+        }
 
-        result:
-          null,
+        const padron =
+          padronResponse
+            .data;
 
-        padron:
-          null,
+        setLookup({
+          checked:
+            true,
 
-        error:
-          ""
-      });
+          loading:
+            false,
+
+          result:
+            null,
+
+          padron,
+
+          representatives: {
+            loading:
+              Boolean(
+                padron
+                  ?.found &&
+                padron
+                  ?.data
+                  ?.legalName
+              ),
+
+            data:
+              null,
+
+            error:
+              ""
+          },
+
+          error:
+            ""
+        });
+
+        /*
+         * STEP 3
+         * Background Consulta RUC legal representative lookup.
+         */
+        if (
+          padron
+            ?.found &&
+          padron
+            ?.data
+            ?.legalName
+        ) {
+          void loadLegalRepresentatives(
+            sequence,
+            normalized,
+            padron
+              .data
+              .legalName
+          );
+        }
+
+        return;
+      } catch (
+        padronError
+      ) {
+        if (
+          sequence !==
+          lookupSequence.current
+        ) {
+          return;
+        }
+
+        setLookup({
+          checked:
+            true,
+
+          loading:
+            false,
+
+          result:
+            null,
+
+          padron: {
+            found:
+              false,
+
+            ruc:
+              normalized,
+
+            message:
+              padronError.message ||
+              "SUNAT Padrón lookup could not be completed."
+          },
+
+          representatives: {
+            loading:
+              false,
+
+            data:
+              null,
+
+            error:
+              ""
+          },
+
+          error:
+            ""
+        });
+      }
     } catch (
       error
     ) {
@@ -767,7 +988,7 @@ export default function Suppliers() {
       }
 
       setLookup({
-        ...emptyLookup,
+        ...freshLookupState(),
 
         error:
           error.message
@@ -821,7 +1042,8 @@ export default function Suppliers() {
           {
             state: {
               createdSupplierId:
-                response.data
+                response
+                  .data
                   .data
                   ._id
             }
@@ -832,7 +1054,8 @@ export default function Suppliers() {
       }
 
       await loadSupplier(
-        response.data
+        response
+          .data
           .data
           ._id,
         "view"
@@ -869,11 +1092,17 @@ export default function Suppliers() {
         "Supplier corrections saved and returned to the review queue."
       );
 
-    if (success) {
+    if (
+      success
+    ) {
       setDrawer(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
-          mode: "view"
+
+          mode:
+            "view"
         })
       );
     }
@@ -886,7 +1115,9 @@ export default function Suppliers() {
   ) {
     setConfirmation({
       ...config,
-      loading: false
+
+      loading:
+        false
     });
   }
 
@@ -894,14 +1125,20 @@ export default function Suppliers() {
     const action =
       confirmation?.action;
 
-    if (!action) {
+    if (
+      !action
+    ) {
       return;
     }
 
     setConfirmation(
-      (current) => ({
+      (
+        current
+      ) => ({
         ...current,
-        loading: true
+
+        loading:
+          true
       })
     );
 
@@ -918,17 +1155,25 @@ export default function Suppliers() {
         );
       } else {
         setConfirmation(
-          (current) => ({
+          (
+            current
+          ) => ({
             ...current,
-            loading: false
+
+            loading:
+              false
           })
         );
       }
     } catch {
       setConfirmation(
-        (current) => ({
+        (
+          current
+        ) => ({
           ...current,
-          loading: false
+
+          loading:
+            false
         })
       );
     }
@@ -985,8 +1230,10 @@ export default function Suppliers() {
             "Supplier",
 
           value:
-            detail.legalName ||
-            detail.name
+            detail
+              .legalName ||
+            detail
+              .name
         }
       ],
 
@@ -1029,7 +1276,8 @@ export default function Suppliers() {
           Edit3,
 
         hidden:
-          !row.permissions
+          !row
+            .permissions
             ?.canEditProposal,
 
         onClick:
@@ -1068,14 +1316,15 @@ export default function Suppliers() {
         ? "Correct Supplier Proposal"
         : detail
             ?.legalName ||
-          detail?.name ||
+          detail
+            ?.name ||
           "Supplier Record";
 
   return (
     <div className="page-shell supplier-page">
       <PageHeader
         title="Supplier Master & Homologation"
-        description="RCO-FOR-002 onboarding, protected evidence, Finance review, banking history and controlled PRV assignment."
+        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, Finance review, banking history and controlled PRV assignment."
         actions={
           <>
             <button
@@ -1217,15 +1466,18 @@ export default function Suppliers() {
         description={
           drawer.mode ===
           "create"
-            ? "Enter an RUC. The system checks duplicates and automatically loads available SUNAT Padrón data."
+            ? "Enter an RUC. UMA checks duplicates, SUNAT Padrón and SUNAT legal representatives automatically."
             : "Official supplier onboarding and homologation record."
         }
         onClose={
           () =>
             !saving &&
             setDrawer({
-              open: false,
-              mode: "view"
+              open:
+                false,
+
+              mode:
+                "view"
             })
         }
       >
@@ -1248,7 +1500,7 @@ export default function Suppliers() {
 
                   <span>
                     {t(
-                      "When 11 digits are entered, the system automatically checks the Supplier Master and then loads official SUNAT Padrón data if the supplier is new."
+                      "When 11 digits are entered, UMA automatically checks the Supplier Master, SUNAT Padrón and SUNAT legal representatives."
                     )}
                   </span>
                 </div>
@@ -1275,7 +1527,9 @@ export default function Suppliers() {
                     onChange={
                       (event) =>
                         changeIdentifier(
-                          event.target.value
+                          event
+                            .target
+                            .value
                         )
                     }
                     inputMode="numeric"
@@ -1376,7 +1630,8 @@ export default function Suppliers() {
 
                   <dd>
                     {
-                      lookup.result
+                      lookup
+                        .result
                         .legalName
                     }
                   </dd>
@@ -1391,7 +1646,8 @@ export default function Suppliers() {
 
                   <dd>
                     {
-                      lookup.result
+                      lookup
+                        .result
                         .rucDni
                     }
                   </dd>
@@ -1406,7 +1662,8 @@ export default function Suppliers() {
 
                   <dd>
                     {
-                      lookup.result
+                      lookup
+                        .result
                         .supplierCode ||
                       "-"
                     }
@@ -1423,7 +1680,8 @@ export default function Suppliers() {
                   <dd>
                     <StatusBadge
                       status={
-                        lookup.result
+                        lookup
+                          .result
                           .homologationStatus
                       }
                     />
@@ -1437,12 +1695,15 @@ export default function Suppliers() {
                   className="secondary-button"
                   onClick={
                     () => {
+                      lookupSequence.current +=
+                        1;
+
                       setIdentifier(
                         ""
                       );
 
                       setLookup(
-                        emptyLookup
+                        freshLookupState()
                       );
                     }
                   }
@@ -1458,10 +1719,12 @@ export default function Suppliers() {
                   onClick={
                     () =>
                       loadSupplier(
-                        lookup.result
+                        lookup
+                          .result
                           ._id,
 
-                        lookup.result
+                        lookup
+                          .result
                           .permissions
                           ?.canEditProposal
                           ? "edit"
@@ -1491,6 +1754,10 @@ export default function Suppliers() {
               padronLookup={
                 lookup.padron
               }
+              representativeLookup={
+                lookup
+                  .representatives
+              }
               includeInitialBank
               loading={
                 saving
@@ -1499,11 +1766,18 @@ export default function Suppliers() {
                 createSupplier
               }
               onCancel={
-                () =>
+                () => {
+                  lookupSequence.current +=
+                    1;
+
                   setDrawer({
-                    open: false,
-                    mode: "view"
-                  })
+                    open:
+                      false,
+
+                    mode:
+                      "view"
+                  });
+                }
               }
             />
           )
@@ -1531,7 +1805,9 @@ export default function Suppliers() {
                       current
                     ) => ({
                       ...current,
-                      mode: "view"
+
+                      mode:
+                        "view"
                     })
                   )
               }
@@ -1574,7 +1850,9 @@ export default function Suppliers() {
                       current
                     ) => ({
                       ...current,
-                      mode: "edit"
+
+                      mode:
+                        "edit"
                     })
                   )
               }
@@ -1645,7 +1923,8 @@ export default function Suppliers() {
                           "Account",
 
                         value:
-                          account.accountNumber
+                          account
+                            .accountNumber
                       }
                     ],
 
@@ -1685,7 +1964,7 @@ export default function Suppliers() {
                       "Homologate supplier and assign PRV?",
 
                     description:
-                      "This assigns one immutable PRV code, activates the supplier, and makes it available to the existing request workflow. It does not create a payment or change Treasury transactions.",
+                      "This assigns one immutable PRV code, activates the supplier, and makes it available to the existing request workflow.",
 
                     confirmLabel:
                       "Homologate and assign PRV",
@@ -1696,8 +1975,10 @@ export default function Suppliers() {
                           "Supplier",
 
                         value:
-                          detail.legalName ||
-                          detail.name
+                          detail
+                            .legalName ||
+                          detail
+                            .name
                       },
 
                       {
@@ -1744,8 +2025,10 @@ export default function Suppliers() {
                           "Supplier",
 
                         value:
-                          detail.legalName ||
-                          detail.name
+                          detail
+                            .legalName ||
+                          detail
+                            .name
                       },
 
                       {
@@ -1753,7 +2036,8 @@ export default function Suppliers() {
                           "PRV Code",
 
                         value:
-                          detail.supplierCode ||
+                          detail
+                            .supplierCode ||
                           "-"
                       }
                     ],
@@ -1782,7 +2066,8 @@ export default function Suppliers() {
           )
         }
         title={
-          confirmation?.title
+          confirmation
+            ?.title
         }
         description={
           confirmation
@@ -1793,7 +2078,8 @@ export default function Suppliers() {
             ?.confirmLabel
         }
         tone={
-          confirmation?.tone
+          confirmation
+            ?.tone
         }
         details={
           confirmation

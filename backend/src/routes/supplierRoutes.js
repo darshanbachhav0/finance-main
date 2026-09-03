@@ -12,6 +12,7 @@ import {
   listSuppliers,
   lookupSupplier,
   lookupSupplierPadron,
+  lookupSupplierLegalRepresentatives,
   removeBankAccount,
   reviewSupplier,
   selectPreferredBankAccount,
@@ -59,8 +60,7 @@ router.get(
 );
 
 /*
- * Important:
- * This route must remain ABOVE /:id.
+ * These two routes MUST remain above /:id.
  */
 router.get(
   "/padron/:ruc",
@@ -70,6 +70,16 @@ router.get(
     ROLES.SOLICITOR
   ),
   lookupSupplierPadron
+);
+
+router.get(
+  "/consulta-ruc/:ruc/representatives",
+  authorize(
+    ROLES.ADMIN,
+    ROLES.ACCOUNTING,
+    ROLES.SOLICITOR
+  ),
+  lookupSupplierLegalRepresentatives
 );
 
 router.post(
