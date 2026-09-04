@@ -1,44 +1,46 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { chromium } from "playwright";
+
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 
-const DEFAULT_ORIGIN =
-  "https://e-consultaruc.sunat.gob.pe";
+const __filename =
+  fileURLToPath(
+    import.meta.url
+  );
+
+const __dirname =
+  path.dirname(
+    __filename
+  );
+
+const BACKEND_ROOT =
+  path.resolve(
+    __dirname,
+    "..",
+    ".."
+  );
+
+const CONSULTA_RUC_URL =
+  "https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/FrameCriterioBusquedaWeb.jsp";
 
 const DEFAULT_TIMEOUT_MS =
-  12_000;
+  30_000;
 
 const DEFAULT_CACHE_MINUTES =
   30;
 
-/*
- * SUNAT has historically exposed more than one servlet alias
- * for Consulta RUC.
- *
- * We try both so a minor portal routing change does not
- * immediately break UMA Finance.
- */
-const SEARCH_PATHS = [
-  "/cl-ti-itmrconsruc/jcrS03Alias",
-  "/cl-ti-itmrconsruc/jcrS00Alias"
-];
+const cache =
+  new Map();
 
-const DETAIL_PATHS = [
-  "/cl-ti-itmrconsruc/jcrS00Alias",
-  "/cl-ti-itmrconsruc/jcrS03Alias"
-];
+const inflight =
+  new Map();
 
-/*
- * SUNAT's public consultation flow uses a session/random token.
- *
- * This is NOT OCR and does not attempt to solve an image CAPTCHA.
- */
-const RANDOM_PATHS = [
-  "/cl-ti-itmrconsmulruc/captcha?accion=random",
-  "/cl-ti-itmrconsruc/captcha?accion=random"
-];
-
-const cache = new Map();
-const inflight = new Map();
+let browserPromise =
+  null;
 
 function env(
   name,
@@ -58,16 +60,58 @@ function positiveNumber(
     Number(value);
 
   return (
-    Number.isFinite(
-      parsed
-    ) &&
+    Number.isFinite(parsed) &&
     parsed > 0
       ? parsed
       : fallback
   );
 }
 
-function normalizedRuc(
+function timeoutMs() {
+  return positiveNumber(
+    env(
+      "SUNAT_CONSULTA_RUC_TIMEOUT_MS"
+    ),
+    DEFAULT_TIMEOUT_MS
+  );
+}
+
+function headlessMode() {
+  const value =
+    env(
+      "SUNAT_REPRESENTATIVES_HEADLESS",
+      "true"
+    ).toLowerCase();
+
+  return ![
+    "false",
+    "0",
+    "no"
+  ].includes(value);
+}
+
+function debugEnabled() {
+  return [
+    "true",
+    "1",
+    "yes"
+  ].includes(
+    env(
+      "SUNAT_REPRESENTATIVES_DEBUG",
+      "false"
+    ).toLowerCase()
+  );
+}
+
+function debugDir() {
+  return path.resolve(
+    BACKEND_ROOT,
+    "debug",
+    "sunat-representatives"
+  );
+}
+
+function normalizeRuc(
   value
 ) {
   return String(
@@ -95,12 +139,10 @@ function cleanText(
     .trim();
 }
 
-function normalizeForCompare(
+function normalizeText(
   value
 ) {
-  return cleanText(
-    value
-  )
+  return cleanText(value)
     .normalize("NFD")
     .replace(
       /[\u0300-\u036f]/g,
@@ -109,1195 +151,11 @@ function normalizeForCompare(
     .toUpperCase();
 }
 
-/*
- * Small HTML entity decoder.
- *
- * We intentionally avoid adding another npm dependency just
- * for this SUNAT page.
- */
-function decodeHtmlEntities(
-  value
-) {
-  const named = {
-    nbsp: " ",
-    amp: "&",
-    quot: "\"",
-    apos: "'",
-    lt: "<",
-    gt: ">",
-
-    aacute: "á",
-    eacute: "é",
-    iacute: "í",
-    oacute: "ó",
-    uacute: "ú",
-
-    Aacute: "Á",
-    Eacute: "É",
-    Iacute: "Í",
-    Oacute: "Ó",
-    Uacute: "Ú",
-
-    ntilde: "ñ",
-    Ntilde: "Ñ",
-
-    uuml: "ü",
-    Uuml: "Ü"
-  };
-
-  return String(
-    value ?? ""
-  )
-    .replace(
-      /&#x([0-9a-f]+);/gi,
-      (
-        match,
-        hex
-      ) => {
-        try {
-          return String.fromCodePoint(
-            Number.parseInt(
-              hex,
-              16
-            )
-          );
-        } catch {
-          return match;
-        }
-      }
-    )
-    .replace(
-      /&#(\d+);/g,
-      (
-        match,
-        decimal
-      ) => {
-        try {
-          return String.fromCodePoint(
-            Number.parseInt(
-              decimal,
-              10
-            )
-          );
-        } catch {
-          return match;
-        }
-      }
-    )
-    .replace(
-      /&([a-zA-Z]+);/g,
-      (
-        match,
-        name
-      ) =>
-        named[name] ??
-        match
-    );
-}
-
-function htmlToText(
-  value
-) {
-  return cleanText(
-    decodeHtmlEntities(
-      String(
-        value ?? ""
-      )
-        .replace(
-          /<br\s*\/?\s*>/gi,
-          " "
-        )
-        .replace(
-          /<[^>]+>/g,
-          " "
-        )
-    )
-  );
-}
-
-/*
- * Convert all HTML table rows into simple arrays.
- *
- * The SUNAT page is server-rendered HTML, so this avoids
- * depending on its CSS classes.
- */
-function extractRows(
-  html
-) {
-  const source =
-    String(
-      html ?? ""
-    )
-      .replace(
-        /<!--[\s\S]*?-->/g,
-        ""
-      )
-      .replace(
-        /<script\b[^>]*>[\s\S]*?<\/script>/gi,
-        ""
-      )
-      .replace(
-        /<style\b[^>]*>[\s\S]*?<\/style>/gi,
-        ""
-      );
-
-  const rows = [];
-
-  const rowRegex =
-    /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
-
-  let rowMatch;
-
-  while (
-    (
-      rowMatch =
-        rowRegex.exec(
-          source
-        )
-    )
-  ) {
-    const cells = [];
-
-    const cellRegex =
-      /<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi;
-
-    let cellMatch;
-
-    while (
-      (
-        cellMatch =
-          cellRegex.exec(
-            rowMatch[1]
-          )
-      )
-    ) {
-      cells.push(
-        htmlToText(
-          cellMatch[1]
-        )
-      );
-    }
-
-    if (
-      cells.length
-    ) {
-      rows.push(
-        cells
-      );
-    }
-  }
-
-  return rows;
-}
-
-/*
- * Parse:
- *
- * Documento
- * Nro. Documento
- * Nombre
- * Cargo
- * Fecha Desde
- */
-function parseLegalRepresentatives(
-  html
-) {
-  const rows =
-    extractRows(
-      html
-    );
-
-  const headerIndex =
-    rows.findIndex(
-      (row) => {
-        const normalized =
-          row.map(
-            normalizeForCompare
-          );
-
-        return (
-          normalized.some(
-            (cell) =>
-              cell ===
-              "DOCUMENTO"
-          ) &&
-          normalized.some(
-            (cell) =>
-              cell.includes(
-                "NRO"
-              ) &&
-              cell.includes(
-                "DOCUMENTO"
-              )
-          ) &&
-          normalized.some(
-            (cell) =>
-              cell ===
-              "NOMBRE"
-          ) &&
-          normalized.some(
-            (cell) =>
-              cell ===
-              "CARGO"
-          ) &&
-          normalized.some(
-            (cell) =>
-              cell.includes(
-                "FECHA"
-              ) &&
-              cell.includes(
-                "DESDE"
-              )
-          )
-        );
-      }
-    );
-
-  const candidateRows =
-    headerIndex >= 0
-      ? rows.slice(
-          headerIndex + 1
-        )
-      : rows;
-
-  const representatives =
-    [];
-
-  const seen =
-    new Set();
-
-  for (
-    const row of
-    candidateRows
-  ) {
-    if (
-      row.length < 5
-    ) {
-      continue;
-    }
-
-    const [
-      documentType,
-      documentNumber,
-      fullName,
-      position,
-      dateFrom
-    ] = row;
-
-    const normalizedDocumentType =
-      normalizeForCompare(
-        documentType
-      );
-
-    const supportedDocuments =
-      [
-        "DNI",
-        "CE",
-        "RUC",
-        "PASAPORTE",
-        "CARNET DE EXTRANJERIA"
-      ];
-
-    if (
-      !supportedDocuments.includes(
-        normalizedDocumentType
-      )
-    ) {
-      continue;
-    }
-
-    if (
-      !cleanText(
-        documentNumber
-      ) ||
-      !cleanText(
-        fullName
-      )
-    ) {
-      continue;
-    }
-
-    const item = {
-      documentType:
-        cleanText(
-          documentType
-        ).toUpperCase(),
-
-      documentNumber:
-        cleanText(
-          documentNumber
-        ),
-
-      fullName:
-        cleanText(
-          fullName
-        ),
-
-      position:
-        cleanText(
-          position
-        ),
-
-      dateFrom:
-        cleanText(
-          dateFrom
-        )
-    };
-
-    const key = [
-      item.documentType,
-      item.documentNumber,
-      item.fullName,
-      item.position,
-      item.dateFrom
-    ].join("|");
-
-    if (
-      !seen.has(
-        key
-      )
-    ) {
-      seen.add(
-        key
-      );
-
-      representatives.push(
-        item
-      );
-    }
-  }
-
-  return representatives;
-}
-
-function extractCompanyHeading(
-  html
-) {
-  const text =
-    htmlToText(
-      html
-    );
-
-  const match =
-    text.match(
-      /REPRESENTANTES\s+LEGALES\s+DE\s+(\d{11})\s*-\s*(.+?)(?:RESULTADO\s+DE\s+LA\s+B[ÚU]SQUEDA|La informaci[oó]n exhibida|Documento)/i
-    );
-
-  if (
-    !match
-  ) {
-    return {
-      ruc: "",
-      legalName: ""
-    };
-  }
-
-  return {
-    ruc:
-      normalizedRuc(
-        match[1]
-      ),
-
-    legalName:
-      cleanText(
-        match[2]
-      )
-  };
-}
-
-function looksLikeSearchResult(
-  html,
-  ruc
-) {
-  const normalized =
-    normalizeForCompare(
-      htmlToText(
-        html
-      )
-    );
-
-  return (
-    normalized.includes(
-      ruc
-    ) &&
-    (
-      normalized.includes(
-        "RESULTADO DE LA BUSQUEDA"
-      ) ||
-      normalized.includes(
-        "NUMERO DE RUC"
-      ) ||
-      normalized.includes(
-        "TIPO CONTRIBUYENTE"
-      )
-    )
-  );
-}
-
-function looksLikeRepresentativesResult(
-  html,
-  ruc
-) {
-  const normalized =
-    normalizeForCompare(
-      htmlToText(
-        html
-      )
-    );
-
-  return (
-    normalized.includes(
-      `REPRESENTANTES LEGALES DE ${ruc}`
-    ) ||
-    (
-      normalized.includes(
-        "REPRESENTANTES LEGALES"
-      ) &&
-      normalized.includes(
-        ruc
-      )
-    )
-  );
-}
-
-function responseCharset(
-  response
-) {
-  const contentType =
-    String(
-      response.headers.get(
-        "content-type"
-      ) || ""
-    );
-
-  const match =
-    contentType.match(
-      /charset\s*=\s*["']?([^;"'\s]+)/i
-    );
-
-  return String(
-    match?.[1] ||
-      "utf-8"
-  ).toLowerCase();
-}
-
-async function responseText(
-  response
-) {
-  const bytes =
-    new Uint8Array(
-      await response.arrayBuffer()
-    );
-
-  const charset =
-    responseCharset(
-      response
-    );
-
-  const labels =
-    charset.includes(
-      "8859-1"
-    ) ||
-    charset.includes(
-      "latin1"
-    )
-      ? [
-          "windows-1252",
-          "utf-8"
-        ]
-      : [
-          charset,
-          "utf-8",
-          "windows-1252"
-        ];
-
-  for (
-    const label of labels
-  ) {
-    try {
-      return new TextDecoder(
-        label,
-        {
-          fatal: false
-        }
-      ).decode(
-        bytes
-      );
-    } catch {
-      // Try next encoding.
-    }
-  }
-
-  return Buffer.from(
-    bytes
-  ).toString(
-    "utf8"
-  );
-}
-
-/*
- * Node fetch does not automatically maintain cookies,
- * so we use a very small cookie jar for this one SUNAT session.
- */
-class CookieJar {
-  constructor() {
-    this.cookies =
-      new Map();
-  }
-
-  absorb(
-    response
-  ) {
-    let setCookies = [];
-
-    if (
-      typeof response
-        .headers
-        .getSetCookie ===
-      "function"
-    ) {
-      setCookies =
-        response
-          .headers
-          .getSetCookie();
-    } else {
-      const combined =
-        response
-          .headers
-          .get(
-            "set-cookie"
-          );
-
-      if (
-        combined
-      ) {
-        setCookies = [
-          combined
-        ];
-      }
-    }
-
-    for (
-      const line of
-      setCookies
-    ) {
-      const parts =
-        String(line).split(
-          /,(?=\s*[!#$%&'*+\-.^_`|~0-9A-Za-z]+=)/
-        );
-
-      for (
-        const part of
-        parts
-      ) {
-        const first =
-          part.split(
-            ";",
-            1
-          )[0];
-
-        const separator =
-          first.indexOf(
-            "="
-          );
-
-        if (
-          separator <= 0
-        ) {
-          continue;
-        }
-
-        const name =
-          first
-            .slice(
-              0,
-              separator
-            )
-            .trim();
-
-        const value =
-          first
-            .slice(
-              separator + 1
-            )
-            .trim();
-
-        if (
-          name &&
-          value
-        ) {
-          this.cookies.set(
-            name,
-            value
-          );
-        }
-      }
-    }
-  }
-
-  header() {
-    return [
-      ...this.cookies.entries()
-    ]
-      .map(
-        ([
-          name,
-          value
-        ]) =>
-          `${name}=${value}`
-      )
-      .join("; ");
-  }
-}
-
-function timeoutMs() {
-  return positiveNumber(
-    env(
-      "SUNAT_CONSULTA_RUC_TIMEOUT_MS"
-    ),
-    DEFAULT_TIMEOUT_MS
-  );
-}
-
-function portalOrigin() {
-  return env(
-    "SUNAT_CONSULTA_RUC_ORIGIN",
-    DEFAULT_ORIGIN
-  ).replace(
-    /\/$/,
-    ""
-  );
-}
-
-function buildUrl(
-  pathname
-) {
-  return new URL(
-    pathname,
-    `${portalOrigin()}/`
-  ).toString();
-}
-
-function standardHeaders({
-  cookie = "",
-  referer = ""
-} = {}) {
-  const headers = {
-    Accept:
-      "text/html,application/xhtml+xml,application/json,text/plain,*/*",
-
-    "Accept-Language":
-      "es-PE,es;q=0.9,en;q=0.7",
-
-    "Cache-Control":
-      "no-cache",
-
-    Pragma:
-      "no-cache",
-
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36"
-  };
-
-  if (
-    cookie
-  ) {
-    headers.Cookie =
-      cookie;
-  }
-
-  if (
-    referer
-  ) {
-    headers.Referer =
-      referer;
-  }
-
-  return headers;
-}
-
-async function fetchWithTimeout(
-  url,
-  options = {}
-) {
-  const controller =
-    new AbortController();
-
-  const timer =
-    setTimeout(
-      () =>
-        controller.abort(),
-      timeoutMs()
-    );
-
-  try {
-    return await fetch(
-      url,
-      {
-        ...options,
-
-        signal:
-          controller.signal,
-
-        /*
-         * Redirects are handled manually so that cookies
-         * received during redirects are not lost.
-         */
-        redirect:
-          "manual"
-      }
-    );
-  } finally {
-    clearTimeout(
-      timer
-    );
-  }
-}
-
-async function requestWithCookies(
-  jar,
-  url,
-  options = {},
-  maxRedirects = 5
-) {
-  let currentUrl =
-    url;
-
-  let currentOptions = {
-    ...options
-  };
-
-  for (
-    let index = 0;
-    index <=
-    maxRedirects;
-    index += 1
-  ) {
-    const cookie =
-      jar.header();
-
-    const headers = {
-      ...standardHeaders({
-        cookie,
-
-        referer:
-          currentOptions
-            .referer
-      }),
-
-      ...(
-        currentOptions
-          .headers ||
-        {}
-      )
-    };
-
-    delete currentOptions
-      .referer;
-
-    const response =
-      await fetchWithTimeout(
-        currentUrl,
-        {
-          ...currentOptions,
-          headers
-        }
-      );
-
-    jar.absorb(
-      response
-    );
-
-    if (
-      ![
-        301,
-        302,
-        303,
-        307,
-        308
-      ].includes(
-        response.status
-      )
-    ) {
-      return response;
-    }
-
-    const location =
-      response.headers.get(
-        "location"
-      );
-
-    if (
-      !location
-    ) {
-      return response;
-    }
-
-    currentUrl =
-      new URL(
-        location,
-        currentUrl
-      ).toString();
-
-    if (
-      [
-        301,
-        302,
-        303
-      ].includes(
-        response.status
-      )
-    ) {
-      currentOptions = {
-        method: "GET",
-        headers: {}
-      };
-    }
-  }
-
-  throw new Error(
-    "SUNAT Consulta RUC exceeded the redirect limit."
-  );
-}
-
-async function requestRandomToken(
-  jar
-) {
-  let lastError;
-
-  for (
-    const pathname of
-    RANDOM_PATHS
-  ) {
-    for (
-      const method of
-      [
-        "GET",
-        "POST"
-      ]
-    ) {
-      try {
-        const response =
-          await requestWithCookies(
-            jar,
-            buildUrl(
-              pathname
-            ),
-            {
-              method,
-
-              headers:
-                method ===
-                "POST"
-                  ? {
-                      "Content-Type":
-                        "application/x-www-form-urlencoded;charset=UTF-8"
-                    }
-                  : {}
-            }
-          );
-
-        if (
-          !response.ok
-        ) {
-          lastError =
-            new Error(
-              `HTTP ${response.status}`
-            );
-
-          continue;
-        }
-
-        const body =
-          cleanText(
-            await responseText(
-              response
-            )
-          );
-
-        const token =
-          body.replace(
-            /[^0-9A-Za-z._-]/g,
-            ""
-          );
-
-        if (
-          token &&
-          token.length <=
-            128 &&
-          !/<html/i.test(
-            body
-          )
-        ) {
-          return token;
-        }
-      } catch (
-        error
-      ) {
-        lastError =
-          error;
-      }
-    }
-  }
-
-  throw (
-    lastError ||
-    new Error(
-      "SUNAT random consultation token was not returned."
-    )
-  );
-}
-
-async function postForm(
-  jar,
-  pathname,
-  form,
-  referer
-) {
-  const body =
-    new URLSearchParams(
-      form
-    ).toString();
-
-  const response =
-    await requestWithCookies(
-      jar,
-      buildUrl(
-        pathname
-      ),
-      {
-        method:
-          "POST",
-
-        referer,
-
-        headers: {
-          "Content-Type":
-            "application/x-www-form-urlencoded;charset=UTF-8",
-
-          Origin:
-            portalOrigin()
-        },
-
-        body
-      }
-    );
-
-  const html =
-    await responseText(
-      response
-    );
-
-  if (
-    !response.ok
-  ) {
-    throw new Error(
-      `SUNAT Consulta RUC returned HTTP ${response.status}.`
-    );
-  }
-
-  return html;
-}
-
-/*
- * First open the normal RUC result.
- *
- * This establishes the SUNAT HTTP session required before
- * asking for the representative detail screen.
- */
-async function establishRucSession(
-  jar,
-  ruc
-) {
-  const landingUrl =
-    buildUrl(
-      "/cl-ti-itmrconsruc/jcrS00Alias"
-    );
-
-  try {
-    const landing =
-      await requestWithCookies(
-        jar,
-        landingUrl,
-        {
-          method: "GET"
-        }
-      );
-
-    await responseText(
-      landing
-    );
-  } catch {
-    /*
-     * Some versions establish the session directly from
-     * the random-token request, so failure here is not fatal.
-     */
-  }
-
-  const token =
-    await requestRandomToken(
-      jar
-    );
-
-  let lastHtml = "";
-  let lastError;
-
-  for (
-    const pathname of
-    SEARCH_PATHS
-  ) {
-    try {
-      const html =
-        await postForm(
-          jar,
-          pathname,
-          {
-            accion:
-              "consPorRuc",
-
-            actReturn:
-              "1",
-
-            nroRuc:
-              ruc,
-
-            numRnd:
-              token,
-
-            contexto:
-              "ti-it",
-
-            modo:
-              "1",
-
-            rbtnTipo:
-              "1",
-
-            search1:
-              ruc,
-
-            tipdoc:
-              "1"
-          },
-          landingUrl
-        );
-
-      lastHtml =
-        html;
-
-      if (
-        looksLikeSearchResult(
-          html,
-          ruc
-        )
-      ) {
-        return {
-          html,
-
-          referer:
-            buildUrl(
-              pathname
-            )
-        };
-      }
-    } catch (
-      error
-    ) {
-      lastError =
-        error;
-    }
-  }
-
-  if (
-    lastHtml
-  ) {
-    throw new Error(
-      "SUNAT returned a page, but it was not a valid RUC result page."
-    );
-  }
-
-  throw (
-    lastError ||
-    new Error(
-      "SUNAT RUC consultation could not be established."
-    )
-  );
-}
-
-async function fetchRepresentativePage(
-  jar,
-  ruc,
-  legalName,
-  referer
-) {
-  let lastHtml = "";
-  let lastError;
-
-  for (
-    const pathname of
-    DETAIL_PATHS
-  ) {
-    try {
-      const html =
-        await postForm(
-          jar,
-          pathname,
-          {
-            accion:
-              "getRepLeg",
-
-            nroRuc:
-              ruc,
-
-            desRuc:
-              legalName,
-
-            actReturn:
-              "1"
-          },
-          referer
-        );
-
-      lastHtml =
-        html;
-
-      if (
-        looksLikeRepresentativesResult(
-          html,
-          ruc
-        )
-      ) {
-        return html;
-      }
-    } catch (
-      error
-    ) {
-      lastError =
-        error;
-    }
-  }
-
-  if (
-    lastHtml
-  ) {
-    throw new Error(
-      "SUNAT returned a page, but the legal-representatives section was not available."
-    );
-  }
-
-  throw (
-    lastError ||
-    new Error(
-      "SUNAT legal-representative consultation failed."
-    )
-  );
-}
-
 function cacheKey(
   ruc,
   legalName
 ) {
-  return `${ruc}|${normalizeForCompare(
+  return `${ruc}|${normalizeText(
     legalName
   )}`;
 }
@@ -1315,17 +173,13 @@ function cacheTtlMs() {
   );
 }
 
-function readCache(
+function getCached(
   key
 ) {
   const item =
-    cache.get(
-      key
-    );
+    cache.get(key);
 
-  if (
-    !item
-  ) {
+  if (!item) {
     return null;
   }
 
@@ -1333,24 +187,22 @@ function readCache(
     item.expiresAt <=
     Date.now()
   ) {
-    cache.delete(
-      key
-    );
+    cache.delete(key);
 
     return null;
   }
 
-  return item.value;
+  return item.data;
 }
 
-function writeCache(
+function saveCached(
   key,
-  value
+  data
 ) {
   cache.set(
     key,
     {
-      value,
+      data,
 
       expiresAt:
         Date.now() +
@@ -1359,67 +211,916 @@ function writeCache(
   );
 }
 
+async function getBrowser() {
+  if (
+    browserPromise
+  ) {
+    return browserPromise;
+  }
+
+  browserPromise =
+    chromium
+      .launch({
+        headless:
+          headlessMode()
+      })
+      .catch(
+        (error) => {
+          browserPromise =
+            null;
+
+          throw error;
+        }
+      );
+
+  return browserPromise;
+}
+
+async function saveDebug(
+  page,
+  ruc,
+  stage
+) {
+  if (
+    !debugEnabled()
+  ) {
+    return;
+  }
+
+  try {
+    const dir =
+      debugDir();
+
+    await fs.mkdir(
+      dir,
+      {
+        recursive: true
+      }
+    );
+
+    const safeStage =
+      String(stage)
+        .replace(
+          /[^a-z0-9_-]+/gi,
+          "_"
+        );
+
+    await page.screenshot({
+      path:
+        path.join(
+          dir,
+          `${ruc}-${safeStage}.png`
+        ),
+
+      fullPage: true
+    });
+
+    await fs.writeFile(
+      path.join(
+        dir,
+        `${ruc}-${safeStage}.html`
+      ),
+      await page.content(),
+      "utf8"
+    );
+  } catch {
+    // Debug generation must never break supplier validation.
+  }
+}
+
+async function detectHumanChallenge(
+  page
+) {
+  const body =
+    normalizeText(
+      await page
+        .locator("body")
+        .innerText()
+        .catch(
+          () => ""
+        )
+    );
+
+  const challengeTerms = [
+    "CAPTCHA",
+    "VERIFICACION",
+    "VERIFICACIÓN",
+    "NO SOY UN ROBOT",
+    "RECAPTCHA",
+    "INGRESE EL CODIGO",
+    "INGRESE EL CÓDIGO"
+  ];
+
+  return challengeTerms.some(
+    (term) =>
+      body.includes(
+        normalizeText(term)
+      )
+  );
+}
+
+async function locateRucInput(
+  page
+) {
+  const selectors = [
+    'input[name="search1"]',
+    'input[name="nroRuc"]',
+    'input[placeholder*="RUC" i]',
+    'input[aria-label*="RUC" i]',
+    'input[type="text"]'
+  ];
+
+  for (
+    const selector of
+    selectors
+  ) {
+    const locator =
+      page
+        .locator(selector)
+        .filter({
+          visible: true
+        })
+        .first();
+
+    if (
+      await locator
+        .count()
+        .catch(
+          () => 0
+        )
+    ) {
+      if (
+        await locator
+          .isVisible()
+          .catch(
+            () => false
+          )
+      ) {
+        return locator;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function clickSearchButton(
+  page
+) {
+  const candidates = [
+    page.getByRole(
+      "button",
+      {
+        name:
+          /^buscar$/i
+      }
+    ),
+
+    page.locator(
+      'input[type="submit"][value*="Buscar" i]'
+    ),
+
+    page.locator(
+      'input[type="button"][value*="Buscar" i]'
+    ),
+
+    page.locator(
+      'button:has-text("Buscar")'
+    )
+  ];
+
+  for (
+    const locator of
+    candidates
+  ) {
+    const candidate =
+      locator.first();
+
+    if (
+      await candidate
+        .isVisible()
+        .catch(
+          () => false
+        )
+    ) {
+      await candidate.click();
+
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function waitForRucResult(
+  page,
+  ruc
+) {
+  await page.waitForFunction(
+    (expectedRuc) =>
+      document.body
+        ?.innerText
+        ?.includes(
+          expectedRuc
+        ),
+    ruc,
+    {
+      timeout:
+        timeoutMs()
+    }
+  );
+}
+
+async function findRepresentativesControl(
+  page
+) {
+  const selectors = [
+    'a:has-text("Representantes Legales")',
+
+    'button:has-text("Representantes Legales")',
+
+    'input[value*="Representantes Legales" i]',
+
+    '[onclick*="getRepLeg"]',
+
+    'a[href*="getRepLeg"]',
+
+    '[onclick*="RepLeg"]',
+
+    'a:has-text("Rep. Legales")',
+
+    'a:has-text("Rep.Legales")',
+
+    'a:has-text("Representantes")'
+  ];
+
+  for (
+    const selector of
+    selectors
+  ) {
+    const candidate =
+      page
+        .locator(selector)
+        .first();
+
+    if (
+      await candidate
+        .isVisible()
+        .catch(
+          () => false
+        )
+    ) {
+      return candidate;
+    }
+  }
+
+  /*
+   * Last text-based fallback.
+   */
+  const textLocator =
+    page
+      .getByText(
+        /representantes\s+legales/i
+      )
+      .first();
+
+  if (
+    await textLocator
+      .isVisible()
+      .catch(
+        () => false
+      )
+  ) {
+    return textLocator;
+  }
+
+  return null;
+}
+
+async function submitRepresentativeFormFallback(
+  page,
+  ruc,
+  legalName
+) {
+  return page.evaluate(
+    ({
+      rucValue,
+      legalNameValue
+    }) => {
+      const forms =
+        Array.from(
+          document.forms || []
+        );
+
+      const form =
+        forms.find(
+          (candidate) =>
+            candidate.querySelector(
+              '[name="accion"]'
+            ) ||
+            candidate.action
+              ?.includes(
+                "jcrS"
+              )
+        );
+
+      if (!form) {
+        return false;
+      }
+
+      function assign(
+        name,
+        value
+      ) {
+        let element =
+          form.querySelector(
+            `[name="${name}"]`
+          );
+
+        if (!element) {
+          element =
+            document.createElement(
+              "input"
+            );
+
+          element.type =
+            "hidden";
+
+          element.name =
+            name;
+
+          form.appendChild(
+            element
+          );
+        }
+
+        element.value =
+          value;
+      }
+
+      assign(
+        "accion",
+        "getRepLeg"
+      );
+
+      assign(
+        "nroRuc",
+        rucValue
+      );
+
+      assign(
+        "desRuc",
+        legalNameValue
+      );
+
+      assign(
+        "actReturn",
+        "1"
+      );
+
+      form.submit();
+
+      return true;
+    },
+    {
+      rucValue:
+        ruc,
+
+      legalNameValue:
+        legalName
+    }
+  );
+}
+
+async function openRepresentatives(
+  page,
+  ruc,
+  legalName
+) {
+  const control =
+    await findRepresentativesControl(
+      page
+    );
+
+  if (control) {
+    /*
+     * SUNAT normally navigates in the same page,
+     * but support a popup if the implementation changes.
+     */
+    const popupPromise =
+      page
+        .waitForEvent(
+          "popup",
+          {
+            timeout:
+              2_000
+          }
+        )
+        .catch(
+          () => null
+        );
+
+    await control.click();
+
+    const popup =
+      await popupPromise;
+
+    const target =
+      popup || page;
+
+    await target
+      .waitForLoadState(
+        "domcontentloaded",
+        {
+          timeout:
+            timeoutMs()
+        }
+      )
+      .catch(
+        () => {}
+      );
+
+    return target;
+  }
+
+  /*
+   * The SUNAT result page has historically submitted
+   * getRepLeg through an existing form.
+   *
+   * Use that same form from within the real browser session
+   * if no visible link can be found.
+   */
+  const submitted =
+    await submitRepresentativeFormFallback(
+      page,
+      ruc,
+      legalName
+    ).catch(
+      () => false
+    );
+
+  if (!submitted) {
+    throw new Error(
+      "The SUNAT result page did not expose the Legal Representatives option."
+    );
+  }
+
+  await page
+    .waitForLoadState(
+      "domcontentloaded",
+      {
+        timeout:
+          timeoutMs()
+      }
+    )
+    .catch(
+      () => {}
+    );
+
+  return page;
+}
+
+async function extractRepresentativeTable(
+  page
+) {
+  const tables =
+    await page
+      .locator("table")
+      .evaluateAll(
+        (
+          elements
+        ) =>
+          elements.map(
+            (
+              table
+            ) => {
+              const rows =
+                Array.from(
+                  table.querySelectorAll(
+                    "tr"
+                  )
+                ).map(
+                  (
+                    row
+                  ) =>
+                    Array.from(
+                      row.querySelectorAll(
+                        "th,td"
+                      )
+                    ).map(
+                      (
+                        cell
+                      ) =>
+                        (
+                          cell.innerText ||
+                          cell.textContent ||
+                          ""
+                        )
+                          .replace(
+                            /\u00a0/g,
+                            " "
+                          )
+                          .replace(
+                            /\s+/g,
+                            " "
+                          )
+                          .trim()
+                    )
+                );
+
+              return rows;
+            }
+          )
+      );
+
+  for (
+    const rows of
+    tables
+  ) {
+    if (
+      !Array.isArray(rows) ||
+      !rows.length
+    ) {
+      continue;
+    }
+
+    const headerIndex =
+      rows.findIndex(
+        (row) => {
+          const joined =
+            normalizeText(
+              row.join(" | ")
+            );
+
+          return (
+            joined.includes(
+              "DOCUMENTO"
+            ) &&
+            joined.includes(
+              "NOMBRE"
+            ) &&
+            joined.includes(
+              "CARGO"
+            ) &&
+            joined.includes(
+              "FECHA"
+            )
+          );
+        }
+      );
+
+    if (
+      headerIndex < 0
+    ) {
+      continue;
+    }
+
+    const representatives =
+      [];
+
+    for (
+      const row of
+      rows.slice(
+        headerIndex + 1
+      )
+    ) {
+      if (
+        row.length < 5
+      ) {
+        continue;
+      }
+
+      const [
+        documentType,
+        documentNumber,
+        fullName,
+        position,
+        dateFrom
+      ] =
+        row.map(
+          cleanText
+        );
+
+      if (
+        !documentType ||
+        !documentNumber ||
+        !fullName
+      ) {
+        continue;
+      }
+
+      const normalizedType =
+        normalizeText(
+          documentType
+        );
+
+      if (
+        ![
+          "DNI",
+          "CE",
+          "PASAPORTE",
+          "RUC",
+          "CARNET DE EXTRANJERIA",
+          "DOC. NACIONAL DE IDENTIDAD"
+        ].some(
+          (
+            type
+          ) =>
+            normalizedType.includes(
+              normalizeText(
+                type
+              )
+            )
+        )
+      ) {
+        continue;
+      }
+
+      representatives.push({
+        documentType,
+        documentNumber,
+        fullName,
+        position,
+        dateFrom
+      });
+    }
+
+    if (
+      representatives.length
+    ) {
+      return representatives;
+    }
+  }
+
+  return [];
+}
+
+async function extractHeading(
+  page,
+  fallbackRuc,
+  fallbackLegalName
+) {
+  const bodyText =
+    cleanText(
+      await page
+        .locator("body")
+        .innerText()
+        .catch(
+          () => ""
+        )
+    );
+
+  const match =
+    bodyText.match(
+      /REPRESENTANTES\s+LEGALES\s+DE\s+(\d{11})\s*-\s*(.+?)(?=RESULTADO\s+DE\s+LA\s+B[ÚU]SQUEDA|La información exhibida|Documento)/i
+    );
+
+  return {
+    ruc:
+      match?.[1] ||
+      fallbackRuc,
+
+    legalName:
+      cleanText(
+        match?.[2] ||
+        fallbackLegalName
+      )
+  };
+}
+
 async function lookupInternal(
   ruc,
   legalName
 ) {
-  const jar =
-    new CookieJar();
+  const browser =
+    await getBrowser();
 
-  const session =
-    await establishRucSession(
-      jar,
+  const context =
+    await browser.newContext({
+      locale:
+        "es-PE",
+
+      viewport: {
+        width:
+          1440,
+
+        height:
+          1000
+      }
+    });
+
+  let page;
+
+  try {
+    page =
+      await context.newPage();
+
+    page.setDefaultTimeout(
+      timeoutMs()
+    );
+
+    page.setDefaultNavigationTimeout(
+      timeoutMs()
+    );
+
+    console.log(
+      `[SUNAT REPRESENTATIVES] Opening Consulta RUC for ${ruc}...`
+    );
+
+    const response =
+      await page.goto(
+        CONSULTA_RUC_URL,
+        {
+          waitUntil:
+            "domcontentloaded",
+
+          timeout:
+            timeoutMs()
+        }
+      );
+
+    if (
+      !response ||
+      !response.ok()
+    ) {
+      throw new Error(
+        `SUNAT Consulta RUC returned HTTP ${
+          response?.status() ||
+          "unknown"
+        }.`
+      );
+    }
+
+    await saveDebug(
+      page,
+      ruc,
+      "01-home"
+    );
+
+    if (
+      await detectHumanChallenge(
+        page
+      )
+    ) {
+      throw new Error(
+        "SUNAT is requesting interactive human verification on Consulta RUC."
+      );
+    }
+
+    const input =
+      await locateRucInput(
+        page
+      );
+
+    if (!input) {
+      throw new Error(
+        "The RUC input could not be found on SUNAT Consulta RUC."
+      );
+    }
+
+    await input.fill(
       ruc
     );
 
-  const html =
-    await fetchRepresentativePage(
-      jar,
+    const clicked =
+      await clickSearchButton(
+        page
+      );
+
+    if (!clicked) {
+      await input.press(
+        "Enter"
+      );
+    }
+
+    await waitForRucResult(
+      page,
+      ruc
+    );
+
+    await page
+      .waitForLoadState(
+        "networkidle",
+        {
+          timeout:
+            5_000
+        }
+      )
+      .catch(
+        () => {}
+      );
+
+    await saveDebug(
+      page,
       ruc,
-      legalName,
-      session.referer
+      "02-ruc-result"
     );
 
-  const representatives =
-    parseLegalRepresentatives(
-      html
+    if (
+      await detectHumanChallenge(
+        page
+      )
+    ) {
+      throw new Error(
+        "SUNAT requested interactive verification after the RUC search."
+      );
+    }
+
+    console.log(
+      `[SUNAT REPRESENTATIVES] RUC result loaded. Opening representatives...`
     );
 
-  const heading =
-    extractCompanyHeading(
-      html
-    );
-
-  return {
-    found:
-      representatives.length >
-      0,
-
-    ruc,
-
-    legalName:
-      heading.legalName ||
-      cleanText(
+    const representativePage =
+      await openRepresentatives(
+        page,
+        ruc,
         legalName
-      ),
+      );
 
-    source:
-      "SUNAT_CONSULTA_RUC_WEB",
+    await representativePage
+      .waitForFunction(
+        () =>
+          /REPRESENTANTES\s+LEGALES/i.test(
+            document.body
+              ?.innerText ||
+            ""
+          ),
+        undefined,
+        {
+          timeout:
+            timeoutMs()
+        }
+      )
+      .catch(
+        () => {}
+      );
 
-    officialSource:
-      true,
+    await saveDebug(
+      representativePage,
+      ruc,
+      "03-representatives"
+    );
 
-    queriedAt:
-      new Date()
-        .toISOString(),
+    if (
+      await detectHumanChallenge(
+        representativePage
+      )
+    ) {
+      throw new Error(
+        "SUNAT requested interactive human verification before displaying legal representatives."
+      );
+    }
 
-    representatives,
+    const representatives =
+      await extractRepresentativeTable(
+        representativePage
+      );
 
-    message:
-      representatives.length
-        ? `${representatives.length} legal representative(s) returned by SUNAT Consulta RUC.`
-        : "SUNAT Consulta RUC returned no legal representatives for this RUC."
-  };
+    const heading =
+      await extractHeading(
+        representativePage,
+        ruc,
+        legalName
+      );
+
+    console.log(
+      `[SUNAT REPRESENTATIVES] Found ${representatives.length} representative(s) for ${ruc}.`
+    );
+
+    return {
+      found:
+        representatives.length >
+        0,
+
+      ruc:
+        heading.ruc,
+
+      legalName:
+        heading.legalName,
+
+      source:
+        "SUNAT_CONSULTA_RUC_BROWSER",
+
+      officialSource:
+        true,
+
+      automation:
+        "PLAYWRIGHT",
+
+      queriedAt:
+        new Date()
+          .toISOString(),
+
+      representatives,
+
+      message:
+        representatives.length
+          ? `${representatives.length} legal representative(s) returned by SUNAT Consulta RUC.`
+          : "SUNAT Consulta RUC loaded correctly but did not return legal representatives."
+    };
+  } finally {
+    await context.close();
+  }
 }
 
 export async function lookupSunatLegalRepresentatives(
@@ -1427,7 +1128,7 @@ export async function lookupSunatLegalRepresentatives(
   legalNameValue
 ) {
   const ruc =
-    normalizedRuc(
+    normalizeRuc(
       rucValue
     );
 
@@ -1443,7 +1144,7 @@ export async function lookupSunatLegalRepresentatives(
   ) {
     throw new AppError(
       422,
-      "SUNAT legal-representative lookup requires an 11-digit RUC.",
+      "SUNAT representative lookup requires an 11-digit RUC.",
       {
         ruc:
           rucValue
@@ -1453,12 +1154,10 @@ export async function lookupSunatLegalRepresentatives(
     );
   }
 
-  if (
-    !legalName
-  ) {
+  if (!legalName) {
     throw new AppError(
       422,
-      "Legal name is required to retrieve SUNAT legal representatives.",
+      "Legal name is required for the SUNAT representative lookup.",
       {
         ruc
       },
@@ -1474,23 +1173,19 @@ export async function lookupSunatLegalRepresentatives(
     );
 
   const cached =
-    readCache(
+    getCached(
       key
     );
 
-  if (
-    cached
-  ) {
+  if (cached) {
     return {
       ...cached,
-      cached: true
+
+      cached:
+        true
     };
   }
 
-  /*
-   * Prevent five browser requests for the same RUC from making
-   * five simultaneous requests to SUNAT.
-   */
   if (
     inflight.has(
       key
@@ -1507,8 +1202,10 @@ export async function lookupSunatLegalRepresentatives(
       legalName
     )
       .then(
-        (result) => {
-          writeCache(
+        (
+          result
+        ) => {
+          saveCached(
             key,
             result
           );
@@ -1517,24 +1214,52 @@ export async function lookupSunatLegalRepresentatives(
         }
       )
       .catch(
-        (error) => {
-          const reason =
-            error?.name ===
-            "AbortError"
-              ? "SUNAT Consulta RUC timed out."
-              : error?.message ||
-                "SUNAT Consulta RUC could not be reached.";
+        (
+          error
+        ) => {
+          console.error(
+            `[SUNAT REPRESENTATIVES] ${ruc}:`,
+            error
+          );
+
+          let message =
+            error?.message ||
+            "SUNAT Consulta RUC could not be completed.";
+
+          if (
+            /executable.*doesn.?t exist|browser.*not found/i.test(
+              message
+            )
+          ) {
+            message =
+              "Playwright Chromium is not installed. Run: npx playwright install chromium";
+          }
+
+          if (
+            /human verification|captcha|recaptcha/i.test(
+              message
+            )
+          ) {
+            message =
+              "SUNAT Consulta RUC is currently requiring manual browser verification. Automated representative lookup cannot continue until SUNAT allows the normal public browser flow.";
+          }
 
           throw new AppError(
             503,
-            "SUNAT legal-representative information is temporarily unavailable.",
+            message,
             {
               ruc,
 
               source:
-                "SUNAT_CONSULTA_RUC_WEB",
+                "SUNAT_CONSULTA_RUC_BROWSER",
 
-              reason
+              originalError:
+                error?.message,
+
+              debugDirectory:
+                debugEnabled()
+                  ? debugDir()
+                  : undefined
             },
             ERROR_CODES
               .INTEGRATION_NOT_CONFIGURED
@@ -1557,13 +1282,24 @@ export async function lookupSunatLegalRepresentatives(
   return promise;
 }
 
-/*
- * Exported only so you can unit-test HTML parsing later
- * without making real SUNAT requests.
- */
-export const sunatConsultaRucRepresentativeInternals =
-  Object.freeze({
-    parseLegalRepresentatives,
-    extractCompanyHeading,
-    decodeHtmlEntities
-  });
+export async function closeSunatRepresentativesBrowser() {
+  if (
+    !browserPromise
+  ) {
+    return;
+  }
+
+  const browser =
+    await browserPromise.catch(
+      () => null
+    );
+
+  browserPromise =
+    null;
+
+  await browser
+    ?.close()
+    .catch(
+      () => {}
+    );
+}

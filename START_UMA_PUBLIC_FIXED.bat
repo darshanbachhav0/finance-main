@@ -91,7 +91,7 @@ echo Project : %PROJECT_DIR%
 echo App port: %APP_PORT%
 echo MongoDB : localhost:%MONGO_PORT%
 echo Database: %MONGO_DB%
-echo SUNAT   : Official Public Padron Reducido RUC
+echo SUNAT   : Official Public Padron + Consulta RUC
 echo.
 echo ============================================================
 echo.
@@ -283,6 +283,7 @@ set "PORT=%APP_PORT%"
 set "JWT_EXPIRES_IN=8h"
 
 
+
 rem ============================================================
 rem SUNAT PUBLIC PADRON CONFIGURATION
 rem ============================================================
@@ -300,6 +301,34 @@ set "SUNAT_PADRON_MAX_STALE_DAYS=7"
 set "SUNAT_PADRON_REQUEST_TIMEOUT_MS=120000"
 
 set "SUNAT_PADRON_MAX_UNCOMPRESSED_BYTES=5368709120"
+
+
+
+rem ============================================================
+rem SUNAT CONSULTA RUC - LEGAL REPRESENTATIVES
+rem ============================================================
+rem
+rem IMPORTANT:
+rem
+rem On this PC SUNAT accepts normal visible Chromium but resets
+rem the connection when Chromium is running in headless mode.
+rem
+rem Therefore HEADLESS must remain false.
+rem
+rem When a supplier RUC is checked, a Chromium browser window
+rem may briefly appear on THIS HOST PC.
+rem
+rem Remote users using the ngrok URL will NOT see this browser.
+rem ============================================================
+
+set "SUNAT_REPRESENTATIVES_HEADLESS=false"
+
+set "SUNAT_REPRESENTATIVES_DEBUG=false"
+
+set "SUNAT_CONSULTA_RUC_TIMEOUT_MS=30000"
+
+set "SUNAT_CONSULTA_RUC_CACHE_MINUTES=30"
+
 
 
 rem ============================================================
@@ -396,6 +425,23 @@ if errorlevel 1 goto :DEPENDENCY_ERROR
 :DEPENDENCIES_READY
 
 echo       Dependencies are ready.
+echo.
+
+
+
+rem ============================================================
+rem VERIFY PLAYWRIGHT CHROMIUM
+rem ============================================================
+
+echo       Checking Playwright Chromium...
+
+
+node --input-type=module -e "import('playwright').then(async ({chromium})=>{const b=await chromium.launch({headless:false});console.log('      Playwright Chromium ready: '+await b.version());await b.close();}).catch(e=>{console.error(e.message);process.exit(1);})"
+
+
+if errorlevel 1 goto :PLAYWRIGHT_ERROR
+
+
 echo.
 
 
@@ -723,16 +769,45 @@ echo     Database: %MONGO_DB%
 echo.
 echo ============================================================
 echo.
-echo SUNAT VALIDATION:
+echo SUNAT TAXPAYER VALIDATION:
 echo.
 echo     Source        : Official SUNAT Public Padron
 echo     RUC exists    : ENABLED
 echo     Legal name    : ENABLED
 echo     ACTIVO status : ENABLED
 echo     HABIDO status : ENABLED
+echo     Fiscal address: ENABLED
+echo     UBIGEO        : ENABLED
 echo.
-echo     Specific CPE acceptance:
+echo ============================================================
+echo.
+echo SUNAT LEGAL REPRESENTATIVES:
+echo.
+echo     Source        : Official SUNAT Consulta RUC
+echo     Browser       : Playwright Chromium
+echo     Headless      : DISABLED
+echo     Status        : ENABLED
+echo.
+echo     Information:
+echo     - Representative document type
+echo     - Representative document number
+echo     - Representative full name
+echo     - Position
+echo     - Effective date
+echo.
+echo     NOTE:
+echo     A Chromium window may briefly appear on this PC when
+echo     a supplier RUC is checked. This is expected.
+echo.
+echo ============================================================
+echo.
+echo SUNAT CPE VALIDATION:
+echo.
+echo     Specific invoice acceptance:
 echo     NOT available from the public Padron.
+echo.
+echo     Official CPE API credentials would still be required
+echo     for authoritative invoice-level SUNAT validation.
 echo.
 echo ============================================================
 echo.
@@ -757,6 +832,9 @@ echo - Keep Docker Desktop running.
 echo - Keep the Production Server window running.
 echo - Keep the Batch Worker window running.
 echo - Keep the ngrok window running.
+echo.
+echo - Do NOT close Chromium while SUNAT representative lookup
+echo   is actively running.
 echo.
 echo When this PC is turned off, the platform becomes unavailable.
 echo.
@@ -949,6 +1027,27 @@ goto :FAIL
 
 echo.
 echo [ERROR] npm dependency installation failed.
+echo.
+goto :FAIL
+
+
+
+:PLAYWRIGHT_ERROR
+
+echo.
+echo ============================================================
+echo PLAYWRIGHT CHROMIUM ERROR
+echo ============================================================
+echo.
+echo Playwright or its Chromium browser is not ready.
+echo.
+echo Run these commands from the project root:
+echo.
+echo     npm install playwright --workspace backend
+echo.
+echo     npx playwright install chromium
+echo.
+echo Then run this BAT again.
 echo.
 goto :FAIL
 
