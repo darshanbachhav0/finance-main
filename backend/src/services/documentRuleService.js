@@ -1,4 +1,5 @@
 import DocumentRule from "../models/DocumentRule.js";
+import { validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { AppError } from "../utils/AppError.js";
 import {
   ERROR_CODES,
@@ -74,11 +75,12 @@ export async function configuredQuotationPolicy(request) {
 }
 
 export function validateStructuredQuotationComparison(request, policy = defaultQuotationPolicy(request)) {
-  if (!policy.enabled) return { valid: true, applicable: false, policy, errors: [] };
+  const paymentErrors = (request.quotations || []).flatMap((quotation, index) => validatePaymentTerms(quotation).map((error) => ({ code: "QUOTATION_PAYMENT_TERMS_INVALID", quotation: index + 1, ...error })));
+  if (!policy.enabled) return { valid: paymentErrors.length === 0, applicable: false, policy, errors: paymentErrors };
   const quotations = request.quotations || [];
   const exception = request.quotationException || {};
   const exceptionAccepted = Boolean(exception.authorized && policy.allowAuthorizedException);
-  const errors = [];
+  const errors = [...paymentErrors];
   const supplierIds = quotations.map((quotation) => String(quotation.supplier?._id || quotation.supplier || "")).filter(Boolean);
   const uniqueSupplierIds = new Set(supplierIds);
   if (!exceptionAccepted && uniqueSupplierIds.size < policy.minimumCount) {

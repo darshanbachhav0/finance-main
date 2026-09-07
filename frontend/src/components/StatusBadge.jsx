@@ -95,5 +95,5 @@ const classes = {
 
 export default function StatusBadge({ status }) {
   const { t } = useLanguage();
-  return <span className={classes[status] || "badge badge-gray"}>{t(status || "N/A")}</span>;
+  return <span className={classes[status] || "badge badge-gray"}><span className="badge-label">{t(status || "N/A")}</span></span>;
 }

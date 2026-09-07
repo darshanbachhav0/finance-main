@@ -153,6 +153,9 @@ The generated `trycloudflare.com` URL is temporary. `npm run share:publish` also
 - `docs/REQUIREMENTS_TRACEABILITY.md`: requirement-to-code/test mapping.
 - `docs/EXTERNAL_INTEGRATIONS.md`: honest integration capabilities and limits.
 - `docs/ARCHITECTURE.md`: system and domain architecture.
+- `docs/QUOTATION_PAYMENT_TERMS.md`: quotation payment choices, comparison, order snapshots, and compatibility.
+- `docs/ANNUAL_MONTHLY_BUDGETS.md`: annual plans, monthly limits, reserve allocation, audited adjustments, and legacy compatibility.
+- `docs/UMA_UI_UX.md`: UMA branding, the 19 interface improvements, responsive behavior, and browser verification.
 - `docs/MIGRATION_AND_OPERATIONS.md`: migration, backup, seed, run, and recovery procedures.
 - `docs/USER_MANUAL.md`: English/Spanish operator manual source.
 - `documentation/UMA_Integrated_ERP_User_and_Operations_Manual_EN_ES.docx`: polished bilingual Word manual.

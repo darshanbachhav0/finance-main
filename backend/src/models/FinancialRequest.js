@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
 import {
   ACKNOWLEDGMENT_TYPES,
   APPROVAL_STAGES,
@@ -68,13 +69,15 @@ const quotationSchema = new mongoose.Schema(
     amount: { type: Number, min: 0 },
     currency: { type: String, enum: CURRENCY, default: "PEN" },
     deliveryPeriod: { type: String, trim: true, default: "" },
-    paymentConditions: { type: String, trim: true, default: "" },
+    ...paymentTermFields,
     commercialConditions: { type: String, trim: true, default: "" },
     attachment: { type: mongoose.Schema.Types.ObjectId },
     recommended: { type: Boolean, default: false }
   },
   { _id: true }
 );
+
+quotationSchema.pre("validate", validateAndNormalizePaymentTerms);
 
 const mobilityLineSchema = new mongoose.Schema(
   {

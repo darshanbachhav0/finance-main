@@ -41,6 +41,7 @@ import {
 } from "../utils/constants.js";
 import { canModifyRequest, canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
+import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 
 export const requestPopulate = [
   { path: "supplier" },
@@ -92,6 +93,29 @@ const attachmentKinds = Object.freeze({
 
 function parseBoolean(value) {
   return value === true || value === "true" || value === "1";
+}
+
+const A1_B_EXPENDITURE_CLASSIFICATIONS = new Set([REQUEST_TYPE.OPEX, REQUEST_TYPE.CAPEX]);
+
+export function normalizeRequestTypeForTrack(flowType, requestType) {
+  const normalizedFlow = flowType || FLOW_TYPE.A1;
+
+  if (normalizedFlow === FLOW_TYPE.C) return REQUEST_TYPE.ENTREGA_RENDIR;
+
+  if ([FLOW_TYPE.A1, FLOW_TYPE.B].includes(normalizedFlow) && !A1_B_EXPENDITURE_CLASSIFICATIONS.has(requestType)) {
+    throw new AppError(
+      422,
+      "Tracks A1 and B only allow CAPEX or OPEX as the expenditure classification.",
+      {
+        flowType: normalizedFlow,
+        requestType,
+        allowedRequestTypes: [REQUEST_TYPE.CAPEX, REQUEST_TYPE.OPEX]
+      },
+      ERROR_CODES.VALIDATION_ERROR
+    );
+  }
+
+  return requestType;
 }
 
 function maskBankValue(value) {
@@ -168,16 +192,21 @@ export function parseRequestLines(value) {
 export function parseQuotations(value) {
   const parsed = parseJson(value, "quotations") || [];
   if (!Array.isArray(parsed)) throw new AppError(400, "quotations must be an array.", { field: "quotations" }, ERROR_CODES.VALIDATION_ERROR);
-  return parsed.map((quotation) => ({
-    supplier: quotation.supplier?._id || quotation.supplier,
-    amount: quotation.amount === "" || quotation.amount === undefined || quotation.amount === null ? undefined : Number(quotation.amount),
-    currency: quotation.currency,
-    deliveryPeriod: quotation.deliveryPeriod || "",
-    paymentConditions: quotation.paymentConditions || "",
-    commercialConditions: quotation.commercialConditions || "",
-    attachment: quotation.attachment?._id || quotation.attachment,
-    recommended: parseBoolean(quotation.recommended)
-  }));
+  return parsed.map((quotation, index) => {
+    if (!quotation || typeof quotation !== "object" || Array.isArray(quotation)) throw new AppError(400, "Each quotation must be an object.", { quotation: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    const errors = validatePaymentTerms(quotation, { requireComplete: false });
+    if (errors.length) throw new AppError(422, "Review the quotation payment terms.", { quotation: index + 1, errors }, ERROR_CODES.VALIDATION_ERROR);
+    return {
+      supplier: quotation.supplier?._id || quotation.supplier,
+      amount: quotation.amount === "" || quotation.amount === undefined || quotation.amount === null ? undefined : Number(quotation.amount),
+      currency: quotation.currency,
+      deliveryPeriod: quotation.deliveryPeriod || "",
+      ...normalizePaymentTerms(quotation),
+      commercialConditions: quotation.commercialConditions || "",
+      attachment: quotation.attachment?._id || quotation.attachment,
+      recommended: parseBoolean(quotation.recommended)
+    };
+  });
 }
 
 function optionalNumber(value) {
@@ -394,18 +423,20 @@ function applyEditableFields(request, payload) {
 }
 
 function normalizeTrackFields(request) {
-  if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) request.flowType = FLOW_TYPE.C;
+  request.flowType ||= FLOW_TYPE.A1;
+  request.requestType = normalizeRequestTypeForTrack(request.flowType, request.requestType);
+
   if (request.flowType === FLOW_TYPE.C) {
-    request.requestType = REQUEST_TYPE.ENTREGA_RENDIR;
     request.supplier = undefined;
     request.supplierSnapshot = undefined;
     request.quotations = [];
     request.supplierSelectionReason = "";
     request.directPayment = undefined;
     request.fiscalData = undefined;
-  } else if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
-    request.requestType = REQUEST_TYPE.OPEX;
+    request.capexDetails = {};
+    request.opexDetails = {};
   }
+
   if (request.flowType !== FLOW_TYPE.A1) {
     request.quotations = [];
     request.supplierSelectionReason = "";
@@ -614,12 +645,13 @@ export async function createFinancialRequest({ payload, files, user, req }) {
   if (requestedFlow === FLOW_TYPE.A2) {
     throw new AppError(422, "Track A2 starts from an existing approved Purchase Order in the batch-invoice workspace.", { flowType: requestedFlow }, ERROR_CODES.VALIDATION_ERROR);
   }
+  const normalizedRequestType = normalizeRequestTypeForTrack(requestedFlow, payload.requestType);
   const lines = parseRequestLines(payload.lines);
   const accountingPeriod = payload.accountingPeriod || periodFromDate(payload.issueDate);
   await guardAccountingPeriod({ period: accountingPeriod, action: "CREATE", user, req, module: "REQUESTS", entityType: "FinancialRequest" });
   const request = new FinancialRequest({
     flowType: requestedFlow,
-    requestType: payload.requestType,
+    requestType: normalizedRequestType,
     expenseNature: payload.expenseNature,
     priority: payload.priority,
     requester: user._id,
@@ -769,11 +801,15 @@ export async function deleteFinancialRequest({ id, user, req }) {
 }
 
 export async function requestDocumentRequirements(query) {
-  return configuredDocumentRequirements({ flowType: query.flowType || FLOW_TYPE.A1, requestType: query.requestType, expenseNature: query.expenseNature, attachments: [] });
+  const flowType = query.flowType || FLOW_TYPE.A1;
+  const requestType = normalizeRequestTypeForTrack(flowType, query.requestType);
+  return configuredDocumentRequirements({ flowType, requestType, expenseNature: query.expenseNature, attachments: [] });
 }
 
 export async function requestFormPolicy(query) {
-  const request = { flowType: query.flowType || FLOW_TYPE.A1, requestType: query.requestType, expenseNature: query.expenseNature, attachments: [] };
+  const flowType = query.flowType || FLOW_TYPE.A1;
+  const requestType = normalizeRequestTypeForTrack(flowType, query.requestType);
+  const request = { flowType, requestType, expenseNature: query.expenseNature, attachments: [] };
   const [documentRequirements, quotationPolicy] = await Promise.all([
     configuredDocumentRequirements(request),
     configuredQuotationPolicy(request)
@@ -793,10 +829,12 @@ export async function requestAuthorizedCostCenters(user) {
 }
 
 export async function previewFinancialRequestBudget({ payload, user }) {
+  const flowType = payload.flowType || FLOW_TYPE.A1;
+  const requestType = normalizeRequestTypeForTrack(flowType, payload.requestType);
   const lines = parseRequestLines(payload.lines);
   assertRequestLines(lines);
   await validateAccountingDimensions({
-    requestType: payload.requestType,
+    requestType,
     expenseNature: payload.expenseNature,
     lines,
     user
@@ -811,7 +849,7 @@ export async function previewFinancialRequestBudget({ payload, user }) {
     line.penEquivalent = multiplyMoney(line.totalAmount, exchangeRate);
   }
   return previewBudget({
-    requestType: payload.requestType,
+    requestType,
     expenseNature: payload.expenseNature,
     issueDate: payload.issueDate,
     accountingPeriod: payload.accountingPeriod,

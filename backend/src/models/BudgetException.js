@@ -10,6 +10,14 @@ const budgetExceptionSchema = new mongoose.Schema(
     project: String,
     strategy: { type: String, enum: ["REQUEST_BUDGET_INCREASE", "EXTRAORDINARY_APPROVAL"], required: true },
     availableAmount: { type: Number, required: true },
+    budgetLimits: {
+      planningMode: String,
+      budgetMonth: Number,
+      annualAvailable: Number,
+      annualProjected: Number,
+      monthlyAvailable: Number,
+      monthlyProjected: Number
+    },
     requestedAmount: { type: Number, required: true },
     status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING", index: true },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -24,4 +32,3 @@ budgetExceptionSchema.index({ request: 1, dimensionKey: 1 }, { unique: true });
 budgetExceptionSchema.index({ status: 1, strategy: 1, createdAt: -1 });
 
 export default mongoose.model("BudgetException", budgetExceptionSchema);
-

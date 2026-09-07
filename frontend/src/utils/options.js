@@ -7,6 +7,34 @@ export const requestTypes = [
   "PAGO_CON_COTIZACION"
 ];
 
+/*
+ * New-request classification policy:
+ *
+ * - A1 and B describe HOW the transaction is processed.
+ * - OPEX / CAPEX describe WHAT kind of expenditure it is.
+ * - C is an advance to render, so its internal request type remains
+ *   ENTREGA_RENDIR until the rendition establishes the final expense.
+ *
+ * Keep requestTypes above for historical records, filters and master-data
+ * configuration. New A1/B requests must use only the two values below.
+ */
+export const requestCreationClassifications = ["OPEX", "CAPEX"];
+
+export const expenditureClassificationLabels = {
+  OPEX: "OPEX - Operating expenditure",
+  CAPEX: "CAPEX - Capital expenditure"
+};
+
+export function requestTypeForFlow(flowType, currentRequestType = "OPEX") {
+  if (flowType === "C") return "ENTREGA_RENDIR";
+  if (["A1", "B"].includes(flowType)) {
+    return requestCreationClassifications.includes(currentRequestType)
+      ? currentRequestType
+      : "OPEX";
+  }
+  return currentRequestType;
+}
+
 export const flowTypes = ["A1", "A2", "B", "C"];
 
 export const flowTypeLabels = {

@@ -65,7 +65,7 @@ export default function ApprovalInbox() {
           ? "This records an authenticated Area Director electronic sign-off and advances the configured route."
           : "This records an authenticated approval and advances to the next configured level or budget control.",
         confirmLabel: "Approve request",
-        tone: "primary",
+        tone: "success",
         inputLabel: "Approval comments",
         result: "The configured approval route advances. Budget is committed only after all required approvals pass."
       },
@@ -138,7 +138,7 @@ export default function ApprovalInbox() {
             { key: "approvalDueAt", label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><span>{t(row.sla?.severity || (row.sla?.overdue ? "OVERDUE" : "LOW"))}</span></div> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
             { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-            { key: "decision", label: "Decision", sortable: false, render: (row) => <div className="row-actions"><button type="button" className="icon-button approve" title={t("Approve")} onClick={() => openDecision(row, "approve")}><CheckCircle2 size={17} /></button><button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button><button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button></div> }
+            { key: "decision", label: "Decision", sortable: false, render: (row) => <div className="row-actions"><button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve")}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button><button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button><button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button></div> }
           ]}
         />
       </div>

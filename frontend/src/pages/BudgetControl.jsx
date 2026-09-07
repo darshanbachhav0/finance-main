@@ -12,14 +12,19 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import BudgetPlanWorkspace from "../components/BudgetPlanWorkspace.jsx";
+import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
+import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 
-const money = (value) => `PEN ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value) => value === null || value === undefined ? "—" : `PEN ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function BudgetControl() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { notify } = useToast();
-  const initialPeriod = new Date().toISOString().slice(0, 7);
+  const initialPeriod = new Date().toISOString().slice(0, 4);
+  const [view, setView] = useState("ANNUAL");
+  const [workspace, setWorkspace] = useState(null);
   const [periodInput, setPeriodInput] = useState(initialPeriod);
   const [period, setPeriod] = useState(initialPeriod);
   const [data, setData] = useState({ totals: {}, warnings: [] });
@@ -43,6 +48,7 @@ export default function BudgetControl() {
   useEffect(() => { load(); }, [period]);
 
   function applyPeriod() {
+    if (!(view === "ANNUAL" ? validBudgetYear(periodInput) : validBudgetPeriod(periodInput))) { setError(t("Select a valid budget year or month.")); return; }
     if (periodInput !== period) {
       setPeriod(periodInput);
       return;
@@ -51,6 +57,19 @@ export default function BudgetControl() {
     allocationTable.reload();
     exceptionTable.reload();
     commitmentTable.reload();
+  }
+
+  function changeView(nextView) {
+    setView(nextView);
+    const year = validBudgetYear(periodInput.slice(0, 4)) ? periodInput.slice(0, 4) : initialPeriod;
+    const nextPeriod = nextView === "ANNUAL" ? year : year + "-" + new Date().toISOString().slice(5, 7);
+    setPeriodInput(nextPeriod); setPeriod(nextPeriod);
+  }
+
+  function planSaved(plan) {
+    setWorkspace({ planId: plan._id });
+    if (plan.period !== period.slice(0, 4)) { setView("ANNUAL"); setPeriod(plan.period); setPeriodInput(plan.period); }
+    else { load(); allocationTable.reload(); exceptionTable.reload(); commitmentTable.reload(); }
   }
 
   async function decide(comments) {
@@ -82,14 +101,22 @@ export default function BudgetControl() {
   }
 
   return <section>
-    <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={<Link className="secondary-button" to="/configuration/budget-allocations">{t("Manage allocations")}</Link>} />
+    <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
     <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error}</Message>
-    <div className="period-toolbar"><label className="field compact-period"><span>{t("Commitment period")}</span><input type="month" value={periodInput} onChange={(event) => setPeriodInput(event.target.value)} /></label><button type="button" className="secondary-button" onClick={applyPeriod} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Apply")}</span></button></div>
+    <div className="period-toolbar budget-period-toolbar">
+      <div className="budget-view-switch" role="group" aria-label={t("Budget view")}><button type="button" aria-pressed={view === "ANNUAL"} onClick={() => changeView("ANNUAL")}>{t("Annual view")}</button><button type="button" aria-pressed={view === "MONTHLY"} onClick={() => changeView("MONTHLY")}>{t("Monthly view")}</button></div>
+      <label className="field compact-period"><span>{t("Budget year")}</span><input aria-label={t("Budget year")} type="number" min="2000" max="2199" value={periodInput.slice(0, 4)} onChange={(event) => setPeriodInput(event.target.value + (view === "MONTHLY" ? "-" + (periodInput.slice(5) || "01") : ""))} /></label>
+      {view === "MONTHLY" && <label className="field compact-period"><span>{t("Month")}</span><select aria-label={t("Month")} value={periodInput.slice(5)} onChange={(event) => setPeriodInput(periodInput.slice(0, 4) + "-" + event.target.value)}>{BUDGET_MONTHS.map((name, index) => <option key={name} value={String(index + 1).padStart(2, "0")}>{t(name)}</option>)}</select></label>}
+      <button type="button" className="secondary-button" onClick={applyPeriod} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Apply")}</span></button>
+    </div>
+    {data.hasUndatedLegacy && <Message>{t("Legacy Cost Center balances have no budget year and are excluded from selected-period totals.")}</Message>}
+    {data.hasAnnualOnlyActivity && <Message>{t("Annual-only plans show monthly activity without a monthly limit. View their annual plan for available budget.")}</Message>}
     <div className="stats-grid budget-stats"><StatCard label="Assigned budget" value={money(data.totals.assigned)} tone="navy" /><StatCard label="Committed budget" value={money(data.totals.committed)} tone="amber" /><StatCard label="Executed budget" value={money(data.totals.executed)} tone="teal" /><StatCard label="Paid budget" value={money(data.totals.paid)} tone="green" /><StatCard label="Available balance" value={money(data.totals.available)} tone="neutral" /></div>
     {data.warnings?.length > 0 && <div className="alert-strip warning"><AlertTriangle size={20} /><div><strong>{t("Budget attention required")}</strong><p>{t("One or more dimensions have low availability or over-execution.")}</p></div></div>}
 
-    <div className="workspace-panel"><div className="section-heading"><div><h3>{t("Dimensional budget")}</h3><p>{t("Period, Cost Center, expense classification, and project remain visible together.")}</p></div><span className="section-count">{allocationTable.pagination.total}</span></div><DataTable rows={allocationTable.rows} loading={allocationTable.loading} remote={allocationTable.remote} filters={[{ key: "source", label: "sources", allLabel: "All sources", options: ["DIMENSIONAL_ALLOCATION", "TRANSITIONAL_COST_CENTER"] }]} searchPlaceholder="Search Cost Center, account, project, or period..." columns={[
-      { key: "period", label: "Period", render: (row) => row.period || period },
+    <div className="workspace-panel"><div className="section-heading"><div><h3>{t("Dimensional budget")}</h3><p>{t("Period, Cost Center, expense classification, and project remain visible together.")}</p></div><span className="section-count">{allocationTable.pagination.total}</span></div><DataTable rows={allocationTable.rows} loading={allocationTable.loading} remote={allocationTable.remote} rowActions={(row) => row.source === "LINKED_ANNUAL_PLAN" ? [{ label: "View annual plan", onClick: () => setWorkspace({ planId: row._id }) }] : []} filters={[{ key: "source", label: "sources", allLabel: "All sources", options: ["LINKED_ANNUAL_PLAN", "DIMENSIONAL_ALLOCATION", "TRANSITIONAL_COST_CENTER"] }]} searchPlaceholder="Search Cost Center, account, project, or period..." columns={[
+      { key: "period", label: "Period", render: (row) => row.period || t("Undated legacy balance") },
+      { key: "planningMode", label: "Budget planning mode", sortable: false, render: (row) => t(BUDGET_PLANNING_MODES[row.planningMode] || "Legacy allocation") },
       { key: "costCenter", label: "Cost center", sortable: false, getValue: (row) => `${row.costCenter?.code || ""} ${row.costCenter?.name || ""}`, render: (row) => <div className="primary-cell"><strong>{row.costCenter?.code || "-"}</strong><span>{row.costCenter?.name}</span></div> },
       { key: "expenseType", label: "Expense type", sortable: false, getValue: (row) => row.expenseType?.accountNumber, render: (row) => row.expenseType ? `${row.expenseType.accountNumber} - ${row.expenseType.name}` : t("All") },
       { key: "project", label: "Project", render: (row) => row.project || t("All") }, { key: "assignedAmount", label: "Assigned", align: "right", render: (row) => money(row.assignedAmount) },
@@ -100,6 +127,7 @@ export default function BudgetControl() {
     <div className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget exceptions")}</h3><p>{t("Insufficient-budget branches require an explicit decision and remain auditable.")}</p></div><span className="section-count">{exceptionTable.pagination.total}</span></div><DataTable rows={exceptionTable.rows} loading={exceptionTable.loading} remote={exceptionTable.remote} filters={[{ key: "status", label: "statuses", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED"] }]} rowActions={exceptionActions} columns={[
       { key: "request", label: "Request", sortable: false, getValue: (row) => row.request?.requestNumber, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
       { key: "strategy", label: "Strategy" }, { key: "costCenter", label: "Cost center", sortable: false, render: (row) => row.costCenter?.code || "-" }, { key: "expenseType", label: "Expense type", sortable: false, render: (row) => row.expenseType?.accountNumber || "-" },
+      { key: "budgetLimits", label: "Annual / monthly limits", sortable: false, render: (row) => row.budgetLimits?.planningMode ? <BudgetLimitSummary line={row.budgetLimits} /> : "—" },
       { key: "availableAmount", label: "Available", align: "right", render: (row) => money(row.availableAmount) }, { key: "requestedAmount", label: "Requested", align: "right", render: (row) => <strong>{money(row.requestedAmount)}</strong> }, { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }
     ]} /></div>
 
@@ -109,6 +137,7 @@ export default function BudgetControl() {
       { key: "lines", label: "Dimensions", sortable: false, getValue: (row) => row.lines?.map((line) => `${line.costCenter?.code} ${line.expenseType?.accountNumber}`).join(" "), render: (row) => row.lines?.map((line) => `${line.costCenter?.code || "-"} / ${line.expenseType?.accountNumber || "-"}`).join(", ") },
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }, { key: "totalAmount", label: "Committed amount", align: "right", render: (row) => <strong>{money(row.totalAmount)}</strong> }, { key: "createdAt", label: "Created", render: (row) => new Date(row.createdAt).toLocaleString() }
     ]} /></div>
+    <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canDecide} onClose={() => setWorkspace(null)} onSaved={planSaved} />
     <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm ? [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
   </section>;
 }

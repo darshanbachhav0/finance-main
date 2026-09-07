@@ -29,10 +29,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import api from "../api/client.js";
 import CommandPalette from "../components/CommandPalette.jsx";
+import UmaBrand from "../components/UmaBrand.jsx";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
+import useMediaQuery from "../hooks/useMediaQuery.js";
 import { canAccessNavigation } from "../utils/navigationAccess.js";
 
 const groups = [
@@ -56,6 +58,11 @@ const groups = [
       { label: "Accounts Payable", path: "/accounting/payables", icon: BookOpenCheck },
       { label: "Invoice Observations", path: "/accounting/invoice-observations", icon: TriangleAlert },
       { label: "Treasury", path: "/treasury", icon: Landmark, counter: "payable" },
+    ]
+  },
+  {
+    label: "Planning and reports",
+    items: [
       { label: "Budget Control", path: "/budget", icon: WalletCards, counter: "budgetExceptions" },
       { label: "Accounting Periods", path: "/accounting/periods", icon: CalendarRange },
       { label: "SIRE Export", path: "/accounting/sire", icon: FileSpreadsheet },
@@ -113,6 +120,7 @@ export default function AppLayout() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobile = useMediaQuery("(max-width: 1080px)");
   const [tasks, setTasks] = useState({ items: [], total: 0, counters: {} });
   const [notifications, setNotifications] = useState({ data: [], unreadCount: 0 });
   const [taskOpen, setTaskOpen] = useState(false);
@@ -157,8 +165,11 @@ export default function AppLayout() {
   useEffect(() => {
     setMobileOpen(false);
     setTaskOpen(false);
+    setUserOpen(false);
     loadTasks();
   }, [location.pathname]);
+
+  useEffect(() => { document.title = `${t(pageTitle)} · UMA`; }, [pageTitle, t]);
 
   useEffect(() => {
     const refresh = () => loadTasks();
@@ -192,6 +203,8 @@ export default function AppLayout() {
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const sidebar = sidebarRef.current;
     const focusable = () => [...(sidebar?.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])') || [])].filter((item) => item.offsetParent !== null);
     const frame = window.requestAnimationFrame(() => focusable()[0]?.focus({ preventScroll: true }));
@@ -217,6 +230,7 @@ export default function AppLayout() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      document.body.style.overflow = previousOverflow;
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
     };
@@ -231,14 +245,11 @@ export default function AppLayout() {
 
   return (
     <div className={`app-shell${collapsed ? " sidebar-collapsed" : ""}${mobileOpen ? " mobile-nav-open" : ""}`}>
+      <a className="skip-link" href="#main-content">{t("Skip to main content")}</a>
       {mobileBackdrop.shouldRender && <button type="button" className={`mobile-nav-backdrop motion-${mobileBackdrop.phase}`} onClick={() => { setMobileOpen(false); window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true })); }} aria-label={t("Close navigation")} />}
-      <aside ref={sidebarRef} className="sidebar" aria-label={t("Primary navigation")}>
+      <aside ref={sidebarRef} className="sidebar" aria-label={t("Primary navigation")} inert={mobile && !mobileOpen ? "" : undefined}>
         <div className="brand">
-          <div className="brand-mark">FC</div>
-          <div className="brand-copy">
-            <strong>{t("Financial Control")}</strong>
-            <span>{t("Requests & payments")}</span>
-          </div>
+          <Link to="/" aria-label={t("UMA home")}><UmaBrand /></Link>
           <button type="button" className="icon-button sidebar-mobile-close" onClick={() => { setMobileOpen(false); window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true })); }} aria-label={t("Close navigation")}><X size={19} /></button>
         </div>
 
@@ -284,7 +295,7 @@ export default function AppLayout() {
                   {breadcrumb.map((item, index) => item.path ? <Link key={item.label} to={item.path}>{t(item.label)}</Link> : <span key={item.label} aria-current="page">{t(item.label)}</span>).reduce((items, item, index) => index ? [...items, <span className="breadcrumb-separator" key={`separator-${index}`}>/</span>, item] : [item], [])}
                 </nav>
               )}
-              <h1>{t(pageTitle)}</h1>
+              <strong className="topbar-page-title">{t(pageTitle)}</strong>
             </div>
           </div>
 
@@ -326,7 +337,7 @@ export default function AppLayout() {
             </div>
 
             <div className="topbar-menu">
-              <button type="button" className="user-menu-button" onClick={() => { setUserOpen((current) => !current); setTaskOpen(false); }} aria-expanded={userOpen}>
+              <button type="button" className="user-menu-button" aria-label={t("Account menu")} onClick={() => { setUserOpen((current) => !current); setTaskOpen(false); }} aria-expanded={userOpen}>
                 <span className="user-avatar">{user.name?.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
                 <span className="user-summary"><strong>{user.name}</strong><small>{t(user.role)} · {user.area}</small></span>
                 <ChevronDown size={15} />
@@ -344,7 +355,10 @@ export default function AppLayout() {
             </div>
           </div>
         </header>
-        <main className="content"><Outlet /></main>
+        <main className="content" id="main-content" tabIndex={-1}>
+          <div className="uma-print-header"><UmaBrand /><span>{t(pageTitle)}</span></div>
+          <Outlet />
+        </main>
       </div>
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} pages={commandPages} />
     </div>

@@ -50,6 +50,8 @@ export default function ConfirmDialog({
 
   useEffect(() => {
     if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKeyDown = (event) => {
       if (event.key === "Escape" && !loading) {
         event.preventDefault();
@@ -74,7 +76,7 @@ export default function ConfirmDialog({
       }
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", onKeyDown); };
   }, [open, loading]);
 
   useEffect(() => {
@@ -103,7 +105,7 @@ export default function ConfirmDialog({
             {content.details.map((detail) => (
               <div key={detail.label}>
                 <dt>{t(detail.label)}</dt>
-                <dd>{detail.value}</dd>
+                <dd>{typeof detail.value === "string" ? t(detail.value) : detail.value}</dd>
               </div>
             ))}
           </dl>
@@ -130,7 +132,7 @@ export default function ConfirmDialog({
                 required={content.inputRequired}
               />
             )}
-            {content.inputRequired && !inputValue.trim() && <small className="field-hint">{t("A comment is required to continue.")}</small>}
+            {content.inputRequired && !inputValue.trim() && <small className="field-hint">{t(content.inputType === "text" ? "Enter a value to continue." : "A comment is required to continue.")}</small>}
           </label>
         )}
         <footer className="dialog-actions">
@@ -138,7 +140,7 @@ export default function ConfirmDialog({
           <button
             ref={confirmRef}
             type="button"
-            className={content.tone === "danger" ? "danger-button" : "primary-button"}
+            className={content.tone === "danger" ? "danger-button" : content.tone === "success" ? "primary-button approve-button" : "primary-button"}
             disabled={disabled}
             onClick={() => onConfirm(inputValue.trim())}
           >

@@ -1,8 +1,9 @@
-import { LockKeyhole, LogIn, ShieldCheck, UsersRound } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, LogIn, ShieldCheck, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import Message from "../components/Message.jsx";
+import UmaBrand from "../components/UmaBrand.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
@@ -25,6 +26,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 
@@ -61,12 +63,12 @@ export default function Login() {
       <div className="login-language"><LanguageToggle /></div>
       <section className="login-shell">
         <div className="login-brand-panel">
-          <div className="login-brand"><span>FC</span><div><strong>{t("Financial Control")}</strong><small>{t("ERP operations")}</small></div></div>
-          <div className="login-system-mark"><ShieldCheck size={30} /><strong>{t("Financial Request & Payment Control")}</strong><span>{t("Authorized business users only")}</span></div>
-          <small className="login-version">ERP Financial Control · v1.0</small>
+          <UmaBrand />
+          <div className="login-system-mark"><ShieldCheck size={30} /><strong>{t("One place for your financial work.")}</strong><p>{t("Requests, approvals and budgets. Connected from the first step to payment.")}</p><span>{t("Universidad María Auxiliadora")}</span></div>
+          <small className="login-version">UMA · {t("Financial management")}</small>
         </div>
         <form className="login-form" onSubmit={submit}>
-          <div className="login-form-heading"><LockKeyhole size={24} /><div><h1>{t("Sign in")}</h1><p>{t("Use your assigned company account.")}</p></div></div>
+          <div className="login-form-heading"><LockKeyhole size={24} /><div><h1>{t("Welcome to UMA")}</h1><p>{t("Sign in with your university account.")}</p></div></div>
           <fieldset className="login-role-access" disabled={loading}>
             <legend><UsersRound size={16} />{t("Demo role access")}</legend>
             <label className="field">
@@ -85,7 +87,7 @@ export default function Login() {
           <div className="login-divider"><span>{t("Or sign in with an assigned account")}</span></div>
           <Message type="error">{error}</Message>
           <label className="field"><span>{t("Email")}</span><input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label className="field"><span>{t("Password")}</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+          <label className="field"><span>{t("Password")}</span><div className="password-control"><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /><button type="button" className="icon-button quiet" aria-label={t(showPassword ? "Hide password" : "Show password")} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           <button className="primary-button login-submit" type="submit" disabled={loading}><LogIn size={17} /><span>{t(loading ? "Signing in..." : "Sign in")}</span></button>
         </form>
       </section>

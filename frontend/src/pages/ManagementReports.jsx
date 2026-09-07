@@ -1,4 +1,4 @@
-import { Download, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
+import { Download, Printer, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
@@ -118,12 +118,14 @@ export default function ManagementReports() {
         description="Interactive institutional analysis using current request, budget, Accounting, CXP, Treasury, rendition, and reconciliation data."
         actions={<>
           <span className="last-updated">{t("Last updated")}: {data.lastUpdated ? formatDateTime(data.lastUpdated, language) : "-"}</span>
+          <button type="button" className="secondary-button" onClick={() => window.print()} disabled={loading}><Printer size={16} />{t("Print report")}</button>
           <button type="button" className="secondary-button" onClick={() => load()} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>
           <button type="button" className="primary-button" onClick={exportReport} disabled={loading || exporting}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Export management CSV")}</span></button>
         </>}
       />
       <Message type="error">{error || exportTable.error}</Message>
       <ReportFilters values={draftFilters} options={data.filterOptions || emptyData.filterOptions} onChange={setDraftFilters} onApply={applyFilters} onClear={clearFilters} loading={loading} />
+      <div className="report-context" role="status"><strong>{t("Showing report for")}: {filters.period || t("All periods")}</strong>{Object.entries(filters).filter(([key, value]) => key !== "period" && value).map(([key, value]) => <span key={key}>{t({ dateFrom: "Date from", dateTo: "Date to", currency: "Currency", requestType: "Request type", area: "Area", costCenter: "Cost center", project: "Project" }[key])}: {key === "costCenter" ? data.filterOptions.costCenters.find((center) => center.value === value)?.code || value : t(value)}</span>)}</div>
 
       <div className="stats-grid report-stats">
         <StatCard label="Assigned budget" value={money(data.budget.assigned)} tone="navy" />
@@ -141,10 +143,10 @@ export default function ManagementReports() {
       </div>
 
       <div className="analytics-tabs" role="tablist" aria-label={t("Report sections")}>
-        {tabs.map((item) => <button key={item.key} type="button" role="tab" aria-selected={activeSection === item.key} className={activeSection === item.key ? "active" : ""} onClick={() => setActiveSection(item.key)}>{t(item.label)}</button>)}
+        {tabs.map((item, index) => <button key={item.key} id={`report-tab-${item.key}`} type="button" role="tab" aria-controls="report-panel" tabIndex={activeSection === item.key ? 0 : -1} aria-selected={activeSection === item.key} className={activeSection === item.key ? "active" : ""} onClick={() => setActiveSection(item.key)} onKeyDown={(event) => { if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length; setActiveSection(tabs[next].key); document.getElementById(`report-tab-${tabs[next].key}`)?.focus(); }}>{t(item.label)}</button>)}
       </div>
 
-      <div className="analytics-grid" role="tabpanel">
+      <div className="analytics-grid" id="report-panel" role="tabpanel" aria-labelledby={`report-tab-${activeSection}`}>
         {activeSection === "overview" && <>
           <AnalyticsChart title="Global budget execution" description="Assigned, committed, executed, paid, and available budget for the selected scope." data={[{ name: data.comparison?.currentPeriod || t("Selected scope"), ...data.budget }]} series={[{ key: "assigned", label: "Assigned", color: "#17344c" }, { key: "committed", label: "Committed", color: "#d18a00" }, { key: "executed", label: "Executed", color: "#087c75" }, { key: "paid", label: "Paid", color: "#2463a6" }, { key: "available", label: "Available", color: "#19733d" }]} valueFormatter={money} loading={loading} />
           <AnalyticsChart title="CAPEX versus OPEX" description="Controlled expenditure by request type." type="donut" data={labelRows(data.byType)} series={amountSeries} valueFormatter={money} loading={loading} onDrillDown={(row) => navigate(requestPath({ requestType: row._id, period: filters.period }))} />

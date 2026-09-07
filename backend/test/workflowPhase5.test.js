@@ -207,6 +207,36 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(serviceOrder.orderKind, "SERVICE");
     });
 
+    await t.test("issued order preserves the selected quotation terms and does not create a payable", async () => {
+      const request = await procurementRequest();
+      Object.assign(request.quotations[0], { paymentCondition: "ADVANCE_AND_BALANCE", advancePercentage: 30, balanceTiming: "OTHER", balanceTimingNotes: "After final inspection", paymentNotes: "Supplier agreement" });
+      Object.assign(request.quotations[1], { paymentCondition: "100%_ADVANCE" });
+      await request.save();
+      const reloaded = await FinancialRequest.findById(request._id);
+      assert.equal(reloaded.quotations[0].balancePercentage, 70);
+      const order = await issueProcurementOrder({ requestId: request._id, user: users.budget, req });
+      const savedOrder = await PurchaseOrder.findById(order._id);
+      assert.equal(savedOrder.paymentTermsSnapshot.paymentCondition, "ADVANCE_AND_BALANCE");
+      assert.equal(savedOrder.paymentTermsSnapshot.advancePercentage, 30);
+      assert.equal(savedOrder.paymentTermsSnapshot.balancePercentage, 70);
+      assert.equal(savedOrder.paymentTermsSnapshot.balanceTimingNotes, "After final inspection");
+      assert.equal(savedOrder.paymentTermsSnapshot.paymentNotes, "Supplier agreement");
+      assert.equal(String(savedOrder.paymentTermsSnapshot.sourceQuotation), String(request.quotations[0]._id));
+      assert.equal(savedOrder.paymentTermsSnapshot.quotationAmount, 118);
+      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0);
+      const currentRequest = await FinancialRequest.findById(request._id);
+      currentRequest.quotations[0].advancePercentage = 50;
+      await currentRequest.save();
+      const repeated = await issueProcurementOrder({ requestId: request._id, user: users.budget, req });
+      assert.equal(repeated.paymentTermsSnapshot.advancePercentage, 30);
+
+      const legacy = await procurementRequest();
+      legacy.quotations[0].paymentConditions = "Original signed agreement";
+      await legacy.save();
+      const legacyOrder = await issueProcurementOrder({ requestId: legacy._id, user: users.budget, req });
+      assert.equal(legacyOrder.paymentTermsSnapshot.paymentConditions, "Original signed agreement");
+    });
+
     await t.test("repeated and concurrent order creation remains idempotent", async () => {
       const repeated = await issueProcurementOrder({ requestId: readyRequest._id, user: users.budget, req });
       assert.equal(await PurchaseOrder.countDocuments({ request: readyRequest._id }), 1);
@@ -256,9 +286,10 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     let legacyAccount;
     let ineligibleAccountIds;
     await t.test("Treasury receives only eligible CURRENT accounts and preferred is first", async () => {
-      preferredAccount = await account({ preferred: true });
-      alternateAccount = await account({ ownershipResult: "MANUAL_ACCEPTED" });
-      legacyAccount = await account({ verificationStatus: "LEGACY_ACCEPTED", ownershipResult: "NOT_REVIEWED" });
+      // Explicit dates keep the ordering assertion independent of tied creation timestamps.
+      preferredAccount = await account({ preferred: true, validFrom: new Date("2025-01-01") });
+      alternateAccount = await account({ ownershipResult: "MANUAL_ACCEPTED", validFrom: new Date("2025-02-01") });
+      legacyAccount = await account({ verificationStatus: "LEGACY_ACCEPTED", ownershipResult: "NOT_REVIEWED", validFrom: new Date("2025-03-01") });
       const pending = await account({ verificationStatus: "PENDING", ownershipResult: "NOT_REVIEWED" });
       const observed = await account({ verificationStatus: "OBSERVED" });
       const rejected = await account({ verificationStatus: "REJECTED" });

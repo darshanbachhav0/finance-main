@@ -126,7 +126,7 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
   if (supplier && !supplier.supplierCode) {
     issues.push(issue(ERROR_CODES.SUPPLIER_PRV_MISSING, "The homologated supplier has no assigned PRV code.", { supplier: supplier._id }));
   }
-  if (applicable && quotationPolicy.enabled && !quotationResult.valid) {
+  if (applicable && !quotationResult.valid) {
     issues.push(issue(ERROR_CODES.QUOTATION_REQUIREMENTS_INCOMPLETE, "The configured quotation comparison is incomplete.", { errors: quotationResult.errors, policy: quotationPolicy }));
   }
   if (applicable && !documentResult.valid) {
@@ -155,7 +155,7 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
       status: request.status
     },
     budget: { complete: procurementReadyBudgetStatuses.has(commitment?.status), status: commitment?.status || BUDGET_STATUS.NO_BUDGET, commitment: commitment?._id || null },
-    quotations: { complete: !quotationPolicy.enabled || quotationResult.valid, policy: quotationPolicy, errors: quotationResult.errors },
+    quotations: { complete: quotationResult.valid, policy: quotationPolicy, errors: quotationResult.errors },
     documents: { complete: documentResult.valid, missing: documentResult.missing },
     issues
   };

@@ -15,6 +15,7 @@ const commitmentHistorySchema = new mongoose.Schema(
 const commitmentLineSchema = new mongoose.Schema(
   {
     allocation: { type: mongoose.Schema.Types.ObjectId, ref: "BudgetAllocation" },
+    budgetMonth: { type: Number, min: 1, max: 12 },
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter", required: true },
     expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType", required: true },
     budgetItem: String,

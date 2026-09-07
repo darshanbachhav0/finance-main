@@ -19,3 +19,15 @@ test("audit log remains append-only", () => {
   assert.match(audit, /append-only/i);
   assert.match(audit, /deleteOne|deleteMany/);
 });
+
+test("A1 and B creation only allow CAPEX/OPEX while C stays an advance-to-render", () => {
+  const requestService = source("../src/services/requestService.js");
+  const frontendOptions = source("../../frontend/src/utils/options.js");
+  const requestCreate = source("../../frontend/src/pages/RequestCreate.jsx");
+
+  assert.match(frontendOptions, /requestCreationClassifications = \["OPEX", "CAPEX"\]/);
+  assert.match(frontendOptions, /if \(flowType === "C"\) return "ENTREGA_RENDIR"/);
+  assert.match(requestService, /Tracks A1 and B only allow CAPEX or OPEX as the expenditure classification\./);
+  assert.match(requestCreate, /CAPEX \/ OPEX \*/);
+  assert.match(requestCreate, /form\.flowType !== "C"/);
+});

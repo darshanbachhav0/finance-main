@@ -17,6 +17,7 @@ import { closeAccountingPeriod, createAccountingPeriod, reopenAccountingPeriod }
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
+import { assertLegacyAllocationChange } from "../services/budgetPlanService.js";
 
 function pick(source, fields) {
   return Object.fromEntries(fields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]]));
@@ -26,6 +27,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
   return {
     list: asyncHandler(async (req, res) => {
       const query = {};
+      if (Model === BudgetAllocation) query.planningMode = { $nin: ["ANNUAL_ONLY", "ANNUAL_MONTHLY"] };
       if (req.query.active !== undefined && Model.schema.path("active")) query.active = req.query.active === "true";
       if (req.query.search && searchFields.length) {
         const regex = new RegExp(escapedRegex(req.query.search), "i");
@@ -43,6 +45,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
     }),
     create: asyncHandler(async (req, res) => {
       const payload = pick(req.body, fields);
+      if (Model === BudgetAllocation) await assertLegacyAllocationChange(payload);
       if (Model === ExchangeRate) {
         const date = new Date(payload.date);
         if (Number.isNaN(date.getTime())) throw new AppError(422, "A valid exchange-rate date is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
@@ -62,6 +65,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
       if (!data) throw new AppError(404, `${label} not found.`, { id: req.params.id }, ERROR_CODES.NOT_FOUND);
       const oldValues = data.toObject();
       const payload = pick(req.body, fields.filter((field) => field !== "createdBy"));
+      if (Model === BudgetAllocation) await assertLegacyAllocationChange(payload, data);
       if (Model === ExchangeRate && payload.date) {
         const date = new Date(payload.date);
         payload.date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -80,6 +84,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
         throw new AppError(409, `${label} cannot be deleted because financial master history is retained.`, undefined, ERROR_CODES.CONFLICT);
       }
       const oldValues = { active: data.active };
+      if (Model === BudgetAllocation) await assertLegacyAllocationChange({ active: false }, data);
       data.active = false;
       await data.save();
       await recordAudit({ entityType: label, entity: data, action: "DEACTIVATED", user: req.user, req, module: "MASTER_DATA", oldValues, newValues: { active: false } });

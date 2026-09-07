@@ -1,0 +1,136 @@
+// Real Budget controllers and MongoDB, using only a disposable test database.
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import express from "express";
+import mongoose from "mongoose";
+import { createServer } from "vite";
+import { chromium } from "playwright";
+import BudgetAllocation from "../../backend/src/models/BudgetAllocation.js";
+import CostCenter from "../../backend/src/models/CostCenter.js";
+import ExpenseType from "../../backend/src/models/ExpenseType.js";
+import User from "../../backend/src/models/User.js";
+import * as budget from "../../backend/src/controllers/budgetController.js";
+
+const output = fileURLToPath(new URL("../../.tmp/annual-monthly-budget-ui/", import.meta.url));
+const root = fileURLToPath(new URL("../", import.meta.url));
+await mkdir(output, { recursive: true });
+await mongoose.connect(`mongodb://127.0.0.1:27017/erp_budget_browser_test_${process.pid}_${Date.now()}`);
+let browser, page, http, vite;
+try {
+  await BudgetAllocation.init();
+  const user = await User.create({ name: "Budget Browser Tester", email: "budget.browser@test.invalid", passwordHash: "unused", role: "Budget", area: "Finance" });
+  const center = await CostCenter.create({ code: "CC-BROWSER", name: "Laboratory", area: "Science", active: true });
+  const expense = await ExpenseType.create({ code: "EXP-BROWSER", name: "Teaching supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => { req.user = user; next(); });
+  app.get("/api/auth/me", (_req, res) => res.json({ user: { _id: user._id, name: user.name, role: user.role, area: user.area } }));
+  app.get("/api/cost-centers", (_req, res) => res.json({ data: [center] }));
+  app.get("/api/expense-types", (_req, res) => res.json({ data: [expense] }));
+  app.get("/api/dashboard/tasks", (_req, res) => res.json({}));
+  app.get("/api/notifications", (_req, res) => res.json({ data: [], unreadCount: 0 }));
+  app.get("/api/budget/overview", budget.getBudgetOverview);
+  app.get("/api/budget/allocations", budget.listBudgetAllocations);
+  app.get("/api/budget/commitments", budget.listBudgetCommitments);
+  app.get("/api/budget/exceptions", budget.listBudgetExceptions);
+  app.get("/api/budget/plans/:id", budget.readBudgetPlan);
+  app.post("/api/budget/plans", budget.addBudgetPlan);
+  app.post("/api/budget/plans/:id/adjustments", budget.changeBudgetPlan);
+  app.use((error, _req, res, _next) => res.status(error.statusCode || 500).json({ message: error.message, code: error.code, details: error.details }));
+  http = await new Promise((resolve) => { const server = app.listen(5189, "127.0.0.1", () => resolve(server)); });
+  vite = await createServer({ root, configFile: `${root}/vite.config.js`, define: { "import.meta.env.VITE_API_URL": JSON.stringify("/api") }, server: { host: "127.0.0.1", port: 5188, strictPort: true, proxy: { "/api": "http://127.0.0.1:5189" } }, logLevel: "error" });
+  await vite.listen();
+  browser = await chromium.launch({ headless: true });
+  page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+  const runtimeErrors = [];
+  page.on("pageerror", (error) => { runtimeErrors.push(error.message); console.error(error.message); });
+  await page.addInitScript((user) => {
+    localStorage.setItem("erp_user", JSON.stringify(user));
+    localStorage.setItem("erp_token", "test-only");
+    if (!localStorage.getItem("erp_language")) localStorage.setItem("erp_language", "en");
+  }, { _id: String(user._id), name: user.name, role: user.role, area: user.area });
+  await page.goto("http://127.0.0.1:5188/budget");
+  await page.getByRole("button", { name: "Create annual budget", exact: true }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByLabel("Budget year", { exact: true }).fill("2038");
+  await drawer.getByLabel("Cost center", { exact: true }).selectOption(String(center._id));
+  await drawer.getByLabel("Expense account", { exact: true }).selectOption(String(expense._id));
+  await drawer.getByLabel("Annual budget", { exact: true }).fill("120000");
+  assert.equal(await drawer.getByLabel("Monthly distribution", { exact: true }).count(), 0);
+  await drawer.getByLabel("Budget planning mode", { exact: true }).selectOption("ANNUAL_MONTHLY");
+  assert.equal(await drawer.getByLabel("January", { exact: true }).inputValue(), "10000");
+  await drawer.getByLabel("Monthly distribution", { exact: true }).selectOption("CUSTOM");
+  await drawer.getByLabel("January", { exact: true }).fill("15000");
+  assert.equal(await drawer.getByRole("button", { name: "Create budget plan", exact: true }).isDisabled(), true);
+  await drawer.getByLabel("January", { exact: true }).fill("5000");
+  assert.match(await drawer.locator(".budget-reserve-preview").innerText(), /5,000/);
+  await drawer.getByLabel("Reason / approval reference").fill("Approved planning resolution 2038-01");
+  await drawer.getByRole("button", { name: "Create budget plan", exact: true }).click();
+  await drawer.getByRole("button", { name: "Adjust budget", exact: true }).waitFor();
+  assert.equal(await drawer.locator(".budget-month-table tbody tr").count(), 12);
+  let plan = await BudgetAllocation.findOne({ period: "2038" });
+  assert.equal(plan.months[0].assignedAmount, 5000);
+  assert.equal(plan.assignedAmount, 120000);
+
+  async function adjustment(action, amount, reason, from, to) {
+    await drawer.getByRole("button", { name: "Adjust budget", exact: true }).click();
+    await drawer.getByLabel("Adjustment type", { exact: true }).selectOption(action);
+    await drawer.getByLabel("Adjustment amount", { exact: true }).fill(String(amount));
+    if (from) await drawer.getByLabel("From month", { exact: true }).selectOption(String(from));
+    if (to) await drawer.getByLabel("To month", { exact: true }).selectOption(String(to));
+    await drawer.getByLabel("Reason / approval reference").fill(reason);
+    await drawer.getByRole("button", { name: "Save adjustment", exact: true }).click();
+    await drawer.getByRole("button", { name: "Adjust budget", exact: true }).waitFor();
+  }
+  await adjustment("TRANSFER", 1000, "Move unused January funds to February", 1, 2);
+  await adjustment("INCREASE", 6000, "Approved additional annual funding");
+  await adjustment("ALLOCATE_RESERVE", 5000, "Assign reserve for September teaching", null, 9);
+  plan = await BudgetAllocation.findById(plan._id);
+  assert.equal(plan.assignedAmount, 126000);
+  assert.equal(plan.months[0].assignedAmount, 4000);
+  assert.equal(plan.months[1].assignedAmount, 11000);
+  assert.equal(plan.months[8].assignedAmount, 15000);
+  assert.equal(plan.adjustments.length, 4);
+  await drawer.screenshot({ path: `${output}/annual-plan.png` });
+  await drawer.getByRole("button", { name: "Close panel", exact: true }).click();
+  await page.getByRole("button", { name: "Monthly view", exact: true }).click();
+  await page.getByLabel("Month", { exact: true }).selectOption("09");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector(".budget-stats")?.textContent.includes("15,000"));
+  await page.screenshot({ path: `${output}/monthly-overview.png`, fullPage: true });
+
+  await page.getByRole("button", { name: "Create annual budget", exact: true }).click();
+  await drawer.getByLabel("Cost center", { exact: true }).selectOption(String(center._id));
+  await drawer.getByLabel("Expense account", { exact: true }).selectOption(String(expense._id));
+  await drawer.getByLabel("Project", { exact: true }).fill("ANNUAL-ONLY");
+  await drawer.getByLabel("Annual budget", { exact: true }).fill("60000");
+  await drawer.getByLabel("Reason / approval reference").fill("Approved annual-only plan");
+  await drawer.getByRole("button", { name: "Create budget plan", exact: true }).click();
+  await drawer.getByRole("button", { name: "Adjust budget", exact: true }).waitFor();
+  assert.equal(await BudgetAllocation.countDocuments({ period: "2038" }), 2);
+  assert.match(await drawer.locator(".budget-mode-tag").innerText(), /Annual only/);
+  await drawer.getByRole("button", { name: "Close panel", exact: true }).click();
+  await page.evaluate(() => localStorage.setItem("erp_language", "es"));
+  await page.reload();
+  await page.getByRole("button", { name: "Crear presupuesto anual", exact: true }).click();
+  await drawer.getByLabel("Modalidad presupuestal").selectOption("ANNUAL_MONTHLY");
+  await drawer.getByLabel("Presupuesto anual", { exact: true }).fill("120000");
+  assert.equal(await drawer.getByLabel("Enero", { exact: true }).inputValue(), "10000");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {}))));
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: `${output}/mobile-spanish.png` });
+  assert.deepEqual(runtimeErrors, []);
+  console.log("PASS: annual/monthly planning, equal/custom distribution, real API persistence, audited adjustments, monthly reporting, Spanish and mobile");
+  console.log(`Screenshots: ${output}`);
+} catch (error) {
+  if (page) { console.error((await page.locator("body").innerText()).slice(-5000)); await page.screenshot({ path: `${output}/failure.png`, fullPage: true }); }
+  throw error;
+} finally {
+  await browser?.close();
+  await vite?.close();
+  if (http) await new Promise((resolve) => http.close(resolve));
+  await mongoose.connection.dropDatabase();
+  await mongoose.disconnect();
+}

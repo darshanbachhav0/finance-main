@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/client.js";
@@ -68,6 +68,15 @@ export default function Dashboard() {
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }
   ];
   const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
+  const workspace = {
+    Admin: ["Keep university operations moving", "Review requests and the items that need your team’s attention.", "/requests", "View requests"],
+    Solicitor: ["Your next request starts here", "Prepare a request or continue work saved in your drafts.", "/requests/new", "New request"],
+    Approver: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
+    Accounting: ["Keep the accounts up to date", "Review pending entries, documents and accounting observations.", "/accounting", "Open Accounting"],
+    Treasury: ["A clear view of upcoming payments", "Review payment destinations, scheduled items and bank confirmations.", "/treasury", "Open Treasury"],
+    Budget: ["Plan the year. Follow each month.", "Review annual availability, monthly allocations and budget exceptions.", "/budget", "Open Budget Control"],
+    Management: ["See the institution’s financial position", "Explore spending, budget availability and work awaiting completion.", "/reports", "Open reports"]
+  }[summary?.role];
 
   return (
     <section>
@@ -83,6 +92,7 @@ export default function Dashboard() {
 
       {!loading && summary && (
         <>
+          {workspace && <div className="dashboard-next"><div><small>UMA · {t("Your workspace")}</small><h2>{t(workspace[0])}</h2><p>{t(workspace[1])}</p></div><Link className="primary-button" to={workspace[2]}>{t(workspace[3])}<ArrowRight size={17} /></Link></div>}
           <div className="stats-grid">
             {summary.metrics.map((metric) => (
               <StatCard key={metric.key} label={metric.label} value={metricValue(metric)} suffix={metric.suffix} tone={metric.tone} icon={metricIcons[metric.key] || FileText} />

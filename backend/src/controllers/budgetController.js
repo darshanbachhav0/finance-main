@@ -1,5 +1,4 @@
 import BudgetException from "../models/BudgetException.js";
-import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import CostCenter from "../models/CostCenter.js";
 import ExpenseType from "../models/ExpenseType.js";
@@ -12,7 +11,8 @@ import { publicRequestPayload } from "../services/requestService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
-import { subtractMoney } from "../utils/money.js";
+import { budgetAllocationRows, budgetPeriodFilter } from "../services/budgetReportingService.js";
+import { adjustBudgetPlan, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
 
 export const getBudgetOverview = asyncHandler(async (req, res) => {
   res.json({ data: await budgetOverview(req.query) });
@@ -20,76 +20,22 @@ export const getBudgetOverview = asyncHandler(async (req, res) => {
 
 export const listBudgetAllocations = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination(req.query);
-  const baseQuery = { active: true };
-  if (req.query.period) baseQuery.period = req.query.period;
-  if (req.query.costCenter) baseQuery.costCenter = req.query.costCenter;
-  if (req.query.expenseType) baseQuery.expenseType = req.query.expenseType;
-  if (req.query.project !== undefined && req.query.project !== "") baseQuery.project = req.query.project;
-
-  const hasDimensionalAllocations = await BudgetAllocation.exists(baseQuery);
-  const requestedSource = String(req.query.source || "");
-  const useTransitional = !hasDimensionalAllocations && requestedSource !== "DIMENSIONAL_ALLOCATION";
-  if (useTransitional) {
-    const centerQuery = { active: true };
-    if (req.query.costCenter) centerQuery._id = req.query.costCenter;
-    if (req.query.area) centerQuery.area = req.query.area;
-    if (req.query.search) {
-      const search = new RegExp(escapedRegex(req.query.search), "i");
-      centerQuery.$or = [{ code: search }, { name: search }, { area: search }];
-    }
-    const sortAliases = { assignedAmount: "annualBudget", committedAmount: "committedAmount", executedAmount: "executedAmount", paidAmount: "paidAmount" };
-    const requestedSort = sortAliases[req.query.sortBy] || req.query.sortBy;
-    const sort = parseSort({ ...req.query, sortBy: requestedSort }, ["code", "name", "annualBudget", "committedAmount", "executedAmount", "paidAmount"], { code: 1 });
-    const [centers, total] = await Promise.all([
-      CostCenter.find(centerQuery).sort(sort).skip(skip).limit(pageSize),
-      CostCenter.countDocuments(centerQuery)
-    ]);
-    const rows = centers.map((center) => ({
-      _id: center._id,
-      period: req.query.period || "",
-      costCenter: center,
-      assignedAmount: center.annualBudget,
-      committedAmount: center.committedAmount,
-      executedAmount: center.executedAmount,
-      paidAmount: center.paidAmount,
-      availableAmount: center.availableAmount,
-      source: "TRANSITIONAL_COST_CENTER"
-    }));
-    return res.json(paginatedPayload(rows, total, page, pageSize));
-  }
-
-  if (requestedSource === "TRANSITIONAL_COST_CENTER") return res.json(paginatedPayload([], 0, page, pageSize));
-  const query = { ...baseQuery };
-  if (req.query.search) {
-    const search = new RegExp(escapedRegex(req.query.search), "i");
-    const [costCenters, expenseTypes] = await Promise.all([
-      CostCenter.find({ $or: [{ code: search }, { name: search }, { area: search }] }).distinct("_id"),
-      ExpenseType.find({ $or: [{ code: search }, { name: search }, { accountNumber: search }] }).distinct("_id")
-    ]);
-    query.$or = [
-      { period: search },
-      { project: search },
-      { costCenter: { $in: costCenters } },
-      { expenseType: { $in: expenseTypes } }
-    ];
-  }
-  const sort = parseSort(req.query, ["period", "project", "assignedAmount", "committedAmount", "executedAmount", "paidAmount", "createdAt"], { period: -1, createdAt: -1 });
-  const [allocations, total] = await Promise.all([
-    BudgetAllocation.find(query).populate("costCenter").populate("expenseType").sort(sort).skip(skip).limit(pageSize),
-    BudgetAllocation.countDocuments(query)
-  ]);
-  const rows = allocations.map((allocation) => ({
-    ...allocation.toObject(),
-    availableAmount: subtractMoney(subtractMoney(allocation.assignedAmount, allocation.committedAmount), allocation.executedAmount),
-    source: "DIMENSIONAL_ALLOCATION"
-  }));
-  res.json(paginatedPayload(rows, total, page, pageSize));
+  const rows = await budgetAllocationRows(req.query);
+  const fields = ["period", "assignedAmount", "committedAmount", "executedAmount", "paidAmount"];
+  const sort = fields.includes(req.query.sortBy) ? req.query.sortBy : "period";
+  const direction = req.query.sortDirection === "asc" ? 1 : -1;
+  rows.sort((a, b) => (typeof a[sort] === "number" ? a[sort] - b[sort] : String(a[sort] || "").localeCompare(String(b[sort] || ""))) * direction);
+  res.json(paginatedPayload(rows.slice(skip, skip + pageSize), rows.length, page, pageSize));
 });
+
+export const readBudgetPlan = asyncHandler(async (req, res) => res.json({ data: await getBudgetPlan(req.params.id) }));
+export const addBudgetPlan = asyncHandler(async (req, res) => res.status(201).json({ data: await createBudgetPlan(req.body, req.user, req) }));
+export const changeBudgetPlan = asyncHandler(async (req, res) => res.json({ data: await adjustBudgetPlan(req.params.id, req.body, req.user, req) }));
 
 export const listBudgetCommitments = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination(req.query);
   const query = {};
-  if (req.query.period) query.period = req.query.period;
+  if (req.query.period) query.period = budgetPeriodFilter(req.query.period);
   if (req.query.status) query.status = req.query.status;
   if (req.query.search) {
     const search = new RegExp(escapedRegex(req.query.search), "i");
@@ -115,7 +61,7 @@ export const listBudgetExceptions = asyncHandler(async (req, res) => {
   if (req.query.status) clauses.push({ status: req.query.status });
   if (req.query.strategy) clauses.push({ strategy: req.query.strategy });
   if (req.query.period) {
-    const requestIds = await FinancialRequest.find({ accountingPeriod: req.query.period }).distinct("_id");
+    const requestIds = await FinancialRequest.find({ accountingPeriod: budgetPeriodFilter(req.query.period) }).distinct("_id");
     clauses.push({ request: { $in: requestIds } });
   }
   if (req.query.search) {

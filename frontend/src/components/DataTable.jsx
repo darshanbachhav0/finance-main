@@ -9,7 +9,8 @@ import {
   ListFilter,
   Search
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { LayoutList, Table2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "./EmptyState.jsx";
 import RowActionMenu from "./RowActionMenu.jsx";
 import TableTools from "./TableTools.jsx";
@@ -59,6 +60,19 @@ export default function DataTable({
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [density, setDensity] = useState(() => localStorage.getItem("erp_table_density") || "comfortable");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileCards, setMobileCards] = useState(true);
+  const scrollRef = useRef(null);
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const update = () => setScrolls(element.scrollWidth > element.clientWidth + 1);
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    update();
+    return () => observer.disconnect();
+  }, [rows, columns, mobileCards, loading]);
   const tableIdentity = tableId || caption || searchPlaceholder || columns.map((column) => column.key).join("-");
   const preferenceKey = `erp_table_views:${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}`;
 
@@ -93,7 +107,7 @@ export default function DataTable({
     }
     if (activeSort) {
       const column = columns.find((item) => (item.sortKey || item.key) === activeSort.key);
-      next.sort((left, right) => compare(rawValue(column, left), rawValue(column, right)) * (activeSort.direction === "asc" ? 1 : -1));
+      if (column) next.sort((left, right) => compare(rawValue(column, left), rawValue(column, right)) * (activeSort.direction === "asc" ? 1 : -1));
     }
     return next;
   }, [rows, columns, activeSearch, filters, activeFilters, activeSort, isRemote]);
@@ -188,7 +202,7 @@ export default function DataTable({
   }
 
   return (
-    <div className={`data-table density-${density} ${className}`.trim()}>
+    <div aria-busy={loading} className={`data-table density-${density} ${controls && mobileCards ? "mobile-cards" : ""} ${className}`.trim()}>
       {controls && (
         <div className="table-toolbar">
           <div className="table-toolbar-primary">
@@ -219,6 +233,7 @@ export default function DataTable({
             </div>
           </div>
           <div className="table-toolbar-actions">
+            <button type="button" className="secondary-button mobile-table-toggle" aria-pressed={mobileCards} onClick={() => setMobileCards((value) => !value)}>{mobileCards ? <Table2 size={16} /> : <LayoutList size={16} />}{t(mobileCards ? "Table view" : "Card view")}</button>
             {toolbarActions}
             <TableTools
               storageKey={preferenceKey}
@@ -232,15 +247,26 @@ export default function DataTable({
         </div>
       )}
 
+      {controls && hasFilters && <div className="active-filter-chips" aria-label={t("Active filters")}>
+        {activeSearch && <span>{t("Search")}: {activeSearch}</span>}
+        {filters.filter((filter) => activeFilters[filter.key]).map((filter) => {
+          const value = activeFilters[filter.key];
+          const option = filter.options.find((entry) => String(entry.value ?? entry) === String(value));
+          return <span key={filter.key}>{t(filter.label)}: {t(option?.label ?? value)}</span>;
+        })}
+        <button type="button" className="text-button" onClick={clearFilters}><X size={14} />{t("Clear filters")}</button>
+      </div>}
+
       {showResultCount && (
         <div className="table-result-bar">
-          <span>{loading ? t("Loading records...") : t("Showing {shown} of {total} results").replace("{shown}", processed.length).replace("{total}", isRemote ? remote.pagination?.total || 0 : rows.length)}</span>
+          <span role="status">{loading ? t("Loading records...") : t("Showing {shown} of {total} results").replace("{shown}", visibleRows.length).replace("{total}", isRemote ? remote.pagination?.total || 0 : processed.length)}</span>
           {selection && selectedIds.length > 0 && <strong>{t("{count} selected").replace("{count}", selectedIds.length)}</strong>}
         </div>
       )}
 
-      <div className="table-scroll">
-        <table>
+      {scrolls && <p className="table-scroll-note">{t("Scroll horizontally to see all columns.")}</p>}
+      <div ref={scrollRef} className="table-scroll" role="region" aria-label={t(caption || "Scrollable results")} tabIndex={0}>
+        <table role="table">
           {caption && <caption className="sr-only">{t(caption)}</caption>}
           <thead>
             <tr>
@@ -253,7 +279,7 @@ export default function DataTable({
                 const sorted = activeSort?.key === (column.sortKey || column.key);
                 const SortIcon = !sorted ? ChevronsUpDown : activeSort.direction === "asc" ? ArrowUp : ArrowDown;
                 return (
-                  <th key={column.key} className={column.align ? `align-${column.align}` : ""} style={column.width ? { width: column.width } : undefined}>
+                  <th scope="col" aria-sort={sorted ? activeSort.direction === "asc" ? "ascending" : "descending" : undefined} key={column.key} className={column.align ? `align-${column.align}` : ""} style={column.width ? { width: column.width } : undefined}>
                     {column.sortable === false || column.key === "actions" ? t(column.label) : (
                       <button type="button" className="sort-button" onClick={() => toggleSort(column)}>
                         <span>{t(column.label)}</span>
@@ -277,13 +303,15 @@ export default function DataTable({
               <tr
                 key={row[rowKey]}
                 className={onRowClick ? "clickable-row" : ""}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={onRowClick ? (event) => { if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); onRowClick(row); } } : undefined}
                 onClick={onRowClick ? (event) => {
                   if (event.target.closest("a, button, input, select, textarea")) return;
                   onRowClick(row);
                 } : undefined}
               >
                 {selection && (
-                  <td className="checkbox-column">
+                  <td className="checkbox-column" data-label={t("Select row")}>
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(row[rowKey])}
@@ -297,12 +325,12 @@ export default function DataTable({
                   const value = column.render ? column.render(row) : rawValue(column, row);
                   return <td key={column.key} className={column.align ? `align-${column.align}` : ""} data-label={t(column.label)}>{typeof value === "string" ? t(value) : value}</td>;
                 })}
-                {rowActions && <td className="actions-column"><RowActionMenu row={row} actions={rowActions} /></td>}
+                {rowActions && <td className="actions-column" data-label={t("Actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
               </tr>
             ))}
           </tbody>
         </table>
-        {!loading && !visibleRows.length && <EmptyState description={hasFilters ? "No records match the current filters." : emptyDescription} />}
+        {!loading && !visibleRows.length && <EmptyState title={hasFilters ? "No matching results" : "No records yet"} filtered={hasFilters} onClear={hasFilters ? clearFilters : undefined} description={hasFilters ? "Try a different search or clear your filters." : emptyDescription} />}
       </div>
 
       {controls && (processed.length > 0 || (isRemote && (remote.pagination?.total || 0) > 0)) && (

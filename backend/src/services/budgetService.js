@@ -1,4 +1,3 @@
-import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import BudgetException from "../models/BudgetException.js";
 import BudgetRule from "../models/BudgetRule.js";
@@ -6,6 +5,7 @@ import CostCenter from "../models/CostCenter.js";
 import { AppError } from "../utils/AppError.js";
 import { BUDGET_STATUS, ERROR_CODES } from "../utils/constants.js";
 import { addMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
+import { budgetLimits, changeAllocationUsage, findBudgetAllocation as findAllocation, isBudgetPlan } from "./budgetAllocationService.js";
 
 function dimensionKey(line, project) {
   return [
@@ -46,6 +46,7 @@ export async function previewBudget(request) {
   const centers = await CostCenter.find({ _id: { $in: grouped.map((line) => line.costCenter) } });
   const centerMap = new Map(centers.map((center) => [String(center._id), center]));
   const lines = [];
+  const previewSources = new Map();
 
   for (const line of grouped) {
     const center = centerMap.get(String(line.costCenter));
@@ -65,15 +66,20 @@ export async function previewBudget(request) {
     const committed = roundMoney(allocation?.committedAmount ?? center.committedAmount ?? 0);
     const executed = roundMoney(allocation?.executedAmount ?? center.executedAmount ?? 0);
     const paid = roundMoney(allocation?.paidAmount ?? center.paidAmount ?? 0);
-    const available = subtractMoney(subtractMoney(assigned, committed), executed);
-    const projectedBalance = subtractMoney(available, line.amount);
-    const mode = rule.mode || "TRANSITIONAL";
+    const sourceKey = String(allocation?._id || center._id);
+    const requested = addMoney(previewSources.get(sourceKey)?.requested || 0, line.amount);
+    const limits = budgetLimits(allocation, request.accountingPeriod, requested);
+    const available = limits?.available ?? subtractMoney(subtractMoney(assigned, committed), executed);
+    const projectedBalance = subtractMoney(available, requested);
+    previewSources.set(sourceKey, { available, requested, projectedBalance });
+    const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
     lines.push({
       ...line,
       mode,
       exceptionStrategy: rule.exceptionStrategy || "REJECT",
       source: allocation ? "BUDGET_ALLOCATION" : "COST_CENTER",
       allocation: allocation?._id,
+      ...limits,
       costCenterSnapshot: { code: center.code, name: center.name, area: center.area },
       assigned,
       committed,
@@ -90,8 +96,8 @@ export async function previewBudget(request) {
   return {
     status: !complete ? "PENDING_VALIDATION" : insufficient ? "INSUFFICIENT" : lines.every((line) => line.mode === "TRANSITIONAL") ? "TRANSITIONAL" : "AVAILABLE",
     totalRequested: sumMoney(lines.map((line) => line.amount || 0)),
-    totalAvailable: complete ? sumMoney(lines.map((line) => line.available || 0)) : null,
-    projectedBalance: complete ? sumMoney(lines.map((line) => line.projectedBalance || 0)) : null,
+    totalAvailable: complete ? sumMoney([...previewSources.values()].map((line) => line.available)) : null,
+    projectedBalance: complete ? sumMoney([...previewSources.values()].map((line) => line.projectedBalance)) : null,
     lines
   };
 }
@@ -114,39 +120,23 @@ async function resolveRule(line, center, requestDate) {
   };
 }
 
-async function findAllocation(period, line) {
-  const exact = await BudgetAllocation.findOne({
-    period,
-    costCenter: line.costCenter,
-    expenseType: line.expenseType,
-    project: line.project || "",
-    active: true
-  });
-  if (exact) return exact;
-  return BudgetAllocation.findOne({
-    period: period.slice(0, 4),
-    costCenter: line.costCenter,
-    expenseType: line.expenseType,
-    project: line.project || "",
-    active: true
-  });
-}
-
-function insufficientBudgetError(label, available, required, strategy) {
+function insufficientBudgetError(label, available, required, strategy, limits) {
   return new AppError(
     422,
     `${label} has insufficient budget. Available PEN ${available.toFixed(2)}, required PEN ${required.toFixed(2)}.`,
-    { available, required, exceptionStrategy: strategy },
+    { available, required, exceptionStrategy: strategy, ...limits },
     ERROR_CODES.INSUFFICIENT_BUDGET
   );
 }
 
 async function releaseApplied(applied, session) {
+  if (session) return; // The enclosing transaction aborts all its writes together.
   for (const item of [...applied].reverse()) {
+    const inverse = Object.fromEntries(Object.entries(item.increments || { committedAmount: item.amount }).map(([key, value]) => [key, -value]));
     if (item.kind === "allocation") {
-      await BudgetAllocation.updateOne({ _id: item.id }, { $inc: { committedAmount: -item.amount } }, { session });
+      await changeAllocationUsage({ allocation: item.id, budgetMonth: item.budgetMonth, increments: inverse, session });
     } else {
-      await CostCenter.updateOne({ _id: item.id }, { $inc: { committedAmount: -item.amount } }, { session });
+      await CostCenter.updateOne({ _id: item.id }, { $inc: inverse }, { session });
     }
   }
 }
@@ -159,6 +149,7 @@ export async function reserveBudget(request, userId, { session } = {}) {
   const centers = await CostCenter.find({ _id: { $in: grouped.map((line) => line.costCenter) } }).session(session || null);
   const centerMap = new Map(centers.map((center) => [String(center._id), center]));
   const prepared = [];
+  const demands = new Map();
 
   for (const line of grouped) {
     const center = centerMap.get(String(line.costCenter));
@@ -167,15 +158,20 @@ export async function reserveBudget(request, userId, { session } = {}) {
     }
     const [rule, allocation] = await Promise.all([
       resolveRule(line, center, request.issueDate),
-      findAllocation(request.accountingPeriod, line)
+      findAllocation(request.accountingPeriod, line, session)
     ]);
-    const mode = rule.mode || "TRANSITIONAL";
+    const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
     const exceptionStrategy = rule.exceptionStrategy || "REJECT";
-    const available = allocation
+    const limits = budgetLimits(allocation, request.accountingPeriod, line.amount);
+    const sourceKey = String(allocation?._id || center._id);
+    const demand = demands.get(sourceKey) || 0;
+    const rawAvailable = limits?.available ?? (allocation
       ? subtractMoney(subtractMoney(allocation.assignedAmount, allocation.committedAmount), allocation.executedAmount)
-      : subtractMoney(subtractMoney(center.annualBudget, center.committedAmount), center.executedAmount);
+      : subtractMoney(subtractMoney(center.annualBudget, center.committedAmount), center.executedAmount));
+    const available = subtractMoney(rawAvailable, demand);
+    demands.set(sourceKey, addMoney(demand, line.amount));
     if (mode === "ACTIVE" && available < line.amount && exceptionStrategy === "REJECT") {
-      throw insufficientBudgetError(allocation ? `${center.code} allocation` : center.code, available, line.amount, exceptionStrategy);
+      throw insufficientBudgetError(allocation ? `${center.code} allocation` : center.code, available, line.amount, exceptionStrategy, limits);
     }
     let budgetException = null;
     let exceptionApproved = false;
@@ -193,36 +189,29 @@ export async function reserveBudget(request, userId, { session } = {}) {
           strategy: exceptionStrategy,
           availableAmount: available,
           requestedAmount: line.amount,
+          budgetLimits: limits || undefined,
           requestedBy: userId
         }]);
       }
       exceptionApproved = exceptionStrategy === "EXTRAORDINARY_APPROVAL" && budgetException.status === "APPROVED";
       if (!exceptionApproved) {
-      throw new AppError(
-        409,
-        `Budget exception ${exceptionStrategy} is required before this request can continue.`,
-        { available, required: line.amount, exceptionStrategy, costCenter: center.code, budgetException: budgetException._id, exceptionStatus: budgetException.status },
-        ERROR_CODES.INSUFFICIENT_BUDGET
-      );
+        throw new AppError(
+          409,
+          `Budget exception ${exceptionStrategy} is required before this request can continue.`,
+          { available, required: line.amount, exceptionStrategy, costCenter: center.code, budgetException: budgetException._id, exceptionStatus: budgetException.status, ...limits },
+          ERROR_CODES.INSUFFICIENT_BUDGET
+        );
       }
     }
-    prepared.push({ ...line, mode, exceptionStrategy, allocation, center, budgetException, exceptionApproved });
+    prepared.push({ ...line, mode, exceptionStrategy, allocation, budgetMonth: limits?.budgetMonth, center, budgetException, exceptionApproved });
   }
 
   const applied = [];
   try {
     for (const line of prepared.filter((item) => item.mode === "ACTIVE")) {
       if (line.allocation) {
-        const allocationQuery = line.exceptionApproved
-          ? { _id: line.allocation._id }
-          : { _id: line.allocation._id, $expr: { $gte: [{ $subtract: [{ $subtract: ["$assignedAmount", "$committedAmount"] }, "$executedAmount"] }, line.amount] } };
-        const updated = await BudgetAllocation.findOneAndUpdate(
-          allocationQuery,
-          { $inc: { committedAmount: line.amount } },
-          { new: true, session }
-        );
-        if (!updated) throw new AppError(409, "Budget allocation changed while reserving funds. Retry the operation.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
-        applied.push({ kind: "allocation", id: line.allocation._id, amount: line.amount });
+        await changeAllocationUsage({ allocation: line.allocation._id, budgetMonth: line.budgetMonth, increments: { committedAmount: line.amount }, required: line.amount, allowOverrun: line.exceptionApproved, session });
+        applied.push({ kind: "allocation", id: line.allocation._id, budgetMonth: line.budgetMonth, amount: line.amount });
       } else {
         const centerQuery = line.exceptionApproved
           ? { _id: line.center._id }
@@ -244,6 +233,7 @@ export async function reserveBudget(request, userId, { session } = {}) {
       period: request.accountingPeriod,
       lines: prepared.map((line) => ({
         allocation: line.allocation?._id,
+        budgetMonth: line.budgetMonth,
         costCenter: line.costCenter,
         expenseType: line.expenseType,
         budgetItem: line.budgetItem,
@@ -307,25 +297,31 @@ function deriveCommitmentStatus(commitment) {
   return commitment.lines.some((line) => line.mode === "ACTIVE") ? BUDGET_STATUS.COMMITTED : BUDGET_STATUS.NO_BUDGET;
 }
 
-async function applyExecutionAllocations(commitment, allocations, session) {
+async function changeTrackedUsage(line, increments, session, applied) {
+  if (line.allocation) {
+    await changeAllocationUsage({ allocation: line.allocation, budgetMonth: line.budgetMonth, increments, session });
+    applied.push({ kind: "allocation", id: line.allocation, budgetMonth: line.budgetMonth, increments });
+  } else {
+    await CostCenter.updateOne({ _id: line.costCenter }, { $inc: increments }, { session });
+    applied.push({ kind: "costCenter", id: line.costCenter, increments });
+  }
+}
+
+async function applyExecutionAllocations(commitment, allocations, session, applied) {
   for (const allocation of allocations) {
     const line = commitment.lines[allocation.index];
     line.executedAmount = addMoney(trackedLineAmount(line, "executedAmount"), allocation.amount);
     if (line.mode !== "ACTIVE") continue;
-    const update = { $inc: { committedAmount: -allocation.amount, executedAmount: allocation.amount } };
-    if (line.allocation) await BudgetAllocation.updateOne({ _id: line.allocation }, update, { session });
-    else await CostCenter.updateOne({ _id: line.costCenter }, update, { session });
+    await changeTrackedUsage(line, { committedAmount: -allocation.amount, executedAmount: allocation.amount }, session, applied);
   }
 }
 
-async function applyPaidAllocations(commitment, allocations, session) {
+async function applyPaidAllocations(commitment, allocations, session, applied) {
   for (const allocation of allocations) {
     const line = commitment.lines[allocation.index];
     line.paidAmount = addMoney(trackedLineAmount(line, "paidAmount"), allocation.amount);
     if (line.mode !== "ACTIVE") continue;
-    const update = { $inc: { paidAmount: allocation.amount } };
-    if (line.allocation) await BudgetAllocation.updateOne({ _id: line.allocation }, update, { session });
-    else await CostCenter.updateOne({ _id: line.costCenter }, update, { session });
+    await changeTrackedUsage(line, { paidAmount: allocation.amount }, session, applied);
   }
 }
 
@@ -339,20 +335,26 @@ export async function executeBudgetAmount(request, userId, amount, { session, co
   if (amountToExecute <= 0) return commitment;
 
   const allocations = allocateAcrossLines(commitment.lines, amountToExecute, (line) => subtractMoney(line.amount, trackedLineAmount(line, "executedAmount")));
-  await applyExecutionAllocations(commitment, allocations, session);
-  const applied = sumMoney(allocations.map((item) => item.amount));
-  commitment.executedAmount = addMoney(currentExecuted, applied);
-  commitment.status = deriveCommitmentStatus(commitment);
-  commitment.executedAt = new Date();
-  commitment.executedBy = userId;
-  commitment.history.push({
-    status: commitment.status,
-    amount: applied,
-    by: userId,
-    comments: comments || "Budget execution updated when a validated expense was provisioned."
-  });
-  await commitment.save({ session });
-  return commitment;
+  const appliedUsage = [];
+  try {
+    await applyExecutionAllocations(commitment, allocations, session, appliedUsage);
+    const applied = sumMoney(allocations.map((item) => item.amount));
+    commitment.executedAmount = addMoney(currentExecuted, applied);
+    commitment.status = deriveCommitmentStatus(commitment);
+    commitment.executedAt = new Date();
+    commitment.executedBy = userId;
+    commitment.history.push({
+      status: commitment.status,
+      amount: applied,
+      by: userId,
+      comments: comments || "Budget execution updated when a validated expense was provisioned."
+    });
+    await commitment.save({ session });
+    return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
+  }
 }
 
 export async function executeBudget(request, userId, { session, comments } = {}) {
@@ -382,20 +384,26 @@ export async function markBudgetPaidAmount(request, userId, amount, { session, c
   }
 
   const allocations = allocateAcrossLines(commitment.lines, amountToPay, (line) => subtractMoney(trackedLineAmount(line, "executedAmount"), trackedLineAmount(line, "paidAmount")));
-  await applyPaidAllocations(commitment, allocations, session);
-  const applied = sumMoney(allocations.map((item) => item.amount));
-  commitment.paidAmount = addMoney(currentPaid, applied);
-  commitment.status = deriveCommitmentStatus(commitment);
-  commitment.paidAt = new Date();
-  commitment.paidBy = userId;
-  commitment.history.push({
-    status: commitment.status,
-    amount: applied,
-    by: userId,
-    comments: comments || "Budget paid amount updated after Treasury confirmation."
-  });
-  await commitment.save({ session });
-  return commitment;
+  const appliedUsage = [];
+  try {
+    await applyPaidAllocations(commitment, allocations, session, appliedUsage);
+    const applied = sumMoney(allocations.map((item) => item.amount));
+    commitment.paidAmount = addMoney(currentPaid, applied);
+    commitment.status = deriveCommitmentStatus(commitment);
+    commitment.paidAt = new Date();
+    commitment.paidBy = userId;
+    commitment.history.push({
+      status: commitment.status,
+      amount: applied,
+      by: userId,
+      comments: comments || "Budget paid amount updated after Treasury confirmation."
+    });
+    await commitment.save({ session });
+    return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
+  }
 }
 
 export async function markBudgetPaid(request, userId, { session, comments } = {}) {
@@ -409,20 +417,24 @@ export async function releaseBudget(request, userId, reason, { session } = {}) {
   const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
   if (!commitment || [BUDGET_STATUS.CLOSED, BUDGET_STATUS.RELEASED].includes(commitment.status)) return commitment;
 
-  for (const line of commitment.lines.filter((item) => item.mode === "ACTIVE")) {
-    const remainingCommitted = subtractMoney(line.amount, trackedLineAmount(line, "executedAmount"));
-    if (remainingCommitted <= 0) continue;
-    const update = { $inc: { committedAmount: -remainingCommitted } };
-    if (line.allocation) await BudgetAllocation.updateOne({ _id: line.allocation }, update, { session });
-    else await CostCenter.updateOne({ _id: line.costCenter }, update, { session });
+  const appliedUsage = [];
+  try {
+    for (const line of commitment.lines.filter((item) => item.mode === "ACTIVE" && commitment.status !== BUDGET_STATUS.DEFERRED)) {
+      const remainingCommitted = subtractMoney(line.amount, trackedLineAmount(line, "executedAmount"));
+      if (remainingCommitted <= 0) continue;
+      await changeTrackedUsage(line, { committedAmount: -remainingCommitted }, session, appliedUsage);
+    }
+    commitment.status = BUDGET_STATUS.RELEASED;
+    commitment.releasedAt = new Date();
+    commitment.releasedBy = userId;
+    commitment.releaseReason = reason;
+    commitment.history.push({ status: BUDGET_STATUS.RELEASED, amount: subtractMoney(commitment.totalAmount, currentTrackedAmount(commitment, "executedAmount")), by: userId, comments: reason });
+    await commitment.save({ session });
+    return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
   }
-  commitment.status = BUDGET_STATUS.RELEASED;
-  commitment.releasedAt = new Date();
-  commitment.releasedBy = userId;
-  commitment.releaseReason = reason;
-  commitment.history.push({ status: BUDGET_STATUS.RELEASED, amount: subtractMoney(commitment.totalAmount, currentTrackedAmount(commitment, "executedAmount")), by: userId, comments: reason });
-  await commitment.save({ session });
-  return commitment;
 }
 
 // Track C advances are recorded without reserving/consuming expense budget. The budget is
@@ -437,12 +449,13 @@ export async function deferBudget(request, userId, { session } = {}) {
   for (const line of grouped) {
     const center = centerMap.get(String(line.costCenter));
     if (!center?.active) throw new AppError(422, "Every request line needs an active Cost Center.", { costCenter: line.costCenter }, ERROR_CODES.VALIDATION_ERROR);
-    const [rule, allocation] = await Promise.all([resolveRule(line, center, request.issueDate), findAllocation(request.accountingPeriod, line)]);
+    const [rule, allocation] = await Promise.all([resolveRule(line, center, request.issueDate), findAllocation(request.accountingPeriod, line, session)]);
     prepared.push({
       ...line,
-      mode: rule.mode || "TRANSITIONAL",
+      mode: isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL",
       exceptionStrategy: rule.exceptionStrategy || "REJECT",
-      allocation: allocation?._id
+      allocation: allocation?._id,
+      budgetMonth: budgetLimits(allocation, request.accountingPeriod)?.budgetMonth
     });
   }
   const totalAmount = sumMoney(prepared.map((line) => line.amount));
@@ -476,50 +489,55 @@ export async function executeDeferredBudget(request, userId, { session, lines } 
   const centers = await CostCenter.find({ _id: { $in: grouped.map((line) => line.costCenter) } }).session(session || null);
   const centerMap = new Map(centers.map((center) => [String(center._id), center]));
   const prepared = [];
+  const appliedUsage = [];
 
-  for (const source of grouped) {
-    const center = centerMap.get(String(source.costCenter));
-    if (!center?.active) throw new AppError(422, "Every rendition line needs an active Cost Center.", { costCenter: source.costCenter }, ERROR_CODES.VALIDATION_ERROR);
-    const [rule, allocation] = await Promise.all([
-      resolveRule(source, center, request.issueDate),
-      findAllocation(request.accountingPeriod, source)
-    ]);
-    const line = {
-      ...source,
-      mode: rule.mode || source.mode || "TRANSITIONAL",
-      exceptionStrategy: rule.exceptionStrategy || source.exceptionStrategy || "REJECT",
-      allocation: allocation?._id || source.allocation
-    };
-    prepared.push(line);
-    if (line.mode !== "ACTIVE" || !(line.amount > 0)) continue;
-    if (line.allocation) {
-      const updated = await BudgetAllocation.findOneAndUpdate(
-        { _id: line.allocation, $expr: { $gte: [{ $subtract: [{ $subtract: ["$assignedAmount", "$committedAmount"] }, "$executedAmount"] }, line.amount] } },
-        { $inc: { executedAmount: line.amount, paidAmount: line.amount } },
-        { new: true, session }
-      );
-      if (!updated) throw new AppError(409, "Budget changed before rendition validation.", { amount: line.amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
-    } else {
-      const updated = await CostCenter.findOneAndUpdate(
-        { _id: line.costCenter, $expr: { $gte: [{ $subtract: [{ $subtract: ["$annualBudget", { $ifNull: ["$committedAmount", 0] }] }, { $ifNull: ["$executedAmount", 0] }] }, line.amount] } },
-        { $inc: { executedAmount: line.amount, paidAmount: line.amount } },
-        { new: true, session }
-      );
-      if (!updated) throw new AppError(409, "Cost Center budget changed before rendition validation.", { costCenter: line.costCenter, amount: line.amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
+  try {
+    for (const source of grouped) {
+      const center = centerMap.get(String(source.costCenter));
+      if (!center?.active) throw new AppError(422, "Every rendition line needs an active Cost Center.", { costCenter: source.costCenter }, ERROR_CODES.VALIDATION_ERROR);
+      const [rule, allocation] = await Promise.all([
+        resolveRule(source, center, request.issueDate),
+        findAllocation(commitment.period, source, session)
+      ]);
+      const line = {
+        ...source,
+        mode: isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || source.mode || "TRANSITIONAL",
+        exceptionStrategy: rule.exceptionStrategy || source.exceptionStrategy || "REJECT",
+        allocation: allocation?._id || source.allocation,
+        budgetMonth: budgetLimits(allocation, commitment.period)?.budgetMonth
+      };
+      prepared.push(line);
+      if (line.mode !== "ACTIVE" || !(line.amount > 0)) continue;
+      if (line.allocation) {
+        const increments = { executedAmount: line.amount, paidAmount: line.amount };
+        await changeAllocationUsage({ allocation: line.allocation, budgetMonth: line.budgetMonth, increments, required: line.amount, session });
+        appliedUsage.push({ kind: "allocation", id: line.allocation, budgetMonth: line.budgetMonth, increments });
+      } else {
+        const updated = await CostCenter.findOneAndUpdate(
+          { _id: line.costCenter, $expr: { $gte: [{ $subtract: [{ $subtract: ["$annualBudget", { $ifNull: ["$committedAmount", 0] }] }, { $ifNull: ["$executedAmount", 0] }] }, line.amount] } },
+          { $inc: { executedAmount: line.amount, paidAmount: line.amount } },
+          { new: true, session }
+        );
+        if (!updated) throw new AppError(409, "Cost Center budget changed before rendition validation.", { costCenter: line.costCenter, amount: line.amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
+        appliedUsage.push({ kind: "costCenter", id: line.costCenter, increments: { executedAmount: line.amount, paidAmount: line.amount } });
+      }
     }
-  }
 
-  commitment.lines = prepared.map((line) => ({ ...line, executedAmount: line.amount || 0, paidAmount: line.amount || 0 }));
-  commitment.totalAmount = sumMoney(prepared.map((line) => line.amount || 0));
-  commitment.executedAmount = commitment.totalAmount;
-  commitment.paidAmount = commitment.totalAmount;
-  commitment.status = BUDGET_STATUS.CLOSED;
-  commitment.executedAt = new Date();
-  commitment.executedBy = userId;
-  commitment.paidAt = new Date();
-  commitment.paidBy = userId;
-  commitment.history.push({ status: BUDGET_STATUS.EXECUTED, amount: commitment.totalAmount, by: userId, comments: "Track C eligible expense budget executed at rendition validation." });
-  commitment.history.push({ status: BUDGET_STATUS.CLOSED, amount: commitment.totalAmount, by: userId, comments: "Track C eligible expense budget closed after rendition validation." });
-  await commitment.save({ session });
-  return commitment;
+    commitment.lines = prepared.map((line) => ({ ...line, executedAmount: line.amount || 0, paidAmount: line.amount || 0 }));
+    commitment.totalAmount = sumMoney(prepared.map((line) => line.amount || 0));
+    commitment.executedAmount = commitment.totalAmount;
+    commitment.paidAmount = commitment.totalAmount;
+    commitment.status = BUDGET_STATUS.CLOSED;
+    commitment.executedAt = new Date();
+    commitment.executedBy = userId;
+    commitment.paidAt = new Date();
+    commitment.paidBy = userId;
+    commitment.history.push({ status: BUDGET_STATUS.EXECUTED, amount: commitment.totalAmount, by: userId, comments: "Track C eligible expense budget executed at rendition validation." });
+    commitment.history.push({ status: BUDGET_STATUS.CLOSED, amount: commitment.totalAmount, by: userId, comments: "Track C eligible expense budget closed after rendition validation." });
+    await commitment.save({ session });
+    return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
+  }
 }

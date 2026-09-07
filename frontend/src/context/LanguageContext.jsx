@@ -1,3 +1,5 @@
+import { budgetPlanningSpanish } from "../utils/budgetPlanningSpanish.js";
+import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
@@ -1669,7 +1671,56 @@ const tripleTrackSpanish = {
   "COMPLETED_WITH_OBSERVATIONS": "COMPLETADO CON OBSERVACIONES"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish };
+const quotationPaymentSpanish = {
+  "Payment condition": "Condición de pago",
+  "100% advance": "100% Adelanto",
+  "100% on delivery": "100% Contra entrega",
+  "Advance + balance": "Adelanto + Saldo",
+  "Credit": "Crédito",
+  "Partial payments": "Pagos parciales",
+  "Other": "Otro",
+  "On delivery": "Contra entrega",
+  "On conformity": "Contra conformidad",
+  "At service completion": "Al finalizar el servicio",
+  "After invoice": "Después de factura",
+  "Invoice": "Factura",
+  "Conformity": "Conformidad",
+  "Not specified": "Sin especificar",
+  "Details pending": "Detalles pendientes",
+  "Existing payment terms": "Condiciones de pago existentes",
+  "Advance percentage": "Porcentaje de adelanto",
+  "Advance": "Adelanto",
+  "Balance": "Saldo",
+  "Balance payable": "Pago del saldo",
+  "Describe when the balance is payable": "Describa cuándo se paga el saldo",
+  "Credit period": "Plazo de crédito",
+  "Credit days": "Días de crédito",
+  "Credit period starts after": "El plazo de crédito inicia después de",
+  "{days} days": "{days} días",
+  "Number of payments": "Número de pagos",
+  "Describe the payment condition": "Describa la condición de pago",
+  "Payment details": "Detalle de los pagos",
+  "Payment notes": "Observaciones de pago",
+  "30% at start, 40% at 50% progress, 30% on final delivery": "30% al inicio, 40% al avance del 50%, 30% contra entrega final",
+  "100% before starting": "100% antes de iniciar",
+  "100% after delivery / conformity": "100% después de entrega / conformidad",
+  "{advance}% advance + {balance}% balance ({timing})": "{advance}% adelanto + {balance}% saldo ({timing})",
+  "100% payable {days} days after {start}": "100% pagadero {days} días después de {start}",
+  "{count} payments": "{count} pagos",
+  "Order payment terms": "Condición de pago de la orden",
+  "Compare supplier quotations": "Comparar cotizaciones de proveedores",
+  "Select a valid payment condition.": "Seleccione una condición de pago válida.",
+  "Enter text of at most 4000 characters.": "Ingrese un texto de hasta 4000 caracteres.",
+  "Enter an advance greater than 0 and less than 100, with at most two decimal places.": "Ingrese un adelanto mayor que 0 y menor que 100, con hasta dos decimales.",
+  "Select when the balance is payable.": "Seleccione cuándo se paga el saldo.",
+  "Enter a positive whole number of credit days.": "Ingrese un número entero positivo de días de crédito.",
+  "Select when the credit period starts.": "Seleccione cuándo inicia el plazo de crédito.",
+  "Enter at least two payments as a whole number.": "Ingrese un número entero de al menos dos pagos.",
+  "Review the quotation payment terms.": "Revise las condiciones de pago de la cotización.",
+  "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
+};
+
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish };
 
 const LanguageContext = createContext(null);
 
@@ -1692,8 +1743,9 @@ export function LanguageProvider({ children }) {
 
   function t(text) {
     if (text === undefined || text === null) return "";
-    if (language === "en") return text;
-    return spanishDictionary[text] || text;
+    const display = umaCopy[text] || text;
+    if (language === "en") return display;
+    return umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
   }
 
   const value = useMemo(() => ({ language, setLanguage: changeLanguage, toggleLanguage, t }), [language]);

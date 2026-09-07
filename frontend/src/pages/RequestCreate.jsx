@@ -19,20 +19,25 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import SearchSelect from "../components/SearchSelect.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import QuotationPaymentTerms from "../components/QuotationPaymentTerms.jsx";
+import QuotationComparison from "../components/QuotationComparison.jsx";
+import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
+import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import WorkflowStepper from "../components/WorkflowStepper.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import {
   currencies,
+  expenditureClassificationLabels,
   expenseNatureLabels,
   flowTypeLabels,
   flowTypes,
   expenseNatures,
   optionLabel,
+  requestCreationClassifications,
   requestPriorities,
-  requestTypeLabels,
-  requestTypes
+  requestTypeForFlow
 } from "../utils/options.js";
 
 const steps = ["Request information", "Items and quotations", "Documents", "Review and submit"];
@@ -63,14 +68,14 @@ const emptyQuotation = () => ({
   amount: "",
   currency: "PEN",
   deliveryPeriod: "",
-  paymentConditions: "",
+  ...normalizePaymentTerms(),
   commercialConditions: "",
   attachment: "",
   recommended: false
 });
 
 const quotationHasData = (quotation) => Boolean(
-  quotation.supplier || quotation.amount || quotation.deliveryPeriod || quotation.paymentConditions ||
+  quotation.supplier || quotation.amount || quotation.deliveryPeriod || quotation.paymentConditions || quotation.paymentCondition || quotation.paymentNotes ||
   quotation.commercialConditions || quotation.attachment || quotation.recommended
 );
 
@@ -184,10 +189,11 @@ export default function RequestCreate() {
             navigate(`/requests/${id}`, { replace: true });
             return;
           }
+          const requestFlowType = request.flowType || (request.requestType === "ENTREGA_RENDIR" ? "C" : "A1");
           const serverForm = {
             ...initialForm(),
-            flowType: request.flowType || (request.requestType === "ENTREGA_RENDIR" ? "C" : "A1"),
-            requestType: request.requestType,
+            flowType: requestFlowType,
+            requestType: requestTypeForFlow(requestFlowType, request.requestType),
             expenseNature: request.expenseNature || "SERVICES",
             priority: request.priority || "MEDIA",
             requesterCostCenter: supplierId(request.requesterCostCenter),
@@ -224,7 +230,7 @@ export default function RequestCreate() {
             amount: quotation.amount ?? "",
             currency: quotation.currency || request.currency,
             deliveryPeriod: quotation.deliveryPeriod || "",
-            paymentConditions: quotation.paymentConditions || "",
+            ...normalizePaymentTerms(quotation),
             commercialConditions: quotation.commercialConditions || "",
             attachment: attachmentId(quotation.attachment),
             recommended: Boolean(quotation.recommended)
@@ -243,7 +249,13 @@ export default function RequestCreate() {
           const localDraft = localStorage.getItem(draftKey);
           const parsed = localDraft ? JSON.parse(localDraft) : null;
           const useLocal = parsed?.savedAt && new Date(parsed.savedAt) > new Date(request.updatedAt);
-          setForm(useLocal ? parsed.form : serverForm);
+          const localForm = parsed?.form
+            ? {
+                ...parsed.form,
+                requestType: requestTypeForFlow(parsed.form.flowType || requestFlowType, parsed.form.requestType)
+              }
+            : null;
+          setForm(useLocal && localForm ? localForm : serverForm);
           setCapex(useLocal ? parsed.capex || serverCapex : serverCapex);
           setOpexFrequency(useLocal ? parsed.opexFrequency || request.opexDetails?.expenseFrequency || "ONE_OFF" : request.opexDetails?.expenseFrequency || "ONE_OFF");
           setLines(useLocal && parsed.lines?.length ? parsed.lines : serverLines);
@@ -254,7 +266,11 @@ export default function RequestCreate() {
           const localDraft = localStorage.getItem(draftKey);
           if (localDraft) {
             const parsed = JSON.parse(localDraft);
-            setForm(parsed.form || initialForm());
+            const restoredForm = parsed.form || initialForm();
+            setForm({
+              ...restoredForm,
+              requestType: requestTypeForFlow(restoredForm.flowType || "A1", restoredForm.requestType)
+            });
             setCapex(parsed.capex || initialCapex);
             setOpexFrequency(parsed.opexFrequency || "ONE_OFF");
             setLines(parsed.lines?.length ? parsed.lines : [emptyLine()]);
@@ -397,6 +413,12 @@ export default function RequestCreate() {
       ["requestType", "expenseNature", "priority", "requesterCostCenter", "issueDate", "accountingPeriod", "currency", "description"].forEach((field) => {
         if (!String(form[field] || "").trim()) next[field] = "This field is required.";
       });
+      if (["A1", "B"].includes(form.flowType) && !requestCreationClassifications.includes(form.requestType)) {
+        next.requestType = "Select CAPEX or OPEX.";
+      }
+      if (form.flowType === "C" && form.requestType !== "ENTREGA_RENDIR") {
+        next.requestType = "Track C is an advance to render and is classified at rendition validation.";
+      }
       if (officialRequest && submitting) {
         [["title", "Requirement title is required."], ["detailedDescription", "Detailed description is required."], ["businessJustification", "Business justification is required."], ["nonApprovalRisk", "Risk if not approved is required."]].forEach(([field, message]) => {
           if (!String(form[field] || "").trim()) next[field] = message;
@@ -414,6 +436,11 @@ export default function RequestCreate() {
         if (!(Number(line.totalAmount) > 0)) next[`lines.${lineIndex}.totalAmount`] = "Total must be greater than zero.";
         if (line.quantity !== "" && Number(line.quantity) < 0) next[`lines.${lineIndex}.quantity`] = "Enter a valid quantity.";
         if (line.unitPrice !== "" && Number(line.unitPrice) < 0) next[`lines.${lineIndex}.unitPrice`] = "Enter a valid unit price.";
+      });
+      if (form.flowType === "A1") quotations.forEach((quotation, quoteIndex) => {
+        validatePaymentTerms(quotation, { requireComplete: submitting }).forEach(({ field, message }) => {
+          next[`quotations.${quoteIndex}.${field}`] = message;
+        });
       });
       if (quotationPolicy.enabled && submitting) {
         if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size < quotationPolicy.minimumCount) next.quotations = `At least ${quotationPolicy.minimumCount} different supplier quotations are required.`;
@@ -445,6 +472,11 @@ export default function RequestCreate() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       notify("Review the highlighted fields before continuing.", "error");
+      window.requestAnimationFrame(() => {
+        const error = window.document.querySelector(".field-error-text");
+        error?.scrollIntoView({ behavior: "smooth", block: "center" });
+        error?.closest(".field, .document-upload")?.querySelector("input, select, textarea, button")?.focus({ preventScroll: true });
+      });
       return;
     }
     setCompletedSteps((current) => [...new Set([...current, step])]);
@@ -465,7 +497,11 @@ export default function RequestCreate() {
     setSaving(true);
     setError("");
     const data = new FormData();
-    const payloadForm = { ...form, description: form.description || form.detailedDescription };
+    const payloadForm = {
+      ...form,
+      requestType: requestTypeForFlow(form.flowType, form.requestType),
+      description: form.description || form.detailedDescription
+    };
     Object.entries(payloadForm).forEach(([key, value]) => data.append(key, value ?? ""));
     data.append("capexDetails", JSON.stringify(form.requestType === "CAPEX" ? {
       projectPep: capex.projectPep,
@@ -516,12 +552,13 @@ export default function RequestCreate() {
     <Message type="error">{error}</Message>
     <div className="request-wizard official-request-wizard">
       <WorkflowStepper steps={steps} current={step} completedSteps={completedSteps} maxAccessible={maxStep} onSelect={(next) => next <= maxStep && setStep(next)} />
+      <div className="wizard-financial-context"><span>{t("Step {step} of {total}").replace("{step}", step + 1).replace("{total}", steps.length)} · {t(steps[step])}</span><span>{t("Total amount")}<strong>{form.currency} {money(totals.total)}</strong></span><small>{t("Fields marked * are required.")}</small></div>
       <div className="wizard-workspace">
         {step === 0 && <div className="wizard-step">
           <div className="section-heading"><div><h3>{t("General information")}</h3><p>{t("Identify the request, authorized CECO, period, and institutional need.")}</p></div></div>
           <div className="form-grid two-column-form">
-            <label className="field"><span>{t("Operational track")} *</span><select value={form.flowType} onChange={(event) => { const flowType = event.target.value; setForm((current) => ({ ...current, flowType, requestType: flowType === "C" ? "ENTREGA_RENDIR" : (current.requestType === "ENTREGA_RENDIR" ? "OPEX" : current.requestType), supplier: flowType === "C" ? "" : current.supplier })); }}>{flowTypes.filter((type) => type !== "A2").map((type) => <option key={type} value={type}>{t(optionLabel(type, flowTypeLabels))}</option>)}</select><small>{t(form.flowType === "A1" ? "Formal purchase with quotations and PO." : form.flowType === "B" ? "Direct invoice / advance payment with mandatory XML + PDF." : "Advance to render / petty cash; expense budget is executed at rendition validation.")}</small></label>
-            <label className={`field${errors.requestType ? " field-error" : ""}`}><span>{t("Request type")} *</span><select value={form.requestType} disabled={form.flowType === "C"} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))}>{requestTypes.map((type) => <option key={type} value={type}>{t(optionLabel(type, requestTypeLabels))}</option>)}</select></label>
+            <label className="field"><span>{t("Operational track")} *</span><select value={form.flowType} onChange={(event) => { const flowType = event.target.value; setForm((current) => ({ ...current, flowType, requestType: requestTypeForFlow(flowType, current.requestType), supplier: flowType === "C" ? "" : current.supplier })); }}>{flowTypes.filter((type) => type !== "A2").map((type) => <option key={type} value={type}>{t(optionLabel(type, flowTypeLabels))}</option>)}</select><small>{t(form.flowType === "A1" ? "Formal purchase with quotations and PO." : form.flowType === "B" ? "Direct invoice / advance payment with mandatory XML + PDF." : "Advance to render / petty cash; expense budget is executed at rendition validation.")}</small></label>
+            {form.flowType !== "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>CAPEX / OPEX *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))}>{requestCreationClassifications.map((type) => <option key={type} value={type}>{t(optionLabel(type, expenditureClassificationLabels))}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t("The operational track defines how the transaction is processed; CAPEX / OPEX defines the economic classification of the spend.")}</small></label>}
             <label className="field"><span>{t("Expense nature")} *</span><select value={form.expenseNature} onChange={(event) => setForm((current) => ({ ...current, expenseNature: event.target.value }))}>{expenseNatures.map((item) => <option key={item} value={item}>{t(optionLabel(item, expenseNatureLabels))}</option>)}</select></label>
             <label className="field"><span>{t("Priority")} *</span><select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}>{requestPriorities.map((item) => <option key={item}>{t(item)}</option>)}</select></label>
             <label className="field"><span>{t("Requesting area")}</span><input value={user.area || "General"} disabled title={t("Assigned from the signed-in user profile.")} /></label>
@@ -537,6 +574,10 @@ export default function RequestCreate() {
             <label className="field form-span-two"><span>{t("Risk if not approved")} *</span><textarea rows="3" value={form.nonApprovalRisk} onChange={(event) => setForm((current) => ({ ...current, nonApprovalRisk: event.target.value }))} />{errors.nonApprovalRisk && <small className="field-error-text">{t(errors.nonApprovalRisk)}</small>}</label>
           </div>
 
+          {form.flowType === "C" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("Track C - Advance to render")}</strong><span>{t("CAPEX / OPEX is not selected when the advance is created. The final expense is recognized when Accounting validates the rendition.")}</span></div></div>}
+
+          {form.flowType === "B" && form.requestType === "CAPEX" && <div className="inline-alert alert-warning"><AlertTriangle size={18} /><div><strong>{t("Direct CAPEX purchase")}</strong><span>{t("Track B has no prior Purchase Order. Provide a clear business justification and the required supporting evidence for this capital expenditure.")}</span></div></div>}
+
           {form.requestType === "CAPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("CAPEX financial information")}</h3><p>{t("Planning information is recorded only; no depreciation or NPV calculation is generated.")}</p></div></div><div className="form-grid three-column-form">
             <label className="field"><span>{t("Project / PEP")}</span><select value={capex.projectId} onChange={(event) => { const project = masters.projects.find((item) => item._id === event.target.value); setCapex((current) => ({ ...current, projectId: event.target.value, projectPep: project?.code || current.projectPep })); }}><option value="">{t("No project")}</option>{masters.projects.map((project) => <option key={project._id} value={project._id}>{project.code} - {project.name}</option>)}</select></label>
             <label className="field"><span>{t("Fixed asset category")}</span><select value={capex.assetCategory} onChange={(event) => setCapex((current) => ({ ...current, assetCategory: event.target.value }))}><option value="">{t("Select")}</option>{["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"].map((value) => <option key={value} value={value}>{t(value)}</option>)}</select></label>
@@ -546,7 +587,7 @@ export default function RequestCreate() {
             <div className="field"><span>{t("Payback")}</span><div className="compound-field"><input aria-label={t("Payback value")} type="number" min="0" step="0.01" value={capex.paybackValue} onChange={(event) => setCapex((current) => ({ ...current, paybackValue: event.target.value }))} /><select aria-label={t("Payback unit")} value={capex.paybackUnit} onChange={(event) => setCapex((current) => ({ ...current, paybackUnit: event.target.value }))}><option value="MONTHS">{t("Months")}</option><option value="YEARS">{t("Years")}</option></select></div></div>
           </div></div>}
 
-          {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("The expense account remains controlled by the configured accounting master.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
+          {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("The expense account remains controlled by the configured accounting master.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="EVERY_3_MONTHS">{language === "es" ? "Cada 3 meses" : "Every 3 months"}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
         </div>}
 
         {step === 1 && <div className="wizard-step">
@@ -583,25 +624,29 @@ export default function RequestCreate() {
               return <article className={`quotation-card${quotation.recommended ? " recommended" : ""}`} key={quotation.clientId}><div className="quotation-card-head"><span>{t("Quotation")} {index + 1}</span>{supplier && <StatusBadge status={status} />}</div>
                 <SearchSelect label="Supplier" value={quotation.supplier} options={masters.suppliers} onChange={(value) => updateQuotation(index, { supplier: value, recommended: false })} getOptionLabel={(item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)} - ${t(supplierStatus(item))}`} error={errors[`quotations.${index}.supplier`]} required searchPlaceholder="Search name or RUC/DNI..." />
                 {supplier && <div className="supplier-inline-status"><div><strong>{supplierName(supplier)}</strong><span>{supplier.rucDni}{supplier.supplierCode ? ` - ${supplier.supplierCode}` : ""}</span></div><small>{supplier.taxpayerValidation?.providerMode === "MANUAL" ? t("Manual taxpayer validation") : t(supplier.taxpayerValidation?.providerMode || "NOT_CONFIGURED")}</small></div>}
-                <div className="form-grid two-column-form"><label className="field"><span>{t("Amount")} *</span><input type="number" min="0" step="0.01" value={quotation.amount} onChange={(event) => updateQuotation(index, { amount: event.target.value })} /></label><label className="field"><span>{t("Currency")}</span><select value={quotation.currency} onChange={(event) => updateQuotation(index, { currency: event.target.value })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label><label className="field"><span>{t("Delivery period")}</span><input value={quotation.deliveryPeriod} onChange={(event) => updateQuotation(index, { deliveryPeriod: event.target.value })} /></label><label className="field"><span>{t("Payment conditions")}</span><input value={quotation.paymentConditions} onChange={(event) => updateQuotation(index, { paymentConditions: event.target.value })} /></label><label className="field form-span-two"><span>{t("Commercial conditions")}</span><textarea rows="2" value={quotation.commercialConditions} onChange={(event) => updateQuotation(index, { commercialConditions: event.target.value })} /></label></div>
+                <div className="form-grid two-column-form"><label className="field"><span>{t("Amount")} *</span><input type="number" min="0" step="0.01" value={quotation.amount} onChange={(event) => updateQuotation(index, { amount: event.target.value })} /></label><label className="field"><span>{t("Currency")}</span><select value={quotation.currency} onChange={(event) => updateQuotation(index, { currency: event.target.value })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label><label className="field"><span>{t("Delivery period")}</span><input value={quotation.deliveryPeriod} onChange={(event) => updateQuotation(index, { deliveryPeriod: event.target.value })} /></label></div>
+                <QuotationPaymentTerms quotation={quotation} onChange={(changes) => updateQuotation(index, changes)} errors={errors} errorPrefix={`quotations.${index}.`} />
+                <label className="field"><span>{t("Commercial conditions")}</span><textarea rows="2" value={quotation.commercialConditions} onChange={(event) => updateQuotation(index, { commercialConditions: event.target.value })} /></label>
                 <label className={`quotation-evidence${errors[`quotations.${index}.attachment`] ? " field-error" : ""}`}><FileText size={18} /><span><strong>{quotationFiles[quotation.clientId]?.name || evidence?.originalName || t("Attach quotation evidence")}</strong><small>{quotationFiles[quotation.clientId] || evidence ? t("Evidence attached") : t("Evidence missing")}</small></span><input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" onChange={(event) => setQuotationFiles((current) => ({ ...current, [quotation.clientId]: event.target.files?.[0] }))} /></label>
                 <div className="quotation-actions"><label className={`recommend-option${blocked ? " disabled" : ""}`} title={blocked ? t("Rejected or inactive suppliers cannot be recommended.") : ""}><input type="radio" name="recommended-quotation" checked={quotation.recommended} disabled={blocked || !quotation.supplier} onChange={() => { updateQuotation(index, { recommended: true }); setForm((current) => ({ ...current, supplier: quotation.supplier })); }} /><CheckCircle2 size={17} /><span>{t("Recommend supplier")}</span></label><button type="button" className="icon-button danger" onClick={() => setQuotations((current) => current.filter((_, currentIndex) => currentIndex !== index))} title={t("Remove quotation")}><Trash2 size={16} /></button></div>
               </article>;
             })}</div>
+            {quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}
             <Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : "/requests/new")}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
             <label className="field"><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => setForm((current) => ({ ...current, supplierSelectionReason: event.target.value }))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
 
-          <div className="official-subsection budget-preview"><div className="section-heading"><div><h3>{t("Budget preview")}</h3><p>{t("Read-only result from the existing Budget service. No funds are reserved here.")}</p></div>{budgetLoading ? <RefreshCw className="spin" size={18} /> : <StatusBadge status={budgetPreview.status} />}</div>{budgetPreview.lines?.length ? <div className="budget-preview-lines">{budgetPreview.lines.map((item, index) => <div key={`${item.costCenter}-${item.expenseType}-${index}`}><div><strong>{item.costCenterSnapshot?.code || t("Pending validation")}</strong><span>{item.budgetItem || t("No budget item")}</span></div><span>{t("Requested")}: PEN {money(item.amount)}</span><span>{t("Available")}: {item.available === undefined ? "-" : `PEN ${money(item.available)}`}</span><span>{t("Projected")}: {item.projectedBalance === undefined ? "-" : `PEN ${money(item.projectedBalance)}`}</span><StatusBadge status={item.status} /></div>)}</div> : <div className="empty-inline"><BarChart3 size={20} /><span>{t("Complete the accounting dimensions to calculate the budget preview.")}</span></div>}</div>
+          <div className="official-subsection budget-preview"><div className="section-heading"><div><h3>{t("Budget preview")}</h3><p>{t("Read-only result from the existing Budget service. No funds are reserved here.")}</p></div>{budgetLoading ? <RefreshCw className="spin" size={18} /> : <StatusBadge status={budgetPreview.status} />}</div>{budgetPreview.lines?.length ? <div className="budget-preview-lines">{budgetPreview.lines.map((item, index) => <div key={`${item.costCenter}-${item.expenseType}-${index}`}><div><strong>{item.costCenterSnapshot?.code || t("Pending validation")}</strong><span>{item.budgetItem || t("No budget item")}</span></div><span>{t("Requested")}: PEN {money(item.amount)}</span><span>{t("Available")}: {item.available === undefined ? "-" : `PEN ${money(item.available)}`}</span><span>{t("Projected")}: {item.projectedBalance === undefined ? "-" : `PEN ${money(item.projectedBalance)}`}</span><StatusBadge status={item.status} /><BudgetLimitSummary line={item} /></div>)}</div> : <div className="empty-inline"><BarChart3 size={20} /><span>{t("Complete the accounting dimensions to calculate the budget preview.")}</span></div>}</div>
         </div>}
 
         {step === 2 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Supporting documents")}</h3><p>{t("Quotation evidence is attached to each supplier above; other configured evidence is uploaded here.")}</p></div></div><div className="document-requirement required"><FileText size={20} /><div><strong>{t("Mandatory document checklist")}</strong><p>{formPolicy.documentRequirements.length ? formPolicy.documentRequirements.map((rule) => `${t(rule.labelKey)} x ${rule.minCount}`).join(" - ") : t("No additional configured evidence for this classification.")}</p></div></div><div className="document-grid">{documentDefinitions.map((document) => {
           const rule = formPolicy.documentRequirements.find((item) => item.kind === document.kind);
           const existing = existingAttachments.filter((item) => item.kind === document.kind);
-          return <label className={`document-upload${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{rule ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small>{t("Choose file")}</small></span><input type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: Array.from(event.target.files || []) }))} /><div className="file-list">{existing.map((file) => <span key={file._id}>{file.originalName} - {t("Already uploaded")}</span>)}{files[document.key].map((file) => <span key={`${file.name}-${file.size}`}>{file.name} - {(file.size / 1024).toFixed(0)} KB</span>)}</div>{errors[document.key] && <small className="field-error-text">{t(errors[document.key])}</small>}</label>;
+          const attached = existing.length + (files[document.key]?.length || 0);
+          return <label className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{rule ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{t(attached ? "Files attached" : rule ? "Required document" : "Optional document")}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: Array.from(event.target.files || []) }))} /><div className="file-list">{existing.map((file) => <span key={file._id}>{file.originalName} - {t("Already uploaded")}</span>)}{files[document.key].map((file) => <span key={`${file.name}-${file.size}`}>{file.name} - {(file.size / 1024).toFixed(0)} KB</span>)}</div>{errors[document.key] && <small className="field-error-text">{t(errors[document.key])}</small>}</label>;
         })}</div></div>}
 
-        {step === 3 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div><div className="review-layout"><div className="review-section"><div className="section-heading compact"><h3>{t("Requirement")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Operational track")}</dt><dd>{t(optionLabel(form.flowType, flowTypeLabels))}</dd></div><div><dt>{t("Request type")}</dt><dd>{t(form.requestType)}</dd></div><div><dt>{t("CECO")}</dt><dd>{masters.costCenters.find((item) => item._id === form.requesterCostCenter)?.code || "-"}</dd></div><div><dt>{t("Title")}</dt><dd>{form.title || "-"}</dd></div><div><dt>{t("Priority")}</dt><dd>{t(form.priority)}</dd></div><div className="wide"><dt>{t("Business justification")}</dt><dd>{form.businessJustification || "-"}</dd></div><div className="wide"><dt>{t("Risk if not approved")}</dt><dd>{form.nonApprovalRisk || "-"}</dd></div></dl></div><div className="review-section"><div className="section-heading compact"><h3>{t("Items and totals")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div><div className="review-lines">{lines.map((line, index) => <div key={line.clientId}><span>{index + 1}</span><div><strong>{line.itemDescription || t("Accounting line")}</strong><small>{masters.costCenters.find((item) => item._id === line.costCenter)?.code} - {masters.expenseTypes.find((item) => item._id === line.expenseType)?.accountNumber}</small></div><strong>{form.currency} {money(line.totalAmount)}</strong></div>)}</div><div className="review-total"><span>{t("Total amount")}</span><strong>{form.currency} {money(totals.total)}</strong></div></div>{form.flowType !== "C" && <div className="review-section"><div className="section-heading compact"><h3>{t("Recommended supplier")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div>{selectedSupplier ? <div className="recommended-summary"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /><p>{form.supplierSelectionReason || "-"}</p></div> : <p>{t("No recommended supplier selected.")}</p>}</div>}<div className="review-section"><div className="section-heading compact"><h3>{t("Budget and documents")}</h3><button type="button" className="text-button" onClick={() => setStep(2)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Budget status")}</dt><dd><StatusBadge status={budgetPreview.status} /></dd></div><div><dt>{t("Quotation evidence")}</dt><dd>{quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length}/{quotations.length}</dd></div><div><dt>{t("Other documents")}</dt><dd>{existingAttachments.filter((item) => item.kind !== "QUOTATION").length + Object.values(files).flat().length}</dd></div></dl></div></div></div>}
+        {step === 3 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div>{form.flowType === "A1" && quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}<div className="review-layout"><div className="review-section"><div className="section-heading compact"><h3>{t("Requirement")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Operational track")}</dt><dd>{t(optionLabel(form.flowType, flowTypeLabels))}</dd></div><div><dt>CAPEX / OPEX</dt><dd>{form.flowType === "C" ? t("Defined at rendition validation") : t(form.requestType)}</dd></div><div><dt>{t("CECO")}</dt><dd>{masters.costCenters.find((item) => item._id === form.requesterCostCenter)?.code || "-"}</dd></div><div><dt>{t("Title")}</dt><dd>{form.title || "-"}</dd></div><div><dt>{t("Priority")}</dt><dd>{t(form.priority)}</dd></div><div className="wide"><dt>{t("Business justification")}</dt><dd>{form.businessJustification || "-"}</dd></div><div className="wide"><dt>{t("Risk if not approved")}</dt><dd>{form.nonApprovalRisk || "-"}</dd></div></dl></div><div className="review-section"><div className="section-heading compact"><h3>{t("Items and totals")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div><div className="review-lines">{lines.map((line, index) => <div key={line.clientId}><span>{index + 1}</span><div><strong>{line.itemDescription || t("Accounting line")}</strong><small>{masters.costCenters.find((item) => item._id === line.costCenter)?.code} - {masters.expenseTypes.find((item) => item._id === line.expenseType)?.accountNumber}</small></div><strong>{form.currency} {money(line.totalAmount)}</strong></div>)}</div><div className="review-total"><span>{t("Total amount")}</span><strong>{form.currency} {money(totals.total)}</strong></div></div>{form.flowType !== "C" && <div className="review-section"><div className="section-heading compact"><h3>{t("Recommended supplier")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div>{selectedSupplier ? <div className="recommended-summary"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /><p>{form.supplierSelectionReason || "-"}</p></div> : <p>{t("No recommended supplier selected.")}</p>}</div>}<div className="review-section"><div className="section-heading compact"><h3>{t("Budget and documents")}</h3><button type="button" className="text-button" onClick={() => setStep(2)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Budget status")}</dt><dd><StatusBadge status={budgetPreview.status} /></dd></div><div><dt>{t("Quotation evidence")}</dt><dd>{quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length}/{quotations.length}</dd></div><div><dt>{t("Other documents")}</dt><dd>{existingAttachments.filter((item) => item.kind !== "QUOTATION").length + Object.values(files).flat().length}</dd></div></dl></div></div></div>}
 
         <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => setStep((current) => Math.max(0, current - 1))}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{step < 3 ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit for approval")}</span></button>}</div></footer>
       </div>

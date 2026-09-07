@@ -30,6 +30,9 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
+import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
+import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
+import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
 import {
   expenseNatureLabels,
   flowTypeLabels,
@@ -135,15 +138,12 @@ function Definition({ label, children }) {
 
 function Section({ title, description, children, className = "" }) {
   const { t } = useLanguage();
+  const [expanded, setExpanded] = useState(true);
+  const sectionId = `request-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
-    <div className={`workspace-panel detail-section ${className}`.trim()}>
-      <div className="section-heading">
-        <div>
-          <h3>{t(title)}</h3>
-          {description && <p>{t(description)}</p>}
-        </div>
-      </div>
-      {children}
+    <div className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
+      <h3 style={{ margin: 0 }}><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong>{description && <small>{t(description)}</small>}</span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button></h3>
+      <div className="request-section-content" id={`${sectionId}-content`} hidden={!expanded}>{children}</div>
     </div>
   );
 }
@@ -410,6 +410,20 @@ export default function RequestDetail() {
 
       <Message type="error">{error}</Message>
 
+      <dl className="request-overview">
+        <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
+        <div><dt>{t("Supplier / beneficiary")}</dt><dd>{entityName(supplier, "") || request.rendition?.beneficiarySnapshot?.name || requesterName(request)}</dd></div>
+        <div><dt>{t("Accounting period")}</dt><dd>{request.accountingPeriod || "—"}</dd></div>
+        <div><dt>{t("Current status")}</dt><dd><StatusBadge status={request.status} /></dd></div>
+      </dl>
+      <nav className="request-section-nav" aria-label={t("Request sections")}>
+        <a href="#request-section-requirement-and-justification">{t("Overview")}</a>
+        <a href="#request-section-budget-preview">{t("Budget")}</a>
+        <a href="#request-section-documents-and-fiscal-validation">{t("Documents")}</a>
+        <a href="#request-section-financial-control-records">{t("Financial records")}</a>
+        <a href="#request-actions">{t("Actions and history")}</a>
+      </nav>
+
       <div className="workspace-panel status-workspace">
         <div className="request-status-heading">
           <div>
@@ -503,7 +517,7 @@ export default function RequestDetail() {
                     { key: "supplier", label: "Supplier", render: (row) => entityName(row.supplier, row.supplierSnapshot?.legalName) },
                     { key: "amount", label: "Amount", align: "right", render: (row) => formatCurrency(row.amount, row.currency || request.currency, language) },
                     { key: "deliveryPeriod", label: "Delivery period" },
-                    { key: "paymentConditions", label: "Payment conditions" },
+                    { key: "paymentConditions", label: "Payment conditions", getValue: (row) => paymentTermsSummary(row, t), render: (row) => <PaymentTermsSummary terms={row} /> },
                     { key: "recommended", label: "Recommended supplier", render: (row) => row.recommended ? t("Yes") : t("No") }
                   ]}
                 />
@@ -530,6 +544,7 @@ export default function RequestDetail() {
                     { key: "amount", label: "Requested", align: "right", render: (row) => formatCurrency(row.amount, "PEN", language) },
                     { key: "available", label: "Available", align: "right", render: (row) => row.available === undefined ? "-" : formatCurrency(row.available, "PEN", language) },
                     { key: "projectedBalance", label: "Projected balance", align: "right", render: (row) => row.projectedBalance === undefined ? "-" : formatCurrency(row.projectedBalance, "PEN", language) },
+                    { key: "planningMode", label: "Annual / monthly limits", sortable: false, render: (row) => <BudgetLimitSummary line={row} /> },
                     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }
                   ]}
                 />
@@ -681,6 +696,7 @@ export default function RequestDetail() {
               <Definition label="Executed budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.executedAmount, "PEN", language) : "-"}</Definition>
               <Definition label="Paid budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.paidAmount, "PEN", language) : "-"}</Definition>
               <Definition label="Purchase / Service Order">{order?.poNumber || "-"}</Definition>
+              {order?.paymentTermsSnapshot && <Definition label="Order payment terms"><PaymentTermsSummary terms={order.paymentTermsSnapshot} amount={order.paymentTermsSnapshot.quotationAmount} currency={order.paymentTermsSnapshot.quotationCurrency || order.currency} /></Definition>}
               <Definition label="PO remaining balance">{order ? formatCurrency(order.remainingAmount, order.currency, language) : "-"}</Definition>
               <Definition label="Payment operation">{request.payment?.operationNumber || request.payment?.confirmations?.at(-1)?.operationNumber || "-"}</Definition>
               <Definition label="Reconciliation">{related.reconciliation ? `${related.reconciliation.bankReference} / ${formatCurrency(related.reconciliation.difference, "PEN", language)}` : "-"}</Definition>
@@ -768,7 +784,7 @@ export default function RequestDetail() {
           )}
         </div>
 
-        <aside className="request-detail-side">
+        <aside className="request-detail-side" id="request-actions">
           {(permissions.modifiable || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
               <div className="section-heading"><div><h3>{t("Available actions")}</h3><p>{t("The backend revalidates permission, period, status, documents, supplier, fiscal, and budget controls.")}</p></div></div>

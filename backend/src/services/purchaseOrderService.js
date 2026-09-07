@@ -7,6 +7,25 @@ import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS } from "../utils/constants.js";
 import { hasPermission } from "../utils/permissions.js";
+import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
+
+export function selectedQuotationPaymentTerms(request) {
+  const supplierId = String(request.supplier?._id || request.supplier || "");
+  const selected = (request.quotations || []).filter((quotation) => quotation.recommended);
+  if (!selected.length) return undefined;
+  if (selected.length !== 1 || String(selected[0].supplier?._id || selected[0].supplier || "") !== supplierId) {
+    throw new AppError(422, "The selected quotation must match the order supplier.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const quotation = selected[0];
+  const errors = validatePaymentTerms(quotation);
+  if (errors.length) throw new AppError(422, "Complete the selected quotation payment terms before issuing the order.", { errors }, ERROR_CODES.VALIDATION_ERROR);
+  return {
+    ...normalizePaymentTerms(quotation),
+    sourceQuotation: quotation._id,
+    quotationAmount: quotation.amount,
+    quotationCurrency: quotation.currency || request.currency
+  };
+}
 
 function lineSnapshot(line) {
   return {
@@ -25,6 +44,7 @@ export async function generatePurchaseOrder(request, user, req, { session, commi
   if (existing) return existing;
   const readiness = await assertProcurementReady(request, { session, commitment });
   await request.populate(["supplier", "lines.costCenter", "lines.expenseType"]);
+  const paymentTermsSnapshot = selectedQuotationPaymentTerms(request);
   const poNumber = await nextPurchaseOrderNumber(request.issueDate);
   let purchaseOrder;
   try {
@@ -39,6 +59,7 @@ export async function generatePurchaseOrder(request, user, req, { session, commi
         legalName: request.supplier.legalName || request.supplier.name
       },
       lines: (request.lines || []).map(lineSnapshot),
+      paymentTermsSnapshot,
       amount: request.totalAmount,
       originalAmount: request.totalAmount,
       consumedAmount: 0,
@@ -70,7 +91,8 @@ export async function generatePurchaseOrder(request, user, req, { session, commi
       supplier: purchaseOrder.supplier,
       supplierCode: purchaseOrder.supplierCodeSnapshot,
       amount: purchaseOrder.amount,
-      currency: purchaseOrder.currency
+      currency: purchaseOrder.currency,
+      paymentTermsSnapshot: purchaseOrder.paymentTermsSnapshot?.toObject()
     },
     session
   });

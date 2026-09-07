@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
 import { CURRENCY, PROCUREMENT_ORDER_KINDS } from "../utils/constants.js";
 
 const orderLineSchema = new mongoose.Schema(
@@ -14,6 +15,14 @@ const orderLineSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const paymentTermsSnapshotSchema = new mongoose.Schema({
+  ...paymentTermFields,
+  sourceQuotation: mongoose.Schema.Types.ObjectId,
+  quotationAmount: Number,
+  quotationCurrency: { type: String, enum: CURRENCY }
+}, { _id: false });
+paymentTermsSnapshotSchema.pre("validate", validateAndNormalizePaymentTerms);
+
 const purchaseOrderSchema = new mongoose.Schema(
   {
     poNumber: { type: String, required: true, unique: true, immutable: true },
@@ -26,6 +35,7 @@ const purchaseOrderSchema = new mongoose.Schema(
       legalName: String
     },
     lines: { type: [orderLineSchema], default: [] },
+    paymentTermsSnapshot: { type: paymentTermsSnapshotSchema, default: undefined },
     amount: { type: Number, required: true, min: 0 },
     originalAmount: { type: Number, min: 0 },
     consumedAmount: { type: Number, default: 0, min: 0 },

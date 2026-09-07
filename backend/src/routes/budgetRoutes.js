@@ -7,12 +7,16 @@ import {
   listBudgetCommitments,
   listBudgetExceptions
 } from "../controllers/budgetController.js";
+import { addBudgetPlan, changeBudgetPlan, readBudgetPlan } from "../controllers/budgetController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { ROLES } from "../utils/constants.js";
 
 const router = Router();
 router.use(protect, authorize(ROLES.ADMIN, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.BUDGET, ROLES.MANAGEMENT));
 router.get("/overview", getBudgetOverview);
+router.get("/plans/:id", readBudgetPlan);
+router.post("/plans", authorize(ROLES.ADMIN, ROLES.BUDGET), addBudgetPlan);
+router.post("/plans/:id/adjustments", authorize(ROLES.ADMIN, ROLES.BUDGET), changeBudgetPlan);
 router.get("/allocations", listBudgetAllocations);
 router.get("/commitments", listBudgetCommitments);
 router.get("/exceptions", listBudgetExceptions);

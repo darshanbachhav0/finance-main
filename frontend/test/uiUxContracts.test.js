@@ -15,6 +15,7 @@ test("shared financial formatters produce localized, fixed-precision values", ()
   assert.match(formatCurrency(118, "USD", "en"), /\$118\.00/);
   assert.equal(formatNumber(0, "en"), "0");
   assert.equal(formatDate("not-a-date", "en"), "-");
+  assert.match(formatDate("2026-09-07", "en"), /Sep 07, 2026/);
 });
 
 test("DataTable exposes saved views, density, export, and collapsible mobile filters", () => {
