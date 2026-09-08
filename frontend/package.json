@@ -10,6 +10,7 @@
     "test:payment-terms-ui": "node test/quotationPaymentTerms.browser.mjs",
     "test:budget-planning-ui": "node test/annualMonthlyBudget.browser.mjs",
     "test:uma-ui": "node test/umaResponsive.browser.mjs",
+    "test:supplier-ruc-ui": "node test/supplierRuc.browser.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

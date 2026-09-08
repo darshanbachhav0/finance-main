@@ -310,18 +310,12 @@ rem ============================================================
 rem
 rem IMPORTANT:
 rem
-rem On this PC SUNAT accepts normal visible Chromium but resets
-rem the connection when Chromium is running in headless mode.
-rem
-rem Therefore HEADLESS must remain false.
-rem
-rem When a supplier RUC is checked, a Chromium browser window
-rem may briefly appear on THIS HOST PC.
-rem
-rem Remote users using the ngrok URL will NOT see this browser.
+rem Legal representatives are retrieved in the background using
+rem full Chromium's unified headless mode. No browser window opens.
+rem The backend enforces this even with an older launcher setting.
 rem ============================================================
 
-set "SUNAT_REPRESENTATIVES_HEADLESS=false"
+set "SUNAT_REPRESENTATIVES_HEADLESS=true"
 
 set "SUNAT_REPRESENTATIVES_DEBUG=false"
 
@@ -436,7 +430,7 @@ rem ============================================================
 echo       Checking Playwright Chromium...
 
 
-node --input-type=module -e "import('playwright').then(async ({chromium})=>{const b=await chromium.launch({headless:false});console.log('      Playwright Chromium ready: '+await b.version());await b.close();}).catch(e=>{console.error(e.message);process.exit(1);})"
+node --input-type=module -e "import('playwright').then(async ({chromium})=>{const b=await chromium.launch({channel:'chromium',headless:true});console.log('      Background Chromium ready: '+await b.version());await b.close();}).catch(e=>{console.error(e.message);process.exit(1);})"
 
 
 if errorlevel 1 goto :PLAYWRIGHT_ERROR
@@ -785,7 +779,7 @@ echo SUNAT LEGAL REPRESENTATIVES:
 echo.
 echo     Source        : Official SUNAT Consulta RUC
 echo     Browser       : Playwright Chromium
-echo     Headless      : DISABLED
+echo     Headless      : ENABLED - background lookup
 echo     Status        : ENABLED
 echo.
 echo     Information:
@@ -796,8 +790,8 @@ echo     - Position
 echo     - Effective date
 echo.
 echo     NOTE:
-echo     A Chromium window may briefly appear on this PC when
-echo     a supplier RUC is checked. This is expected.
+echo     Supplier details load automatically in UMA.
+echo     No Consulta RUC browser window opens on this PC.
 echo.
 echo ============================================================
 echo.

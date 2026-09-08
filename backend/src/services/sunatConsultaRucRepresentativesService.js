@@ -76,20 +76,6 @@ function timeoutMs() {
   );
 }
 
-function headlessMode() {
-  const value =
-    env(
-      "SUNAT_REPRESENTATIVES_HEADLESS",
-      "true"
-    ).toLowerCase();
-
-  return ![
-    "false",
-    "0",
-    "no"
-  ].includes(value);
-}
-
 function debugEnabled() {
   return [
     "true",
@@ -218,22 +204,32 @@ async function getBrowser() {
     return browserPromise;
   }
 
-  browserPromise =
+  const pending =
     chromium
       .launch({
-        headless:
-          headlessMode()
+        // Use full Chromium's unified headless mode, not the headless shell.
+        // Supplier autofill must never open a desktop window, including when
+        // an older launcher still sets SUNAT_REPRESENTATIVES_HEADLESS=false.
+        channel: "chromium",
+        headless: true
+      })
+      .then((browser) => {
+        browser.once("disconnected", () => {
+          // Permit the next lookup to recover if Chromium exits unexpectedly.
+          if (browserPromise === pending) browserPromise = null;
+        });
+        return browser;
       })
       .catch(
         (error) => {
-          browserPromise =
-            null;
+          if (browserPromise === pending) browserPromise = null;
 
           throw error;
         }
       );
 
-  return browserPromise;
+  browserPromise = pending;
+  return pending;
 }
 
 async function saveDebug(
@@ -897,6 +893,9 @@ async function lookupInternal(
 
   const context =
     await browser.newContext({
+      // Identify this public-data client explicitly. SUNAT resets connections
+      // using Chromium's default HeadlessChrome user-agent on this host.
+      userAgent: "UMA-Finance/1.0 (SUNAT public RUC lookup)",
       locale:
         "es-PE",
 
@@ -924,7 +923,7 @@ async function lookupInternal(
     );
 
     console.log(
-      `[SUNAT REPRESENTATIVES] Opening Consulta RUC for ${ruc}...`
+      `[SUNAT REPRESENTATIVES] Looking up ${ruc} in the background...`
     );
 
     const response =
@@ -1027,7 +1026,7 @@ async function lookupInternal(
     }
 
     console.log(
-      `[SUNAT REPRESENTATIVES] RUC result loaded. Opening representatives...`
+      `[SUNAT REPRESENTATIVES] RUC result loaded. Retrieving representatives...`
     );
 
     const representativePage =

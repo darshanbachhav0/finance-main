@@ -156,6 +156,7 @@ The generated `trycloudflare.com` URL is temporary. `npm run share:publish` also
 - `docs/QUOTATION_PAYMENT_TERMS.md`: quotation payment choices, comparison, order snapshots, and compatibility.
 - `docs/ANNUAL_MONTHLY_BUDGETS.md`: annual plans, monthly limits, reserve allocation, audited adjustments, and legacy compatibility.
 - `docs/UMA_UI_UX.md`: UMA branding, the 19 interface improvements, responsive behavior, and browser verification.
+- `docs/SUNAT_BACKGROUND_LOOKUP.md`: invisible RUC lookup, automatic supplier fields, and regression verification.
 - `docs/MIGRATION_AND_OPERATIONS.md`: migration, backup, seed, run, and recovery procedures.
 - `docs/USER_MANUAL.md`: English/Spanish operator manual source.
 - `documentation/UMA_Integrated_ERP_User_and_Operations_Manual_EN_ES.docx`: polished bilingual Word manual.
