@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
 import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
 import {
   ACKNOWLEDGMENT_TYPES,
@@ -29,6 +30,8 @@ const lineSchema = new mongoose.Schema(
     quantity: { type: Number, min: 0 },
     unitOfMeasure: { type: String, trim: true, default: "" },
     unitPrice: { type: Number, min: 0 },
+    // Undefined preserves historical manually entered amounts.
+    priceIncludesIGV: { type: Boolean, default: undefined },
     commercialTotal: { type: Number, min: 0, default: 0 },
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter", required: true },
     expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType", required: true },
@@ -477,19 +480,27 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
   let commercialLineCount = 0;
   let incompleteCommercialLine = false;
   for (const [index, line] of (this.lines || []).entries()) {
+    const automaticIGV = typeof line.priceIncludesIGV === "boolean";
+    if (automaticIGV) {
+      const calculated = calculateRequestLineAmounts(line);
+      line.unitPrice = calculated.unitPrice;
+      line.netAmount = calculated.netAmount;
+      line.igvAmount = calculated.igvAmount;
+      line.totalAmount = calculated.totalAmount;
+    }
     line.netAmount = roundMoney(line.netAmount);
     line.igvAmount = roundMoney(line.igvAmount);
     line.totalAmount = roundMoney(line.totalAmount);
     assertLineTotal(line, index);
     line.currency ||= this.currency;
     line.exchangeRate ||= this.exchangeRate || 1;
-    line.penEquivalent = roundMoney(line.penEquivalent || multiplyMoney(line.totalAmount, line.exchangeRate));
+    line.penEquivalent = automaticIGV ? multiplyMoney(line.totalAmount, line.exchangeRate) : roundMoney(line.penEquivalent || multiplyMoney(line.totalAmount, line.exchangeRate));
 
     const hasQuantity = line.quantity !== null && line.quantity !== undefined;
     const hasUnitPrice = line.unitPrice !== null && line.unitPrice !== undefined;
     if (hasQuantity && hasUnitPrice) {
       line.unitPrice = roundMoney(line.unitPrice);
-      line.commercialTotal = multiplyMoney(line.unitPrice, line.quantity);
+      line.commercialTotal = automaticIGV ? line.totalAmount : multiplyMoney(line.unitPrice, line.quantity);
       commercialLineCount += 1;
     } else {
       line.commercialTotal = 0;

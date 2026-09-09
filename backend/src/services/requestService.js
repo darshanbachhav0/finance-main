@@ -8,6 +8,7 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Reconciliation from "../models/Reconciliation.js";
+import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
 import SunatVoucher from "../models/SunatVoucher.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
@@ -173,20 +174,33 @@ function parseJson(value, field) {
 export function parseRequestLines(value) {
   const parsed = parseJson(value, "lines") || [];
   if (!Array.isArray(parsed)) throw new AppError(400, "lines must be an array.", { field: "lines" }, ERROR_CODES.VALIDATION_ERROR);
-  return parsed.map((line) => ({
-    itemDescription: line.itemDescription || "",
-    quantity: line.quantity === "" || line.quantity === undefined || line.quantity === null ? undefined : Number(line.quantity),
-    unitOfMeasure: line.unitOfMeasure || "",
-    unitPrice: line.unitPrice === "" || line.unitPrice === undefined || line.unitPrice === null ? undefined : Number(line.unitPrice),
-    costCenter: line.costCenter?._id || line.costCenter,
-    expenseType: line.expenseType?._id || line.expenseType,
-    budgetItem: line.budgetItem || line.budgetItemId || "",
-    projectId: line.projectId || "",
-    subAccount: line.subAccount || "",
-    netAmount: Number(line.netAmount ?? line.net ?? 0),
-    igvAmount: Number(line.igvAmount ?? line.igv ?? 0),
-    totalAmount: Number(line.totalAmount ?? line.total ?? 0)
-  }));
+  return parsed.map((line, index) => {
+    if (!line || typeof line !== "object" || Array.isArray(line)) throw new AppError(422, "Each request line must be an object.", { line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    let calculated = {};
+    if (line.priceIncludesIGV !== undefined) {
+      try {
+        calculated = calculateRequestLineAmounts(line);
+      } catch (error) {
+        throw new AppError(422, error.message, { line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+      }
+    }
+    return {
+      itemDescription: line.itemDescription || "",
+      quantity: line.quantity === "" || line.quantity === undefined || line.quantity === null ? undefined : Number(line.quantity),
+      unitOfMeasure: line.unitOfMeasure || "",
+      unitPrice: line.unitPrice === "" || line.unitPrice === undefined || line.unitPrice === null ? undefined : Number(line.unitPrice),
+      priceIncludesIGV: line.priceIncludesIGV,
+      costCenter: line.costCenter?._id || line.costCenter,
+      expenseType: line.expenseType?._id || line.expenseType,
+      budgetItem: line.budgetItem || line.budgetItemId || "",
+      projectId: line.projectId || "",
+      subAccount: line.subAccount || "",
+      netAmount: Number(line.netAmount ?? line.net ?? 0),
+      igvAmount: Number(line.igvAmount ?? line.igv ?? 0),
+      totalAmount: Number(line.totalAmount ?? line.total ?? 0),
+      ...calculated
+    };
+  });
 }
 
 export function parseQuotations(value) {

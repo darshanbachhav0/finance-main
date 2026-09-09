@@ -32,13 +32,6 @@ test("CAPEX and OPEX conditional sections use the approved enums and server proj
   assert.doesNotMatch(page, /projectSnapshot: \{[^}]*name:/);
 });
 
-test("commercial totals are displayed but never submitted as authoritative line values", () => {
-  const page = source("../src/pages/RequestCreate.jsx");
-  assert.match(page, /Number\(line\.quantity \|\| 0\) \* Number\(line\.unitPrice \|\| 0\)/);
-  assert.doesNotMatch(page, /commercialTotal:/);
-  assert.match(page, /commercialTotalStatus|Reconciliation status/);
-});
-
 test("structured quotation comparison links one evidence file per supplier and one radio recommendation", () => {
   const page = source("../src/pages/RequestCreate.jsx");
   assert.match(page, /quotationPolicy\.minimumCount/);

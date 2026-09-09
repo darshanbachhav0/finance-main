@@ -38,6 +38,19 @@ export const umaCopy = {
 };
 
 export const umaSpanish = {
+  "Unit price already includes IGV (18%)": "El precio unitario ya incluye IGV (18%)",
+  "Final total": "Total final", "Subtotal": "Subtotal", "Included": "Incluido", "Request total": "Total de la solicitud", "Item": "Ítem",
+  "Enter the quantity and unit price. We calculate IGV and the final total for you.": "Ingresa la cantidad y el precio unitario. Calculamos el IGV y el total final por ti.",
+  "Expense account for these items": "Cuenta de gasto para estos ítems",
+  "Choose once for all items. A single eligible account is selected automatically.": "Elige una vez para todos los ítems. Si solo hay una cuenta permitida, se selecciona automáticamente.",
+  "Adjust budget allocation": "Ajustar asignación presupuestal",
+  "Items inherit the request's cost center and expense account. Adjust only when an item uses a different budget.": "Los ítems usan el centro de costos y la cuenta de gasto de la solicitud. Ajusta solo si un ítem usa otro presupuesto.",
+  "Previously saved amounts are retained. Change quantity, unit price or the IGV option to use automatic calculation.": "Se conservan los importes guardados anteriormente. Cambia la cantidad, el precio unitario o la opción de IGV para usar el cálculo automático.",
+  "Select a unit of measure.": "Selecciona una unidad de medida.",
+  "Quantity supports up to 8 decimal places.": "La cantidad admite hasta 8 decimales.",
+  "The item amount is too large.": "El importe del ítem es demasiado grande.",
+  "Choose whether the unit price includes IGV.": "Indica si el precio unitario incluye IGV.",
+  "UNIT": "UNIDAD", "SERVICE": "SERVICIO", "HOUR": "HORA", "DAY": "DÍA", "MONTH": "MES", "SET": "JUEGO", "BOX": "CAJA", "KG": "KG", "LITER": "LITRO", "METER": "METRO",
   "Scroll horizontally to see all columns.": "Desplázate horizontalmente para ver todas las columnas.",
   "Financial management": "Gestión financiera", "Planning and reports": "Planificación e informes",
   "UMA home": "Inicio UMA", "Skip to main content": "Ir al contenido principal", "Account menu": "Menú de cuenta",

@@ -12,10 +12,12 @@ import {
   Send,
   Trash2
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
 import Message from "../components/Message.jsx";
+import RequestItemLine from "../components/RequestItemLine.jsx";
+import { restoreEditorLine, editRequestLine, requestLinePayload } from "../utils/requestLineEditor.js";
 import PageHeader from "../components/PageHeader.jsx";
 import SearchSelect from "../components/SearchSelect.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -47,19 +49,21 @@ const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierId = (value) => value?._id || value || "";
 const attachmentId = (value) => value?._id || value || "";
 
-const emptyLine = (costCenter = "") => ({
+const emptyLine = (costCenter = "", expenseType = "") => ({
   clientId: `${Date.now()}-${Math.random()}`,
   itemDescription: "",
   quantity: "1",
   unitOfMeasure: "UNIT",
   unitPrice: "",
+  priceIncludesIGV: true,
+  subtotal: 0,
   costCenter,
-  expenseType: "",
+  expenseType,
   budgetItem: "",
   projectId: "",
-  netAmount: "",
-  igvAmount: "",
-  totalAmount: ""
+  netAmount: 0,
+  igvAmount: 0,
+  totalAmount: 0
 });
 
 const emptyQuotation = () => ({
@@ -87,6 +91,7 @@ function initialForm() {
     expenseNature: "SERVICES",
     priority: "MEDIA",
     requesterCostCenter: "",
+    defaultExpenseType: "",
     schoolOrDepartment: "",
     areaCorrelative: "",
     issueDate: today,
@@ -157,6 +162,8 @@ export default function RequestCreate() {
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [savedStatus, setSavedStatus] = useState("");
+  const validationFocusRef = useRef(null);
+  useEffect(() => () => window.cancelAnimationFrame(validationFocusRef.current), []);
 
   useEffect(() => {
     let active = true;
@@ -197,6 +204,7 @@ export default function RequestCreate() {
             expenseNature: request.expenseNature || "SERVICES",
             priority: request.priority || "MEDIA",
             requesterCostCenter: supplierId(request.requesterCostCenter),
+            defaultExpenseType: supplierId(request.lines?.[0]?.expenseType),
             schoolOrDepartment: request.schoolOrDepartment || "",
             areaCorrelative: request.areaCorrelative || "",
             issueDate: request.issueDate.slice(0, 10),
@@ -216,6 +224,7 @@ export default function RequestCreate() {
             quantity: line.quantity ?? "",
             unitOfMeasure: line.unitOfMeasure || "",
             unitPrice: line.unitPrice ?? "",
+            priceIncludesIGV: line.priceIncludesIGV,
             costCenter: supplierId(line.costCenter),
             expenseType: supplierId(line.expenseType),
             budgetItem: line.budgetItem || "",
@@ -258,7 +267,7 @@ export default function RequestCreate() {
           setForm(useLocal && localForm ? localForm : serverForm);
           setCapex(useLocal ? parsed.capex || serverCapex : serverCapex);
           setOpexFrequency(useLocal ? parsed.opexFrequency || request.opexDetails?.expenseFrequency || "ONE_OFF" : request.opexDetails?.expenseFrequency || "ONE_OFF");
-          setLines(useLocal && parsed.lines?.length ? parsed.lines : serverLines);
+          setLines((useLocal && parsed.lines?.length ? parsed.lines : serverLines).map(restoreEditorLine));
           setQuotations(useLocal ? parsed.quotations || serverQuotations : serverQuotations);
           if (useLocal) setSavedStatus(t("Recovered local draft"));
           setExistingAttachments(request.attachments || []);
@@ -273,7 +282,7 @@ export default function RequestCreate() {
             });
             setCapex(parsed.capex || initialCapex);
             setOpexFrequency(parsed.opexFrequency || "ONE_OFF");
-            setLines(parsed.lines?.length ? parsed.lines : [emptyLine()]);
+            setLines(parsed.lines?.length ? parsed.lines.map(restoreEditorLine) : [emptyLine()]);
             setQuotations(parsed.quotations || []);
             setSavedStatus(t("Recovered local draft"));
           } else {
@@ -351,7 +360,8 @@ export default function RequestCreate() {
           issueDate: form.issueDate,
           accountingPeriod: form.accountingPeriod,
           currency: form.currency,
-          lines
+          project: form.requestType === "CAPEX" ? capex.projectPep || masters.projects.find(item => item._id === capex.projectId)?.code : undefined,
+          lines: lines.map(requestLinePayload)
         });
         if (active) setBudgetPreview(response.data.data);
       } catch (err) {
@@ -361,7 +371,7 @@ export default function RequestCreate() {
       }
     }, 500);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [hydrated, form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, lines]);
+  }, [hydrated, form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, capex.projectPep, capex.projectId, masters.projects, lines]);
 
   const selectedSupplier = masters.suppliers.find((supplier) => supplier._id === form.supplier);
   const officialRequest = form.flowType === "A1" && officialTypes.has(form.requestType);
@@ -373,16 +383,26 @@ export default function RequestCreate() {
   const allowedExpenseTypes = useMemo(() => masters.expenseTypes.filter((item) => {
     const typeAllowed = !item.permittedRequestTypes?.length || item.permittedRequestTypes.includes(form.requestType);
     const natureAllowed = !item.permittedExpenseNatures?.length || item.permittedExpenseNatures.includes(form.expenseNature);
-    return typeAllowed && natureAllowed;
+    const categoryAllowed = !["CAPEX", "OPEX"].includes(form.requestType) || item.category === form.requestType;
+    return typeAllowed && natureAllowed && categoryAllowed;
   }), [masters.expenseTypes, form.requestType, form.expenseNature]);
-  const totals = useMemo(() => lines.reduce((result, line) => ({
-    net: result.net + Number(line.netAmount || 0),
-    igv: result.igv + Number(line.igvAmount || 0),
-    total: result.total + Number(line.totalAmount || 0),
-    commercial: result.commercial + Number(line.quantity || 0) * Number(line.unitPrice || 0)
-  }), { net: 0, igv: 0, total: 0, commercial: 0 }), [lines]);
-  const accountingDifference = Number((totals.net + totals.igv - totals.total).toFixed(2));
-  const commercialDifference = Number((totals.commercial - totals.total).toFixed(2));
+  const totals = useMemo(() => {
+    const cents = lines.reduce((result, line) => ({ net: result.net + Math.round(Number(line.netAmount || 0) * 100), igv: result.igv + Math.round(Number(line.igvAmount || 0) * 100), total: result.total + Math.round(Number(line.totalAmount || 0) * 100) }), { net: 0, igv: 0, total: 0 });
+    return { net: cents.net / 100, igv: cents.igv / 100, total: cents.total / 100 };
+  }, [lines]);
+  useEffect(() => {
+    if (!hydrated) return;
+    const selected = allowedExpenseTypes.find(item => item._id === form.defaultExpenseType)?._id;
+    const automatic = selected || (allowedExpenseTypes.length === 1 ? allowedExpenseTypes[0]._id : "");
+    if (automatic && !form.defaultExpenseType) setForm(current => ({ ...current, defaultExpenseType: automatic }));
+    if (automatic) setLines(current => current.some(line => !line.expenseType) ? current.map(line => line.expenseType ? line : { ...line, expenseType: automatic }) : current);
+  }, [hydrated, form.defaultExpenseType, allowedExpenseTypes]);
+
+  function setDefaultExpenseType(value) {
+    const previous = form.defaultExpenseType;
+    setForm(current => ({ ...current, defaultExpenseType: value }));
+    setLines(current => current.map(line => !line.expenseType || line.expenseType === previous ? { ...line, expenseType: value } : line));
+  }
 
   function setHeaderCostCenter(value) {
     setForm((current) => {
@@ -393,7 +413,14 @@ export default function RequestCreate() {
   }
 
   function updateLine(index, patch) {
-    setLines((current) => current.map((line, currentIndex) => currentIndex === index ? { ...line, ...patch } : line));
+    window.cancelAnimationFrame(validationFocusRef.current);
+    setLines((current) => current.map((line, currentIndex) => currentIndex === index ? editRequestLine(line, patch) : line));
+    setErrors(current => {
+      const next = { ...current };
+      Object.keys(patch).forEach(field => delete next[`lines.${index}.${field}`]);
+      if (["quantity", "unitPrice", "priceIncludesIGV"].some(field => Object.hasOwn(patch, field))) delete next[`lines.${index}.totalAmount`];
+      return next;
+    });
   }
 
   function updateQuotation(index, patch) {
@@ -430,12 +457,16 @@ export default function RequestCreate() {
     if (index === 1) {
       if (!lines.length) next.lines = "At least one request line is required.";
       lines.forEach((line, lineIndex) => {
-        if (!line.itemDescription && officialRequest && submitting) next[`lines.${lineIndex}.itemDescription`] = "Item description is required.";
+        if (!String(line.itemDescription || "").trim() && (!line.legacyAmounts || officialRequest && submitting)) next[`lines.${lineIndex}.itemDescription`] = "Item description is required.";
         if (!line.costCenter) next[`lines.${lineIndex}.costCenter`] = "Select a Cost Center.";
-        if (!line.expenseType) next[`lines.${lineIndex}.expenseType`] = "Select an expense account.";
+        if (!line.expenseType || !allowedExpenseTypes.some(item => item._id === line.expenseType)) next[`lines.${lineIndex}.expenseType`] = "Select an expense account.";
         if (!(Number(line.totalAmount) > 0)) next[`lines.${lineIndex}.totalAmount`] = "Total must be greater than zero.";
-        if (line.quantity !== "" && Number(line.quantity) < 0) next[`lines.${lineIndex}.quantity`] = "Enter a valid quantity.";
-        if (line.unitPrice !== "" && Number(line.unitPrice) < 0) next[`lines.${lineIndex}.unitPrice`] = "Enter a valid unit price.";
+        if (!line.legacyAmounts) {
+          if (!(Number(line.quantity) > 0) || !Number.isFinite(Number(line.quantity))) next[`lines.${lineIndex}.quantity`] = "Enter a valid quantity.";
+          if (!(Number(line.unitPrice) > 0) || !Number.isFinite(Number(line.unitPrice))) next[`lines.${lineIndex}.unitPrice`] = "Enter a valid unit price.";
+          if (!line.unitOfMeasure) next[`lines.${lineIndex}.unitOfMeasure`] = "Select a unit of measure.";
+          if (line.calculationError) next[`lines.${lineIndex}.${line.calculationError.includes("quantity") || line.calculationError.includes("Quantity") ? "quantity" : "unitPrice"}`] = line.calculationError;
+        }
       });
       if (form.flowType === "A1") quotations.forEach((quotation, quoteIndex) => {
         validatePaymentTerms(quotation, { requireComplete: submitting }).forEach(({ field, message }) => {
@@ -472,7 +503,7 @@ export default function RequestCreate() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       notify("Review the highlighted fields before continuing.", "error");
-      window.requestAnimationFrame(() => {
+      validationFocusRef.current = window.requestAnimationFrame(() => {
         const error = window.document.querySelector(".field-error-text");
         error?.scrollIntoView({ behavior: "smooth", block: "center" });
         error?.closest(".field, .document-upload")?.querySelector("input, select, textarea, button")?.focus({ preventScroll: true });
@@ -512,7 +543,7 @@ export default function RequestCreate() {
       payback: { value: capex.paybackValue, unit: capex.paybackUnit }
     } : {}));
     data.append("opexDetails", JSON.stringify(form.requestType === "OPEX" ? { expenseFrequency: opexFrequency } : {}));
-    data.append("lines", JSON.stringify(lines.map(({ clientId, ...line }) => line)));
+    data.append("lines", JSON.stringify(lines.map(requestLinePayload)));
     data.append("quotations", JSON.stringify(quotations.map((quotation) => ({
       ...quotation,
       clientId: undefined,
@@ -587,30 +618,20 @@ export default function RequestCreate() {
             <div className="field"><span>{t("Payback")}</span><div className="compound-field"><input aria-label={t("Payback value")} type="number" min="0" step="0.01" value={capex.paybackValue} onChange={(event) => setCapex((current) => ({ ...current, paybackValue: event.target.value }))} /><select aria-label={t("Payback unit")} value={capex.paybackUnit} onChange={(event) => setCapex((current) => ({ ...current, paybackUnit: event.target.value }))}><option value="MONTHS">{t("Months")}</option><option value="YEARS">{t("Years")}</option></select></div></div>
           </div></div>}
 
+          <div className="official-subsection request-default-account"><SearchSelect label="Expense account for these items" value={form.defaultExpenseType || ""} options={allowedExpenseTypes} onChange={setDefaultExpenseType} getOptionLabel={item => item.accountNumber + " - " + item.name} searchPlaceholder="Search expense account..." required /><p className="section-note">{t("Choose once for all items. A single eligible account is selected automatically.")}</p></div>
+
           {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("The expense account remains controlled by the configured accounting master.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="EVERY_3_MONTHS">{language === "es" ? "Cada 3 meses" : "Every 3 months"}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
         </div>}
 
         {step === 1 && <div className="wizard-step">
-          <div className="section-heading"><div><h3>{t("Item / service breakdown")}</h3><p>{t("Commercial values and accounting dimensions remain on the same request line.")}</p></div><button type="button" className="secondary-button" onClick={() => setLines((current) => [...current, emptyLine(form.requesterCostCenter)])}><Plus size={16} /><span>{t("Add line")}</span></button></div>
-          <div className="official-line-list">{lines.map((line, index) => {
-            const lineDifference = Number((Number(line.netAmount || 0) + Number(line.igvAmount || 0) - Number(line.totalAmount || 0)).toFixed(2));
-            const commercialTotal = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-            return <div className="official-line" key={line.clientId}><div className="official-line-head"><strong>{t("Line")} {index + 1}</strong><button type="button" className="icon-button danger" onClick={() => setLines((current) => current.filter((_, currentIndex) => currentIndex !== index))} disabled={lines.length === 1} title={t("Remove line")}><Trash2 size={16} /></button></div><div className="form-grid four-column-form">
-              <label className="field form-span-two"><span>{t("Item / service description")} *</span><input value={line.itemDescription} onChange={(event) => updateLine(index, { itemDescription: event.target.value })} />{errors[`lines.${index}.itemDescription`] && <small className="field-error-text">{t(errors[`lines.${index}.itemDescription`])}</small>}</label>
-              <label className="field"><span>{t("Quantity")}</span><input type="number" min="0" step="0.01" value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} /></label>
-              <label className="field"><span>{t("Unit of measure")}</span><input value={line.unitOfMeasure} onChange={(event) => updateLine(index, { unitOfMeasure: event.target.value })} /></label>
-              <label className="field"><span>{t("Unit price")}</span><input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(event) => updateLine(index, { unitPrice: event.target.value })} /></label>
-              <label className="field"><span>{t("Commercial total")}</span><input value={`${form.currency} ${money(commercialTotal)}`} disabled title={t("Calculated by the server as quantity multiplied by unit price.")} /></label>
-              <div className="form-span-two"><SearchSelect label="Cost Center / CECO" value={line.costCenter} options={masters.costCenters} onChange={(value) => updateLine(index, { costCenter: value })} getOptionLabel={(item) => `${item.code} - ${item.name}`} error={errors[`lines.${index}.costCenter`]} required searchPlaceholder="Search authorized CECO..." /></div>
-              <div className="form-span-two"><SearchSelect label="Expense type / account" value={line.expenseType} options={allowedExpenseTypes} onChange={(value) => updateLine(index, { expenseType: value })} getOptionLabel={(item) => `${item.accountNumber} - ${item.name}`} error={errors[`lines.${index}.expenseType`]} required searchPlaceholder="Search expense account..." /></div>
-              <label className="field"><span>{t("Budget item")}</span><input value={line.budgetItem} onChange={(event) => updateLine(index, { budgetItem: event.target.value })} /></label>
-              <label className="field"><span>{t("Net")}</span><input type="number" min="0" step="0.01" value={line.netAmount} onChange={(event) => updateLine(index, { netAmount: event.target.value })} /></label>
-              <label className="field"><span>{t("IGV")}</span><input type="number" min="0" step="0.01" value={line.igvAmount} onChange={(event) => updateLine(index, { igvAmount: event.target.value })} /></label>
-              <label className="field"><span>{t("Accounting total")} *</span><input type="number" min="0" step="0.01" value={line.totalAmount} onChange={(event) => updateLine(index, { totalAmount: event.target.value })} />{errors[`lines.${index}.totalAmount`] && <small className="field-error-text">{t(errors[`lines.${index}.totalAmount`])}</small>}</label>
-            </div>{lineDifference !== 0 && <div className="line-warning"><AlertTriangle size={15} /><span>{t("Net + IGV differs from Total by {amount}.").replace("{amount}", money(Math.abs(lineDifference)))}</span></div>}</div>;
-          })}</div>
-          <div className="totals-bar official-totals"><div><span>{t("Commercial total")}</span><strong>{form.currency} {money(totals.commercial)}</strong></div><div><span>{t("Accounting total")}</span><strong>{form.currency} {money(totals.total)}</strong></div><div><span>{t("Difference")}</span><strong className={commercialDifference ? "text-warning" : "text-success"}>{form.currency} {money(commercialDifference)}</strong></div><div><span>{t("Reconciliation status")}</span><StatusBadge status={!totals.commercial ? "NOT_APPLICABLE" : commercialDifference ? "MISMATCH" : "MATCH"} /></div></div>
-          {accountingDifference !== 0 && <div className="inline-warning"><AlertTriangle size={16} /><span>{t("Combined Net + IGV does not equal Total.")}</span></div>}
+          <div className="section-heading"><div><h3>{t("Item / service breakdown")}</h3><p>{t("Enter the quantity and unit price. We calculate IGV and the final total for you.")}</p></div><button type="button" className="secondary-button" onClick={() => setLines(current => [...current, emptyLine(form.requesterCostCenter, form.defaultExpenseType)])}><Plus size={16} /><span>{t("Add line")}</span></button></div>
+          <div className="official-line-list">{lines.map((line, index) => <RequestItemLine key={line.clientId} line={line} index={index} currency={form.currency} errors={errors} onChange={patch => updateLine(index, patch)} canRemove={lines.length > 1} onRemove={() => setLines(current => current.filter((_, currentIndex) => currentIndex !== index))} />)}</div>
+          <div className="request-items-total"><span>{t("Request total")}</span><strong>{form.currency} {Number(totals.total).toLocaleString(language === "es" ? "es-PE" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+          <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.(costCenter|expenseType)/.test(key)) ? true : undefined}>
+            <summary>{t("Adjust budget allocation")}</summary>
+            <p className="section-note">{t("Items inherit the request's cost center and expense account. Adjust only when an item uses a different budget.")}</p>
+            {lines.map((line, index) => <div className="request-budget-line" key={line.clientId}><strong>{t("Item")} {index + 1}: {line.itemDescription || t("Item / service description")}</strong><div className="form-grid two-column-form"><SearchSelect label="Cost Center / CECO" value={line.costCenter} options={masters.costCenters} onChange={value => updateLine(index, { costCenter: value })} getOptionLabel={item => item.code + " - " + item.name} error={errors["lines." + index + ".costCenter"]} required searchPlaceholder="Search authorized CECO..." /><SearchSelect label="Expense type / account" value={line.expenseType} options={allowedExpenseTypes} onChange={value => updateLine(index, { expenseType: value })} getOptionLabel={item => item.accountNumber + " - " + item.name} error={errors["lines." + index + ".expenseType"]} required searchPlaceholder="Search expense account..." /></div></div>)}
+          </details>
 
           {form.flowType !== "C" && !quotationPolicy.enabled && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("Supplier")}</h3><p>{t("Select the supplier linked to this request. Pending or observed suppliers may continue through review but must be homologated before budget commitment.")}</p></div></div><div className="form-grid two-column-form"><SearchSelect label="Supplier" value={form.supplier} options={eligibleSuppliers} onChange={(value) => setForm((current) => ({ ...current, supplier: value }))} getOptionLabel={(item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)} - ${t(supplierStatus(item))}`} error={errors.supplier} required searchPlaceholder="Search name or RUC/DNI..." />{selectedSupplier && <div className="supplier-inline-status"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /></div>}</div><Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : "/requests/new")}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link></div>}
 

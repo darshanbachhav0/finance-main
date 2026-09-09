@@ -9,6 +9,7 @@ import "./financialLifecycle.test.js";
 import "./officialFormatsFoundation.test.js";
 import "./supplierPhase2.test.js";
 import "./requestPhase3.test.js";
+import "./requestLineAmounts.test.js";
 import "./renditionPhase4.test.js";
 import "./workflowPhase5.test.js";
 import "./tripleTrackWorkflow.test.js";

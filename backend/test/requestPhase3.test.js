@@ -13,6 +13,7 @@ import User from "../src/models/User.js";
 import { validateStructuredQuotationComparison } from "../src/services/documentRuleService.js";
 import {
   createFinancialRequest,
+  updateFinancialRequest,
   parseQuotations,
   previewFinancialRequestBudget,
   requestAuthorizedCostCenters,
@@ -161,6 +162,26 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       await request.validate();
       assert.equal(request.commercialTotalStatus, "MISMATCH");
       assert.equal(request.totalAmount, 118);
+    });
+
+    await t.test("automatic IGV survives database save, reload, edit and budget preview", async () => {
+      const payload = { requestType: "OPEX", expenseNature: "MAINTENANCE", requesterCostCenter: center._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id, title: "Automatic IGV", description: "Automatic IGV", lines: [line({ quantity: 3, unitPrice: 1000, priceIncludesIGV: false, netAmount: 1, igvAmount: 1, totalAmount: 2 })] };
+      const created = await createFinancialRequest({ payload, files: {}, user: solicitor, req });
+      let stored = await FinancialRequest.findById(created._id);
+      assert.equal(stored.lines[0].priceIncludesIGV, false);
+      assert.equal(stored.totalNet, 3000);
+      assert.equal(stored.totalIGV, 540);
+      assert.equal(stored.totalAmount, 3540);
+      assert.equal(stored.commercialTotalStatus, "MATCH");
+      const preview = await previewFinancialRequestBudget({ payload, user: solicitor });
+      assert.equal(preview.lines[0].amount, 3540);
+      await updateFinancialRequest({ id: created._id, payload: { lines: [line({ quantity: 3, unitPrice: 1000, priceIncludesIGV: true, totalAmount: 999 })] }, files: {}, user: solicitor, req });
+      stored = await FinancialRequest.findById(created._id);
+      assert.equal(stored.lines[0].priceIncludesIGV, true);
+      assert.equal(stored.totalAmount, 3000);
+      assert.equal(stored.totalNet, 2542.37);
+      assert.equal(stored.totalIGV, 457.63);
+      assert.equal(stored.commercialTotalStatus, "MATCH");
     });
 
     await t.test("configured quotation policy exposes its real minimum and detailed recommendation errors", async () => {

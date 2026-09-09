@@ -11,6 +11,7 @@
     "test:budget-planning-ui": "node test/annualMonthlyBudget.browser.mjs",
     "test:uma-ui": "node test/umaResponsive.browser.mjs",
     "test:supplier-ruc-ui": "node test/supplierRuc.browser.mjs",
+    "test:request-item-ui": "node test/requestItemAmounts.browser.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

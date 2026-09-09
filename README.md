@@ -154,6 +154,7 @@ The generated `trycloudflare.com` URL is temporary. `npm run share:publish` also
 - `docs/EXTERNAL_INTEGRATIONS.md`: honest integration capabilities and limits.
 - `docs/ARCHITECTURE.md`: system and domain architecture.
 - `docs/QUOTATION_PAYMENT_TERMS.md`: quotation payment choices, comparison, order snapshots, and compatibility.
+- `docs/SIMPLIFIED_REQUEST_ITEMS.md`: minimal item entry, automatic IGV totals, budget defaults, and draft compatibility.
 - `docs/ANNUAL_MONTHLY_BUDGETS.md`: annual plans, monthly limits, reserve allocation, audited adjustments, and legacy compatibility.
 - `docs/UMA_UI_UX.md`: UMA branding, the 19 interface improvements, responsive behavior, and browser verification.
 - `docs/SUNAT_BACKGROUND_LOOKUP.md`: invisible RUC lookup, automatic supplier fields, and regression verification.

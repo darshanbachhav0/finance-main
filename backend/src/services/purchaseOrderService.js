@@ -33,6 +33,9 @@ function lineSnapshot(line) {
     quantity: line.quantity,
     unitOfMeasure: line.unitOfMeasure,
     unitPrice: line.unitPrice,
+    priceIncludesIGV: line.priceIncludesIGV,
+    netAmount: line.netAmount,
+    igvAmount: line.igvAmount,
     total: line.commercialTotal ?? line.totalAmount,
     costCenterCode: line.costCenter?.code || line.costCenterSnapshot?.code,
     expenseAccount: line.expenseType?.accountNumber || line.expenseTypeSnapshot?.accountNumber

@@ -8,6 +8,9 @@ const orderLineSchema = new mongoose.Schema(
     quantity: Number,
     unitOfMeasure: String,
     unitPrice: Number,
+    priceIncludesIGV: { type: Boolean, default: undefined },
+    netAmount: Number,
+    igvAmount: Number,
     total: Number,
     costCenterCode: String,
     expenseAccount: String
