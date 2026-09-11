@@ -159,7 +159,7 @@ export default function SupplierDetail({
       <Section icon={Building2} title="Commercial Conditions">
         <DetailGrid>
           <Detail label="Billing Currency" value={supplier.currency} />
-          <Detail label="Payment Terms" value={supplier.paymentTerms?.option ? `${t(supplier.paymentTerms.option)} · ${supplier.paymentTerms.days || 0} ${t("days")}` : "-"} />
+          {supplier.paymentTerms?.option && <Detail label="Legacy supplier terms (fallback)" value={`${t(supplier.paymentTerms.option)} · ${supplier.paymentTerms.days || 0} ${t("days")}`} />}
           <Detail label="Goods / services profile" value={supplier.goodsServicesProfile || supplier.supplierType} />
           <Detail label="Delivery Method" value={supplier.delivery?.method ? t(supplier.delivery.method) : "-"} />
         </DetailGrid>

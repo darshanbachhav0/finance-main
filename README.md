@@ -46,7 +46,7 @@ Important: generating a bank TXT creates a payment instruction and changes the r
 - `Budget`: allocations, commitments, exceptions, and budget reporting.
 - `Management`: executive reporting and configured extraordinary approvals.
 
-Backend permission checks are authoritative. Frontend navigation only reflects those permissions.
+These seven stored roles represent eight operating profiles: Director and Vice Rector both use `Approver` with different approval levels. Backend role, permission, ownership, and workflow checks are authoritative; frontend navigation is a separate role-based layer. See the detailed role guide below for scope and limitations.
 
 ## Requirements and Installation
 
@@ -148,6 +148,8 @@ The generated `trycloudflare.com` URL is temporary. `npm run share:publish` also
 
 ## Documentation
 
+- [Role permissions guide](docs/ROLE_PERMISSIONS_GUIDE.md): all eight operating profiles, capability matrices, permitted actions, restrictions, approval scope, banking visibility, and implementation limitations.
+- [Printable role permissions guide](output/pdf/UMA_Role_Permissions_Guide.pdf): the 20-page UMA-formatted PDF, generated from the Markdown guide by `scripts/build-role-permissions-guide.py` (Python, ReportLab, pypdf, and Windows Arial fonts).
 - `docs/GAP_ANALYSIS.md`: baseline comparison made before implementation.
 - `docs/IMPLEMENTATION_PLAN.md`: phased implementation record.
 - `docs/REQUIREMENTS_TRACEABILITY.md`: requirement-to-code/test mapping.

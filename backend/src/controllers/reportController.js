@@ -14,6 +14,10 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../s
 import { AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 const excludedStatuses = [REQUEST_STATUS.DRAFT, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED];
+const pendingAgreedDate = { $and: [
+  { $in: ["$paymentTermsSnapshot.source", ["PURCHASE_ORDER", "QUOTATION"]] },
+  { $eq: [{ $ifNull: ["$dueDate", null] }, null] }
+] };
 
 function previousPeriod(period) {
   const date = /^\d{4}-\d{2}$/.test(period || "") ? new Date(`${period}-01T00:00:00.000Z`) : new Date();
@@ -147,8 +151,9 @@ export const managementSummary = asyncHandler(async (req, res) => {
     ]),
     AccountsPayable.aggregate([
       ...payableRequestPipeline(match, { status: { $in: openPayableStatuses } }),
-      { $project: { amount: { $multiply: ["$outstandingAmount", "$exchangeRate"] }, daysOverdue: { $floor: { $divide: [{ $subtract: [now, { $ifNull: ["$dueDate", "$createdAt"] }] }, 86400000] } } } },
+      { $project: { amount: { $multiply: ["$outstandingAmount", "$exchangeRate"] }, pendingAgreedDate, daysOverdue: { $floor: { $divide: [{ $subtract: [now, { $ifNull: ["$dueDate", "$createdAt"] }] }, 86400000] } } } },
       { $project: { amount: 1, bucket: { $switch: { branches: [
+        { case: "$pendingAgreedDate", then: { label: "Date pending", order: 5 } },
         { case: { $lte: ["$daysOverdue", 0] }, then: { label: "Current", order: 0 } },
         { case: { $lte: ["$daysOverdue", 30] }, then: { label: "1-30 days", order: 1 } },
         { case: { $lte: ["$daysOverdue", 60] }, then: { label: "31-60 days", order: 2 } },
@@ -161,6 +166,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
       ...payableRequestPipeline(match, { status: { $ne: AP_STATUS.CANCELLED } }),
       { $project: { amount: { $cond: [{ $eq: ["$status", AP_STATUS.PAID] }, "$penEquivalent", { $multiply: ["$outstandingAmount", "$exchangeRate"] }] }, category: { $switch: { branches: [
         { case: { $eq: ["$status", AP_STATUS.PAID] }, then: "Paid" },
+        { case: pendingAgreedDate, then: "Pending" },
         { case: { $and: [{ $lt: ["$dueDate", now] }, { $in: ["$status", openPayableStatuses] }] }, then: "Overdue" }
       ], default: "Pending" } } } },
       { $group: { _id: "$category", total: { $sum: "$amount" }, count: { $sum: 1 } } },
@@ -168,6 +174,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
     ]),
     AccountsPayable.aggregate([
       ...payableRequestPipeline(match, { status: { $in: openPayableStatuses } }),
+      { $match: { $expr: { $not: [pendingAgreedDate] } } },
       { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$dueDate", "$createdAt"] } } }, total: { $sum: { $multiply: ["$outstandingAmount", "$exchangeRate"] } }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
       { $limit: 14 }

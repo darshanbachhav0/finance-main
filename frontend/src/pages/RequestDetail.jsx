@@ -713,7 +713,7 @@ export default function RequestDetail() {
                     { key: "flowType", label: "Track", render: (row) => <span className={`track-pill track-${row.flowType}`}>{row.flowType || request.flowType}</span> },
                     { key: "status", label: "CXP status", render: (row) => <StatusBadge status={row.status} /> },
                     { key: "originalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.originalAmount, row.currency, language) },
-                    { key: "paymentTermsSnapshot", label: "Payment Terms", render: (row) => row.paymentTermsSnapshot?.option ? `${t(row.paymentTermsSnapshot.option)} · ${row.paymentTermsSnapshot.days || 0} ${t("days")}` : "-" },
+                    { key: "paymentTermsSnapshot", label: "Payment Terms", render: (row) => <PaymentTermsSummary terms={row.paymentTermsSnapshot} showAmounts={false} /> },
                     { key: "dueDate", label: "Due date", render: (row) => formatDate(row.dueDate, language) },
                     { key: "paymentPriority", label: "Priority", render: (row) => row.paymentPriority === "PRIORITY" ? <span className="priority-pill">{t("Priority")}</span> : t("Normal") },
                     { key: "paymentBatch", label: "Bank batch", render: (row) => row.paymentBatch?.batchNumber || "-" },

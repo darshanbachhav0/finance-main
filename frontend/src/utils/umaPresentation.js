@@ -38,6 +38,15 @@ export const umaCopy = {
 };
 
 export const umaSpanish = {
+  "100% Advance": "100% Adelanto", "100% On Delivery": "100% Contra entrega", "Advance + Balance": "Adelanto + Saldo",
+  "Pay the full amount before starting": "Paga el importe completo antes de comenzar",
+  "Pay the full amount on delivery": "Paga el importe completo contra entrega",
+  "Choose an advance, pay the rest later": "Elige el adelanto y paga el saldo después",
+  "Advance percentage slider": "Control del porcentaje de adelanto",
+  "Enter a valid advance percentage": "Ingresa un porcentaje de adelanto válido",
+  "Quick advance percentages": "Porcentajes rápidos de adelanto",
+  "Custom": "Personalizado", "Additional terms (optional)": "Condiciones adicionales (opcional)",
+  "Saved terms are retained until you choose a payment option above.": "Se conservan las condiciones guardadas hasta que elijas una de las opciones de pago de arriba.",
   "Unit price already includes IGV (18%)": "El precio unitario ya incluye IGV (18%)",
   "Final total": "Total final", "Subtotal": "Subtotal", "Included": "Incluido", "Request total": "Total de la solicitud", "Item": "Ítem",
   "Enter the quantity and unit price. We calculate IGV and the final total for you.": "Ingresa la cantidad y el precio unitario. Calculamos el IGV y el total final por ti.",

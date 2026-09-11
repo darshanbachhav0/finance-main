@@ -13,5 +13,6 @@ export default function PaymentTermsSummary({ terms = {}, amount = terms.amount,
       <div><span>{t("Balance")} · {breakdown.balancePercentage}%</span><strong>{formatCurrency(breakdown.balanceAmount, currency, language)}</strong></div>
     </div>}
     {showNotes && <small>{terms.paymentNotes}</small>}
+    {terms.source === "SUPPLIER_DEFAULT" && <small>{t("Legacy supplier terms (fallback)")}</small>}
   </div>;
 }

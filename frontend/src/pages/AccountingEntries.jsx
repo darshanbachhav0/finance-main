@@ -85,7 +85,7 @@ export default function AccountingEntries() {
   function openFiscalProcessing(request) {
     const documentDate = request.issueDate?.slice(0, 10) || "";
     setSelectedRequest(request);
-    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: request.accountingPeriod || period, dueDate: documentDate, accountNumber: request.lines?.[0]?.expenseType?.accountNumber || "", subaccountNumber: "", comments: "" });
+    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: request.accountingPeriod || period, dueDate: "", accountNumber: request.lines?.[0]?.expenseType?.accountNumber || "", subaccountNumber: "", comments: "" });
   }
 
   async function processRequest(event) {
@@ -195,7 +195,7 @@ export default function AccountingEntries() {
           <label className="field"><span>{t("Document date")} *</span><input required type="date" value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value })} /></label>
           <label className="field"><span>{t("Accounting date")} *</span><input required type="date" value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
           <label className="field"><span>{t("Fiscal period")} *</span><input required type="month" value={fiscalForm.fiscalPeriod} onChange={(event) => setFiscalForm({ ...fiscalForm, fiscalPeriod: event.target.value })} /></label>
-          <label className="field"><span>{t("Due date")}</span><input type="date" value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /></label>
+          <label className="field"><span>{t("Due date")}</span><input type="date" value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
           <label className="field"><span>{t("Account number")} *</span><input required value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("The posting account is still validated against the configured mapping.")}</small></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>

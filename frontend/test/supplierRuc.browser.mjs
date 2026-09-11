@@ -16,6 +16,7 @@ process.env.SUNAT_CONSULTA_RUC_TIMEOUT_MS = "5000";
 const server = await createServer({ root, configFile: `${root}/vite.config.js`, server: { host: "127.0.0.1", port: 5188, strictPort: true }, logLevel: "error" });
 let browser, serviceBrowser, page;
 let launches = 0, searches = 0, transportFailure = false;
+let releasePadron, duplicateChecks = 0;
 const runtimeErrors = [];
 const company = "Proveedor de prueba S.A.C.";
 const first = { documentType: "DNI", documentNumber: "00000001", fullName: "Representante de prueba", position: "GERENTE", dateFrom: "01/01/2026" };
@@ -72,9 +73,16 @@ try {
     let body = { data: [] }, status = 200;
     if (path === "/auth/me") body = { user };
     else if (path === "/suppliers") body = { data: [], total: 0, page: 1, pageSize: 10 };
-    else if (path.startsWith("/suppliers/lookup/")) body = { found: false, data: null };
+    else if (path.startsWith("/suppliers/lookup/")) {
+      duplicateChecks++;
+      const ruc = path.split("/").at(-1);
+      if (ruc.endsWith("07")) body = { found: true, data: { _id: "existing-supplier", rucDni: ruc, legalName: "Existing supplier fixture", homologationStatus: "HOMOLOGATED", status: "ACTIVE", permissions: {} } };
+      else if (ruc.endsWith("08")) { status = 503; body = { message: "Duplicate check unavailable" }; }
+      else body = { found: false, data: null };
+    }
     else if (path.startsWith("/suppliers/padron/")) {
       const ruc = path.split("/").at(-1);
+      if (ruc.endsWith("06")) await new Promise(resolve => { releasePadron = resolve; });
       body = { found: true, ruc, datasetDate: "2026-09-07", officialSource: true, data: { rucDni: ruc, legalName: company, personType: "LEGAL_ENTITY", fiscalAddress: "AV. UNIVERSIDAD NRO. 100", taxpayerStatus: "ACTIVO", domicileCondition: "HABIDO", active: true, habido: true, accountHolderName: company, location: { ubigeo: "150101" } } };
     } else if (/\/consulta-ruc\/\d+\/representatives$/.test(path)) {
       try { body = await lookupSunatLegalRepresentatives(path.split("/")[3], url.searchParams.get("legalName")); }
@@ -93,8 +101,13 @@ try {
     await page.getByRole("button", { name: "New supplier", exact: true }).click();
     await page.getByLabel("RUC / identifier", { exact: true }).fill(ruc);
     await page.getByLabel("Legal Name", { exact: false }).waitFor();
+    await page.waitForFunction(company => [...document.querySelectorAll("label")].find(label => label.textContent.includes("Legal Name"))?.querySelector("input")?.value === company, company);
     assert.equal(await page.getByLabel("Legal Name", { exact: false }).inputValue(), company);
     assert.equal(await page.getByLabel("Fiscal Address", { exact: true }).inputValue(), "AV. UNIVERSIDAD NRO. 100");
+    assert.equal(await page.getByLabel("Payment Terms", { exact: true }).count(), 0);
+    assert.equal(await page.getByLabel("Custom credit days", { exact: true }).count(), 0);
+    assert.equal(await page.getByLabel("Payment comments", { exact: true }).count(), 0);
+    await page.getByText("Payment terms are entered in each supplier quotation and carried into the selected purchase.", { exact: true }).waitFor();
   };
 
   await openSupplier("20600000001");
@@ -107,6 +120,37 @@ try {
   assert.equal(cached.cached, true);
   assert.equal(searches, 1, "Repeated RUC lookup reuses the cached result");
   await page.screenshot({ path: `${output}/autofill.png`, fullPage: true });
+
+  // A deliberately blocked Padrón request must not hold the entire form hostage.
+  await page.goto("http://127.0.0.1:5188/suppliers");
+  await page.getByRole("button", { name: "New supplier", exact: true }).click();
+  await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000006");
+  await page.getByText("Loading SUNAT details in the background", { exact: true }).waitFor();
+  await page.getByLabel("Legal Name", { exact: false }).fill("User-entered company name");
+  await page.getByLabel("Fiscal Address", { exact: true }).fill("User-entered address");
+  const nameInput = await page.getByLabel("Legal Name", { exact: false }).elementHandle();
+  assert.equal(typeof releasePadron, "function");
+  await page.screenshot({ path: `${output}/background-prefill.png`, fullPage: true });
+  releasePadron();
+  await page.getByText("SUNAT Padrón data loaded automatically", { exact: true }).waitFor();
+  assert.equal(await nameInput.evaluate(node => node.isConnected), true, "Autofill must not remount the form");
+  assert.equal(await page.getByLabel("Legal Name", { exact: false }).inputValue(), "User-entered company name");
+  assert.equal(await page.getByLabel("Fiscal Address", { exact: true }).inputValue(), "User-entered address");
+
+  await page.goto("http://127.0.0.1:5188/suppliers");
+  await page.getByRole("button", { name: "New supplier", exact: true }).click();
+  await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000007");
+  await page.getByText("Existing supplier fixture", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Legal Name", { exact: false }).count(), 0, "Duplicates must not open a proposal form");
+
+  await page.goto("http://127.0.0.1:5188/suppliers");
+  await page.getByRole("button", { name: "New supplier", exact: true }).click();
+  await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000008");
+  await page.getByText("Duplicate check unavailable", { exact: true }).waitFor();
+  const checksAfterFailure = duplicateChecks;
+  await new Promise(resolve => setTimeout(resolve, 800));
+  assert.equal(duplicateChecks, checksAfterFailure, "Failed duplicate checks must not cause an automatic retry loop");
+  assert.equal(await page.getByLabel("Legal Name", { exact: false }).count(), 0, "A failed duplicate check must not authorize a new proposal");
 
   await openSupplier("20600000002");
   await page.getByText("SUNAT reports multiple representatives. Select the person UMA wants to record as the primary representative; the system will not guess automatically.").waitFor();
@@ -133,7 +177,7 @@ try {
   assert.equal(await page.getByLabel("Legal Representative", { exact: true }).inputValue(), "");
   assert.equal(launches, 2, "A network failure does not trigger a visible-browser fallback");
   assert.deepEqual(runtimeErrors, []);
-  console.log("PASS: invisible RUC lookup, supplier autofill, representative selection, cache, concurrent lookup, browser recovery, CAPTCHA and connection-failure handling");
+  console.log("PASS: nonblocking Padrón autofill, preserved edits, duplicate/error guards, invisible RUC lookup, representative selection, cache, concurrent lookup, browser recovery, CAPTCHA and connection-failure handling");
 } catch (error) {
   await page?.screenshot({ path: `${output}/failure.png`, fullPage: true }).catch(() => {});
   throw error;

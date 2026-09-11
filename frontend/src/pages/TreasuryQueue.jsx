@@ -20,6 +20,8 @@ import DataTable from "../components/DataTable.jsx";
 import Drawer from "../components/Drawer.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
+import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
 import StatCard from "../components/StatCard.jsx";
@@ -265,7 +267,8 @@ export default function TreasuryQueue() {
     } },
     { key: "status", label: "CXP status", getValue: (row) => row.accountsPayable?.status, render: (row) => <StatusBadge status={row.accountsPayable?.status} /> },
     { key: "amount", sortKey: "outstandingAmount", label: "Outstanding", align: "right", getValue: amountOf, render: (row) => <strong>{money(row.currency || row.accountsPayable?.currency, amountOf(row))}</strong> },
-    { key: "dueDate", label: "Due date", getValue: (row) => row.accountsPayable?.dueDate, render: (row) => row.accountsPayable?.dueDate ? new Date(row.accountsPayable.dueDate).toLocaleDateString() : "-" }
+    { key: "paymentTerms", label: "Payment Terms", sortable: false, getValue: (row) => paymentTermsSummary(row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot || {}, t), render: (row) => <PaymentTermsSummary terms={row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot} showAmounts={false} /> },
+    { key: "dueDate", label: "Due date", getValue: (row) => row.accountsPayable?.dueDate, render: (row) => row.accountsPayable?.dueDate ? new Date(row.accountsPayable.dueDate).toLocaleDateString() : row.accountsPayable?.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-" }
   ];
 
   return <section>

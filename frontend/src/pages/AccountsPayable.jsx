@@ -15,6 +15,8 @@ import {
 } from "react-router-dom";
 
 import DataTable from "../components/DataTable.jsx";
+import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
+import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
 import Drawer from "../components/Drawer.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -600,28 +602,8 @@ export default function AccountsPayable() {
               sortable:
                 false,
 
-              getValue:
-                (row) =>
-                  row.paymentTermsSnapshot
-                    ?.days,
-
-              render:
-                (row) =>
-                  row.paymentTermsSnapshot
-                    ?.option
-                    ? `${
-                        t(
-                          row.paymentTermsSnapshot.option
-                        )
-                      } · ${
-                        row.paymentTermsSnapshot.days ||
-                        0
-                      } ${
-                        t(
-                          "days"
-                        )
-                      }`
-                    : "-"
+              getValue: (row) => paymentTermsSummary(row.paymentTermsSnapshot || {}, t),
+              render: (row) => <PaymentTermsSummary terms={row.paymentTermsSnapshot} showAmounts={false} />
             },
 
             {
@@ -633,9 +615,7 @@ export default function AccountsPayable() {
 
               render:
                 (row) =>
-                  dateText(
-                    row.dueDate
-                  )
+                  row.dueDate ? dateText(row.dueDate) : row.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-"
             }
           ]}
         />
@@ -879,24 +859,7 @@ export default function AccountsPayable() {
                   </dt>
 
                   <dd>
-                    {
-                      selected
-                        .paymentTermsSnapshot
-                        ?.option
-                        ? `${
-                            t(
-                              selected.paymentTermsSnapshot.option
-                            )
-                          } · ${
-                            selected.paymentTermsSnapshot.days ||
-                            0
-                          } ${
-                            t(
-                              "days"
-                            )
-                          }`
-                        : "-"
-                    }
+                    <PaymentTermsSummary terms={selected.paymentTermsSnapshot} showAmounts={false} />
                   </dd>
                 </div>
 
@@ -911,9 +874,7 @@ export default function AccountsPayable() {
 
                   <dd>
                     {
-                      dateText(
-                        selected.dueDate
-                      )
+                      selected.dueDate ? dateText(selected.dueDate) : selected.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-"
                     }
                   </dd>
                 </div>

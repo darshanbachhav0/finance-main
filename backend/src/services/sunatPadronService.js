@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { openZipEntryStream } from "../utils/zipReader.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
+import { findPadronLine, preparePadronIndexes } from "./padronChunkIndex.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +33,7 @@ const MAX_MEMORY_CACHE = 5_000;
 
 let refreshTimer = null;
 let inProcessSyncPromise = null;
+let nextLookupRefreshAt = 0;
 
 function env(name, fallback = "") {
   return String(
@@ -952,6 +954,9 @@ async function buildChunksFromZip({
     );
   }
 
+  // Prepare exact byte-offset indexes before publishing a new dataset.
+  await preparePadronIndexes(chunksDir);
+
   const manifest = {
     provider:
       "SUNAT_PUBLIC_PADRON_RUC",
@@ -1445,8 +1450,17 @@ function cachePut(
   }
 }
 
+function refreshForLookup() {
+  if (Date.now() < nextLookupRefreshAt) return;
+  nextLookupRefreshAt = Date.now() + 5 * 60_000;
+  void ensureSunatPadron().catch(error => {
+    console.warn("[SUNAT PADRON] Background lookup refresh failed:", error.message);
+  });
+}
+
 export async function lookupSunatPadronRuc(
-  identifier
+  identifier,
+  { localOnly = false } = {}
 ) {
   const ruc =
     normalizedRuc(
@@ -1467,37 +1481,36 @@ export async function lookupSunatPadronRuc(
     };
   }
 
-  if (
-    memoryCache.has(ruc)
-  ) {
-    return memoryCache.get(
-      ruc
-    );
-  }
-
-  const manifest =
-    await ensureSunatPadron();
+  // Proposal prefill must never wait for a full dataset refresh or its process lock.
+  // Financial validation retains its existing refresh/fallback policy.
+  const manifest = localOnly ? await readManifest() : await ensureSunatPadron();
+  if (localOnly && !isFresh(manifest)) refreshForLookup();
 
   if (
     !datasetExists(
       manifest
-    )
+    ) || (localOnly && !isFresh(manifest) && !isAcceptablyStale(manifest))
   ) {
     throw new AppError(
       503,
-      "SUNAT public Padrón dataset is not available.",
+      "SUNAT public Padrón is being prepared or refreshed. You can complete the proposal manually; taxpayer validation remains required.",
       undefined,
       ERROR_CODES
         .INTEGRATION_NOT_CONFIGURED
     );
   }
 
+  // Check the dataset generation before returning cached records, including after
+  // an external sync process has replaced the files or the dataset has expired.
+  const cacheKey = `${currentDir()}:${manifest.generatedAt}:${ruc}`;
+  if (memoryCache.has(cacheKey)) return { ...memoryCache.get(cacheKey), manifest };
+
   const chunkFile =
     path.join(
       currentChunksDir(),
       `${ruc.slice(
         0,
-        CHUNK_PREFIX_LENGTH
+        manifest.chunkPrefixLength || CHUNK_PREFIX_LENGTH
       )}.txt`
     );
 
@@ -1513,74 +1526,24 @@ export async function lookupSunatPadronRuc(
     };
 
     cachePut(
-      ruc,
+      cacheKey,
       result
     );
 
     return result;
   }
 
-  const input =
-    fs.createReadStream(
-      chunkFile,
-      {
-        encoding: "utf8"
-      }
-    );
-
-  const lines =
-    readline.createInterface({
-      input,
-      crlfDelay: Infinity
-    });
-
-  try {
-    for await (
-      const line of lines
-    ) {
-      if (
-        String(line).slice(
-          0,
-          11
-        ) !== ruc
-      ) {
-        continue;
-      }
-
-      const record =
-        parsePadronLine(
-          line
-        );
-
-      const result = {
-        found:
-          Boolean(record),
-
-        ruc,
-        record,
-        manifest
-      };
-
-      cachePut(
-        ruc,
-        result
-      );
-
-      return result;
-    }
-  } finally {
-    lines.close();
-    input.destroy();
-  }
-
+  const line = await findPadronLine(chunkFile, ruc);
+  const record = line ? parsePadronLine(line) : null;
   const result = {
-    found: false,
+    found: Boolean(record),
     ruc,
+    record,
     manifest
   };
 
   cachePut(
-    ruc,
+    cacheKey,
     result
   );
 

@@ -40,7 +40,7 @@ export async function getSupplierPadronPrefill(rucValue) {
     );
   }
 
-  const lookup = await lookupSunatPadronRuc(ruc);
+  const lookup = await lookupSunatPadronRuc(ruc, { localOnly: true });
 
   const meta = datasetMeta(
     lookup.manifest

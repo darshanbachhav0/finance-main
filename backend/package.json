@@ -21,6 +21,7 @@
     "worker:batch": "node src/workers/batchInvoiceWorker.js",
     "migrate:triple-track": "node scripts/migrateTripleTrackWorkflow.js",
     "migrate:triple-track:apply": "node scripts/migrateTripleTrackWorkflow.js --apply",
+    "sunat:padron:index": "node scripts/indexSunatPadron.js",
     "sunat:padron:sync": "node scripts/syncSunatPadron.js",
     "sunat:padron:sync:force": "node scripts/syncSunatPadron.js --force"
   },

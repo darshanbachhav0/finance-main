@@ -1,4 +1,5 @@
 import AccountsPayable from "../models/AccountsPayable.js";
+import { resolvePayablePaymentTerms, resolvePayableDueDate } from "./payablePaymentTermsService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import JournalEntry from "../models/JournalEntry.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
@@ -23,24 +24,6 @@ import { addMoney, moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMon
 
 function normalizeToken(value) {
   return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
-}
-
-function resolveVoucherDueDate({ dueDate, voucher, supplier, flowType }) {
-  if (dueDate) {
-    const explicit = new Date(dueDate);
-    if (!Number.isNaN(explicit.getTime())) return explicit;
-  }
-  const issueDate = new Date(voucher?.issueDate || voucher?.documentDate || Date.now());
-  if ([FLOW_TYPE.B, FLOW_TYPE.C].includes(flowType)) return issueDate;
-  const option = supplier?.paymentTerms?.option;
-  const days = option === "CREDIT_45"
-    ? 45
-    : option === "CUSTOM"
-      ? Number(supplier?.paymentTerms?.days || 30)
-      : 30;
-  const resolved = new Date(issueDate);
-  resolved.setUTCDate(resolved.getUTCDate() + Math.max(0, Number.isFinite(days) ? days : 30));
-  return resolved;
 }
 
 function fiscalPayload(body, supplierIdentifier) {
@@ -328,12 +311,7 @@ export async function createAccountsPayableFromVoucher({
   }
   const total = roundMoney(voucher.totalAmount);
   const exchangeRate = Number(request.exchangeRate || 1);
-  const paymentTermsSnapshot = supplier?.paymentTerms?.option ? {
-    option: supplier.paymentTerms.option,
-    days: supplier.paymentTerms.days,
-    supplier: supplierId,
-    capturedAt: new Date()
-  } : undefined;
+  const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier, purchaseOrder, session });
   const [accountsPayable] = await AccountsPayable.create([{
     request: request._id,
     purchaseOrder: purchaseOrder?._id || purchaseOrder,
@@ -360,10 +338,10 @@ export async function createAccountsPayableFromVoucher({
     exchangeRate,
     penEquivalent: multiplyMoney(total, exchangeRate),
     outstandingAmount: total,
-    dueDate: resolveVoucherDueDate({
+    dueDate: resolvePayableDueDate({
       dueDate,
       voucher,
-      supplier,
+      paymentTermsSnapshot,
       flowType: flowType || request.flowType
     }),
     paymentTermsSnapshot,
@@ -529,12 +507,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     throw new AppError(409, "The supplier voucher is already registered.", { accountsPayable: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
   }
 
-  const paymentTermsSnapshot = request.supplier?.paymentTerms?.option ? {
-    option: request.supplier.paymentTerms.option,
-    days: request.supplier.paymentTerms.days,
-    supplier: request.supplier._id,
-    capturedAt: new Date()
-  } : undefined;
+  const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier: request.supplier });
 
   const result = await runFinancialOperation(async (session) => {
     request.fiscalData = { ...fiscal, processedAt: new Date(), processedBy: user._id };
@@ -556,7 +529,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
         exchangeRate: request.exchangeRate,
         penEquivalent: request.totalPENEquivalent ?? request.penEquivalent,
         outstandingAmount: request.totalAmount,
-        dueDate: payload.dueDate,
+        dueDate: resolvePayableDueDate({ dueDate: payload.dueDate, voucher: fiscal, paymentTermsSnapshot, flowType: request.flowType }),
         paymentTermsSnapshot,
         status: AP_STATUS.OPEN,
         history: [{ status: AP_STATUS.OPEN, by: user._id, comments: "CXP created after fiscal validation." }]

@@ -55,7 +55,7 @@ export function validatePaymentTerms(value = {}, { requireComplete = true } = {}
 export function normalizePaymentTerms(value = {}) {
   const condition = value.paymentCondition || null;
   const split = condition === "ADVANCE_AND_BALANCE";
-  const advance = split ? number(value.advancePercentage) : null;
+  const advance = condition === "100%_ADVANCE" ? 100 : condition === "100%_ON_DELIVERY" ? 0 : split ? number(value.advancePercentage) : null;
   return {
     paymentCondition: condition,
     paymentConditions: condition ? "" : text(value.paymentConditions),
@@ -71,19 +71,21 @@ export function normalizePaymentTerms(value = {}) {
 }
 
 export function paymentBreakdown(value = {}, amount = value.amount) {
-  if (value.paymentCondition !== "ADVANCE_AND_BALANCE" || blank(amount) || !numeric(amount) || Number(amount) < 0) return null;
-  if (validatePaymentTerms(value, { requireComplete: false }).some((error) => error.field === "advancePercentage") || blank(value.advancePercentage)) return null;
+  if (!["100%_ADVANCE", "100%_ON_DELIVERY", "ADVANCE_AND_BALANCE"].includes(value.paymentCondition) || blank(amount) || !numeric(amount) || Number(amount) < 0) return null;
+  if (validatePaymentTerms(value, { requireComplete: false }).some((error) => error.field === "advancePercentage")) return null;
+  const { advancePercentage, balancePercentage } = normalizePaymentTerms(value);
+  if (advancePercentage === null) return null;
   // Round once to cents, then subtract the advance so both amounts sum exactly.
   const match = String(amount).match(/^(\d+)(?:\.(\d*))?$/);
   if (!match) return null;
   const fraction = `${match[2] || ""}000`;
   const cents = BigInt(match[1]) * 100n + BigInt(fraction.slice(0, 2)) + (Number(fraction[2]) >= 5 ? 1n : 0n);
   if (cents > BigInt(Number.MAX_SAFE_INTEGER)) return null;
-  const basisPoints = BigInt(Math.round(Number(value.advancePercentage) * 100));
+  const basisPoints = BigInt(Math.round(advancePercentage * 100));
   const advanceCents = (cents * basisPoints + 5000n) / 10000n;
   return {
-    advancePercentage: Number(value.advancePercentage),
-    balancePercentage: Number((100 - Number(value.advancePercentage)).toFixed(2)),
+    advancePercentage,
+    balancePercentage,
     advanceAmount: Number(advanceCents) / 100,
     balanceAmount: Number(cents - advanceCents) / 100
   };
@@ -91,6 +93,10 @@ export function paymentBreakdown(value = {}, amount = value.amount) {
 
 export function paymentTermsSummary(value = {}, t = (label) => label) {
   const condition = value.paymentCondition;
+  if (!condition && !text(value.paymentConditions) && !text(value.paymentNotes) && value.option) {
+    const days = value.option === "CREDIT_45" ? 45 : value.option === "CREDIT_30" ? 30 : Number(value.days || 0);
+    return `${t(value.option)} · ${days} ${t("days")}`;
+  }
   if (!condition) return text(value.paymentConditions) || text(value.paymentNotes) || t("Not specified");
   const label = t(PAYMENT_CONDITIONS[condition] || "Other");
   if (validatePaymentTerms(value).length) return `${label} (${t("Details pending")})`;

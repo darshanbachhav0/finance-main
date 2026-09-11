@@ -14,6 +14,7 @@ import {
 
 import {
   useEffect,
+  useRef,
   useState
 } from "react";
 
@@ -170,24 +171,6 @@ function initialValues(
     currency:
       supplier?.currency ||
       "PEN",
-
-    paymentTermOption:
-      supplier
-        ?.paymentTerms
-        ?.option ||
-      "CREDIT_30",
-
-    paymentTermDays:
-      supplier
-        ?.paymentTerms
-        ?.days ||
-      30,
-
-    paymentTermComments:
-      supplier
-        ?.paymentTerms
-        ?.comments ||
-      "",
 
     goodsServicesProfile:
       supplier
@@ -465,6 +448,19 @@ export default function SupplierForm({
       ? padronLookup.data
       : null;
 
+  const editedFields = useRef(new Set());
+  useEffect(() => {
+    if (supplier || !padronLookup?.found) return;
+    const values = initialValues(null, identifier, padronLookup);
+    setForm(current => {
+      const next = { ...current };
+      for (const field of ["legalName", "commercialName", "personType", "fiscalAddress", "district", "province", "department", "ubigeo", "accountHolderName"]) {
+        if (!editedFields.current.has(field) && !current[field] && values[field]) next[field] = values[field];
+      }
+      return next;
+    });
+  }, [supplier, identifier, padronLookup]);
+
   const legalRepresentatives =
     representativeLookup
       ?.data
@@ -533,6 +529,7 @@ export default function SupplierForm({
     field,
     value
   ) {
+    editedFields.current.add(field);
     setForm(
       (current) => ({
         ...current,
@@ -618,26 +615,6 @@ export default function SupplierForm({
       setError(
         t(
           "Legal name and registration justification are required."
-        )
-      );
-
-      return;
-    }
-
-    if (
-      form
-        .paymentTermOption ===
-        "CUSTOM" &&
-      !(
-        Number(
-          form
-            .paymentTermDays
-        ) > 0
-      )
-    ) {
-      setError(
-        t(
-          "Custom payment terms require a positive number of days."
         )
       );
 
@@ -733,25 +710,6 @@ export default function SupplierForm({
         form
           .operationsContact
       )
-    );
-
-    payload.append(
-      "paymentTerms",
-      JSON.stringify({
-        option:
-          form
-            .paymentTermOption,
-
-        days:
-          Number(
-            form
-              .paymentTermDays
-          ),
-
-        comments:
-          form
-            .paymentTermComments
-      })
     );
 
     payload.append(
@@ -884,6 +842,16 @@ export default function SupplierForm({
         )
       }
 
+      {!supplier && padronLookup?.loading && (
+        <div className="inline-alert alert-info" role="status">
+          <RefreshCw size={18} className="spin" aria-hidden="true" />
+          <div>
+            <strong>{t("Loading SUNAT details in the background")}</strong>
+            <span>{t("You can continue filling the form. Available SUNAT data will fill untouched fields automatically.")}</span>
+          </div>
+        </div>
+      )}
+
       {
         !supplier &&
         padronLookup
@@ -980,6 +948,7 @@ export default function SupplierForm({
       {
         !supplier &&
         padronLookup &&
+        !padronLookup.loading &&
         !padronLookup
           .found && (
           <div
@@ -1746,103 +1715,7 @@ export default function SupplierForm({
             </select>
           </label>
 
-          <label className="field">
-            <span>
-              {t(
-                "Payment Terms"
-              )}
-            </span>
-
-            <select
-              value={
-                form
-                  .paymentTermOption
-              }
-              onChange={
-                (event) =>
-                  setValue(
-                    "paymentTermOption",
-                    event
-                      .target
-                      .value
-                  )
-              }
-            >
-              <option value="CREDIT_30">
-                {t(
-                  "CREDIT_30"
-                )}
-              </option>
-
-              <option value="CREDIT_45">
-                {t(
-                  "CREDIT_45"
-                )}
-              </option>
-
-              <option value="CUSTOM">
-                {t(
-                  "CUSTOM"
-                )}
-              </option>
-            </select>
-          </label>
-
-          {
-            form
-              .paymentTermOption ===
-              "CUSTOM" && (
-              <label className="field">
-                <span>
-                  {t(
-                    "Custom credit days"
-                  )}
-                </span>
-
-                <input
-                  type="number"
-                  min="1"
-                  value={
-                    form
-                      .paymentTermDays
-                  }
-                  onChange={
-                    (event) =>
-                      setValue(
-                        "paymentTermDays",
-                        event
-                          .target
-                          .value
-                      )
-                  }
-                />
-              </label>
-            )
-          }
-
-          <label className="field">
-            <span>
-              {t(
-                "Payment comments"
-              )}
-            </span>
-
-            <input
-              value={
-                form
-                  .paymentTermComments
-              }
-              onChange={
-                (event) =>
-                  setValue(
-                    "paymentTermComments",
-                    event
-                      .target
-                      .value
-                  )
-              }
-            />
-          </label>
+          <p className="field-span-2 section-note">{t("Payment terms are entered in each supplier quotation and carried into the selected purchase.")}</p>
 
           <label className="field field-span-2">
             <span>

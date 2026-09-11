@@ -424,6 +424,12 @@ export default function RequestCreate() {
   }
 
   function updateQuotation(index, patch) {
+    window.cancelAnimationFrame(validationFocusRef.current);
+    setErrors(current => {
+      const next = { ...current };
+      Object.keys(patch).forEach(field => delete next[`quotations.${index}.${field}`]);
+      return next;
+    });
     setQuotations((current) => current.map((quotation, currentIndex) => {
       if (patch.recommended === true) return { ...quotation, recommended: currentIndex === index };
       return currentIndex === index ? { ...quotation, ...patch } : quotation;

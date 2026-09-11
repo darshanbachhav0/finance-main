@@ -116,6 +116,14 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.equal(created.supplier.supplierCode, undefined);
       assert.equal(created.supplier.homologationStatus, "PENDING_VALIDATION");
       assert.equal(created.supplier.active, false);
+      assert.equal(created.supplier.paymentTerms?.option, undefined, "New proposals need no duplicate payment-term entry");
+      const legacy = await Supplier.findById(created.supplier._id);
+      legacy.paymentTerms = { option: "CUSTOM", days: 60, comments: "Historical agreement" };
+      await legacy.save();
+      await updateSupplierProposal({ supplierId: legacy._id, payload: { commercialName: "Updated name" }, user: users.solicitor, req });
+      const preserved = await Supplier.findById(legacy._id);
+      assert.equal(preserved.paymentTerms.days, 60, "Editing the simplified form preserves historical terms");
+      assert.equal(preserved.paymentTerms.comments, "Historical agreement");
       await assert.rejects(
         () => createSupplierProposal({ payload, files: {}, user: users.solicitor, req }),
         (error) => error.code === "DUPLICATE_SUPPLIER" && String(error.details.supplier) === String(created.supplier._id)

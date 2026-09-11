@@ -204,8 +204,8 @@ export default function Suppliers() {
    * After 11 RUC digits have been entered, automatically:
    *
    * 1. Check UMA Supplier Master.
-   * 2. Check local SUNAT Padron.
-   * 3. Open the form immediately.
+   * 2. Open the form after the duplicate check.
+   * 3. Fill untouched fields from the local SUNAT Padron in background.
    * 4. Retrieve SUNAT legal representatives in background.
    */
   useEffect(
@@ -214,7 +214,8 @@ export default function Suppliers() {
         drawer.mode !==
           "create" ||
         lookup.checked ||
-        lookup.loading
+        lookup.loading ||
+        lookup.error
       ) {
         return undefined;
       }
@@ -240,7 +241,7 @@ export default function Suppliers() {
               normalized
             );
           },
-          600
+          200
         );
 
       return () =>
@@ -252,7 +253,8 @@ export default function Suppliers() {
       identifier,
       drawer.mode,
       lookup.checked,
-      lookup.loading
+      lookup.loading,
+      lookup.error
     ]
   );
 
@@ -761,7 +763,8 @@ export default function Suppliers() {
        */
       const response =
         await api.get(
-          `/suppliers/lookup/${normalized}`
+          `/suppliers/lookup/${normalized}`,
+          { timeout: 10_000 }
         );
 
       if (
@@ -857,12 +860,19 @@ export default function Suppliers() {
 
       /*
        * STEP 2
-       * Fast local SUNAT Padron lookup.
+       * Open immediately after the duplicate check. Enrich the same form in
+       * background so slow Padrón I/O never blocks manual entry or loses edits.
        */
+      setLookup({
+        ...freshLookupState(),
+        checked: true,
+        padron: { loading: true, ruc: normalized }
+      });
       try {
         const padronResponse =
           await api.get(
-            `/suppliers/padron/${normalized}`
+            `/suppliers/padron/${normalized}`,
+            { timeout: 15_000 }
           );
 
         if (
@@ -1571,7 +1581,7 @@ export default function Suppliers() {
 
                     <span>
                       {t(
-                        "Checking Supplier Master and SUNAT Padrón..."
+                        "Checking Supplier Master for duplicates..."
                       )}
                     </span>
                   </div>
@@ -1747,7 +1757,7 @@ export default function Suppliers() {
           lookup.checked &&
           !lookup.result && (
             <SupplierForm
-              key={`create-${identifier}-${lookup.padron?.datasetDate || "no-padron"}`}
+              key={`create-${identifier}`}
               identifier={
                 identifier
               }

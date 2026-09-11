@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { paymentTermFields } from "./paymentTermFields.js";
 import { AP_STATUS, CURRENCY, FLOW_TYPES, PAYMENT_DESTINATION_SOURCES, SUPPLIER_PAYMENT_TERM_OPTIONS } from "../utils/constants.js";
 
 const accountsPayableSchema = new mongoose.Schema(
@@ -33,6 +34,11 @@ const accountsPayableSchema = new mongoose.Schema(
     budgetExecutedAt: Date,
     budgetPaidAt: Date,
     paymentTermsSnapshot: {
+      ...paymentTermFields,
+      source: { type: String, enum: ["PURCHASE_ORDER", "QUOTATION", "SUPPLIER_DEFAULT"] },
+      sourceQuotation: mongoose.Schema.Types.ObjectId,
+      quotationAmount: Number,
+      quotationCurrency: { type: String, enum: CURRENCY },
       option: { type: String, enum: SUPPLIER_PAYMENT_TERM_OPTIONS },
       days: { type: Number, min: 0 },
       supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier" },

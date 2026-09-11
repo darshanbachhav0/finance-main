@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import mongoose from "mongoose";
 import AccountsPayable from "../src/models/AccountsPayable.js";
+import AccountingMapping from "../src/models/AccountingMapping.js";
+import { createAccountsPayableFromVoucher } from "../src/services/accountingService.js";
+import { managementSummary } from "../src/controllers/reportController.js";
 import AuditLog from "../src/models/AuditLog.js";
 import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import CostCenter from "../src/models/CostCenter.js";
@@ -237,6 +240,45 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(legacyOrder.paymentTermsSnapshot.paymentConditions, "Original signed agreement");
     });
 
+    await t.test("fixed payment options persist their automatic split on the request and issued order", async () => {
+      for (const [paymentCondition, advancePercentage, balancePercentage] of [["100%_ADVANCE", 100, 0], ["100%_ON_DELIVERY", 0, 100]]) {
+        const request = await procurementRequest();
+        Object.assign(request.quotations[0], { paymentCondition });
+        await request.save();
+        const reloaded = await FinancialRequest.findById(request._id);
+        assert.equal(reloaded.quotations[0].advancePercentage, advancePercentage);
+        assert.equal(reloaded.quotations[0].balancePercentage, balancePercentage);
+        const order = await issueProcurementOrder({ requestId: request._id, user: users.budget, req });
+        const savedOrder = await PurchaseOrder.findById(order._id);
+        assert.equal(savedOrder.paymentTermsSnapshot.paymentCondition, paymentCondition);
+        assert.equal(savedOrder.paymentTermsSnapshot.advancePercentage, advancePercentage);
+        assert.equal(savedOrder.paymentTermsSnapshot.balancePercentage, balancePercentage);
+        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0);
+      }
+    });
+
+    await t.test("invoice payables inherit issued order terms and preserve the snapshot on retry", async () => {
+      for (const [purpose, accountNumber] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"]]) {
+        await AccountingMapping.create({ code: `PH5-${purpose}`, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: "*", currency: "*", accountNumber, active: true });
+      }
+      const invoiceRequest = await procurementRequest();
+      Object.assign(invoiceRequest.quotations[0], { paymentCondition: "CREDIT", creditDays: 15, creditStart: "INVOICE" });
+      await invoiceRequest.save();
+      const order = await generatePurchaseOrder(invoiceRequest, users.budget, req);
+      Object.assign(invoiceRequest.quotations[0], { paymentCondition: "100%_ADVANCE" });
+      await invoiceRequest.save();
+      const voucher = { ruc: mainSupplier.rucDni, series: "F099", number: "001", issueDate: "2026-09-01", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
+      const args = { request: invoiceRequest, supplier: mainSupplier, purchaseOrder: order, voucher, user: users.accounting, flowType: "A1" };
+      const payable = await createAccountsPayableFromVoucher(args);
+      const loaded = await AccountsPayable.findById(payable._id);
+      assert.equal(loaded.paymentTermsSnapshot.source, "PURCHASE_ORDER");
+      assert.equal(loaded.paymentTermsSnapshot.creditDays, 15);
+      assert.equal(loaded.dueDate.toISOString().slice(0, 10), "2026-09-16");
+      const repeated = await createAccountsPayableFromVoucher({ ...args, dueDate: "2026-12-01" });
+      assert.equal(String(repeated._id), String(payable._id));
+      assert.equal(repeated.dueDate.toISOString().slice(0, 10), "2026-09-16");
+    });
+
     await t.test("repeated and concurrent order creation remains idempotent", async () => {
       const repeated = await issueProcurementOrder({ requestId: readyRequest._id, user: users.budget, req });
       assert.equal(await PurchaseOrder.countDocuments({ request: readyRequest._id }), 1);
@@ -377,6 +419,17 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       const loaded = await AccountsPayable.findById(historical._id);
       assert.equal(loaded.paymentTermsSnapshot?.option, undefined);
       assert.equal(loaded.dueDate, undefined);
+    });
+
+    await t.test("milestone payables without a confirmed date remain pending in reports", async () => {
+      const milestoneRequest = await procurementRequest();
+      const milestone = await AccountsPayable.create({ request: milestoneRequest._id, supplier: mainSupplier._id, supplierIdentifierSnapshot: mainSupplier.rucDni, originalAmount: 321, currency: "PEN", exchangeRate: 1, penEquivalent: 321, outstandingAmount: 321, status: AP_STATUS.OPEN, paymentTermsSnapshot: { source: "PURCHASE_ORDER", paymentCondition: "100%_ON_DELIVERY" } });
+      await AccountsPayable.collection.updateOne({ _id: milestone._id }, { $set: { createdAt: new Date("2020-01-01") } });
+      let response;
+      await managementSummary({ query: { period: "2026-08" }, user: users.accounting }, { json: value => { response = value.data; } }, error => { throw error; });
+      assert.equal(response.payableAgeing.find(row => row._id === "Date pending").total, 321);
+      assert.ok(!response.treasurySchedule.some(row => row._id === "2020-01-01"), "An upload/creation date must not masquerade as a payment due date");
+      assert.ok(response.paymentComparison.find(row => row._id === "Pending").total >= 321);
     });
 
     await t.test("Request Detail masks payment destinations for approvers but Finance roles retain operational access", async () => {
