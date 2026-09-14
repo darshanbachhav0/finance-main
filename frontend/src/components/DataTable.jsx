@@ -265,7 +265,7 @@ export default function DataTable({
       )}
 
       {scrolls && <p className="table-scroll-note">{t("Scroll horizontally to see all columns.")}</p>}
-      <div ref={scrollRef} className="table-scroll" role="region" aria-label={t(caption || "Scrollable results")} tabIndex={0}>
+      <div ref={scrollRef} className="table-scroll" role="region" aria-busy={loading} aria-label={t(caption || "Scrollable results")} tabIndex={0}>
         <table role="table">
           {caption && <caption className="sr-only">{t(caption)}</caption>}
           <thead>
@@ -294,7 +294,7 @@ export default function DataTable({
           </thead>
           <tbody>
             {loading ? Array.from({ length: Math.min(activePageSize, 6) }).map((_, rowIndex) => (
-              <tr key={`loading-${rowIndex}`}>
+              <tr key={`loading-${rowIndex}`} aria-hidden="true">
                 {selection && <td><span className="skeleton skeleton-check" /></td>}
                 {columns.map((column) => <td key={column.key}><span className="skeleton skeleton-line" /></td>)}
                 {rowActions && <td><span className="skeleton skeleton-check" /></td>}
@@ -302,7 +302,7 @@ export default function DataTable({
             )) : visibleRows.map((row) => (
               <tr
                 key={row[rowKey]}
-                className={onRowClick ? "clickable-row" : ""}
+                className={`${onRowClick ? "clickable-row" : ""}${selection && selectedIds.includes(row[rowKey]) ? " is-selected" : ""}`}
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={onRowClick ? (event) => { if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); onRowClick(row); } } : undefined}
                 onClick={onRowClick ? (event) => {

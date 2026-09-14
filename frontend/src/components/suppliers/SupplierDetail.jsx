@@ -27,10 +27,12 @@ function displayDate(value, language) {
   return Number.isNaN(date.getTime()) ? "-" : new Intl.DateTimeFormat(language === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function sectionId(title) { return `supplier-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`; }
+
 function Section({ icon: Icon, title, status, actions, children }) {
   const { t } = useLanguage();
   return (
-    <section className="supplier-detail-section">
+    <section className="supplier-detail-section" id={sectionId(title)}>
       <header>
         <span className="section-icon"><Icon size={17} aria-hidden="true" /></span>
         <div><h3>{t(title)}</h3>{status && <small>{t(status)}</small>}</div>
@@ -131,6 +133,11 @@ export default function SupplierDetail({
           {permissions.canReview && supplier.homologationStatus !== "INACTIVE" && <button type="button" className="danger-button ghost-danger" onClick={onDeactivateSupplier} disabled={loading}><Power size={16} /><span>{t("Deactivate supplier")}</span></button>}
         </div>
       </div>
+
+      <nav className="supplier-section-nav" aria-label={t("Supplier sections")}>
+        {["Legal Identification", "Banking Information", "Mandatory Documents", "Homologation Readiness", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
+      </nav>
+      {permissions.canReview && supplier.homologationStatus !== "INACTIVE" && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier checks and homologation readiness." : "Review the outstanding supplier requirements.")}</p></div><a className="secondary-button" href={`#${sectionId("Homologation Readiness")}`}>{t("Review requirements")}</a></div>}
 
       <Section icon={Building2} title="Legal Identification" status={supplier.proposalJustification ? "Registration justification recorded" : "Registration justification missing"}>
         <DetailGrid>

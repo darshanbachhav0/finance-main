@@ -72,6 +72,25 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${output}/login-mobile.png` });
   await page.evaluate((user) => { localStorage.setItem("erp_user", JSON.stringify(user)); localStorage.setItem("erp_token", "ui-test-only"); localStorage.setItem("erp_language", "en"); }, user);
+  await page.goto("http://127.0.0.1:5190/");
+  await page.locator(".stat-card-link").first().waitFor();
+  assert.equal(await page.locator(".stat-card-link").first().getAttribute("href"), "/requests");
+  await page.locator(".stat-card-link").first().click();
+  await page.waitForURL("**/requests");
+  await page.goto("http://127.0.0.1:5190/");
+  await page.locator(".stat-card-link").first().waitFor();
+  let releaseRefresh, signalRefresh;
+  const refreshStarted = new Promise((resolve) => { signalRefresh = resolve; });
+  const refreshRoute = (route) => new Promise((resolve) => { releaseRefresh = async () => { await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "Refresh unavailable. Please retry." }) }); resolve(); }; signalRefresh(); });
+  await page.route("**/api/dashboard/summary", refreshRoute);
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await refreshStarted;
+  assert.equal(await page.locator(".stat-card-link").count(), 3, "Refresh keeps the current cards visible");
+  assert.equal(await page.locator(".dashboard-loading").count(), 0);
+  await releaseRefresh();
+  await page.getByRole("alert").waitFor();
+  assert.equal(await page.locator(".stat-card-link").count(), 3, "Failed refresh preserves last successful data");
+  await page.unroute("**/api/dashboard/summary", refreshRoute);
   const paths = ["/", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });

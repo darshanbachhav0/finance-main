@@ -22,6 +22,8 @@ import {
   useLanguage
 } from "../../context/LanguageContext.jsx";
 
+import OptionalSection from "../OptionalSection.jsx";
+
 const emptyContact = {
   name: "",
   position: "",
@@ -1652,10 +1654,10 @@ export default function SupplierForm({
         />
       </Section>
 
-      <Section
-        icon={Truck}
+      <OptionalSection
         title="Operations / Logistics Contact"
-        status="Dispatch, delivery and logistics coordination"
+        description="Optional contact for dispatch and delivery"
+        initiallyOpen={Object.values(form.operationsContact || {}).some(Boolean)}
       >
         <ContactFields
           legend="Operations / Logistics Contact"
@@ -1675,7 +1677,7 @@ export default function SupplierForm({
               )
           }
         />
-      </Section>
+      </OptionalSection>
 
       <Section
         icon={Truck}

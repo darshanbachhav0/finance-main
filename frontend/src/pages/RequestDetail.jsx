@@ -23,6 +23,7 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import OfficialRenditionWorkspace from "../components/rendition/OfficialRenditionWorkspace.jsx";
@@ -369,11 +370,17 @@ export default function RequestDetail() {
     setConfirm({ type, ...actions[type] });
   }
 
-  if (loading && !request) return <div className="page-loader">{t("Loading request...")}</div>;
+  if (loading && !request) return <WorkspaceSkeleton label="Loading request..." />;
   if (!request) return <section><Message type="error">{error || "Request not found."}</Message></section>;
 
   const supplier = request.supplier;
   const order = request.purchaseOrder;
+  const nextAction = permissions.modifiable
+    ? (missingDocuments.length ? ["Complete the required documents before submitting.", "Documents", "#request-section-documents-and-fiscal-validation"] : ["Your request is ready for your submission review.", "Available actions", "#request-actions"])
+    : permissions.canApprove ? ["Review the supporting documents and record your decision.", "Available actions", "#request-actions"]
+    : permissions.canCommitBudget ? ["Review budget availability and commit the approved request.", "Available actions", "#request-actions"]
+    : permissions.canIssueOrder ? ["Review the approved purchase and issue the order.", "Available actions", "#request-actions"]
+    : permissions.canClose ? ["Review the reconciliation before closing this request.", "Available actions", "#request-actions"] : null;
   const requestDescription = request.flowType === "C"
     ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
     : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
@@ -416,6 +423,7 @@ export default function RequestDetail() {
         <div><dt>{t("Accounting period")}</dt><dd>{request.accountingPeriod || "—"}</dd></div>
         <div><dt>{t("Current status")}</dt><dd><StatusBadge status={request.status} /></dd></div>
       </dl>
+      {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]}>{t(nextAction[1])}</a></div>}
       <nav className="request-section-nav" aria-label={t("Request sections")}>
         <a href="#request-section-requirement-and-justification">{t("Overview")}</a>
         <a href="#request-section-budget-preview">{t("Budget")}</a>

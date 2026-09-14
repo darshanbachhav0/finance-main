@@ -120,6 +120,19 @@ try {
   assert.equal(cached.cached, true);
   assert.equal(searches, 1, "Repeated RUC lookup reuses the cached result");
   await page.screenshot({ path: `${output}/autofill.png`, fullPage: true });
+  const optionalContact = page.locator(".optional-section");
+  assert.equal(await optionalContact.getAttribute("open"), null);
+  await optionalContact.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await optionalContact.getByLabel("Contact name", { exact: true }).fill("Dispatch contact");
+  await optionalContact.locator("summary").click();
+  await optionalContact.locator("summary").click();
+  assert.equal(await optionalContact.getByLabel("Contact name", { exact: true }).inputValue(), "Dispatch contact", "Collapsing optional fields retains entered data");
+  await optionalContact.getByLabel("Email", { exact: true }).fill("invalid-email");
+  await optionalContact.locator("summary").click();
+  assert.equal(await optionalContact.getByLabel("Email", { exact: true }).evaluate((input) => input.reportValidity()), false);
+  assert.equal(await optionalContact.getByLabel("Email", { exact: true }).isVisible(), true, "Invalid optional fields reopen for correction");
+  await optionalContact.getByLabel("Email", { exact: true }).fill("");
 
   // A deliberately blocked Padrón request must not hold the entire form hostage.
   await page.goto("http://127.0.0.1:5188/suppliers");

@@ -253,7 +253,7 @@ export default function AppLayout() {
           <button type="button" className="icon-button sidebar-mobile-close" onClick={() => { setMobileOpen(false); window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true })); }} aria-label={t("Close navigation")}><X size={19} /></button>
         </div>
 
-        <nav className="nav-groups">
+        <nav className="nav-groups" aria-label={t("Main navigation")}>
           {visibleGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group-label">{t(group.label)}</span>
@@ -269,7 +269,7 @@ export default function AppLayout() {
                     data-tooltip={t(item.label)}
                     aria-label={t(item.label)}
                   >
-                    <Icon size={18} />
+                    <Icon size={18} aria-hidden="true" />
                     <span className="nav-label">{t(item.label)}</span>
                     {count > 0 && <span className="nav-counter" aria-label={t("{count} pending tasks").replace("{count}", count)}>{count > 99 ? "99+" : count}</span>}
                   </NavLink>

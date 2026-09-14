@@ -19,6 +19,7 @@ import Message from "../components/Message.jsx";
 import RequestItemLine from "../components/RequestItemLine.jsx";
 import { restoreEditorLine, editRequestLine, requestLinePayload } from "../utils/requestLineEditor.js";
 import PageHeader from "../components/PageHeader.jsx";
+import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import SearchSelect from "../components/SearchSelect.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import QuotationPaymentTerms from "../components/QuotationPaymentTerms.jsx";
@@ -578,7 +579,7 @@ export default function RequestCreate() {
     }
   }
 
-  if (loading) return <div className="page-loader">{t(isEditing ? "Loading request..." : "Loading form data...")}</div>;
+  if (loading) return <WorkspaceSkeleton label={isEditing ? "Loading request..." : "Loading form data..."} />;
 
   return <section>
     <PageHeader

@@ -132,6 +132,7 @@ try {
   assert.deepEqual(errors, []);
   console.log("PASS: six-field items, both IGV modes, live changes, rounding, validation, multiple lines, budget preview, autosave, save/reopen, Spanish and responsive layouts");
 } catch (error) {
+  if (page) console.error("Overflow diagnostics:", await page.evaluate(() => [...document.querySelectorAll("body *")].filter((node) => { const rect = node.getBoundingClientRect(); return rect.width && rect.right > innerWidth + 1 && rect.left >= 0 && !node.closest(".table-scroll, .quotation-comparison"); }).map((node) => ({ tag: node.tagName, class: node.className, right: node.getBoundingClientRect().right, text: node.textContent.slice(0, 60) })).slice(0, 20)));
   await page?.screenshot({ path: `${output}/failure.png`, fullPage: true }).catch(() => {});
   throw error;
 } finally {

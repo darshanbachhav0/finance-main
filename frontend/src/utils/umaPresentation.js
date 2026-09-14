@@ -1,5 +1,7 @@
 // Display copy only. Status keys, API values and financial decisions are unchanged.
 export const umaCopy = {
+  "GOODS": "Goods", "SERVICES": "Services", "BAJA": "Low", "MEDIA": "Medium", "ALTA": "High",
+  "NOT_CONFIGURED": "Not configured", "PENDING_VALIDATION": "Pending validation", "OBSERVED": "Needs correction",
   "Financial Control": "Financial management",
   "Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions.": "Follow your annual plan and each month’s available budget, commitments and spending.",
   "Period, Cost Center, expense classification, and project remain visible together.": "Review budgets by period, Cost Center, expense account and project.",
@@ -38,6 +40,21 @@ export const umaCopy = {
 };
 
 export const umaSpanish = {
+  "Goods": "Bienes", "Services": "Servicios", "Low": "Baja", "Medium": "Media", "High": "Alta",
+  "Not configured": "Sin configurar", "Pending validation": "Validación pendiente",
+  "Main navigation": "Navegación principal", "Supplier sections": "Secciones del proveedor",
+  "View users": "Ver usuarios", "View suppliers": "Ver proveedores", "View audit history": "Ver historial de auditoría",
+  "View payables": "Ver cuentas por pagar", "View drafts": "Ver borradores", "View details": "Ver detalles",
+  "Optional details": "Datos opcionales", "Optional contact for dispatch and delivery": "Contacto opcional para despacho y entrega",
+  "Next step": "Siguiente paso", "Review requirements": "Revisar requisitos",
+  "Complete the required documents before submitting.": "Completa los documentos obligatorios antes de enviar.",
+  "Your request is ready for your submission review.": "Revisa tu solicitud antes de enviarla a aprobación.",
+  "Review the supporting documents and record your decision.": "Revisa los documentos de sustento y registra tu decisión.",
+  "Review budget availability and commit the approved request.": "Revisa la disponibilidad presupuestal y compromete la solicitud aprobada.",
+  "Review the approved purchase and issue the order.": "Revisa la compra aprobada y emite la orden.",
+  "Review the reconciliation before closing this request.": "Revisa la conciliación antes de cerrar esta solicitud.",
+  "Review the supplier checks and homologation readiness.": "Revisa las validaciones del proveedor y su estado para homologación.",
+  "Review the outstanding supplier requirements.": "Revisa los requisitos pendientes del proveedor.",
   "100% Advance": "100% Adelanto", "100% On Delivery": "100% Contra entrega", "Advance + Balance": "Adelanto + Saldo",
   "Pay the full amount before starting": "Paga el importe completo antes de comenzar",
   "Pay the full amount on delivery": "Paga el importe completo contra entrega",
