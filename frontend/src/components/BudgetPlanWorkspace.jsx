@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import { useEffect, useState } from "react";
 import api from "../api/client.js";
 import Drawer from "./Drawer.jsx";
@@ -36,7 +38,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
     };
     (async () => {
       try {
-        if (planId) { const response = await api.get(`/budget/plans/${planId}`); if (active) setPlan(response.data.data); }
+        if (planId) { const response = await api.get(`/budget/plans/${planId}`); if (active) { setPlan(response.data.data); if (new URLSearchParams(window.location.search).get("workScope") === "budget-adjustment") setShowAdjustment(true); } }
         else {
           const [centers, expenses] = await Promise.all([fetchAll("/cost-centers"), fetchAll("/expense-types")]);
           if (active) setMasters({ centers, expenses });
@@ -46,6 +48,10 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
     })();
     return () => { active = false; };
   }, [open, planId, year]);
+
+  const draft = useWorkDraft({ scope: "budget-plan", title: "Annual budget plan", enabled: open && !loading && !planId && !plan && canManage, value: form, restore: setForm });
+  const adjustmentDraft = useWorkDraft({ scope: "budget-adjustment", recordId: plan?._id || planId || "new", title: "Budget adjustment", enabled: open && !loading && Boolean(plan) && canManage && showAdjustment, value: adjustment, restore: setAdjustment, sourceVersion: plan?.updatedAt });
+  useDraftResume("budget-adjustment", () => setShowAdjustment(true));
 
   let monthlyAmounts = form.months;
   let distributionError = "";
@@ -59,19 +65,23 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
   }
 
   async function savePlan(event) {
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     if (distributionError) { setError(distributionError); return; }
     setSaving(true); setError("");
     try {
       const response = await api.post("/budget/plans", { ...form, months: monthlyAmounts });
+      await draft.complete();
       setPlan(response.data.data);
       onSaved(response.data.data);
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   }
   async function saveAdjustment(event) {
+    event.preventDefault(); if (!adjustmentDraft.ready || adjustmentDraft.status === "conflict") return;
     event.preventDefault(); setSaving(true); setError("");
     try {
       const response = await api.post(`/budget/plans/${plan._id}/adjustments`, { ...adjustment, revision: plan.__v });
+      await adjustmentDraft.complete();
       setPlan(response.data.data); setShowAdjustment(false); setAdjustment(adjustmentForm()); onSaved(response.data.data);
     } catch (err) {
       setError(err.message);
@@ -95,7 +105,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
         {canManage && !showAdjustment && <button className="secondary-button" type="button" onClick={() => { setShowAdjustment(true); setAdjustment({ ...adjustmentForm(), action: plan.planningMode === "ANNUAL_ONLY" ? "INCREASE" : "TRANSFER" }); }}>{t("Adjust budget")}</button>}
       </div>
       <div className="budget-month-table"><table><thead><tr>{["Month", "Assigned", "Committed", "Executed", "Paid", "Available"].map((label) => <th key={label}>{t(label)}</th>)}</tr></thead><tbody>{plan.months.map((bucket) => <tr key={bucket.month} className={selectedPeriod === `${plan.period}-${String(bucket.month).padStart(2, "0")}` ? "is-current-month" : ""}><th scope="row">{t(BUDGET_MONTHS[bucket.month - 1])}</th><td>{plan.planningMode === "ANNUAL_ONLY" ? "—" : money(bucket.assignedAmount)}</td><td>{money(bucket.committedAmount)}</td><td>{money(bucket.executedAmount)}</td><td>{money(bucket.paidAmount)}</td><td className={bucket.availableAmount < 0 ? "text-danger" : ""}>{money(bucket.availableAmount)}</td></tr>)}</tbody></table></div>
-      {showAdjustment && canManage && <form className="budget-adjustment-form" onSubmit={saveAdjustment}>
+      {showAdjustment && canManage && <DraftPanel busy={saving} draft={adjustmentDraft} onDiscard={() => setShowAdjustment(false)}><form className="budget-adjustment-form" onSubmit={saveAdjustment}>
         <h3>{t("Audited budget adjustment")}</h3>
         <div className="form-grid two-column-form">
           <label className="field"><span>{t("Adjustment type")}</span><select aria-label={t("Adjustment type")} value={adjustment.action} onChange={(event) => setAdjustment((current) => ({ ...current, action: event.target.value }))}>{plan.planningMode === "ANNUAL_MONTHLY" && <><option value="TRANSFER">{t("Transfer between months")}</option><option value="ALLOCATE_RESERVE">{t("Allocate annual reserve")}</option></>}<option value="INCREASE">{t("Record approved annual increase")}</option></select></label>
@@ -106,10 +116,10 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
         </div>
         <p>{t(adjustment.action === "TRANSFER" ? "Only unused budget can be transferred. The annual total remains unchanged." : adjustment.action === "INCREASE" ? "Record the approval reference. For monthly plans, the increase remains pending allocation until assigned to a month." : "Allocate part of the undistributed annual amount to the selected month.")}</p>
         <div className="budget-form-actions"><button type="button" className="secondary-button" disabled={saving} onClick={() => setShowAdjustment(false)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={saving}>{t(saving ? "Saving..." : "Save adjustment")}</button></div>
-      </form>}
+      </form></DraftPanel>}
       <h3 className="section-spacer">{t("Budget adjustment history")}</h3>
       <div className="budget-history">{[...plan.adjustments].reverse().map((entry) => <article key={entry.operationId}><div><strong>{t({ CREATED: "Budget created", TRANSFER: "Transfer between months", ALLOCATE_RESERVE: "Allocate annual reserve", INCREASE: "Annual increase" }[entry.action])} · {money(entry.amount)}</strong><span>{entry.fromMonth ? `${t(BUDGET_MONTHS[entry.fromMonth - 1])} → ` : ""}{entry.toMonth ? t(BUDGET_MONTHS[entry.toMonth - 1]) : ""}</span></div><p>{entry.reason}</p><small>{entry.actorName} · {formatDateTime(entry.at, language)}</small></article>)}</div>
-    </> : !planId && canManage && <form onSubmit={savePlan} className="budget-plan-form">
+    </> : !planId && canManage && <DraftPanel busy={saving} draft={draft} onDiscard={onClose}><form onSubmit={savePlan} className="budget-plan-form">
       <p>{t("Create a yearly budget for a Cost Center, expense account, and optional project. Existing allocations and recorded activity remain unchanged.")}</p>
       <div className="form-grid two-column-form">
         <label className="field"><span>{t("Budget year")} *</span><input aria-label={t("Budget year")} type="number" min="2000" max="2199" step="1" required value={form.year} onChange={(event) => change("year", event.target.value)} /></label>
@@ -127,6 +137,6 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
       </div>}
       <label className="field"><span>{t("Reason / approval reference")} *</span><textarea aria-label={t("Reason / approval reference")} maxLength="2000" required rows="2" value={form.reason} onChange={(event) => change("reason", event.target.value)} /></label>
       <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={onClose}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={saving || Boolean(distributionError)}>{t(saving ? "Saving..." : "Create budget plan")}</button></div>
-    </form>}
+    </form></DraftPanel>}
   </Drawer>;
 }

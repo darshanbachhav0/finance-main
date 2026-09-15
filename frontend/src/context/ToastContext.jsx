@@ -1,5 +1,5 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "./LanguageContext.jsx";
 
 const ToastContext = createContext(null);
@@ -21,6 +21,8 @@ export function ToastProvider({ children }) {
     window.setTimeout(() => dismiss(id), options.duration || 5000);
     return id;
   }, [dismiss]);
+
+  useEffect(() => { const warn = () => notify("The record was saved, but its old draft could not be removed. Discard it from Continue your work; do not submit it again.", "warning", { duration: 12000 }); window.addEventListener("uma:draft-cleanup-warning", warn); return () => window.removeEventListener("uma:draft-cleanup-warning", warn); }, [notify]);
 
   const value = useMemo(() => ({ notify, dismiss }), [notify, dismiss]);
 

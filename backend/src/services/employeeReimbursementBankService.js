@@ -5,6 +5,7 @@ import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, ROLES } from "../utils/constants.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
+import { notifyEmployeeBankDecision, notifyEmployeeBankReview, resolveEmployeeBankReview } from "./bankNotificationService.js";
 
 const OWNER_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR]);
 const REVIEW_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
@@ -14,6 +15,7 @@ const PROTECTED_FIELDS = Object.freeze([
   "verifiedBy",
   "verifiedAt",
   "verificationSource",
+  "verificationComments",
   "verificationDocument",
   "active",
   "validFrom",
@@ -128,6 +130,7 @@ export async function createEmployeeReimbursementBankAccount({ payload, user, re
     return account;
   });
   const account = await EmployeeReimbursementBankAccount.findById(result._id).select(accountSelector()).populate("user", "employeeCode name email area");
+  await notifyEmployeeBankReview(account);
   return bankPayload(account, user);
 }
 
@@ -179,6 +182,8 @@ export async function updateEmployeeReimbursementBankAccount({ accountId, payloa
     return next;
   });
   const account = await EmployeeReimbursementBankAccount.findById(replacement._id).select(accountSelector()).populate("user", "employeeCode name email area");
+  await resolveEmployeeBankReview(current);
+  await notifyEmployeeBankReview(account);
   return bankPayload(account, user);
 }
 
@@ -213,6 +218,7 @@ export async function deactivateEmployeeReimbursementBankAccount({ accountId, us
   account.changedBy = user._id;
   await account.save();
   await recordAudit({ entityType: "EmployeeReimbursementBankAccount", entity: account, action: "EMPLOYEE_BANK_PROFILE_DEACTIVATED", user, req, module: "EMPLOYEE_BANKING", newValues: { active: false, preferred: false } });
+  await resolveEmployeeBankReview(account);
   return bankPayload(account, user);
 }
 
@@ -231,6 +237,7 @@ export async function reviewEmployeeReimbursementBankAccount({ accountId, payloa
   account.verifiedBy = user._id;
   account.verifiedAt = new Date();
   account.verificationSource = "UMA_MANUAL_FINANCE_REVIEW";
+  account.verificationComments = comments;
   account.changedBy = user._id;
   await account.save();
   await recordAudit({
@@ -243,6 +250,7 @@ export async function reviewEmployeeReimbursementBankAccount({ accountId, payloa
     comments,
     newValues: { verificationStatus: result, verificationSource: account.verificationSource }
   });
+  await notifyEmployeeBankDecision(account);
   return bankPayload(account, user);
 }
 

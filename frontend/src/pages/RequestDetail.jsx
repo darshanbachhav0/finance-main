@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import {
   ArrowLeft,
   Check,
@@ -304,7 +306,10 @@ export default function RequestDetail() {
     }
   }
 
+  const invoiceDraft = useWorkDraft({ scope: "invoice-files", recordId: id, title: "Invoice and conformity files", enabled: Boolean(permissions.canRegisterInvoice), value: invoiceFiles, restore: setInvoiceFiles });
+
   async function submitInvoice(event) {
+    event.preventDefault(); if (!invoiceDraft.ready || invoiceDraft.status === "conflict") return;
     event.preventDefault();
     if (!invoiceFiles.xml || !invoiceFiles.pdf || !invoiceFiles.conformity) {
       setError("XML, PDF and conformity evidence are required for Track A1.");
@@ -317,6 +322,7 @@ export default function RequestDetail() {
       data.append("pdf", invoiceFiles.pdf);
       data.append("conformity", invoiceFiles.conformity);
       const response = await api.post(`/requests/${id}/invoice`, data);
+      await invoiceDraft.complete();
       notify(response.data.observed ? "Invoice isolated for correction; the observation is now traceable." : "Invoice validated, matched to the PO and provisioned in CXP.");
       setInvoiceFiles({ xml: null, pdf: null, conformity: null });
       event.currentTarget.reset();
@@ -622,11 +628,11 @@ export default function RequestDetail() {
 
           {permissions.canRegisterInvoice && (
             <Section title="Register A1 invoice and conformity" description="Upload the supplier XML, PDF and reception conformity. Amount fields are immutable and read from XML.">
-              <form className="invoice-registration-panel" onSubmit={submitInvoice}>
-                <div className="file-upload-grid">
-                  <label className="field"><span>{t("Invoice XML")} *</span><input type="file" accept=".xml,text/xml,application/xml" onChange={(event) => setInvoiceFiles((current) => ({ ...current, xml: event.target.files?.[0] || null }))} required /></label>
-                  <label className="field"><span>{t("Invoice PDF")} *</span><input type="file" accept=".pdf,application/pdf" onChange={(event) => setInvoiceFiles((current) => ({ ...current, pdf: event.target.files?.[0] || null }))} required /></label>
-                  <label className="field"><span>{t("Conformity evidence")} *</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setInvoiceFiles((current) => ({ ...current, conformity: event.target.files?.[0] || null }))} required /></label>
+              <DraftPanel busy={invoiceSubmitting} draft={invoiceDraft}><form className="invoice-registration-panel" onSubmit={submitInvoice}>
+                <p className="draft-file-list">{Object.values(invoiceFiles).filter(Boolean).map(file => file.name).join(", ")}</p><div className="file-upload-grid">
+                  <label className="field"><span>{t("Invoice XML")} *</span><input type="file" accept=".xml,text/xml,application/xml" onChange={(event) => setInvoiceFiles((current) => ({ ...current, xml: event.target.files?.[0] || null }))} required={!invoiceFiles.xml} /></label>
+                  <label className="field"><span>{t("Invoice PDF")} *</span><input type="file" accept=".pdf,application/pdf" onChange={(event) => setInvoiceFiles((current) => ({ ...current, pdf: event.target.files?.[0] || null }))} required={!invoiceFiles.pdf} /></label>
+                  <label className="field"><span>{t("Conformity evidence")} *</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setInvoiceFiles((current) => ({ ...current, conformity: event.target.files?.[0] || null }))} required={!invoiceFiles.conformity} /></label>
                 </div>
                 <div className="invoice-control-note">
                   <strong>{order?.poNumber}</strong>
@@ -634,7 +640,7 @@ export default function RequestDetail() {
                   <span>{t("The server validates SUNAT, anti-duplication and the PO ceiling before creating CXP.")}</span>
                 </div>
                 <button className="primary-button" type="submit" disabled={invoiceSubmitting}><UploadCloud size={16} /><span>{t(invoiceSubmitting ? "Processing..." : "Validate and provision invoice")}</span></button>
-              </form>
+              </form></DraftPanel>
             </Section>
           )}
 

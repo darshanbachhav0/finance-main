@@ -21,7 +21,7 @@ import {
   configuredQuotationPolicy,
   validateStructuredQuotationComparison
 } from "./documentRuleService.js";
-import { applyExchangeRate } from "./exchangeRateService.js";
+import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
 import { notifyRoles, resolveNotification } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
@@ -853,23 +853,37 @@ export async function previewFinancialRequestBudget({ payload, user }) {
     lines,
     user
   });
-  const exchangeRate = payload.currency === "PEN" ? 1 : Number(payload.exchangeRate || 0);
-  if (!(exchangeRate > 0)) {
-    return { status: "PENDING_VALIDATION", reason: ERROR_CODES.EXCHANGE_RATE_MISSING, totalRequested: 0, lines: [] };
+  const percentage = payload.scenario?.percentage === undefined ? 100 : Number(payload.scenario.percentage);
+  const period = payload.scenario?.period || payload.accountingPeriod;
+  if (!Number.isFinite(percentage) || percentage < 1 || percentage > 300 || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+    throw new AppError(422, "Choose a valid month and an amount between 1% and 300% of the request.", undefined, ERROR_CODES.VALIDATION_ERROR);
   }
+  if (!["PEN", "USD"].includes(payload.currency)) throw new AppError(422, "Unsupported currency.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  let snapshot;
+  try { snapshot = await resolveExchangeRateSnapshot(payload.currency, payload.issueDate); }
+  catch (error) {
+    if (error.code !== ERROR_CODES.EXCHANGE_RATE_MISSING) throw error;
+    return { status: "PENDING_VALIDATION", reason: error.code, totalRequested: 0, lines: [] };
+  }
+  const exchangeRate = snapshot.rate;
+  if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) return { status: "PENDING_VALIDATION", reason: ERROR_CODES.EXCHANGE_RATE_MISSING, totalRequested: 0, lines: [] };
   for (const line of lines) {
     line.currency = payload.currency;
     line.exchangeRate = exchangeRate;
+    // Simulation changes only these in-memory preview amounts, never the request.
+    line.totalAmount = multiplyMoney(line.totalAmount, percentage / 100);
     line.penEquivalent = multiplyMoney(line.totalAmount, exchangeRate);
   }
-  return previewBudget({
+  const preview = await previewBudget({
     requestType,
     expenseNature: payload.expenseNature,
     issueDate: payload.issueDate,
-    accountingPeriod: payload.accountingPeriod,
+    accountingPeriod: period,
     project: payload.project,
     lines
   });
+  return { ...preview, asOf: new Date().toISOString(), period, exchangeRate, exchangeRateDate: snapshot.date,
+    scenarioPercentage: percentage, deferredCommitment: flowType === FLOW_TYPE.C };
 }
 
 export function publicRequestPayload(value) {

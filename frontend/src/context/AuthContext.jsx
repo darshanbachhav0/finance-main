@@ -1,3 +1,4 @@
+import { flushAllDrafts, clearDraftSessions } from "../utils/workDrafts.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../api/client.js";
 
@@ -29,12 +30,16 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const response = await api.post("/auth/login", { email, password });
+    clearDraftSessions();
     localStorage.setItem("erp_token", response.data.token);
     localStorage.setItem("erp_user", JSON.stringify(response.data.user));
     setUser(response.data.user);
   }
 
-  function logout() {
+  async function logout() {
+    const saved = await flushAllDrafts();
+    if (!saved && !window.confirm("Some changes have not reached your account. Stay signed in to retry. Sign out anyway?")) return;
+    clearDraftSessions();
     localStorage.removeItem("erp_token");
     localStorage.removeItem("erp_user");
     setUser(null);

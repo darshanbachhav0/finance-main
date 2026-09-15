@@ -1,3 +1,4 @@
+import ContinueWork from "../components/ContinueWork.jsx";
 import { AlertTriangle, ArrowRight, CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -83,6 +84,7 @@ export default function Dashboard() {
     <section>
       <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="secondary-button" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button></>} />
       <Message type="error">{error}</Message>
+      <ContinueWork />
 
       {loading && !summary && (
         <div className="dashboard-loading" role="status" aria-label={t("Loading dashboard...")}>

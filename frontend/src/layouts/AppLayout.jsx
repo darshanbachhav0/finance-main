@@ -27,9 +27,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import api from "../api/client.js";
+import useNotificationBell from "../hooks/useNotificationBell.js";
 import CommandPalette from "../components/CommandPalette.jsx";
 import UmaBrand from "../components/UmaBrand.jsx";
+import ThemeControl from "../components/ThemeControl.jsx";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
@@ -121,8 +122,7 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 1080px)");
-  const [tasks, setTasks] = useState({ items: [], total: 0, counters: {} });
-  const [notifications, setNotifications] = useState({ data: [], unreadCount: 0 });
+  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead } = useNotificationBell(user._id);
   const [taskOpen, setTaskOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -140,42 +140,14 @@ export default function AppLayout() {
   const pageTitle = routeTitles.find(([pattern]) => pattern.test(location.pathname))?.[1] || "Financial Control";
   const breadcrumb = location.pathname === "/" ? [] : [{ label: "Dashboard", path: "/" }, { label: pageTitle }];
 
-  function loadTasks() {
-    Promise.all([api.get("/dashboard/tasks"), api.get("/notifications", { params: { limit: 20 } })])
-      .then(([taskResponse, notificationResponse]) => {
-        setTasks(taskResponse.data);
-        setNotifications(notificationResponse.data);
-      })
-      .catch(() => {
-        setTasks({ items: [], total: 0, counters: {} });
-        setNotifications({ data: [], unreadCount: 0 });
-      });
-  }
-
-  async function markNotificationRead(item) {
-    if (!item.readAt) await api.patch(`/notifications/${item._id}/read`).catch(() => undefined);
-    setNotifications((current) => ({ ...current, data: current.data.map((value) => value._id === item._id ? { ...value, readAt: new Date().toISOString() } : value), unreadCount: Math.max(0, current.unreadCount - (item.readAt ? 0 : 1)) }));
-  }
-
-  async function markAllRead() {
-    await api.patch("/notifications/read-all");
-    setNotifications((current) => ({ ...current, unreadCount: 0, data: current.data.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })) }));
-  }
-
   useEffect(() => {
     setMobileOpen(false);
     setTaskOpen(false);
     setUserOpen(false);
     loadTasks();
-  }, [location.pathname]);
+  }, [location.pathname, location.search, loadTasks]);
 
   useEffect(() => { document.title = `${t(pageTitle)} · UMA`; }, [pageTitle, t]);
-
-  useEffect(() => {
-    const refresh = () => loadTasks();
-    window.addEventListener("erp:tasks-changed", refresh);
-    return () => window.removeEventListener("erp:tasks-changed", refresh);
-  }, [user.role]);
 
   useEffect(() => {
     const closeMenus = (event) => !menusRef.current?.contains(event.target) && (setTaskOpen(false), setUserOpen(false));
@@ -305,17 +277,27 @@ export default function AppLayout() {
             </button>
             <LanguageToggle />
             <div className="topbar-menu">
-              <button type="button" className="icon-button notification-button" onClick={() => { setTaskOpen((current) => !current); setUserOpen(false); }} aria-label={t("Open task notifications")} aria-expanded={taskOpen}>
+              <button type="button" className="icon-button notification-button" onClick={() => { if (!taskOpen) loadTasks(); setTaskOpen((current) => !current); setUserOpen(false); }} aria-label={t("Open task notifications")} aria-expanded={taskOpen}>
                 <Bell size={19} />
-                {tasks.total + notifications.unreadCount > 0 && <span className="notification-dot">{tasks.total + notifications.unreadCount > 99 ? "99+" : tasks.total + notifications.unreadCount}</span>}
+                {notifications.unreadCount > 0 ? <span className="notification-dot" aria-live="polite" aria-label={t("{count} unread notifications").replace("{count}", notifications.unreadCount)}>{notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}</span> : tasks.total > 0 && <span className="notification-dot" aria-label={t("Pending tasks")}>•</span>}
               </button>
               {taskOpen && (
                 <div className="topbar-popover task-popover">
                   <div className="popover-heading">
                     <strong>{t("Tasks and alerts")}</strong>
-                    <span>{tasks.total + notifications.unreadCount}</span>
+                    <span>{t("{count} unread notifications").replace("{count}", notifications.unreadCount)}</span>
                   </div>
+                  {notificationError && <p className="popover-empty" role="status">{t(notificationError)} <button type="button" className="text-button" onClick={loadTasks}>{t("Retry")}</button></p>}
                   <div className="task-list">
+                    <div className="notification-list-heading"><strong>{t("Notifications")}</strong>{notifications.unreadCount > 0 && <button type="button" className="text-button" onClick={markAllRead}>{t("Mark all read")}</button>}</div>
+                    {notifications.data.map((item) => (
+                      <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
+                        <span className={`task-indicator tone-${item.readAt ? "neutral" : "teal"}`} />
+                        <span><strong>{t(item.title)}</strong><small>{t(item.message)}</small></span>
+                      </Link>
+                    ))}
+                    {!notifications.data.length && !notificationError && <p className="popover-empty">{t("No notifications yet.")}</p>}
+                    <div className="notification-list-heading"><strong>{t("Pending tasks")}</strong></div>
                     {tasks.items.filter((item) => item.count > 0).map((item) => (
                       <Link key={item.key} to={item.path} className="task-item">
                         <span className={`task-indicator tone-${item.tone}`} />
@@ -324,13 +306,6 @@ export default function AppLayout() {
                       </Link>
                     ))}
                     {!tasks.items.some((item) => item.count > 0) && <p className="popover-empty">{t("No pending tasks.")}</p>}
-                    {notifications.data.length > 0 && <div className="notification-list-heading"><strong>{t("Notifications")}</strong>{notifications.unreadCount > 0 && <button type="button" className="text-button" onClick={markAllRead}>{t("Mark all read")}</button>}</div>}
-                    {notifications.data.map((item) => (
-                      <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => markNotificationRead(item)}>
-                        <span className={`task-indicator tone-${item.readAt ? "neutral" : "teal"}`} />
-                        <span><strong>{t(item.title)}</strong><small>{t(item.message)}</small></span>
-                      </Link>
-                    ))}
                   </div>
                 </div>
               )}
@@ -350,6 +325,7 @@ export default function AppLayout() {
                     <small>{t(user.role)} · {user.area}</small>
                   </div>
                   <button type="button" onClick={logout}><LogOut size={16} /><span>{t("Log out")}</span></button>
+                  <ThemeControl />
                 </div>
               )}
             </div>

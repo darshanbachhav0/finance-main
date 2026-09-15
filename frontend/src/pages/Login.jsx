@@ -4,6 +4,7 @@ import { Navigate } from "react-router-dom";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import Message from "../components/Message.jsx";
 import UmaBrand from "../components/UmaBrand.jsx";
+import ThemeControl from "../components/ThemeControl.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
@@ -60,12 +61,11 @@ export default function Login() {
 
   return (
     <main className="login-screen">
-      <div className="login-language"><LanguageToggle /></div>
+      <div className="login-language"><ThemeControl /><LanguageToggle /></div>
       <section className="login-shell">
         <div className="login-brand-panel">
           <UmaBrand />
           <div className="login-system-mark"><ShieldCheck size={30} /><strong>{t("One place for your financial work.")}</strong><p>{t("Requests, approvals and budgets. Connected from the first step to payment.")}</p><span>{t("Universidad María Auxiliadora")}</span></div>
-          <small className="login-version">UMA · {t("Financial management")}</small>
         </div>
         <form className="login-form" onSubmit={submit}>
           <div className="login-form-heading"><LockKeyhole size={24} /><div><h1>{t("Welcome to UMA")}</h1><p>{t("Sign in with your university account.")}</p></div></div>

@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../../hooks/useWorkDraft.js";
+import DraftPanel from "../../components/DraftPanel.jsx";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -121,10 +123,16 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
       setPolicy(policyResponse.data.data || {});
       const accounts = bankResponse.data.data || [];
       setBankAccounts(accounts);
-      setSelectedBank(accounts.find((item) => item.preferred && item.verificationStatus === "VERIFIED")?._id || "");
+      setSelectedBank(current => current || accounts.find((item) => item.preferred && item.verificationStatus === "VERIFIED")?._id || "");
       setBankDestination(destinationResponse.data.data || null);
     }).catch((err) => setError(err.message));
   }, [request._id, ownerId]);
+
+  const draft = useWorkDraft({ scope: "rendition", recordId: request._id, title: "Expense rendition", enabled: canSubmit, sourceVersion: request.updatedAt,
+    value: { accountingLines, mobilityLines, unsupportedLines, amountReturned, selectedBank, exceptionalUse, exceptionalComments, comments, files },
+    restore: data => { setAccountingLines(data.accountingLines); setMobilityLines(data.mobilityLines); setUnsupportedLines(data.unsupportedLines); setAmountReturned(data.amountReturned); setSelectedBank(data.selectedBank); setExceptionalUse(data.exceptionalUse); setExceptionalComments(data.exceptionalComments); setComments(data.comments); setFiles(data.files || []); setAcknowledged(false); }
+  });
+  const settlementDraft = useWorkDraft({ scope: "rendition-settlement", recordId: request._id, title: "Rendition settlement", enabled: canSettle, value: settlement, restore: setSettlement });
 
   const mobilitySubtotal = useMemo(() => sum(mobilityLines, "amount"), [mobilityLines]);
   const unsupportedSubtotal = useMemo(() => sum(unsupportedLines, "grossAmount"), [unsupportedLines]);
@@ -144,6 +152,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
   }
 
   async function submit(event) {
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
     setError("");
@@ -160,6 +169,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     data.append("comments", comments);
     try {
       await api.post(`/requests/${request._id}/rendition`, data, { headers: { "Content-Type": "multipart/form-data" } });
+      await draft.complete();
       notify("Official rendition submitted for Finance review.");
       setFiles([]);
       setAcknowledged(false);
@@ -182,11 +192,13 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
   }
 
   async function settleNonDeductible(event) {
+    event.preventDefault(); if (!settlementDraft.ready || settlementDraft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
     setError("");
     try {
       await api.post(`/requests/${request._id}/rendition/settle-non-deductible`, settlement);
+      await settlementDraft.complete();
       notify("Account 14 balance regularized and audit entry created.");
       setSettlement({ amount: "", method: "REIMBURSEMENT", reference: "" });
       await onReload();
@@ -198,12 +210,14 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     }
   }
 
-  const editable = canSubmit;
+  const editable = canSubmit && draft.ready && draft.status !== "conflict";
   return <div className="workspace-panel detail-section official-rendition-workspace">
     <div className="section-heading"><div><h3>{t("Expense Rendition")}</h3><p>{t(isAdvance ? "Settle the paid advance with official detail while existing Accounting lines remain authoritative." : "Document the exceptional unsupported reimbursement before existing Accounting processing.")}</p></div><div className="rendition-heading-status"><strong>{request.rendition?.number || t("Assigned on submission")}</strong><StatusBadge status={request.rendition?.financeReview?.result || request.rendition?.status || "PENDING"} /></div></div>
     <Message type="error">{error}</Message>
+    {canSubmit && <DraftPanel busy={processing} draft={draft} onDiscard={() => { draft.separateCopy(); window.location.reload(); }} />}
     {isAdvance && dueAt && <div className={`rendition-deadline-card${renditionOverdue ? " overdue" : ""}`}><AlertTriangle size={18} /><div><strong>{t(renditionOverdue ? "Rendition overdue" : "Rendition deadline")}</strong><p>{t("Supporting documents must be submitted within 10 days after the advance payment.")} {t("Due")}: {dueAt.toLocaleDateString()}</p></div><StatusBadge status={renditionOverdue ? "OVERDUE" : request.rendition?.status || "PENDING"} /></div>}
 
+    <fieldset className="work-draft-fields" disabled={processing}>
     <Section icon={BadgeCheck} title="Employee Information" description="Identity and CECO come from the authenticated employee and parent request.">
       <dl className="detail-grid rendition-identity"><div><dt>{t("Beneficiary")}</dt><dd>{request.rendition?.beneficiarySnapshot?.name || request.requester?.name || request.solicitor?.name}</dd></div><div><dt>{t("Employee Code")}</dt><dd>{request.rendition?.beneficiarySnapshot?.employeeCode || request.requester?.employeeCode || request.solicitor?.employeeCode || "-"}</dd></div><div><dt>{t("Institutional email")}</dt><dd>{request.rendition?.beneficiarySnapshot?.email || request.requester?.email || request.solicitor?.email || "-"}</dd></div><div><dt>{t("Area")}</dt><dd>{request.rendition?.beneficiarySnapshot?.area || request.requesterArea}</dd></div><div><dt>{t("Cost Center / CECO")}</dt><dd>{request.rendition?.beneficiarySnapshot?.costCenterCode || request.requesterCostCenter?.code} - {request.rendition?.beneficiarySnapshot?.costCenterName || request.requesterCostCenter?.name}</dd></div></dl>
     </Section>
@@ -237,7 +251,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     {isAdvance && request.rendition?.status === "VALIDATED" && <Section icon={Landmark} title="Account 14 Regularization" description="Non-deductible amounts remain charged to the collaborator until reimbursement or payroll deduction is recorded.">
       <div className="non-deductible-summary"><div><span>{t("Non-deductible outstanding")}</span><strong className={nonDeductibleOutstanding > 0 ? "text-warning" : "text-success"}>PEN {nonDeductibleOutstanding.toFixed(2)}</strong></div><div><span>{t("Settlement status")}</span><StatusBadge status={nonDeductibleOutstanding > 0 ? "PENDING" : "PAGADO_CERRADO"} /></div></div>
       {(request.rendition?.nonDeductibleSettlements || []).length > 0 && <div className="compact-lines">{request.rendition.nonDeductibleSettlements.map((item, index) => <div key={item._id || `${item.method}-${item.settledAt}-${index}`}><span>{new Date(item.settledAt).toLocaleString()} · {t(item.method)} · {item.reference}</span><strong>PEN {Number(item.amount || 0).toFixed(2)}</strong></div>)}</div>}
-      {canSettle && <form className="non-deductible-settlement-form" onSubmit={settleNonDeductible}><label className="field"><span>{t("Settlement method")} *</span><select required value={settlement.method} onChange={(event) => setSettlement({ ...settlement, method: event.target.value })}><option value="REIMBURSEMENT">{t("Employee reimbursement")}</option><option value="PAYROLL_DEDUCTION">{t("Payroll deduction")}</option></select></label><label className="field"><span>{t("Amount")} *</span><input required type="number" min="0.01" max={nonDeductibleOutstanding} step="0.01" value={settlement.amount} onChange={(event) => setSettlement({ ...settlement, amount: event.target.value })} /></label><label className="field"><span>{t("Receipt / payroll reference")} *</span><input required value={settlement.reference} onChange={(event) => setSettlement({ ...settlement, reference: event.target.value })} /></label><button type="submit" className="primary-button" disabled={processing}><CheckCircle2 size={16} />{t(processing ? "Processing..." : "Regularize balance")}</button></form>}
+      {canSettle && <DraftPanel busy={processing} draft={settlementDraft}><form className="non-deductible-settlement-form" onSubmit={settleNonDeductible}><label className="field"><span>{t("Settlement method")} *</span><select required value={settlement.method} onChange={(event) => setSettlement({ ...settlement, method: event.target.value })}><option value="REIMBURSEMENT">{t("Employee reimbursement")}</option><option value="PAYROLL_DEDUCTION">{t("Payroll deduction")}</option></select></label><label className="field"><span>{t("Amount")} *</span><input required type="number" min="0.01" max={nonDeductibleOutstanding} step="0.01" value={settlement.amount} onChange={(event) => setSettlement({ ...settlement, amount: event.target.value })} /></label><label className="field"><span>{t("Receipt / payroll reference")} *</span><input required value={settlement.reference} onChange={(event) => setSettlement({ ...settlement, reference: event.target.value })} /></label><button type="submit" className="primary-button" disabled={processing}><CheckCircle2 size={16} />{t(processing ? "Processing..." : "Regularize balance")}</button></form></DraftPanel>}
     </Section>}
 
     {(editable || unsupportedLines.length > 0 || request.rendition?.unsupportedExpenseLines?.length > 0) && <Section icon={FileSignature} title="Exceptional Use Declaration" description="This is the employee declaration, not Finance approval.">
@@ -248,11 +262,12 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
       {editable ? <label className="checkbox-row acknowledgment"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /><span><strong>{t("I acknowledge the accuracy of this rendition and submit it using my authenticated account.")}</strong><small>{user.name} · {user.email}</small></span></label> : <dl className="detail-grid"><div><dt>{t("Signer")}</dt><dd>{request.rendition?.beneficiaryAcknowledgment?.signerName || "-"}</dd></div><div><dt>{t("Signed")}</dt><dd>{request.rendition?.beneficiaryAcknowledgment?.signedAt ? new Date(request.rendition.beneficiaryAcknowledgment.signedAt).toLocaleString() : "-"}</dd></div><div><dt>{t("Reference")}</dt><dd className="mono-reference">{request.rendition?.beneficiaryAcknowledgment?.reference || "-"}</dd></div></dl>}
     </Section>
 
-    {editable && <form className="rendition-submit-bar" onSubmit={submit}><label className="field"><span>{t("Rendition evidence")}{isAdvance ? " *" : ""}</span><input type="file" multiple required={isAdvance && !request.attachments?.some((item) => item.kind === "RENDITION")} onChange={(event) => setFiles(Array.from(event.target.files || []))} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="2" value={comments} onChange={(event) => setComments(event.target.value)} /></label><button type="submit" className="primary-button" disabled={processing || !acknowledged || Math.abs(difference) >= 0.01 || Math.abs(balance) >= 0.01 || (unsupportedLines.length > 0 && !exceptionalUse) || (isReimbursement && !selectedBank)}><Send size={16} />{t(processing ? "Submitting..." : "Submit rendition")}</button></form>}
+    {editable && <form className="rendition-submit-bar" onSubmit={submit}><label className="field"><span>{files.map(file => file.name).join(", ")} {t("Rendition evidence")}{isAdvance ? " *" : ""}</span><input type="file" multiple required={isAdvance && !files.length && !request.attachments?.some((item) => item.kind === "RENDITION")} onChange={(event) => setFiles(Array.from(event.target.files || []))} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="2" value={comments} onChange={(event) => setComments(event.target.value)} /></label><button type="submit" className="primary-button" disabled={processing || !acknowledged || Math.abs(difference) >= 0.01 || Math.abs(balance) >= 0.01 || (unsupportedLines.length > 0 && !exceptionalUse) || (isReimbursement && !selectedBank)}><Send size={16} />{t(processing ? "Submitting..." : "Submit rendition")}</button></form>}
 
     <Section icon={CheckCircle2} title="Finance Review" description="Accounting/Admin owns the review result and timestamp.">
       <div className="finance-review-row"><div><span>{t("Result")}</span><StatusBadge status={request.rendition?.financeReview?.result || "PENDING"} /></div><div><span>{t("Reviewed")}</span><strong>{request.rendition?.financeReview?.reviewedAt ? new Date(request.rendition.financeReview.reviewedAt).toLocaleString() : "-"}</strong></div><div><span>{t("Comments")}</span><strong>{request.rendition?.financeReview?.comments || "-"}</strong></div>{canReview && <div className="action-buttons"><button type="button" className="primary-button" onClick={() => setConfirm({ action: "approve", title: "Approve rendition?", description: isAdvance ? "Finance approval posts the existing rendition journal and clears the advance transit account." : "Finance approval permits the existing non-deductible Accounting process; it does not execute payment.", confirmLabel: "Approve rendition" })}><CheckCircle2 size={16} />{t("Approve")}</button><button type="button" className="secondary-button" onClick={() => setConfirm({ action: "observe", title: "Observe rendition?", description: "Return the official details for correction while preserving the RG and history.", confirmLabel: "Observe rendition", inputLabel: "Observation comments", inputRequired: true })}><MessageSquareWarning size={16} />{t("Observe")}</button><button type="button" className="danger-button subtle" onClick={() => setConfirm({ action: "reject", title: "Reject rendition?", description: "Reject the Finance review and preserve a distinct audited result.", confirmLabel: "Reject rendition", inputLabel: "Rejection comments", inputRequired: true, tone: "danger" })}><XCircle size={16} />{t("Reject")}</button></div>}</div>
     </Section>
+    </fieldset>
     <ConfirmDialog open={Boolean(confirm)} {...confirm} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={(reviewComments) => review(confirm.action, reviewComments)} />
   </div>;
 }

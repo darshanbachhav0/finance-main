@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import { Download, RefreshCw, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import api from "../api/client.js";
@@ -21,6 +23,9 @@ export default function InvoiceObservations() {
   const [pdf, setPdf] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+
+  const draft = useWorkDraft({ scope: "invoice-resolution", recordId: selected?._id || "new", title: "Invoice correction files", enabled: Boolean(selected), value: { xml, pdf }, restore: data => { setXml(data.xml); setPdf(data.pdf); } });
+  useDraftResume("invoice-resolution", id => resumeDraftRecord("/batch-invoices/observations", id, row => row._id, open, setError));
 
   function open(row) { setSelected(row); setXml(null); setPdf(null); setError(""); }
 
@@ -52,6 +57,7 @@ export default function InvoiceObservations() {
   }
 
   async function retry(event) {
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
     setError("");
@@ -60,6 +66,7 @@ export default function InvoiceObservations() {
     if (pdf) data.append("pdf", pdf);
     try {
       await api.post(`/batch-invoices/observations/${selected._id}/resolve`, data, { headers: { "Content-Type": "multipart/form-data" } });
+      await draft.complete();
       notify("Voucher revalidated and provisioned successfully.");
       setSelected(null);
       table.reload();
@@ -83,15 +90,15 @@ export default function InvoiceObservations() {
           { key: "batch", label: "Batch", sortable: false, render: (row) => row.batch?.batchCode || "-" }
         ]} />
       </div>
-      <Drawer open={Boolean(selected)} title="Revalidate observed invoice" description={selected ? `${selected.seriesNumber} · ${selected.purchaseOrder?.poNumber || ""}` : ""} onClose={() => !processing && setSelected(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelected(null)}>{t("Cancel")}</button><button className="primary-button" form="observation-resolution-form" type="submit" disabled={processing}><RotateCcw size={16} /><span>{t(processing ? "Processing..." : "Revalidate")}</span></button></>}>
-        {selected && <form id="observation-resolution-form" className="form-grid" onSubmit={retry}>
+      <Drawer open={Boolean(selected)} title="Revalidate observed invoice" description={selected ? `${selected.seriesNumber} · ${selected.purchaseOrder?.poNumber || ""}` : ""} onClose={() => !processing && setSelected(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelected(null)}>{t("Cancel")}</button><button className="primary-button" form="observation-resolution-form" type="submit" disabled={processing || !draft.ready || draft.status === "conflict"}><RotateCcw size={16} /><span>{t(processing ? "Processing..." : "Revalidate")}</span></button></>}>
+        {selected && <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelected(null)}><form id="observation-resolution-form" className="form-grid" onSubmit={retry}>
           <Message type="error">{error}</Message>
           <div className="document-requirement required"><div><strong><StatusBadge status={selected.validationStatus || selected.status} /></strong><p>{selected.observationDetail || selected.errorDetail}</p></div></div>
           <div className="inline-document-actions"><button type="button" className="secondary-button" disabled={processing || !selected.xmlUrl} onClick={() => downloadDocument("xml")}><Download size={15} />{t("Download stored XML")}</button><button type="button" className="secondary-button" disabled={processing || !selected.pdfUrl} onClick={() => downloadDocument("pdf")}><Download size={15} />{t("Download stored PDF")}</button></div>
           <p>{t((selected.validationStatus || selected.status) === "OBSERVED_AMOUNT_EXCEEDED" ? "After the PO addendum increases the available ceiling, retry without replacing the XML, or attach a corrected document." : "Attach a corrected XML/PDF when the supplier replaced the voucher. If the stored XML is still valid after an external correction, you can retry without a replacement.")}</p>
-          <label className="field"><span>{t("Replacement XML")}</span><input type="file" accept=".xml" onChange={(event) => setXml(event.target.files?.[0] || null)} /></label>
-          <label className="field"><span>{t("Replacement PDF")}</span><input type="file" accept=".pdf" onChange={(event) => setPdf(event.target.files?.[0] || null)} /></label>
-        </form>}
+          <label className="field"><span>{t("Replacement XML")} {xml?.name}</span><input type="file" accept=".xml" onChange={(event) => setXml(event.target.files?.[0] || null)} /></label>
+          <label className="field"><span>{t("Replacement PDF")} {pdf?.name}</span><input type="file" accept=".pdf" onChange={(event) => setPdf(event.target.files?.[0] || null)} /></label>
+        </form></DraftPanel>}
       </Drawer>
     </section>
   );

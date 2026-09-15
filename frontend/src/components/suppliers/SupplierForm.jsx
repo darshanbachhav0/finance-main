@@ -412,6 +412,8 @@ export default function SupplierForm({
   representativeLookup = null,
   includeInitialBank = false,
   loading = false,
+  draftValue = null,
+  onDraftChange,
   onSubmit,
   onCancel
 }) {
@@ -426,7 +428,7 @@ export default function SupplierForm({
   ] =
     useState(
       () =>
-        initialValues(
+        draftValue?.form || initialValues(
           supplier,
           identifier,
           padronLookup
@@ -437,7 +439,7 @@ export default function SupplierForm({
     files,
     setFiles
   ] =
-    useState({});
+    useState(draftValue?.files || {});
 
   const [
     error,
@@ -450,7 +452,9 @@ export default function SupplierForm({
       ? padronLookup.data
       : null;
 
-  const editedFields = useRef(new Set());
+  const editedFields = useRef(new Set(draftValue?.form ? Object.keys(draftValue.form) : []));
+  useEffect(() => { onDraftChange?.({ form, files }); }, [form, files]);
+
   useEffect(() => {
     if (supplier || !padronLookup?.found) return;
     const values = initialValues(null, identifier, padronLookup);
@@ -777,7 +781,7 @@ export default function SupplierForm({
             form
               .accountHolderName,
 
-          currency:
+          accountCurrency:
             form
               .accountCurrency
         })
@@ -833,6 +837,7 @@ export default function SupplierForm({
       }
       noValidate
     >
+      {Object.values(files).filter(Boolean).length > 0 && <p className="draft-file-list">{t("Files attached")}: {Object.values(files).filter(Boolean).map(file => file.name).join(", ")}</p>}
       {
         error && (
           <div

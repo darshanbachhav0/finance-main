@@ -1,3 +1,4 @@
+import { mockWorkDrafts } from "./mockWorkDrafts.mjs";
 // Exercises the real request wizard with an isolated browser and mocked API.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -54,6 +55,7 @@ try {
     } else if (path === "/requests/saved") body = { data: savedRequest };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   });
+  await mockWorkDrafts(page, { resume: true });
   await page.addInitScript(({ user, form, lines, quotations }) => {
     if (localStorage.getItem("payment-test-initialized")) return;
     localStorage.setItem("payment-test-initialized", "true");
@@ -163,9 +165,9 @@ try {
   }
   await choose("Advance + Balance");
   await percentage.fill("33.33");
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem("erp_request_autosave_test-user_saved"))?.quotations[0].advancePercentage === "33.33");
+  await page.waitForFunction(async () => { const response = await fetch("http://127.0.0.1:5000/api/work-drafts"); return (await response.json()).data.some(draft => draft.value.quotations[0].advancePercentage === "33.33"); });
   await page.reload();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  // The item/quotation step is restored automatically.
   assert.equal(await percentage.inputValue(), "33.33");
   assert.equal(await slider.inputValue(), "33.33");
   await terms.getByRole("button", { name: "30%", exact: true }).click();
@@ -192,7 +194,7 @@ try {
 
   await page.evaluate(() => localStorage.setItem("erp_language", "es"));
   await page.reload();
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page.locator(".workflow-stepper button").nth(1).click();
   assert.equal(await terms.getByRole("radio", { name: "Adelanto + Saldo", exact: true }).isChecked(), true);
   assert.match(await preview.innerText(), /30% adelanto \+ 70% saldo/);
   for (const width of [768, 390, 320]) {

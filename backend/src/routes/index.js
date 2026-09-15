@@ -1,4 +1,5 @@
 import { Router } from "express";
+import workDraftRoutes from "./workDraftRoutes.js";
 import accountingRoutes from "./accountingRoutes.js";
 import auditRoutes from "./auditRoutes.js";
 import approvalRoutes from "./approvalRoutes.js";
@@ -31,6 +32,7 @@ import {
 } from "./masterDataRoutes.js";
 
 const router = Router();
+router.use("/work-drafts", workDraftRoutes);
 
 router.use("/auth", authRoutes);
 router.use("/dashboard", dashboardRoutes);

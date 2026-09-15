@@ -23,7 +23,8 @@
     "migrate:triple-track:apply": "node scripts/migrateTripleTrackWorkflow.js --apply",
     "sunat:padron:index": "node scripts/indexSunatPadron.js",
     "sunat:padron:sync": "node scripts/syncSunatPadron.js",
-    "sunat:padron:sync:force": "node scripts/syncSunatPadron.js --force"
+    "sunat:padron:sync:force": "node scripts/syncSunatPadron.js --force",
+    "test:drafts": "node test/workDrafts.test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import crypto from "node:crypto";
+import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
+import app from "../src/app.js";
+import User from "../src/models/User.js";
+import WorkDraft from "../src/models/WorkDraft.js";
+import FinancialRequest from "../src/models/FinancialRequest.js";
+import Notification from "../src/models/Notification.js";
+
+test("private drafts: ownership, encrypted attachments, atomic conflicts, retry, tombstones and no workflow effects", { timeout: 60000 }, async () => {
+  const db = `erp_work_drafts_test_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${db}`, { serverSelectionTimeoutMS: 5000 });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.on("listening", resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api/work-drafts`;
+  try {
+    const users = await User.create([{ name: "Draft owner", email: "draft-owner@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Other owner", email: "other@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: "Accounting" }]);
+    const token = index => jwt.sign({ id: users[index]._id }, process.env.JWT_SECRET || "dev_secret_change_me");
+    const call = async (path, method = "GET", body, index = 0) => {
+      const response = await fetch(`${base}${path}`, { method, headers: { Authorization: `Bearer ${token(index)}`, ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body) });
+      return { status: response.status, body: await response.json() };
+    };
+    const id = crypto.randomUUID();
+    const body = { scope: "supplier", recordId: "new", route: "/suppliers", title: "Supplier proposal", revision: 0, mutationId: crypto.randomUUID(), value: { identifier: "20123456789", form: { contactName: "Saved contact", bankAccount: "0123456789" } } };
+    let result = await call(`/${id}`, "PUT", body);
+    assert.equal(result.status, 200); assert.equal(result.body.data.revision, 1);
+    assert.equal((await call(`/${id}`, "PUT", body)).body.data.revision, 1, "Replay does not create a second revision");
+    assert.equal((await call(`/${id}`)).body.data.value.form.contactName, "Saved contact");
+    const stored = await WorkDraft.findById(id).select("+payload");
+    assert.equal(stored.payload.includes(Buffer.from("0123456789")), false, "Bank data is encrypted at rest");
+    assert.equal((await call(`/${id}`, "GET", undefined, 1)).status, 404);
+    assert.deepEqual((await call("", "GET", undefined, 1)).body.data, []);
+    assert.equal((await call(`/${id}`, "DELETE", undefined, 1)).status, 404);
+    assert.equal((await call(`/${id}`, "PUT", { ...body, revision: 1, mutationId: crypto.randomUUID() }, 1)).status, 409);
+    const writes = await Promise.all(["first tab", "second tab"].map(name => call(`/${id}`, "PUT", { ...body, revision: 1, mutationId: crypto.randomUUID(), value: { name } })));
+    assert.deepEqual(writes.map(row => row.status).sort(), [200, 409]);
+    const second = crypto.randomUUID();
+    assert.equal((await call(`/${second}`, "PUT", body)).status, 200, "Independent supplier drafts can coexist");
+    assert.equal((await call("?scope=supplier&recordId=new")).body.data.length, 2);
+    assert.equal((await call(`/${crypto.randomUUID()}`, "PUT", { ...body, value: { password: "do-not-store" } })).status, 422);
+    assert.equal((await call(`/${crypto.randomUUID()}`, "PUT", { ...body, scope: "employee-bank" }, 2)).status, 403);
+    assert.equal((await call(`/${crypto.randomUUID()}`, "PUT", { ...body, route: "//evil.example" })).status, 422);
+    const form = new FormData();
+    form.append("supporting", new Blob(["%PDF-1.7\nPrivate supplier document"], { type: "application/pdf" }), "supplier.pdf");
+    const upload = await call(`/${id}/files`, "POST", form);
+    assert.equal(upload.status, 200, JSON.stringify(upload));
+    const fileId = upload.body.data.__draftFile;
+    const fileUrl = `${base}/${id}/files/${fileId}`;
+    const document = await fetch(fileUrl, { headers: { Authorization: `Bearer ${token(0)}` } });
+    assert.equal(await document.text(), "%PDF-1.7\nPrivate supplier document");
+    assert.equal((await fetch(fileUrl, { headers: { Authorization: `Bearer ${token(1)}` } })).status, 404);
+    assert.equal((await fetch(`${base}/${second}/files/${fileId}`, { headers: { Authorization: `Bearer ${token(0)}` } })).status, 404);
+    const chunks = await mongoose.connection.db.collection("draftFiles.chunks").find().toArray();
+    assert.ok(chunks.length); assert.equal(chunks.some(chunk => Buffer.from(chunk.data.buffer).includes(Buffer.from("Private supplier document"))), false);
+    assert.equal((await call(`/${id}?revision=1`, "DELETE")).status, 409);
+    assert.equal((await call(`/${id}?revision=2`, "DELETE")).status, 200);
+    assert.equal((await call(`/${id}`)).status, 404);
+    assert.equal((await call(`/${id}`, "PUT", body)).status, 409, "Delayed requests cannot resurrect discarded drafts");
+    assert.equal(await mongoose.connection.db.collection("draftFiles.files").countDocuments(), 0);
+    assert.equal(await FinancialRequest.countDocuments(), 0);
+    assert.equal(await Notification.countDocuments(), 0);
+    assert.equal(await mongoose.connection.db.collection("suppliers").countDocuments(), 0);
+    assert.equal(await mongoose.connection.db.collection("budgetcommitments").countDocuments(), 0);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (mongoose.connection.name === db) await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});

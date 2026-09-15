@@ -159,7 +159,10 @@ function sanitizedDeclarations(value, current = {}) {
 
 function applyProposalFields(supplier, payload) {
   for (const field of proposalScalarFields) {
-    if (payload[field] !== undefined) supplier[field] = payload[field];
+    if (payload[field] !== undefined) {
+      // Person type is checked during homologation; an unfinished proposal may omit it.
+      supplier[field] = field === "personType" && payload[field] === "" ? undefined : payload[field];
+    }
   }
   for (const field of structuredProposalFields) {
     const value = parseStructuredValue(payload[field], field);
@@ -293,7 +296,7 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
   }
   const accountNumber = assertValidBankAccountNumber(payload.accountNumber || payload.bankAccount);
   const cci = assertValidCci(payload.cci, { required: requireCci });
-  const currency = payload.currency || supplier.currency || "PEN";
+  const currency = payload.accountCurrency || payload.currency || supplier.currency || "PEN";
   const accountHolderName = String(payload.accountHolderName || supplier.legalName || supplier.name || "").trim();
   if (!bank || !accountHolderName) {
     throw new AppError(422, "Bank and account-holder name are required.", { bank: Boolean(bank), accountHolderName: Boolean(accountHolderName) }, ERROR_CODES.VALIDATION_ERROR);

@@ -12,7 +12,10 @@
     "test:uma-ui": "node test/umaResponsive.browser.mjs",
     "test:supplier-ruc-ui": "node test/supplierRuc.browser.mjs",
     "test:request-item-ui": "node test/requestItemAmounts.browser.mjs",
-    "preview": "vite preview --host 0.0.0.0"
+    "test:notification-bell-ui": "node test/notificationBell.browser.mjs",
+    "test:budget-experience-ui": "node test/budgetExperience.browser.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:drafts-ui": "node test/workDrafts.browser.mjs"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.20",

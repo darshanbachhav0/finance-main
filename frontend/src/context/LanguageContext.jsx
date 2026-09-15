@@ -1,4 +1,5 @@
 import { budgetPlanningSpanish } from "../utils/budgetPlanningSpanish.js";
+import experienceSpanish from "./experienceSpanish.js";
 import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
@@ -260,6 +261,17 @@ const additionalSpanish = {
   Breadcrumbs: "Ruta de navegación",
   "Open task notifications": "Abrir notificaciones de tareas",
   "Tasks and alerts": "Tareas y alertas",
+  "{count} unread notifications": "{count} notificaciones sin leer",
+  "Pending tasks": "Tareas pendientes",
+  "No notifications yet.": "Todavía no hay notificaciones.",
+  "Some alerts could not be refreshed. Try again.": "No se pudieron actualizar algunas alertas. Inténtalo de nuevo.",
+  "Could not mark notifications as read. Try again.": "No se pudieron marcar las notificaciones como leídas. Inténtalo de nuevo.",
+  "Reimbursement bank profile awaiting review": "Perfil bancario de reembolso pendiente de revisión",
+  "Reimbursement bank profile reviewed": "Perfil bancario de reembolso revisado",
+  "Reimbursement bank profiles awaiting review": "Perfiles bancarios de reembolso pendientes de revisión",
+  "Supplier bank accounts awaiting review": "Cuentas bancarias de proveedores pendientes de revisión",
+  "Showing the bank profile linked from your notification.": "Mostrando el perfil bancario vinculado a tu notificación.",
+  "Show all profiles": "Mostrar todos los perfiles",
   "No pending tasks.": "No hay tareas pendientes.",
   Notifications: "Notificaciones",
   "Dismiss notification": "Descartar notificación",
@@ -1728,7 +1740,7 @@ const quotationPaymentSpanish = {
   "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish };
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish };
 
 const LanguageContext = createContext(null);
 

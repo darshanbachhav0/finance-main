@@ -1,3 +1,4 @@
+import { mockWorkDrafts } from "./mockWorkDrafts.mjs";
 // Real request wizard; isolated API fixtures. Database persistence is covered by requestPhase3.test.js.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -50,6 +51,7 @@ try {
     } else if (path === "/requests/saved") body = { data: saved };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   });
+  await mockWorkDrafts(page, { resume: true });
   await page.addInitScript(({ user, form, initialLine }) => {
     localStorage.setItem("erp_user", JSON.stringify(user));
     localStorage.setItem("erp_token", "isolated-test");
@@ -98,9 +100,9 @@ try {
   assert.equal(await second.getByRole("checkbox").isChecked(), true);
   assert.match(await page.locator(".request-items-total").innerText(), /3,550\.00/);
   await second.getByRole("button", { name: "Remove line 2" }).click();
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem("erp_request_autosave_item-user_new"))?.lines[0].priceIncludesIGV === false);
+  await page.waitForFunction(async () => { const response = await fetch("http://127.0.0.1:5000/api/work-drafts"); return (await response.json()).data.some(draft => draft.value.lines[0].priceIncludesIGV === false); });
   await page.reload();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  // The item/quotation step is restored automatically.
   assert.equal(await includes.isChecked(), false);
   assert.equal(await total.innerText(), "PEN 3,540.00");
   await page.locator(".official-line-list").screenshot({ path: `${output}/desktop.png` });

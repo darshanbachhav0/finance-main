@@ -8,6 +8,7 @@ import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
+import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBankAccount.js";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { budgetOverview } from "../services/budgetOverviewService.js";
@@ -65,6 +66,8 @@ async function buildTasks(user) {
     items.push({ key: "rendition", label: "Renditions outstanding", count: await FinancialRequest.countDocuments(query), path: "/requests?status=RENDICION_PENDIENTE", tone: "amber" });
   }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
+    items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: await EmployeeReimbursementBankAccount.countDocuments({ active: true, verificationStatus: "PENDING" }), path: "/reimbursement-bank?verificationStatus=PENDING", tone: "amber" });
+    items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: await SupplierBankAccount.countDocuments({ active: true, verificationStatus: "PENDING" }), path: "/suppliers", tone: "amber" });
     items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "teal" });
     items.push({ key: "suppliers", label: "Suppliers awaiting homologation", count: await Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }), path: "/suppliers", tone: "amber" });
     const missingDates = await missingExchangeRateDates();

@@ -25,8 +25,13 @@ export function errorHandler(error, _req, res, _next) {
   if (error.name === "ValidationError") {
     statusCode = 422;
     code = ERROR_CODES.VALIDATION_ERROR;
-    message = "Validation failed.";
     details = Object.values(error.errors).map((item) => ({ field: item.path, message: item.message }));
+    const labels = {
+      personType: "person type", currency: "currency",
+      "legalRepresentativeDocument.type": "representative document type",
+      "delivery.method": "delivery method", accountType: "bank account type"
+    };
+    message = `Please check the following fields: ${details.map(item => labels[item.field] || item.field).join(", ")}.`;
   }
 
   if (statusCode >= 500 && !error.isOperational) {

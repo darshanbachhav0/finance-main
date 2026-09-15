@@ -1,3 +1,4 @@
+import { useDraftResume } from "../hooks/useWorkDraft.js";
 import { AlertTriangle, CheckCircle2, RefreshCw, RotateCw, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -33,6 +34,8 @@ export default function BudgetControl() {
   const [confirm, setConfirm] = useState(null);
   const [error, setError] = useState("");
   const canDecide = ["Admin", "Budget"].includes(user.role);
+  useDraftResume("budget-plan", () => { if (canDecide) setWorkspace({ planId: null }); });
+  useDraftResume("budget-adjustment", id => { if (canDecide) setWorkspace({ planId: id }); });
   const allocationTable = usePaginatedResource("/budget/allocations", { fixedParams: { period } });
   const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: { period } });
   const commitmentTable = usePaginatedResource("/budget/commitments", { fixedParams: { period } });

@@ -1,3 +1,4 @@
+import { mockWorkDrafts } from "./mockWorkDrafts.mjs";
 // Real supplier form and representative service; isolated SUNAT/API fixtures.
 // No external requests or supplier writes are made by this regression suite.
 import assert from "node:assert/strict";
@@ -91,6 +92,7 @@ try {
     else if (path === "/dashboard/tasks") body = {};
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });
+  await mockWorkDrafts(page);
   await page.addInitScript(user => {
     localStorage.setItem("erp_token", "isolated-ruc-test");
     localStorage.setItem("erp_user", JSON.stringify(user));

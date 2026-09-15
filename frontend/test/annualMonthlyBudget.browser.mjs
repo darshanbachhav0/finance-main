@@ -1,3 +1,4 @@
+import { mockWorkDrafts } from "./mockWorkDrafts.mjs";
 // Real Budget controllers and MongoDB, using only a disposable test database.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -45,6 +46,7 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
   const runtimeErrors = [];
   page.on("pageerror", (error) => { runtimeErrors.push(error.message); console.error(error.message); });
+  await mockWorkDrafts(page);
   await page.addInitScript((user) => {
     localStorage.setItem("erp_user", JSON.stringify(user));
     localStorage.setItem("erp_token", "test-only");

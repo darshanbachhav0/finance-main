@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import { Eye, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import api from "../api/client.js";
@@ -48,6 +50,10 @@ export default function ResourceManager({
   const canDelete = allowDelete ?? !readOnly;
   const resourceTable = usePaginatedResource(endpoint);
   const { rows, loading } = resourceTable;
+  const draftScope = `resource:${endpoint.replace(/^\//, "")}`;
+  const draft = useWorkDraft({ scope: draftScope, recordId: editing?._id || "new", title, enabled: drawerOpen && (editing ? canEdit : canCreate), value: form, restore: data => setForm({ ...defaultValue(fields), ...data }), sourceVersion: editing?.updatedAt });
+  useDraftResume(draftScope, async id => { if (id === "new" && canCreate) startCreate(); else if (canEdit) { try { const response = await api.get(`${endpoint}/${id}`); startEdit(response.data.data); } catch (err) { setActionError(err.message); } } });
+
 
   function startCreate(initialValues = {}) {
     setEditing(null);
@@ -91,6 +97,7 @@ export default function ResourceManager({
   }
 
   async function performSubmit() {
+    if (!draft.ready || draft.status === "conflict") return;
     setSaving(true);
     setActionError("");
     try {
@@ -109,6 +116,7 @@ export default function ResourceManager({
       const response = editing
         ? await api.put(`${endpoint}/${editing._id}`, requestPayload, config)
         : await api.post(endpoint, requestPayload, config);
+      await draft.complete();
       notify(editing ? "Record updated." : "Record created.");
       for (const warning of response.data.warnings || []) notify(`${warning.code}: ${warning.supplierName || "Review the related record."}`, "warning");
       setDrawerOpen(false);
@@ -124,6 +132,7 @@ export default function ResourceManager({
   }
 
   function submit(event) {
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     if (!validate()) return;
     const confirmation = confirmSubmit?.(form, editing);
@@ -212,11 +221,12 @@ export default function ResourceManager({
         footer={
           <>
             <button type="button" className="secondary-button" onClick={() => setDrawerOpen(false)} disabled={saving}>{t("Cancel")}</button>
-            <button type="submit" form="resource-form" className="primary-button" disabled={saving}><Save size={16} /><span>{t(saving ? "Saving..." : editing ? "Update" : "Create")}</span></button>
+            <button type="submit" form="resource-form" className="primary-button" disabled={saving || !draft.ready || draft.status === "conflict"}><Save size={16} /><span>{t(saving ? "Saving..." : editing ? "Update" : "Create")}</span></button>
           </>
         }
       >
-        <form id="resource-form" className="form-grid" onSubmit={submit} noValidate>
+        <DraftPanel busy={saving} draft={draft} onDiscard={() => setDrawerOpen(false)}><form id="resource-form" className="form-grid" onSubmit={submit} noValidate>
+          {fields.some(field => field.type === "password") && <p>{t("Passwords are not saved in drafts. Enter them when creating or updating the user.")}</p>}
           {fields.map((field) => (
             <label key={field.name} className={`field${fieldErrors[field.name] ? " field-error" : ""}`}>
               <span>{t(field.label)}{field.required || (!editing && field.requiredOnCreate) ? " *" : ""}</span>
@@ -259,7 +269,7 @@ export default function ResourceManager({
               {field.hint && <small className="field-hint">{t(field.hint)}</small>}
             </label>
           ))}
-        </form>
+        </form></DraftPanel>
       </Drawer>
 
       <Drawer open={Boolean(detailRow)} title={detailsTitle} description={detailRow?.name || detailRow?.code || detailRow?.period} onClose={() => setDetailRow(null)}>

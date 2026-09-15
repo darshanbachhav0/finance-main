@@ -23,6 +23,7 @@ const employeeReimbursementBankAccountSchema = new mongoose.Schema(
     verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     verifiedAt: Date,
     verificationSource: { type: String, trim: true, default: "" },
+    verificationComments: { type: String, trim: true, default: "" },
     verificationDocument: { type: mongoose.Schema.Types.ObjectId },
     validFrom: { type: Date, default: Date.now },
     validTo: Date,

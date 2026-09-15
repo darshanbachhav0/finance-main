@@ -28,7 +28,12 @@ export async function resolveNotification(eventKey) {
 export async function listUserNotifications(userId, { unreadOnly = false, limit = 50 } = {}) {
   const query = { user: userId, resolvedAt: null };
   if (unreadOnly) query.readAt = null;
-  return Notification.find(query).sort({ createdAt: -1 }).limit(Math.min(100, Number(limit) || 50));
+  const pageSize = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 50));
+  return Notification.find(query).sort({ readAt: 1, createdAt: -1 }).limit(pageSize);
+}
+
+export async function countUnreadNotifications(userId) {
+  return Notification.countDocuments({ user: userId, resolvedAt: null, readAt: null });
 }
 
 export async function markNotificationRead(id, userId) {
@@ -38,4 +43,3 @@ export async function markNotificationRead(id, userId) {
 export async function markAllNotificationsRead(userId) {
   return Notification.updateMany({ user: userId, readAt: null, resolvedAt: null }, { $set: { readAt: new Date() } });
 }
-

@@ -1,0 +1,65 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import mongoose from "mongoose";
+import BudgetAllocation from "../src/models/BudgetAllocation.js";
+import BudgetCommitment from "../src/models/BudgetCommitment.js";
+import FinancialRequest from "../src/models/FinancialRequest.js";
+import CostCenter from "../src/models/CostCenter.js";
+import ExpenseType from "../src/models/ExpenseType.js";
+import ExchangeRate from "../src/models/ExchangeRate.js";
+import User from "../src/models/User.js";
+import { createBudgetPlan } from "../src/services/budgetPlanService.js";
+import { previewFinancialRequestBudget } from "../src/services/requestService.js";
+import { simulationSources, budgetBar } from "../../frontend/src/utils/budgetSimulation.js";
+
+test("budget simulator uses live annual/monthly limits and never writes a financial record", { timeout: 30000 }, async () => {
+  const db = `erp_budget_simulation_test_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${db}`, { serverSelectionTimeoutMS: 5000 });
+  try {
+    const center = await CostCenter.create({ code: "SIM", name: "Simulation", area: "Finance", active: true, budgetMode: "TRANSITIONAL" });
+    const expense = await ExpenseType.create({ code: "SIM-EXP", name: "Supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
+    const planner = await User.create({ name: "Planner", email: "planner@test.local", passwordHash: "unused", role: "Budget" });
+    const user = await User.create({ name: "Requester", email: "requester@test.local", passwordHash: "unused", role: "Solicitor", costCenter: center._id });
+    const plan = await createBudgetPlan({ year: "2036", planningMode: "ANNUAL_MONTHLY", costCenter: String(center._id), expenseType: String(expense._id), assignedAmount: 12000, distribution: "CUSTOM", months: [1000,2000,...Array(10).fill(0)], reason: "Test plan" }, planner, { headers: {} });
+    const annual = await createBudgetPlan({ year: "2037", planningMode: "ANNUAL_ONLY", costCenter: String(center._id), expenseType: String(expense._id), assignedAmount: 12000, reason: "Annual test plan" }, planner, { headers: {} });
+    const payload = { flowType: "A1", requestType: "OPEX", expenseNature: "GOODS", currency: "PEN", issueDate: "2036-01-05", accountingPeriod: "2036-01", lines: [1000,500].map((amount,index) => ({ itemDescription: "Test item", quantity: 1, unitOfMeasure: "UNIT", unitPrice: amount, priceIncludesIGV: true, costCenter: String(center._id), expenseType: String(expense._id), budgetItem: `item-${index}` })) };
+    const snapshot = JSON.stringify(await BudgetAllocation.find().lean());
+    const input = JSON.stringify(payload);
+    const simulate = scenario => previewFinancialRequestBudget({ payload: { ...payload, scenario }, user });
+    const base = await simulate();
+    assert.equal(base.totalRequested, 1500);
+    assert.equal(base.status, "INSUFFICIENT");
+    assert.equal(base.totalAvailable, 1000, "Shared budget is not counted twice");
+    assert.equal(simulationSources(base).length, 1);
+    assert.equal(simulationSources(base)[0].annualProjected, 10500);
+    assert.equal(simulationSources(base)[0].monthlyProjected, -500);
+    const lower = await simulate({ percentage: 50, period: "2036-01" });
+    assert.equal(lower.totalRequested, 750);
+    assert.equal(lower.status, "AVAILABLE");
+    assert.equal(simulationSources(lower)[0].monthlyProjected, 250);
+    const nextMonth = await simulate({ percentage: 100, period: "2036-02" });
+    assert.equal(simulationSources(nextMonth)[0].monthlyProjected, 500);
+    const annualPreview = await simulate({ percentage: 100, period: "2037-06" });
+    assert.equal(annualPreview.lines[0].monthlyAvailable, null);
+    assert.equal(annualPreview.lines[0].planningMode, "ANNUAL_ONLY");
+    assert.equal((await simulate({ percentage: 100, period: "2036-03" })).status, "INSUFFICIENT", "Zero allocation remains a real limit");
+    for (const percentage of [-1,0,301,"invalid"]) await assert.rejects(() => simulate({ percentage }), error => error.statusCode === 422);
+    await assert.rejects(() => simulate({ period: "2036-13" }), error => error.statusCode === 422);
+    await assert.rejects(() => previewFinancialRequestBudget({ payload, user: { role: "Solicitor", costCenter: new mongoose.Types.ObjectId() } }), error => error.statusCode === 403);
+    const usd = { ...payload, currency: "USD", exchangeRate: 99 };
+    assert.equal((await previewFinancialRequestBudget({ payload: usd, user })).reason, "EXCHANGE_RATE_MISSING");
+    await ExchangeRate.create({ currency: "USD", date: new Date("2036-01-05"), period: "2036-01", rate: 3.8 });
+    assert.equal((await previewFinancialRequestBudget({ payload: usd, user })).totalRequested, 5700, "Uses stored FX, not a forged client rate");
+    assert.equal(JSON.stringify(payload), input);
+    const tiny = await previewFinancialRequestBudget({ payload: { ...payload, lines: [{ ...payload.lines[0], unitPrice: 0.01 }], scenario: { percentage: 1 } }, user });
+    assert.equal(tiny.totalRequested, 0, "A scenario rounded to zero must not reuse the original line amount");
+    assert.equal(JSON.stringify(await BudgetAllocation.find().lean()), snapshot);
+    assert.equal(await BudgetCommitment.countDocuments(), 0);
+    assert.equal(await FinancialRequest.countDocuments(), 0);
+    assert.ok(plan && annual);
+    assert.deepEqual(budgetBar(100,150), { request: 100/150*100, remaining: 0, shortfall: 50/150*100 });
+  } finally {
+    if (mongoose.connection.name === db) await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});

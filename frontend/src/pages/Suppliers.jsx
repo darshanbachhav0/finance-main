@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import {
   Building2,
   Edit3,
@@ -431,6 +433,7 @@ export default function Suppliers() {
     id,
     mode = "view"
   ) {
+    if (mode === "edit") setEntry(null);
     setDrawer({
       open:
         true,
@@ -567,7 +570,34 @@ export default function Suppliers() {
     }
   }
 
+  const [entry, setEntry] = useState(null);
+  const supplierDraft = useWorkDraft({ scope: "supplier", recordId: drawer.mode === "edit" ? detail?._id || "new" : "new", title: "Supplier proposal", enabled: drawer.open && !loadingDetail && ["create", "edit"].includes(drawer.mode),
+    value: { identifier, lookup: { ...lookup, loading: false, representatives: { ...lookup.representatives, loading: false } }, entry, checkedAt: lookup.checked ? lookup.checkedAt || null : null },
+    restore: data => { if (!data) return; setIdentifier(data.identifier || ""); setLookup(data.lookup || freshLookupState()); setEntry(data.entry); }
+  });
+  useEffect(() => {
+    if (!supplierDraft.ready || !supplierDraft.restoration || !lookup.checked || !/^\d{11}$/.test(identifier)) return;
+    let active = true;
+    const ruc = identifier;
+    // Keep recovered fields visible; recheck duplicate status without resetting the form.
+    api.get(`/suppliers/lookup/${ruc}`, { timeout: 10000 }).then(response => {
+      if (active && response.data.found && drawer.mode === "create") setLookup(current => ({ ...current, result: response.data.data }));
+    }).catch(() => {}); // The submission endpoint also enforces RUC uniqueness.
+    if (!lookup.checkedAt || Date.now() - new Date(lookup.checkedAt).getTime() > 86400000) {
+      api.get(`/suppliers/padron/${ruc}`, { timeout: 10000 }).then(response => {
+        if (active) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
+      }).catch(() => {}); // Cached evidence remains labelled with its original date.
+    }
+    return () => { active = false; };
+  }, [supplierDraft.restoration, supplierDraft.ready]);
+  useDraftResume("supplier-bank", id => { void loadSupplier(id, "view"); });
+  useDraftResume("supplier-tax-review", id => { void loadSupplier(id, "view"); });
+  useDraftResume("supplier-finance-review", id => { void loadSupplier(id, "view"); });
+  useDraftResume("supplier-bank-review", id => { void loadSupplier(id.split("~")[0], "view"); });
+  useDraftResume("supplier", id => { if (!canPropose) return; if (id === "new") startCreate(); else void loadSupplier(id, "edit"); });
+
   function startCreate() {
+    setEntry(null);
     lookupSequence.current +=
       1;
 
@@ -787,6 +817,7 @@ export default function Suppliers() {
           .found
       ) {
         setLookup({
+          checkedAt: new Date().toISOString(),
           checked:
             true,
 
@@ -828,6 +859,7 @@ export default function Suppliers() {
         11
       ) {
         setLookup({
+          checkedAt: new Date().toISOString(),
           checked:
             true,
 
@@ -865,6 +897,7 @@ export default function Suppliers() {
        */
       setLookup({
         ...freshLookupState(),
+        checkedAt: new Date().toISOString(),
         checked: true,
         padron: { loading: true, ruc: normalized }
       });
@@ -887,6 +920,7 @@ export default function Suppliers() {
             .data;
 
         setLookup({
+          checkedAt: new Date().toISOString(),
           checked:
             true,
 
@@ -951,6 +985,7 @@ export default function Suppliers() {
         }
 
         setLookup({
+          checkedAt: new Date().toISOString(),
           checked:
             true,
 
@@ -1035,6 +1070,7 @@ export default function Suppliers() {
         "success"
       );
 
+      await supplierDraft.complete();
       suppliers.reload();
 
       const returnTo =
@@ -1105,6 +1141,7 @@ export default function Suppliers() {
     if (
       success
     ) {
+      await supplierDraft.complete();
       setDrawer(
         (
           current
@@ -1190,7 +1227,7 @@ export default function Suppliers() {
   }
 
   function requestFinanceReview(
-    review
+    review, onRecorded
   ) {
     const descriptions = {
       APPROVED:
@@ -1247,17 +1284,11 @@ export default function Suppliers() {
         }
       ],
 
-      action:
-        () =>
-          mutate(
-            () =>
-              api.post(
-                `/suppliers/${detail._id}/review`,
-                review
-              ),
-
-            "Finance review recorded."
-          )
+      action: async () => {
+        const success = await mutate(() => api.post(`/suppliers/${detail._id}/review`, review), "Finance review recorded.");
+        if (success) await onRecorded?.();
+        return success;
+      }
     });
   }
 
@@ -1491,6 +1522,9 @@ export default function Suppliers() {
             })
         }
       >
+        {drawer.open && ["create", "edit"].includes(drawer.mode) && <DraftPanel busy={saving} draft={supplierDraft} onDiscard={() => setDrawer({ open: false, mode: "view" })} />}
+        {drawer.mode === "create" && lookup.checkedAt && <p className="section-note">{t("SUNAT lookup last checked")}: {new Date(lookup.checkedAt).toLocaleString()}</p>}
+        <fieldset className="work-draft-fields" disabled={saving || (["create", "edit"].includes(drawer.mode) && (!supplierDraft.ready || supplierDraft.status === "conflict"))}>
         {
           drawer.mode ===
             "create" &&
@@ -1754,10 +1788,13 @@ export default function Suppliers() {
         {
           drawer.mode ===
             "create" &&
+          supplierDraft.ready &&
           lookup.checked &&
           !lookup.result && (
             <SupplierForm
-              key={`create-${identifier}`}
+              draftValue={entry}
+              onDraftChange={setEntry}
+              key={`create-${identifier}-${supplierDraft.restoration}`}
               identifier={
                 identifier
               }
@@ -1796,9 +1833,12 @@ export default function Suppliers() {
         {
           drawer.mode ===
             "edit" &&
+          supplierDraft.ready &&
           detail && (
             <SupplierForm
-              key={`edit-${detail._id}-${detail.updatedAt}`}
+              draftValue={entry}
+              onDraftChange={setEntry}
+              key={`edit-${detail._id}-${detail.updatedAt}-${supplierDraft.restoration}`}
               supplier={
                 detail
               }
@@ -1853,19 +1893,7 @@ export default function Suppliers() {
               loading={
                 saving
               }
-              onEdit={
-                () =>
-                  setDrawer(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-
-                      mode:
-                        "edit"
-                    })
-                  )
-              }
+              onEdit={() => { setEntry(null); setDrawer(current => ({ ...current, mode: "edit" })); }}
               onAddBank={
                 (bank) =>
                   mutate(
@@ -2067,6 +2095,7 @@ export default function Suppliers() {
             />
           )
         }
+        </fieldset>
       </Drawer>
 
       <ConfirmDialog

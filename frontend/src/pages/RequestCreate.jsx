@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import {
   AlertTriangle,
   BarChart3,
@@ -24,7 +26,7 @@ import SearchSelect from "../components/SearchSelect.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import QuotationPaymentTerms from "../components/QuotationPaymentTerms.jsx";
 import QuotationComparison from "../components/QuotationComparison.jsx";
-import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
+import BudgetRemainingSummary from "../components/BudgetRemainingSummary.jsx";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import WorkflowStepper from "../components/WorkflowStepper.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -153,6 +155,7 @@ export default function RequestCreate() {
   const [existingAttachments, setExistingAttachments] = useState([]);
   const [formPolicy, setFormPolicy] = useState({ documentRequirements: [], quotationPolicy: { enabled: false, minimumCount: 3 } });
   const [budgetPreview, setBudgetPreview] = useState({ status: "PENDING_VALIDATION", lines: [] });
+  const [budgetRefresh, setBudgetRefresh] = useState(0);
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
@@ -162,7 +165,8 @@ export default function RequestCreate() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [savedStatus, setSavedStatus] = useState("");
+  const [hydratedRecord, setHydratedRecord] = useState(null);
+  const [sourceVersion, setSourceVersion] = useState("");
   const validationFocusRef = useRef(null);
   useEffect(() => () => window.cancelAnimationFrame(validationFocusRef.current), []);
 
@@ -192,6 +196,7 @@ export default function RequestCreate() {
 
         if (requestResponse) {
           const request = requestResponse.data.data;
+          setSourceVersion(request.updatedAt || "");
           const owner = request.requester?._id || request.solicitor?._id;
           if (!['BORRADOR', 'RECHAZADO', 'OBSERVADO', 'OBSERVADO_PRESUPUESTO', 'OBSERVADO_SUNAT', 'OBSERVADO_MONTO_EXCEDIDO', 'OBSERVADO_CARGA_MASIVA', 'DEVUELTO'].includes(request.status) || (user.role !== "Admin" && owner !== user._id)) {
             navigate(`/requests/${id}`, { replace: true });
@@ -270,7 +275,6 @@ export default function RequestCreate() {
           setOpexFrequency(useLocal ? parsed.opexFrequency || request.opexDetails?.expenseFrequency || "ONE_OFF" : request.opexDetails?.expenseFrequency || "ONE_OFF");
           setLines((useLocal && parsed.lines?.length ? parsed.lines : serverLines).map(restoreEditorLine));
           setQuotations(useLocal ? parsed.quotations || serverQuotations : serverQuotations);
-          if (useLocal) setSavedStatus(t("Recovered local draft"));
           setExistingAttachments(request.attachments || []);
         } else {
           const localDraft = localStorage.getItem(draftKey);
@@ -285,7 +289,6 @@ export default function RequestCreate() {
             setOpexFrequency(parsed.opexFrequency || "ONE_OFF");
             setLines(parsed.lines?.length ? parsed.lines.map(restoreEditorLine) : [emptyLine()]);
             setQuotations(parsed.quotations || []);
-            setSavedStatus(t("Recovered local draft"));
           } else {
             const defaultCenter = supplierId(user.costCenter) || nextMasters.costCenters[0]?._id || "";
             setForm((current) => ({ ...current, requesterCostCenter: defaultCenter, schoolOrDepartment: user.area || "" }));
@@ -303,6 +306,7 @@ export default function RequestCreate() {
           notify("Supplier proposal linked to the request quotation.", "success");
           navigate(location.pathname, { replace: true, state: null });
         }
+        setHydratedRecord(id || "new");
         setHydrated(true);
       } catch (err) {
         setError(err.message);
@@ -335,44 +339,41 @@ export default function RequestCreate() {
     return () => { active = false; };
   }, [form.flowType, form.requestType, form.expenseNature, hydrated]);
 
-  useEffect(() => {
-    if (!hydrated) return undefined;
-    setSavedStatus(t("Saving locally..."));
-    const timer = window.setTimeout(() => {
-      localStorage.setItem(draftKey, JSON.stringify({ form, capex, opexFrequency, lines, quotations, savedAt: new Date().toISOString() }));
-      setSavedStatus(`${t("Saved locally")} - ${new Date().toLocaleTimeString(language === "es" ? "es-PE" : "en-US", { hour: "2-digit", minute: "2-digit" })}`);
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [form, capex, opexFrequency, lines, quotations, hydrated, draftKey, language]);
+  const draft = useWorkDraft({ scope: "request", recordId: id || "new", title: "Financial request", enabled: hydrated && !loading && hydratedRecord === (id || "new"), sourceVersion,
+    value: { form, capex, opexFrequency, lines, quotations, files, quotationFiles, step, maxStep, completedSteps },
+    restore: data => { if (!data) return; setForm(data.form); setCapex(data.capex); setOpexFrequency(data.opexFrequency); setLines(data.lines.map(restoreEditorLine)); setQuotations(data.quotations); setFiles(data.files || Object.fromEntries(documentDefinitions.map(item => [item.key, []]))); setQuotationFiles(data.quotationFiles || {}); setStep(data.step || 0); setMaxStep(data.maxStep || 0); setCompletedSteps(data.completedSteps || []); }
+  });
+  useEffect(() => { if (draft.ready) void draft.flush(); }, [step]);
+  useEffect(() => { if (draft.status === "saved") localStorage.removeItem(draftKey); }, [draft.status, draftKey]);
+
+  const budgetPayload = useMemo(() => ({
+    flowType: form.flowType, requestType: form.requestType, expenseNature: form.expenseNature,
+    issueDate: form.issueDate, accountingPeriod: form.accountingPeriod, currency: form.currency,
+    project: form.requestType === "CAPEX" ? capex.projectPep || masters.projects.find(item => item._id === capex.projectId)?.code : undefined,
+    lines: lines.map(requestLinePayload)
+  }), [form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, capex.projectPep, capex.projectId, masters.projects, lines]);
 
   useEffect(() => {
     if (!hydrated || !form.accountingPeriod || lines.some((line) => !line.costCenter || !line.expenseType || !(Number(line.totalAmount) > 0))) {
       setBudgetPreview({ status: "PENDING_VALIDATION", lines: [] });
+      setBudgetLoading(false);
       return undefined;
     }
     let active = true;
+    setBudgetLoading(true);
     const timer = window.setTimeout(async () => {
       setBudgetLoading(true);
       try {
-        const response = await api.post("/requests/budget-preview", {
-          flowType: form.flowType,
-          requestType: form.requestType,
-          expenseNature: form.expenseNature,
-          issueDate: form.issueDate,
-          accountingPeriod: form.accountingPeriod,
-          currency: form.currency,
-          project: form.requestType === "CAPEX" ? capex.projectPep || masters.projects.find(item => item._id === capex.projectId)?.code : undefined,
-          lines: lines.map(requestLinePayload)
-        });
+        const response = await api.post("/requests/budget-preview", budgetPayload, { timeout: 15000 });
         if (active) setBudgetPreview(response.data.data);
       } catch (err) {
-        if (active) setBudgetPreview({ status: "PENDING_VALIDATION", reason: err.code, lines: [] });
+        if (active) setBudgetPreview({ status: "PENDING_VALIDATION", reason: err.code, errorMessage: err.message, lines: [] });
       } finally {
         if (active) setBudgetLoading(false);
       }
     }, 500);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [hydrated, form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, capex.projectPep, capex.projectId, masters.projects, lines]);
+  }, [hydrated, budgetPayload, budgetRefresh]);
 
   const selectedSupplier = masters.suppliers.find((supplier) => supplier._id === form.supplier);
   const officialRequest = form.flowType === "A1" && officialTypes.has(form.requestType);
@@ -524,6 +525,7 @@ export default function RequestCreate() {
   }
 
   async function save(sendForApproval) {
+    if (!draft.ready || draft.status === "conflict") return;
     const validations = [0, 1, 2].map((index) => validationForStep(index, sendForApproval));
     const firstInvalid = validations.findIndex((item) => Object.keys(item).length);
     if (firstInvalid >= 0) {
@@ -566,6 +568,7 @@ export default function RequestCreate() {
       const response = isEditing
         ? await api.put(`/requests/${id}`, data, { headers: { "Content-Type": "multipart/form-data" } })
         : await api.post("/requests", data, { headers: { "Content-Type": "multipart/form-data" } });
+      await draft.complete();
       localStorage.removeItem(draftKey);
       notify(sendForApproval ? "Request submitted for approval." : isEditing ? "Draft request updated." : "Draft request created.");
       navigate(`/requests/${response.data.data._id}`);
@@ -585,8 +588,9 @@ export default function RequestCreate() {
     <PageHeader
       title={isEditing ? "Edit request" : "Create request"}
       description="RCO-FOR-001 request information, commercial comparison, and existing financial controls in one workflow."
-      actions={<span className="autosave-status" role="status"><FileCheck2 size={15} />{savedStatus || t("Autosave ready")}</span>}
+      actions={null}
     />
+    <DraftPanel busy={saving} draft={draft} onDiscard={() => { localStorage.removeItem(draftKey); navigate("/requests"); }}>
     <Message type="error">{error}</Message>
     <div className="request-wizard official-request-wizard">
       <WorkflowStepper steps={steps} current={step} completedSteps={completedSteps} maxAccessible={maxStep} onSelect={(next) => next <= maxStep && setStep(next)} />
@@ -664,7 +668,7 @@ export default function RequestCreate() {
             <label className="field"><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => setForm((current) => ({ ...current, supplierSelectionReason: event.target.value }))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
 
-          <div className="official-subsection budget-preview"><div className="section-heading"><div><h3>{t("Budget preview")}</h3><p>{t("Read-only result from the existing Budget service. No funds are reserved here.")}</p></div>{budgetLoading ? <RefreshCw className="spin" size={18} /> : <StatusBadge status={budgetPreview.status} />}</div>{budgetPreview.lines?.length ? <div className="budget-preview-lines">{budgetPreview.lines.map((item, index) => <div key={`${item.costCenter}-${item.expenseType}-${index}`}><div><strong>{item.costCenterSnapshot?.code || t("Pending validation")}</strong><span>{item.budgetItem || t("No budget item")}</span></div><span>{t("Requested")}: PEN {money(item.amount)}</span><span>{t("Available")}: {item.available === undefined ? "-" : `PEN ${money(item.available)}`}</span><span>{t("Projected")}: {item.projectedBalance === undefined ? "-" : `PEN ${money(item.projectedBalance)}`}</span><StatusBadge status={item.status} /><BudgetLimitSummary line={item} /></div>)}</div> : <div className="empty-inline"><BarChart3 size={20} /><span>{t("Complete the accounting dimensions to calculate the budget preview.")}</span></div>}</div>
+          <BudgetRemainingSummary payload={budgetPayload} preview={budgetPreview} loading={budgetLoading} onRefresh={() => setBudgetRefresh(value => value + 1)} expenseTypes={masters.expenseTypes} />
         </div>}
 
         {step === 2 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Supporting documents")}</h3><p>{t("Quotation evidence is attached to each supplier above; other configured evidence is uploaded here.")}</p></div></div><div className="document-requirement required"><FileText size={20} /><div><strong>{t("Mandatory document checklist")}</strong><p>{formPolicy.documentRequirements.length ? formPolicy.documentRequirements.map((rule) => `${t(rule.labelKey)} x ${rule.minCount}`).join(" - ") : t("No additional configured evidence for this classification.")}</p></div></div><div className="document-grid">{documentDefinitions.map((document) => {
@@ -679,5 +683,6 @@ export default function RequestCreate() {
         <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => setStep((current) => Math.max(0, current - 1))}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{step < 3 ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit for approval")}</span></button>}</div></footer>
       </div>
     </div>
+    </DraftPanel>
   </section>;
 }

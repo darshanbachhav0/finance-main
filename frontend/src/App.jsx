@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
+import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
 
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
@@ -28,16 +29,7 @@ const BulkInvoiceUpload = lazy(() => import("./pages/BulkInvoiceUpload.jsx"));
 const InvoiceObservations = lazy(() => import("./pages/InvoiceObservations.jsx"));
 
 function RouteFallback() {
-  return (
-    <div className="route-loading" role="status" aria-live="polite">
-      <span className="skeleton skeleton-heading" />
-      <span className="skeleton skeleton-line" />
-      <div className="skeleton-table">
-        {Array.from({ length: 6 }, (_, index) => <span className="skeleton skeleton-row" key={index} />)}
-      </div>
-      <span className="sr-only">Loading...</span>
-    </div>
-  );
+  return <div className="route-loading"><WorkspaceSkeleton /></div>;
 }
 
 export default function App() {

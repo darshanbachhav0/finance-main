@@ -18,7 +18,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
-    if (response.config?.method && response.config.method.toLowerCase() !== "get") {
+    if (response.config?.method && response.config.method.toLowerCase() !== "get" && !response.config.url?.endsWith("/budget-preview") && !response.config.url?.startsWith("/work-drafts")) {
       window.dispatchEvent(new CustomEvent("erp:tasks-changed"));
     }
     return response;

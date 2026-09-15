@@ -16,8 +16,11 @@ import {
 } from "recharts";
 import { useId, useMemo } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import useMediaQuery from "../hooks/useMediaQuery.js";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 const palette = ["#c91545", "#45404e", "#19733d", "#d18a00", "#2463a6", "#7a5ca3", "#667581", "#b4232c"];
+const darkPalette = ["#ff789a", "#bcb4ca", "#78d49b", "#edc06a", "#91beef", "#ba9fe9", "#a9bbc8", "#ff909b"];
 
 function ExactTooltip({ active, payload, label, valueFormatter, t }) {
   if (!active || !payload?.length) return null;
@@ -62,28 +65,36 @@ export default function AnalyticsChart({
   compact = false
 }) {
   const { t } = useLanguage();
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const { theme } = useTheme();
+  const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
+  const dark = theme === "dark" || theme === "system" && systemDark;
+  const colors = dark ? darkPalette : palette;
   const titleId = useId();
-  const chartSeries = series.map((item) => ({ ...item, label: t(item.label), color: ({ "#087c75": "#c91545", "#17344c": "#45404e" })[item.color] || item.color }));
-  const chartData = useMemo(() => data.map((row, index) => ({ ...row, fill: row.fill || palette[index % palette.length] })), [data]);
+  const chartSeries = series.map((item) => {
+    const color = ({ "#087c75": "#c91545", "#17344c": "#45404e" })[item.color] || item.color;
+    return { ...item, label: t(item.label), color: dark && palette.includes(color) ? darkPalette[palette.indexOf(color)] : color };
+  });
+  const chartData = useMemo(() => data.map((row, index) => ({ ...row, fill: row.fill || colors[index % colors.length] })), [data, colors]);
   const common = { data: chartData, margin: horizontal ? { top: 8, right: 16, left: 20, bottom: 4 } : { top: 8, right: 10, left: 0, bottom: 4 }, accessibilityLayer: true };
   const tooltip = <Tooltip cursor={{ fill: "rgba(12, 27, 42, 0.045)" }} content={<ExactTooltip valueFormatter={valueFormatter} t={t} />} />;
 
   function renderChart() {
     if (type === "donut") {
-      return <PieChart accessibilityLayer><Pie data={chartData} dataKey={series[0].key} nameKey={xKey} innerRadius="54%" outerRadius="80%" paddingAngle={2} stroke="#fff" strokeWidth={2} onClick={(entry) => onDrillDown?.(entry)} />{tooltip}<Legend verticalAlign="bottom" iconType="circle" iconSize={8} /></PieChart>;
+      return <PieChart accessibilityLayer><Pie isAnimationActive={!reduceMotion} animationDuration={220} data={chartData} dataKey={series[0].key} nameKey={xKey} innerRadius="54%" outerRadius="80%" paddingAngle={2} stroke="#fff" strokeWidth={2} onClick={(entry) => onDrillDown?.(entry)} />{tooltip}<Legend verticalAlign="bottom" iconType="circle" iconSize={8} /></PieChart>;
     }
     if (type === "line") {
-      return <LineChart {...common}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey={xKey} tickLine={false} axisLine={false} minTickGap={24} /><YAxis tickLine={false} axisLine={false} width={54} />{tooltip}<Legend iconType="circle" iconSize={8} />{chartSeries.map((item, index) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color || palette[index]} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4, onClick: (_, event) => onDrillDown?.(event?.payload) }} />)}</LineChart>;
+      return <LineChart {...common}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey={xKey} tickLine={false} axisLine={false} minTickGap={24} /><YAxis tickLine={false} axisLine={false} width={54} />{tooltip}<Legend iconType="circle" iconSize={8} />{chartSeries.map((item, index) => <Line isAnimationActive={!reduceMotion} animationDuration={220} key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color || colors[index]} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4, onClick: (_, event) => onDrillDown?.(event?.payload) }} />)}</LineChart>;
     }
     if (type === "area") {
-      return <AreaChart {...common}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey={xKey} tickLine={false} axisLine={false} minTickGap={24} /><YAxis tickLine={false} axisLine={false} width={54} />{tooltip}<Legend iconType="circle" iconSize={8} />{chartSeries.map((item, index) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color || palette[index]} fill={item.fill || `${item.color || palette[index]}24`} strokeWidth={2} activeDot={{ r: 4, onClick: (_, event) => onDrillDown?.(event?.payload) }} />)}</AreaChart>;
+      return <AreaChart {...common}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey={xKey} tickLine={false} axisLine={false} minTickGap={24} /><YAxis tickLine={false} axisLine={false} width={54} />{tooltip}<Legend iconType="circle" iconSize={8} />{chartSeries.map((item, index) => <Area isAnimationActive={!reduceMotion} animationDuration={220} key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color || colors[index]} fill={item.fill || `${item.color || colors[index]}24`} strokeWidth={2} activeDot={{ r: 4, onClick: (_, event) => onDrillDown?.(event?.payload) }} />)}</AreaChart>;
     }
     return <BarChart {...common} layout={horizontal ? "vertical" : "horizontal"} barCategoryGap={compact ? "24%" : "16%"}>
       <CartesianGrid strokeDasharray="3 3" horizontal={!horizontal} vertical={horizontal} />
       {horizontal ? <><XAxis type="number" tickLine={false} axisLine={false} /><YAxis type="category" dataKey={xKey} tickLine={false} axisLine={false} width={92} /></> : <><XAxis dataKey={xKey} tickLine={false} axisLine={false} minTickGap={20} /><YAxis tickLine={false} axisLine={false} width={54} /></>}
       {tooltip}
       {series.length > 1 && <Legend iconType="circle" iconSize={8} />}
-      {chartSeries.map((item, index) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId={item.stackId} fill={item.color || palette[index]} radius={horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={38} onClick={(entry) => onDrillDown?.(entry?.payload || entry)} />)}
+      {chartSeries.map((item, index) => <Bar isAnimationActive={!reduceMotion} animationDuration={220} key={item.key} dataKey={item.key} name={item.label} stackId={item.stackId} fill={item.color || colors[index]} radius={horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={38} onClick={(entry) => onDrillDown?.(entry?.payload || entry)} />)}
     </BarChart>;
   }
 

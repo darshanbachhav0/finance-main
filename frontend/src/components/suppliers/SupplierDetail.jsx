@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume } from "../../hooks/useWorkDraft.js";
+import DraftPanel from "../DraftPanel.jsx";
 import {
   AlertTriangle,
   Building2,
@@ -91,26 +93,35 @@ export default function SupplierDetail({
   const provider = supplier.sunatProvider || { state: "NOT_CONFIGURED", configured: false };
   const homologationDisabledReason = readiness?.issues?.[0]?.message || "";
 
+  const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: setBankForm });
+  const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canReview && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
+  const financeDraft = useWorkDraft({ scope: "supplier-finance-review", recordId: supplier._id, title: "Supplier Finance review", enabled: permissions.canReview, value: financeReview, restore: setFinanceReview, sourceVersion: supplier.updatedAt });
+  const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canReview && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
+  useDraftResume("supplier-bank-review", id => { const account = supplier.bankAccounts?.find(row => row._id === id.split("~")[1]); if (account) setReviewAccount(account); });
+  useDraftResume("supplier-bank", () => setShowBankForm(true));
+
   async function submitBank(event) {
     event.preventDefault();
-    await onAddBank(bankForm);
-    setShowBankForm(false);
+    if (!bankDraft.ready || bankDraft.status === "conflict") return;
+    if (await onAddBank(bankForm)) { await bankDraft.complete(); setShowBankForm(false); }
   }
 
   async function submitBankReview(event) {
     event.preventDefault();
-    await onReviewBank(reviewAccount, bankReview);
-    setReviewAccount(null);
+    if (!bankReviewDraft.ready || bankReviewDraft.status === "conflict") return;
+    if (await onReviewBank(reviewAccount, bankReview)) { await bankReviewDraft.complete(); setReviewAccount(null); }
   }
 
   async function submitTax(event) {
     event.preventDefault();
-    await onTaxValidation(taxForm);
+    if (!taxDraft.ready || taxDraft.status === "conflict") return;
+    if (await onTaxValidation(taxForm)) await taxDraft.complete();
   }
 
   async function submitFinanceReview(event) {
     event.preventDefault();
-    await onFinanceReview(financeReview);
+    if (!financeDraft.ready || financeDraft.status === "conflict") return;
+    await onFinanceReview(financeReview, () => financeDraft.complete());
   }
 
   return (
@@ -179,7 +190,7 @@ export default function SupplierDetail({
         actions={permissions.canAddBankAccount && <button type="button" className="secondary-button compact-button" onClick={() => setShowBankForm((current) => !current)}><Plus size={15} /><span>{t("Add bank account")}</span></button>}
       >
         {showBankForm && (
-          <form className="supplier-inline-form" onSubmit={submitBank}>
+          <DraftPanel busy={loading} draft={bankDraft} onDiscard={() => setShowBankForm(false)}><form className="supplier-inline-form" onSubmit={submitBank}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Bank")}</span><select value={bankForm.bank} onChange={(event) => setBankForm((current) => ({ ...current, bank: event.target.value }))}>{["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
               <label className="field"><span>{t("Account Type")}</span><select value={bankForm.accountType} onChange={(event) => setBankForm((current) => ({ ...current, accountType: event.target.value }))}><option value="CURRENT">{t("CURRENT")}</option><option value="DETRACTION">{t("DETRACTION")}</option></select></label>
@@ -190,7 +201,7 @@ export default function SupplierDetail({
             </div>
             {bankForm.accountType === "DETRACTION" && <p className="section-note warning-note">{t("Detraction accounts must use Banco de la Nacion. This does not classify the supplier as subject to detraction.")}</p>}
             <div className="inline-form-actions"><button type="button" className="secondary-button" onClick={() => setShowBankForm(false)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Add pending account")}</span></button></div>
-          </form>
+          </form></DraftPanel>
         )}
 
         <div className="supplier-bank-list">
@@ -212,7 +223,7 @@ export default function SupplierDetail({
         </div>
 
         {reviewAccount && (
-          <form className="supplier-inline-form" onSubmit={submitBankReview}>
+          <DraftPanel busy={loading} draft={bankReviewDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitBankReview}>
             <div className="inline-form-heading"><div><strong>{t("Finance bank review")}</strong><small>{reviewAccount.bank} · {reviewAccount.accountNumber}</small></div><button type="button" className="icon-button quiet" onClick={() => setReviewAccount(null)} aria-label={t("Close bank review")}><X size={16} /></button></div>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Verification Status")}</span><select value={bankReview.verificationStatus} onChange={(event) => setBankReview((current) => ({ ...current, verificationStatus: event.target.value }))}>{["VERIFIED", "OBSERVED", "REJECTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
@@ -221,7 +232,7 @@ export default function SupplierDetail({
             </div>
             <p className="section-note">{t("The verification source is recorded as an authorized manual review. No external bank verification is claimed.")}</p>
             <div className="inline-form-actions"><button type="submit" className="primary-button" disabled={loading}><UserCheck size={15} /><span>{t("Record bank review")}</span></button></div>
-          </form>
+          </form></DraftPanel>
         )}
       </Section>
 
@@ -257,7 +268,7 @@ export default function SupplierDetail({
           <Detail label="Validated By" value={supplier.taxpayerValidation?.validatedBy?.name} />
         </DetailGrid>
         {permissions.canReview && provider.state === "MANUAL" && (
-          <form className="supplier-inline-form" onSubmit={submitTax}>
+          <DraftPanel busy={loading} draft={taxDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitTax}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Manual validation result")}</span><select value={String(taxForm.valid)} onChange={(event) => setTaxForm((current) => ({ ...current, valid: event.target.value === "true" }))}><option value="true">{t("Valid")}</option><option value="false">{t("Invalid")}</option></select></label>
               <label className="field"><span>{t("Returned / reviewed RUC")}</span><input value={taxForm.returnedIdentifier} onChange={(event) => setTaxForm((current) => ({ ...current, returnedIdentifier: event.target.value }))} /></label>
@@ -266,7 +277,7 @@ export default function SupplierDetail({
             </div>
             <p className="section-note">{t("This records an authorized manual validation and does not claim live SUNAT verification.")}</p>
             <div className="inline-form-actions"><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Record taxpayer validation")}</span></button></div>
-          </form>
+          </form></DraftPanel>
         )}
       </Section>
 
@@ -278,13 +289,13 @@ export default function SupplierDetail({
           <Detail label="Review Comments" value={supplier.complianceReview?.comments} />
         </DetailGrid>
         {permissions.canReview && (
-          <form className="supplier-inline-form" onSubmit={submitFinanceReview}>
+          <DraftPanel busy={loading} draft={financeDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitFinanceReview}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Finance Review Result")}</span><select value={financeReview.result} onChange={(event) => setFinanceReview((current) => ({ ...current, result: event.target.value }))}>{["PENDING", "APPROVED", "OBSERVED", "REJECTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
               <label className="field field-span-2"><span>{t("Review Comments")}</span><textarea rows="3" value={financeReview.comments} onChange={(event) => setFinanceReview((current) => ({ ...current, comments: event.target.value }))} /></label>
             </div>
             <div className="inline-form-actions"><button type="submit" className={financeReview.result === "REJECTED" ? "danger-button" : "primary-button"} disabled={loading}><Save size={15} /><span>{t("Record Finance review")}</span></button></div>
-          </form>
+          </form></DraftPanel>
         )}
       </Section>
 

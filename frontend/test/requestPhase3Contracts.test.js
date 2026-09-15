@@ -10,7 +10,7 @@ test("RCO-FOR-001 extends the existing request wizard instead of introducing a p
   const page = source("../src/pages/RequestCreate.jsx");
   assert.match(page, /export default function RequestCreate/);
   assert.doesNotMatch(page, /FinancialRequestV2|OfficialRequest|CAPEXRequest|OPEXRequest/);
-  for (const section of ["General information", "Item / service breakdown", "Supplier quotations", "Budget preview", "Review and submit"]) {
+  for (const section of ["General information", "Item / service breakdown", "Supplier quotations", "BudgetRemainingSummary", "Review and submit"]) {
     assert.ok(page.includes(section), `Missing ${section}`);
   }
 });
@@ -49,7 +49,7 @@ test("budget preview uses the backend service endpoint and sends no client-owned
   assert.match(page, /requests\/budget-preview/);
   assert.doesNotMatch(page, /budgetStatus:/);
   assert.doesNotMatch(page, /budgetCommitment:/);
-  assert.match(page, /No funds are reserved here/);
+  assert.match(source("../src/components/BudgetRemainingSummary.jsx"), /No funds are reserved here/);
 });
 
 test("Request Detail exposes approver-visible official fields, quotations, supplier status, and budget preview", () => {

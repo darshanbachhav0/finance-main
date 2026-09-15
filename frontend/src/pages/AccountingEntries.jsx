@@ -1,3 +1,5 @@
+import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import { Download, Eye, FileCheck2, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -82,6 +84,9 @@ export default function AccountingEntries() {
     }
   }
 
+  const draft = useWorkDraft({ scope: "fiscal", recordId: selectedRequest?._id || "new", title: "Fiscal processing", enabled: Boolean(selectedRequest), value: fiscalForm, restore: setFiscalForm, sourceVersion: selectedRequest?.updatedAt });
+  useDraftResume("fiscal", async id => { try { const response = await api.get(`/requests/${id}`); openFiscalProcessing(response.data.data); } catch (err) { setActionError(err.message); } });
+
   function openFiscalProcessing(request) {
     const documentDate = request.issueDate?.slice(0, 10) || "";
     setSelectedRequest(request);
@@ -89,10 +94,12 @@ export default function AccountingEntries() {
   }
 
   async function processRequest(event) {
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
     try {
       await api.post(`/accounting/requests/${selectedRequest._id}/process`, fiscalForm);
+      await draft.complete();
       notify("Fiscal document validated and account payable created.");
       setSelectedRequest(null);
       load();
@@ -186,9 +193,9 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <Drawer open={Boolean(selectedRequest)} title="Process account payable" description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : "Validate and create CXP")}</span></button></>}>
+      <Drawer open={Boolean(selectedRequest)} title="Process account payable" description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : "Validate and create CXP")}</span></button></>}>
         <div className="document-requirement required"><FileCheck2 size={20} /><div><strong>{t("Fiscal duplicate control")}</strong><p>{t("The system blocks repeated RUC + document type + series + number combinations.")}</p></div></div>
-        <form id="fiscal-processing-form" className="form-grid two-column-form" onSubmit={processRequest}>
+        <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelectedRequest(null)}><form id="fiscal-processing-form" className="form-grid two-column-form" onSubmit={processRequest}>
           <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option>FACTURA</option><option>BOLETA</option><option>RXH</option><option>NOTA_CREDITO</option></select></label>
           <label className="field"><span>{t("Series")} *</span><input required value={fiscalForm.series} onChange={(event) => setFiscalForm({ ...fiscalForm, series: event.target.value.toUpperCase() })} /></label>
           <label className="field"><span>{t("Document number")} *</span><input required value={fiscalForm.number} onChange={(event) => setFiscalForm({ ...fiscalForm, number: event.target.value })} /></label>
@@ -199,7 +206,7 @@ export default function AccountingEntries() {
           <label className="field"><span>{t("Account number")} *</span><input required value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("The posting account is still validated against the configured mapping.")}</small></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>
-        </form>
+        </form></DraftPanel>
       </Drawer>
     </section>
   );

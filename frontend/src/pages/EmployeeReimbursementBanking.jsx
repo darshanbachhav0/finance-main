@@ -1,5 +1,8 @@
+import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
+import DraftPanel from "../components/DraftPanel.jsx";
 import { BadgeCheck, Landmark, Pencil, Plus, Power, Star } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -18,6 +21,9 @@ export default function EmployeeReimbursementBanking() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { notify } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const recordId = searchParams.get("record");
+  const pendingFilter = searchParams.get("verificationStatus") === "PENDING";
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -28,6 +34,9 @@ export default function EmployeeReimbursementBanking() {
   const [confirm, setConfirm] = useState(null);
   const canManage = ["Admin", "Solicitor"].includes(user.role);
   const canReview = ["Admin", "Accounting"].includes(user.role);
+  const draft = useWorkDraft({ scope: "employee-bank", recordId: editing?._id || "new", title: "Reimbursement bank profile", enabled: drawer && canManage, value: form, restore: setForm, sourceVersion: editing?.updatedAt });
+  useDraftResume("employee-bank", async id => { if (!canManage) return; if (id === "new") openForm(); else { const response = await api.get("/employee-bank-accounts"); const row = response.data.data.find(item => item._id === id); if (row) openForm(row); else setError("The original bank profile is no longer available."); } });
+
 
   async function load() {
     setLoading(true);
@@ -47,11 +56,13 @@ export default function EmployeeReimbursementBanking() {
   }
 
   async function save(event) {
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
     try {
       if (editing) await api.patch(`/employee-bank-accounts/${editing._id}`, form);
       else await api.post("/employee-bank-accounts", form);
+      await draft.complete();
       notify(editing ? "Bank facts changed. The historical profile was retained and a new pending profile was created." : "Reimbursement bank profile created for Finance review.");
       setDrawer(false);
       await load();
@@ -86,21 +97,22 @@ export default function EmployeeReimbursementBanking() {
   return <section>
     <PageHeader title="Employee Reimbursement Banking" description="Protected employee payment destinations, verification, preference, and retained history." actions={canManage && <button type="button" className="primary-button" onClick={() => openForm()}><Plus size={16} />{t("Add bank profile")}</button>} />
     <Message type="error">{error}</Message>
+    {recordId && <div className="inline-actions"><p>{t("Showing the bank profile linked from your notification.")}</p><button type="button" className="text-button" onClick={() => setSearchParams({})}>{t("Show all profiles")}</button></div>}
     <div className="workspace-panel"><div className="section-heading"><div><h3>{t("Reimbursement bank profiles")}</h3><p>{t(user.role === "Treasury" ? "Read-only payment-destination access for Treasury operations." : "New and changed profiles remain pending until authorized manual Finance review.")}</p></div><Landmark size={20} /></div>
-      <DataTable tableId="employee-reimbursement-banking" rows={rows} loading={loading} rowActions={actions} filters={[{ key: "verificationStatus", label: "Verification", options: ["PENDING", "VERIFIED", "OBSERVED", "REJECTED"] }, { key: "active", label: "Status", options: [{ value: true, label: "Active" }, { value: false, label: "Inactive" }] }]} columns={[
+      <DataTable key={`${recordId || "all"}-${pendingFilter}`} tableId="employee-reimbursement-banking" rows={recordId ? rows.filter((row) => row._id === recordId) : rows} initialFilters={pendingFilter ? { verificationStatus: "PENDING", active: true } : {}} loading={loading} rowActions={actions} filters={[{ key: "verificationStatus", label: "Verification", options: ["PENDING", "VERIFIED", "OBSERVED", "REJECTED"] }, { key: "active", label: "Status", options: [{ value: true, label: "Active" }, { value: false, label: "Inactive" }] }]} columns={[
         { key: "user", label: "Employee", getValue: (row) => row.user?.name || "", render: (row) => <div className="primary-cell"><strong>{row.user?.name || user.name}</strong><span>{row.user?.employeeCode || user.employeeCode}</span></div> },
         { key: "bank", label: "Bank" },
         { key: "currency", label: "Currency" },
         { key: "accountNumberMasked", label: "Account Number", render: (row) => <span className="mono-reference">{row.accountNumberMasked || "-"}</span> },
         { key: "cciMasked", label: "CCI", render: (row) => <span className="mono-reference">{row.cciMasked || "-"}</span> },
-        { key: "verificationStatus", label: "Verification", render: (row) => <StatusBadge status={row.verificationStatus} /> },
+        { key: "verificationStatus", label: "Verification", render: (row) => <div><StatusBadge status={row.verificationStatus} />{row.verificationComments && <p>{row.verificationComments}</p>}</div> },
         { key: "preferred", label: "Preferred", render: (row) => row.preferred ? <Star size={16} className="text-warning" /> : "-" },
         { key: "active", label: "Status", render: (row) => <StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} /> },
         { key: "validFrom", label: "Valid From", render: (row) => row.validFrom?.slice(0, 10) || "-" }
       ]} />
     </div>
-    <Drawer open={drawer} title={editing ? "Change reimbursement bank facts" : "Add reimbursement bank profile"} description={editing ? "Changing verified facts retains the old profile and creates a new pending version." : "Only Finance/Admin can set verification status."} onClose={() => !processing && setDrawer(false)} footer={<><button type="button" className="secondary-button" onClick={() => setDrawer(false)} disabled={processing}>{t("Cancel")}</button><button type="submit" form="employee-bank-form" className="primary-button" disabled={processing}>{t(processing ? "Saving..." : "Save profile")}</button></>}>
-      <form id="employee-bank-form" className="form-grid two-column-form" onSubmit={save}><label className="field"><span>{t("Bank")} *</span><select required value={form.bank} onChange={(event) => setForm({ ...form, bank: event.target.value })}>{banks.map((bank) => <option key={bank} value={bank}>{t(bank)}</option>)}</select></label><label className="field"><span>{t("Currency")} *</span><select required value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field form-span-two"><span>{t("Account holder name")} *</span><input required value={form.accountHolderName} onChange={(event) => setForm({ ...form, accountHolderName: event.target.value })} /></label><label className="field"><span>{t("Account Number")} *</span><input required inputMode="numeric" value={form.accountNumber} onChange={(event) => setForm({ ...form, accountNumber: event.target.value })} /></label><label className="field"><span>{t("CCI")} *</span><input required inputMode="numeric" minLength="20" maxLength="24" value={form.cci} onChange={(event) => setForm({ ...form, cci: event.target.value })} /><small className="field-hint">{t("CCI must contain exactly 20 digits after formatting is removed.")}</small></label>{!editing && <label className="checkbox-row form-span-two"><input type="checkbox" checked={form.preferred} onChange={(event) => setForm({ ...form, preferred: event.target.checked })} /><span>{t("Use as preferred account for new reimbursements")}</span></label>}</form>
+    <Drawer open={drawer} title={editing ? "Change reimbursement bank facts" : "Add reimbursement bank profile"} description={editing ? "Changing verified facts retains the old profile and creates a new pending version." : "Only Finance/Admin can set verification status."} onClose={() => !processing && setDrawer(false)} footer={<><button type="button" className="secondary-button" onClick={() => setDrawer(false)} disabled={processing}>{t("Cancel")}</button><button type="submit" form="employee-bank-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}>{t(processing ? "Saving..." : "Save profile")}</button></>}>
+      <DraftPanel busy={processing} draft={draft} onDiscard={() => setDrawer(false)}><form id="employee-bank-form" className="form-grid two-column-form" onSubmit={save}><label className="field"><span>{t("Bank")} *</span><select required value={form.bank} onChange={(event) => setForm({ ...form, bank: event.target.value })}>{banks.map((bank) => <option key={bank} value={bank}>{t(bank)}</option>)}</select></label><label className="field"><span>{t("Currency")} *</span><select required value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value })}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field form-span-two"><span>{t("Account holder name")} *</span><input required value={form.accountHolderName} onChange={(event) => setForm({ ...form, accountHolderName: event.target.value })} /></label><label className="field"><span>{t("Account Number")} *</span><input required inputMode="numeric" value={form.accountNumber} onChange={(event) => setForm({ ...form, accountNumber: event.target.value })} /></label><label className="field"><span>{t("CCI")} *</span><input required inputMode="numeric" minLength="20" maxLength="24" value={form.cci} onChange={(event) => setForm({ ...form, cci: event.target.value })} /><small className="field-hint">{t("CCI must contain exactly 20 digits after formatting is removed.")}</small></label>{!editing && <label className="checkbox-row form-span-two"><input type="checkbox" checked={form.preferred} onChange={(event) => setForm({ ...form, preferred: event.target.checked })} /><span>{t("Use as preferred account for new reimbursements")}</span></label>}</form></DraftPanel>
     </Drawer>
     <ConfirmDialog open={Boolean(confirm)} {...confirm} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={runConfirm} />
   </section>;
