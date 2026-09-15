@@ -97,6 +97,7 @@ try {
   await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.goto("http://127.0.0.1:5194/reimbursement-bank");
+  await page.locator(".row-details summary").first().click();
   await page.getByText("******1234", { exact: true }).first().waitFor();
   await page.screenshot({ animations: "disabled", path: `${output}/banking-dark.png`, fullPage: true });
   await page.getByRole("button", { name: "Add bank profile", exact: true }).click();

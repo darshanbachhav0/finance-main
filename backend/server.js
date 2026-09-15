@@ -2,10 +2,7 @@ import "dotenv/config";
 
 import { connectDB } from "./src/config/db.js";
 
-import {
-  ensureSunatPadron,
-  startSunatPadronAutoRefresh
-} from "./src/services/sunatPadronService.js";
+import { getSunatPadronStatus } from "./src/services/sunatPadronService.js";
 
 import app from "./src/app.js";
 
@@ -50,21 +47,8 @@ connectDB()
     if (
       usesPublicPadron
     ) {
-      const manifest =
-        await ensureSunatPadron();
-
-      console.log(
-        `[SUNAT PADRON] Active dataset: ${
-          manifest.datasetDate ||
-          "date not reported"
-        } (${Number(
-          manifest.rows || 0
-        ).toLocaleString(
-          "en-US"
-        )} RUC rows)`
-      );
-
-      startSunatPadronAutoRefresh();
+      const status = await getSunatPadronStatus();
+      console.log(status.ready ? `[SUNAT PADRON] Local dataset ready (${status.manifest.datasetDate || "date unavailable"}). Updates run separately.` : "[SUNAT PADRON] No local dataset. Manual proposals remain available; taxpayer validation is pending.");
     }
 
     app.listen(

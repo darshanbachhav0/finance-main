@@ -1,3 +1,4 @@
+import padronRoutes from "./padronRoutes.js";
 import { Router } from "express";
 import workDraftRoutes from "./workDraftRoutes.js";
 import accountingRoutes from "./accountingRoutes.js";
@@ -32,6 +33,7 @@ import {
 } from "./masterDataRoutes.js";
 
 const router = Router();
+router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);
 
 router.use("/auth", authRoutes);

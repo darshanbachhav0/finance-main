@@ -1,0 +1,10 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/package.json
+COPY frontend/package.json frontend/package.json
+RUN npm ci --omit=dev --workspace backend
+COPY backend backend
+COPY shared shared
+ENV SUNAT_PADRON_DATA_DIR=/var/lib/uma/sunat-padron
+CMD ["node", "backend/scripts/padronWorker.js"]

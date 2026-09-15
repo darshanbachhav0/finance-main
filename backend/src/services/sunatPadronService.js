@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
+import { Transform } from "node:stream";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
@@ -68,10 +70,19 @@ function baseDir() {
 }
 
 function currentDir() {
-  return path.join(
-    baseDir(),
-    "current"
-  );
+  try {
+    const pointer = JSON.parse(fs.readFileSync(path.join(baseDir(), "active.json"), "utf8"));
+    if (/^next-[0-9]+-[0-9]+$/.test(pointer.directory)) return path.join(baseDir(), pointer.directory);
+  } catch {}
+  const local = path.join(baseDir(), "current");
+  const legacy = process.env.SUNAT_PADRON_LEGACY_DIR;
+  return !fs.existsSync(path.join(local, "manifest.json")) && legacy ? path.join(path.resolve(legacy), "current") : local;
+}
+
+async function syncStatus(update) {
+  let previous = {};
+  try { previous = JSON.parse(await fsp.readFile(path.join(baseDir(), "sync-status.json"), "utf8")); } catch {}
+  await writeJson(path.join(baseDir(), "sync-status.json"), { ...previous, ...update, updatedAt: nowIso() });
 }
 
 function currentChunksDir() {
@@ -295,37 +306,18 @@ function parsePadronLine(line) {
 
 async function readManifest() {
   try {
-    return JSON.parse(
-      await fsp.readFile(
-        manifestPath(),
-        "utf8"
-      )
-    );
-  } catch {
-    return null;
-  }
+    const directory = currentDir();
+    const manifest = JSON.parse(await fsp.readFile(path.join(directory, "manifest.json"), "utf8"));
+    Object.defineProperty(manifest, "localDirectory", { value: directory });
+    return manifest;
+  } catch { return null; }
 }
 
-async function writeJson(
-  filePath,
-  value
-) {
-  await fsp.mkdir(
-    path.dirname(filePath),
-    {
-      recursive: true
-    }
-  );
-
-  await fsp.writeFile(
-    filePath,
-    `${JSON.stringify(
-      value,
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
+async function writeJson(filePath, value) {
+  await fsp.mkdir(path.dirname(filePath), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.tmp`;
+  await fsp.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await fsp.rename(temporary, filePath);
 }
 
 function ageMs(value) {
@@ -404,15 +396,11 @@ function isAcceptablyStale(
   );
 }
 
-function datasetExists(
-  manifest
-) {
-  return Boolean(
-    manifest?.rows > 0 &&
-      fs.existsSync(
-        currentChunksDir()
-      )
-  );
+function datasetExists(manifest) {
+  const chunks = path.join(manifest?.localDirectory || currentDir(), "chunks");
+  if (!(manifest?.rows > 0) || !fs.existsSync(chunks)) return false;
+  if (manifest.chunkFiles) return manifest.chunkFiles.every(file => /^\d{3}\.txt$/.test(file) && fs.existsSync(path.join(chunks, file)) && fs.existsSync(path.join(chunks, `${file}.ruc-index`)));
+  return fs.readdirSync(chunks).some(file => /^\d{3}\.txt$/.test(file));
 }
 
 async function fetchWithTimeout(
@@ -645,17 +633,24 @@ async function downloadPadronZip({
     }
   );
 
+  const checksum = createHash("sha256");
+  const hashing = new Transform({ transform(chunk, _encoding, callback) { checksum.update(chunk); callback(null, chunk); } });
+  await syncStatus({ phase: "DOWNLOADING", rows: 0 });
   await pipeline(
     Readable.fromWeb(
       response.body
     ),
-    fs.createWriteStream(
-      temp
-    )
+    hashing,
+    fs.createWriteStream(temp),
+    { signal: AbortSignal.timeout(positiveNumber(env("SUNAT_PADRON_DOWNLOAD_TIMEOUT_MS"), 15 * 60_000)) }
   );
 
-  const stat =
-    await fsp.stat(temp);
+  const stat = await fsp.stat(temp);
+  const sha256 = checksum.digest("hex");
+  if (!force && previousManifest?.sha256 === sha256 && datasetExists(previousManifest)) {
+    await fsp.unlink(temp);
+    return { changed: false, datasetDate, reason: "checksum-unchanged" };
+  }
 
   const minimumZipBytes =
     positiveNumber(
@@ -704,6 +699,7 @@ async function downloadPadronZip({
 
   return {
     changed: true,
+    sha256,
     datasetDate,
     url,
 
@@ -816,6 +812,12 @@ async function buildChunksFromZip({
   let headerLine = "";
   let currentPrefix = "";
   let currentStream = null;
+  let batch = "";
+  async function flushBatch() {
+    if (!batch) return;
+    const data = batch; batch = "";
+    await new Promise((resolve, reject) => currentStream.write(data, "utf8", error => error ? reject(error) : resolve()));
+  }
 
   try {
     for await (
@@ -855,18 +857,14 @@ async function buildChunksFromZip({
         }
       }
 
-      const record =
-        parsePadronLine(
-          line
-        );
-
-      if (!record) {
+      const ruc = line.slice(0, 11);
+      if (!/^\d{11}$/.test(ruc) || line[11] !== "|") {
         skipped += 1;
         continue;
       }
 
       const prefix =
-        record.ruc.slice(
+        ruc.slice(
           0,
           CHUNK_PREFIX_LENGTH
         );
@@ -875,9 +873,8 @@ async function buildChunksFromZip({
         prefix !==
         currentPrefix
       ) {
-        await closeWriteStream(
-          currentStream
-        );
+        await flushBatch();
+        await closeWriteStream(currentStream);
 
         currentPrefix =
           prefix;
@@ -895,29 +892,8 @@ async function buildChunksFromZip({
           );
       }
 
-      if (
-        !currentStream.write(
-          `${line}\n`,
-          "utf8"
-        )
-      ) {
-        await new Promise(
-          (
-            resolve,
-            reject
-          ) => {
-            currentStream.once(
-              "drain",
-              resolve
-            );
-
-            currentStream.once(
-              "error",
-              reject
-            );
-          }
-        );
-      }
+      batch += `${line}\n`;
+      if (batch.length >= 256 * 1024) await flushBatch();
 
       rowCount += 1;
 
@@ -926,6 +902,7 @@ async function buildChunksFromZip({
           500_000 ===
         0
       ) {
+        await syncStatus({ phase: "INDEXING", rows: rowCount });
         console.log(
           `[SUNAT PADRON] Indexed ${rowCount.toLocaleString(
             "en-US"
@@ -934,9 +911,8 @@ async function buildChunksFromZip({
       }
     }
   } finally {
-    await closeWriteStream(
-      currentStream
-    );
+    await flushBatch();
+    await closeWriteStream(currentStream);
 
     lines.close();
   }
@@ -954,10 +930,20 @@ async function buildChunksFromZip({
     );
   }
 
+  const previous = await readManifest();
+  const minimumRows = positiveNumber(env("SUNAT_PADRON_MIN_ROWS"), 100000);
+  const minimumRatio = positiveNumber(env("SUNAT_PADRON_MIN_ROW_RATIO"), 0.8);
+  if (rowCount < minimumRows || (previous?.rows && rowCount < previous.rows * minimumRatio)) {
+    throw new Error("SUNAT dataset contains unexpectedly few records; active data was preserved.");
+  }
+
   // Prepare exact byte-offset indexes before publishing a new dataset.
+  await syncStatus({ phase: "BUILDING_SEARCH_INDEX", rows: rowCount });
   await preparePadronIndexes(chunksDir);
 
   const manifest = {
+    sha256: downloadMeta?.sha256,
+    chunkFiles: (await fsp.readdir(chunksDir)).filter(file => /^\d{3}\.txt$/.test(file)),
     provider:
       "SUNAT_PUBLIC_PADRON_RUC",
 
@@ -1033,65 +1019,14 @@ async function buildChunksFromZip({
   return manifest;
 }
 
-async function activateStaging(
-  stagingDir
-) {
-  const live =
-    currentDir();
-
-  const previous =
-    path.join(
-      baseDir(),
-      "previous"
-    );
-
-  await fsp.rm(
-    previous,
-    {
-      recursive: true,
-      force: true
-    }
-  );
-
-  if (
-    fs.existsSync(live)
-  ) {
-    await fsp.rename(
-      live,
-      previous
-    );
+async function activateStaging(stagingDir) {
+  // Readers retain the generation they opened. Publishing changes only a small pointer.
+  const manifest = JSON.parse(await fsp.readFile(path.join(stagingDir, "manifest.json"), "utf8"));
+  if (!manifest.rows || !manifest.chunkFiles?.length) throw new Error("Incomplete PadrÛn generation");
+  for (const file of manifest.chunkFiles) {
+    if (!(await fsp.stat(path.join(stagingDir, "chunks", `${file}.ruc-index`))).size) throw new Error("Missing RUC index");
   }
-
-  try {
-    await fsp.rename(
-      stagingDir,
-      live
-    );
-
-    await fsp.rm(
-      previous,
-      {
-        recursive: true,
-        force: true
-      }
-    );
-  } catch (error) {
-    if (
-      !fs.existsSync(
-        live
-      ) &&
-      fs.existsSync(
-        previous
-      )
-    ) {
-      await fsp.rename(
-        previous,
-        live
-      );
-    }
-
-    throw error;
-  }
+  await writeJson(path.join(baseDir(), "active.json"), { directory: path.basename(stagingDir), activatedAt: nowIso() });
 }
 
 async function touchManifest(
@@ -1226,13 +1161,14 @@ async function releaseCrossProcessLock(
 }
 
 async function syncInternal({
-  force = false
+  force = false,
+  check = false
 } = {}) {
   const before =
     await readManifest();
 
   if (
-    !force &&
+    !force && !check &&
     datasetExists(before) &&
     isFresh(before)
   ) {
@@ -1243,15 +1179,16 @@ async function syncInternal({
     };
   }
 
-  const lockHandle =
-    await acquireCrossProcessLock();
+  const lockHandle = await acquireCrossProcessLock();
+  const heartbeat = setInterval(() => { const now = new Date(); void lockHandle.utimes(now, now).catch(() => {}); }, 30000);
+  heartbeat.unref();
 
   try {
     const current =
       await readManifest();
 
     if (
-      !force &&
+      !force && !check &&
       datasetExists(
         current
       ) &&
@@ -1268,13 +1205,19 @@ async function syncInternal({
       "[SUNAT PADRON] Checking official public Padr√≥n Reducido..."
     );
 
-    const downloadMeta =
-      await downloadPadronZip({
-        previousManifest:
-          current,
-
-        force
-      });
+    let downloadMeta;
+    if (!force) {
+      try {
+        const pending = JSON.parse(await fsp.readFile(path.join(baseDir(), "download-meta.json"), "utf8"));
+        if (Date.now() - new Date(pending.savedAt).getTime() < 86400000) {
+          const hash = createHash("sha256");
+          for await (const chunk of fs.createReadStream(downloadPath())) hash.update(chunk);
+          if (hash.digest("hex") === pending.sha256) downloadMeta = pending;
+        }
+      } catch {}
+    }
+    downloadMeta ||= await downloadPadronZip({ previousManifest: current, force });
+    if (downloadMeta.changed) await writeJson(path.join(baseDir(), "download-meta.json"), { ...downloadMeta, savedAt: nowIso() });
 
     if (
       !downloadMeta.changed &&
@@ -1293,6 +1236,7 @@ async function syncInternal({
           }
         );
 
+      await syncStatus({ phase: "READY", lastSuccessAt: nowIso(), changed: false, error: null });
       console.log(
         `[SUNAT PADRON] Dataset is current${
           updated?.datasetDate
@@ -1336,6 +1280,8 @@ async function syncInternal({
       stagingDir
     );
 
+    await syncStatus({ phase: "READY", lastSuccessAt: nowIso(), changed: true, rows: manifest.rows, error: null });
+    await fsp.unlink(path.join(baseDir(), "download-meta.json")).catch(() => {});
     memoryCache.clear();
 
     console.log(
@@ -1354,6 +1300,7 @@ async function syncInternal({
       cached: false
     };
   } catch (error) {
+    await syncStatus({ phase: "FAILED", error: error.message, failedAt: nowIso() });
     const fallback =
       await readManifest();
 
@@ -1388,6 +1335,7 @@ async function syncInternal({
 
     throw error;
   } finally {
+    clearInterval(heartbeat);
     await releaseCrossProcessLock(
       lockHandle
     );
@@ -1483,13 +1431,12 @@ export async function lookupSunatPadronRuc(
 
   // Proposal prefill must never wait for a full dataset refresh or its process lock.
   // Financial validation retains its existing refresh/fallback policy.
-  const manifest = localOnly ? await readManifest() : await ensureSunatPadron();
-  if (localOnly && !isFresh(manifest)) refreshForLookup();
+  const manifest = await readManifest();
 
   if (
     !datasetExists(
       manifest
-    ) || (localOnly && !isFresh(manifest) && !isAcceptablyStale(manifest))
+    ) || (!isFresh(manifest) && !isAcceptablyStale(manifest))
   ) {
     throw new AppError(
       503,
@@ -1502,12 +1449,12 @@ export async function lookupSunatPadronRuc(
 
   // Check the dataset generation before returning cached records, including after
   // an external sync process has replaced the files or the dataset has expired.
-  const cacheKey = `${currentDir()}:${manifest.generatedAt}:${ruc}`;
+  const cacheKey = `${manifest.localDirectory}:${manifest.generatedAt}:${ruc}`;
   if (memoryCache.has(cacheKey)) return { ...memoryCache.get(cacheKey), manifest };
 
   const chunkFile =
     path.join(
-      currentChunksDir(),
+      path.join(manifest.localDirectory, "chunks"),
       `${ruc.slice(
         0,
         manifest.chunkPrefixLength || CHUNK_PREFIX_LENGTH
@@ -1554,7 +1501,17 @@ export async function getSunatPadronStatus() {
   const manifest =
     await readManifest();
 
+  let synchronization = {};
+  try { synchronization = JSON.parse(await fsp.readFile(path.join(baseDir(), "sync-status.json"), "utf8")); } catch {}
+  let worker = {};
+  try { worker = JSON.parse(await fsp.readFile(path.join(baseDir(), "worker-state.json"), "utf8")); } catch {}
+  try {
+    const stat = await fsp.stat(path.join(baseDir(), "worker.lock"));
+    worker.running = Date.now() - stat.mtimeMs < 60000;
+  } catch { worker.running = false; }
   return {
+    worker,
+    synchronization,
     configured: true,
 
     ready:
@@ -1622,3 +1579,22 @@ export const sunatPadronInternals =
     parseDatasetDateFromHtml,
     normalizedRuc
   });
+
+export async function pruneSunatPadronGenerations() {
+  const root = path.resolve(baseDir());
+  const active = path.resolve(currentDir());
+  const entries = [];
+  for (const name of await fsp.readdir(root)) {
+    if (!/^next-[0-9]+-[0-9]+$/.test(name)) continue;
+    const target = path.resolve(root, name);
+    if (path.dirname(target) !== root || target === active) continue;
+    const stat = await fsp.lstat(target);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) continue;
+    entries.push({ target, mtime: stat.mtimeMs });
+  }
+  entries.sort((a,b)=>b.mtime-a.mtime);
+  // Keep two previous generations and a seven-day grace period for readers/rollback.
+  for (const entry of entries.slice(2)) {
+    if (Date.now()-entry.mtime > 7*86400000) await fsp.rm(entry.target,{recursive:true,force:true});
+  }
+}

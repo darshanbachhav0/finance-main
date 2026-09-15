@@ -1,3 +1,4 @@
+import PadronStatus from "../components/PadronStatus.jsx";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Navigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
@@ -118,6 +119,7 @@ export default function MasterConfiguration() {
   const config = configs[resource];
 
   return <section>
+    {user.role === "Admin" && <PadronStatus />}
     <Message type="error">{error}</Message>
     <nav className="section-tabs" aria-label={t("Configuration sections")}>{visibleEntries.map(([key, item]) => <NavLink key={key} to={`/configuration/${key}`}>{t(item.label)}</NavLink>)}</nav>
     <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" />

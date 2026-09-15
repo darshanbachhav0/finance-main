@@ -74,7 +74,8 @@ set "COUNT_FILE=%TEMP%\uma_finance_user_count.txt"
 
 set "JWT_FILE=%PROJECT_DIR%.uma-local-jwt-secret"
 
-set "SUNAT_PADRON_DATA_DIR=%PROJECT_DIR%backend\data\sunat-padron"
+if not defined SUNAT_PADRON_DATA_DIR set "SUNAT_PADRON_DATA_DIR=%LOCALAPPDATA%\UMA Finance\sunat-padron"
+set "SUNAT_PADRON_LEGACY_DIR=%PROJECT_DIR%backend\data\sunat-padron"
 
 
 cd /d "%PROJECT_DIR%"
@@ -444,27 +445,12 @@ rem ============================================================
 rem STEP 4 - SUNAT PUBLIC PADRON
 rem ============================================================
 
-echo [4/9] Synchronizing official SUNAT public Padron...
+echo [4/9] Starting background SUNAT updater...
+echo       UMA uses the existing local RUC index immediately.
+echo       Updates and first-time preparation run in a separate process.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%backend\scripts\startPadronWorker.ps1" -ProjectDir "%PROJECT_DIR%." -DataDir "%SUNAT_PADRON_DATA_DIR%"
+if errorlevel 1 echo WARNING: SUNAT updater could not start. Check the administrator status panel.
 echo.
-echo       This uses SUNAT public data.
-echo       No SUNAT client_id or client_secret is required.
-echo.
-echo       First synchronization may take several minutes.
-echo       Please do not close this window.
-echo.
-
-
-call npm run sunat:padron:sync
-
-
-if errorlevel 1 goto :SUNAT_PADRON_ERROR
-
-
-echo.
-echo       SUNAT Public Padron is ready.
-echo.
-
-
 
 rem ============================================================
 rem STEP 5 - DATABASE

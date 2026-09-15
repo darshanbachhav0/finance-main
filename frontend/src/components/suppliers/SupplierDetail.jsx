@@ -1,3 +1,4 @@
+import SectionNavigation from "../SectionNavigation.jsx";
 import useWorkDraft, { useDraftResume } from "../../hooks/useWorkDraft.js";
 import DraftPanel from "../DraftPanel.jsx";
 import {
@@ -33,6 +34,7 @@ function sectionId(title) { return `supplier-section-${title.toLowerCase().repla
 
 function Section({ icon: Icon, title, status, actions, children }) {
   const { t } = useLanguage();
+  if (/Audit \/ History/.test(title)) return <details className="supplier-detail-section" id={sectionId(title)}><summary>{t(title)}</summary>{children}</details>;
   return (
     <section className="supplier-detail-section" id={sectionId(title)}>
       <header>
@@ -145,9 +147,9 @@ export default function SupplierDetail({
         </div>
       </div>
 
-      <nav className="supplier-section-nav" aria-label={t("Supplier sections")}>
+      <SectionNavigation className="supplier-section-nav" aria-label={t("Supplier sections")}>
         {["Legal Identification", "Banking Information", "Mandatory Documents", "Homologation Readiness", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
-      </nav>
+      </SectionNavigation>
       {permissions.canReview && supplier.homologationStatus !== "INACTIVE" && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier checks and homologation readiness." : "Review the outstanding supplier requirements.")}</p></div><a className="secondary-button" href={`#${sectionId("Homologation Readiness")}`}>{t("Review requirements")}</a></div>}
 
       <Section icon={Building2} title="Legal Identification" status={supplier.proposalJustification ? "Registration justification recorded" : "Registration justification missing"}>

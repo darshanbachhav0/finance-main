@@ -24,7 +24,11 @@
     "sunat:padron:index": "node scripts/indexSunatPadron.js",
     "sunat:padron:sync": "node scripts/syncSunatPadron.js",
     "sunat:padron:sync:force": "node scripts/syncSunatPadron.js --force",
-    "test:drafts": "node test/workDrafts.test.js"
+    "test:drafts": "node test/workDrafts.test.js",
+    "sunat:padron:worker": "node scripts/padronWorker.js",
+    "sunat:padron:bootstrap": "node scripts/padronWorker.js --once",
+    "sunat:padron:status": "node scripts/padronStatus.js",
+    "test:padron-deployment": "node test/padronDeployment.test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -62,6 +62,8 @@ export default function DataTable({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileCards, setMobileCards] = useState(true);
   const scrollRef = useRef(null);
+  const primaryColumns = columns.filter((column, index) => index < 2 || column.primary === true || /amount|total|status|action|supplier|beneficiary/i.test(column.key));
+  const secondaryColumns = columns.filter(column => !primaryColumns.includes(column));
   const [scrolls, setScrolls] = useState(false);
   useEffect(() => {
     const element = scrollRef.current;
@@ -202,7 +204,7 @@ export default function DataTable({
   }
 
   return (
-    <div aria-busy={loading} className={`data-table density-${density} ${controls && mobileCards ? "mobile-cards" : ""} ${className}`.trim()}>
+    <div aria-busy={loading} className={`data-table density-${density} ${mobileCards ? "mobile-cards" : ""} ${className}`.trim()}>
       {controls && (
         <div className="table-toolbar">
           <div className="table-toolbar-primary">
@@ -235,6 +237,8 @@ export default function DataTable({
           <div className="table-toolbar-actions">
             <button type="button" className="secondary-button mobile-table-toggle" aria-pressed={mobileCards} onClick={() => setMobileCards((value) => !value)}>{mobileCards ? <Table2 size={16} /> : <LayoutList size={16} />}{t(mobileCards ? "Table view" : "Card view")}</button>
             {toolbarActions}
+            <details className="compact-options"><summary>{t("Table options")}</summary><div className="compact-options-body">
+            <div className="field"><span>{t("Sort by")}</span><select aria-label={t("Sort by")} value={activeSort?.key || ""} onChange={event => { const column = columns.find(item => (item.sortKey || item.key) === event.target.value); const next = column ? { key: column.sortKey || column.key, direction: "asc" } : null; if (isRemote) updateRemote({ sort: next, page: 1 }); else setSort(next); }}><option value="">{t("Sort by")}</option>{columns.filter(column => column.sortable !== false && column.key !== "actions").map(column => <option key={column.key} value={column.sortKey || column.key}>{t(column.label)}</option>)}</select></div>{activeSort && <button type="button" className="secondary-button" onClick={() => toggleSort(columns.find(column => (column.sortKey || column.key) === activeSort.key))}>{t(activeSort.direction === "asc" ? "Sort descending" : "Sort ascending")}</button>}
             <TableTools
               storageKey={preferenceKey}
               query={{ search: activeSearch, filters: activeFilters, sort: activeSort, pageSize: activePageSize, density }}
@@ -243,6 +247,7 @@ export default function DataTable({
               onDensityChange={changeDensity}
               onExport={onExport ? () => onExport({ rows: visibleRows, query: { search: activeSearch, filters: activeFilters, sort: activeSort, pageSize: activePageSize } }) : exportable ? exportCurrentResults : undefined}
             />
+            </div></details>
           </div>
         </div>
       )}
@@ -275,7 +280,7 @@ export default function DataTable({
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t("Select all visible rows")} />
                 </th>
               )}
-              {columns.map((column) => {
+              {primaryColumns.map((column) => {
                 const sorted = activeSort?.key === (column.sortKey || column.key);
                 const SortIcon = !sorted ? ChevronsUpDown : activeSort.direction === "asc" ? ArrowUp : ArrowDown;
                 return (
@@ -289,6 +294,7 @@ export default function DataTable({
                   </th>
                 );
               })}
+              {secondaryColumns.length > 0 && <th>{t("Details")}</th>}
               {rowActions && <th className="actions-column"><span className="sr-only">{t("Actions")}</span></th>}
             </tr>
           </thead>
@@ -296,7 +302,8 @@ export default function DataTable({
             {loading ? Array.from({ length: Math.min(activePageSize, 6) }).map((_, rowIndex) => (
               <tr key={`loading-${rowIndex}`} aria-hidden="true">
                 {selection && <td><span className="skeleton skeleton-check" /></td>}
-                {columns.map((column) => <td key={column.key}><span className="skeleton skeleton-line" /></td>)}
+                {primaryColumns.map((column) => <td key={column.key}><span className="skeleton skeleton-line" /></td>)}
+                {secondaryColumns.length > 0 && <td><span className="skeleton skeleton-line" /></td>}
                 {rowActions && <td><span className="skeleton skeleton-check" /></td>}
               </tr>
             )) : visibleRows.map((row) => (
@@ -306,7 +313,7 @@ export default function DataTable({
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={onRowClick ? (event) => { if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); onRowClick(row); } } : undefined}
                 onClick={onRowClick ? (event) => {
-                  if (event.target.closest("a, button, input, select, textarea")) return;
+                  if (event.target.closest("a, button, input, select, textarea, details")) return;
                   onRowClick(row);
                 } : undefined}
               >
@@ -321,10 +328,11 @@ export default function DataTable({
                     />
                   </td>
                 )}
-                {columns.map((column) => {
+                {primaryColumns.map((column) => {
                   const value = column.render ? column.render(row) : rawValue(column, row);
                   return <td key={column.key} className={column.align ? `align-${column.align}` : ""} data-label={t(column.label)}>{typeof value === "string" ? t(value) : value}</td>;
                 })}
+                {secondaryColumns.length > 0 && <td data-label={t("Details")}><details className="row-details" onClick={event => event.stopPropagation()}><summary>{t("Details")}</summary><dl>{secondaryColumns.map(column => { const value = column.render ? column.render(row) : rawValue(column, row); return <div key={column.key}><dt>{t(column.label)}</dt><dd>{typeof value === "string" ? t(value) : value}</dd></div>; })}</dl></details></td>}
                 {rowActions && <td className="actions-column" data-label={t("Actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
               </tr>
             ))}

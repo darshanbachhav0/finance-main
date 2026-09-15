@@ -1637,7 +1637,7 @@ export default function SupplierForm({
       <Section
         icon={Users}
         title="Commercial Contact"
-        status="Pricing, quotations and negotiation"
+
       >
         <ContactFields
           legend="Commercial Contact"

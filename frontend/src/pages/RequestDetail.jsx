@@ -1,3 +1,4 @@
+import SectionNavigation from "../components/SectionNavigation.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import {
@@ -141,12 +142,12 @@ function Definition({ label, children }) {
 
 function Section({ title, description, children, className = "" }) {
   const { t } = useLanguage();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(!/history|audit|financial control/i.test(title));
   const sectionId = `request-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
     <div className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
-      <h3 style={{ margin: 0 }}><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong>{description && <small>{t(description)}</small>}</span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button></h3>
-      <div className="request-section-content" id={`${sectionId}-content`} hidden={!expanded}>{children}</div>
+      <h3 style={{ margin: 0 }}><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong></span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button></h3>
+      <div className="request-section-content" id={`${sectionId}-content`} hidden={!expanded}>{description && <details className="page-help"><summary>{t("About this section")}</summary><p>{t(description)}</p></details>}{children}</div>
     </div>
   );
 }
@@ -430,13 +431,13 @@ export default function RequestDetail() {
         <div><dt>{t("Current status")}</dt><dd><StatusBadge status={request.status} /></dd></div>
       </dl>
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]}>{t(nextAction[1])}</a></div>}
-      <nav className="request-section-nav" aria-label={t("Request sections")}>
+      <SectionNavigation className="request-section-nav" aria-label={t("Request sections")}>
         <a href="#request-section-requirement-and-justification">{t("Overview")}</a>
         <a href="#request-section-budget-preview">{t("Budget")}</a>
         <a href="#request-section-documents-and-fiscal-validation">{t("Documents")}</a>
         <a href="#request-section-financial-control-records">{t("Financial records")}</a>
         <a href="#request-actions">{t("Actions and history")}</a>
-      </nav>
+      </SectionNavigation>
 
       <div className="workspace-panel status-workspace">
         <div className="request-status-heading">
@@ -446,7 +447,7 @@ export default function RequestDetail() {
           </div>
           <StatusBadge status={request.status} />
         </div>
-        <RequestStatusFlow request={request} />
+        <details className="workflow-details"><summary>{t("View workflow")}</summary><RequestStatusFlow request={request} /></details>
       </div>
 
       <div className="request-detail-layout">

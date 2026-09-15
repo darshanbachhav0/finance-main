@@ -10,10 +10,10 @@ export default function QuotationComparison({ quotations, suppliers }) {
     <tbody>{quotations.map((quotation) => {
       const supplier = suppliers.find((item) => item._id === quotation.supplier);
       return <tr key={quotation.clientId} className={quotation.recommended ? "recommended" : ""}>
-        <td>{supplier?.legalName || supplier?.name || "-"}{quotation.recommended && <small> · {t("Recommended supplier")}</small>}</td>
-        <td><strong>{quotation.amount === "" ? "-" : formatCurrency(quotation.amount, quotation.currency, language)}</strong><small>{quotation.currency}</small></td>
-        <td>{quotation.deliveryPeriod || "-"}</td>
-        <td><PaymentTermsSummary terms={quotation} showAmounts={false} /></td>
+        <td data-label={t("Supplier")}>{supplier?.legalName || supplier?.name || "-"}{quotation.recommended && <small> · {t("Recommended supplier")}</small>}</td>
+        <td data-label={t("Amount")}><strong>{quotation.amount === "" ? "-" : formatCurrency(quotation.amount, quotation.currency, language)}</strong><small>{quotation.currency}</small></td>
+        <td data-label={t("Delivery period")}>{quotation.deliveryPeriod || "-"}</td>
+        <td data-label={t("Payment conditions")}><PaymentTermsSummary terms={quotation} showAmounts={false} /></td>
       </tr>;
     })}</tbody>
   </table></div>;

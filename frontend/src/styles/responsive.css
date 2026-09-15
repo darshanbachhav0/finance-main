@@ -1,0 +1,96 @@
+/* Responsive workspaces: let content reflow rather than clipping it. */
+.data-table { container-type: inline-size; }
+.table-scroll { max-height: none; overflow: visible; }
+.table-scroll table { width: 100%; table-layout: fixed; }
+.table-scroll td, .table-scroll th { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.table-scroll td:has(.primary-cell), .table-scroll .primary-cell strong { min-width: 0; }
+.table-scroll td > a, .table-scroll .badge, .table-scroll .align-right { white-space: normal; }
+.table-scroll td > *, .table-account-select, .payment-destination-summary.compact { min-width: 0; max-width: 100%; }
+.table-scroll-note, .mobile-table-toggle { display: none !important; }
+.row-details dl { display: grid; gap: 12px; margin: 12px 0; }
+.row-details dt { color: var(--gray-600); font-size: 12px; }
+.row-details dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+summary { cursor: pointer; }
+summary:focus-visible { outline: 2px solid var(--uma-primary); outline-offset: 3px; }
+.compact-options { min-width: 0; max-width: 100%; }
+.compact-options > summary, .page-help > summary { color: var(--gray-600); padding: 8px 0; font-size: 13px; }
+.compact-options-body { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--gray-200); border-radius: 8px; }
+.table-preferences { flex-wrap: wrap; }
+.table-filter-toggle { display: inline-flex; }
+.table-filter-fields { display: none; }
+.table-filter-fields.is-open { display: flex; flex-wrap: wrap; }
+.work-draft-status { padding: 8px 12px; gap: 8px 16px; align-items: center; }
+.work-draft-status > div[role=status] { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.work-draft-status strong, .work-draft-status small { font-size: 12px; }
+.work-draft-status p { font-size: 12px; max-width: 50ch; }
+.page-help p { max-width: 65ch; font-size: 13px; }
+.section-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.section-selector { display: none; }
+.responsive-section-nav { overflow: visible; flex-wrap: wrap; }
+.section-links a[aria-current] { color: var(--uma-primary); font-weight: 700; }
+.workflow-details summary { padding: 12px 0; }
+.workflow-details .status-flow { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 12px; }
+.workflow-details .status-flow li { min-width: 0; padding: 0; flex-direction: row; gap: 12px; }
+.workflow-details .status-flow li::after { display: none; }
+.analytics-tabs, .section-tabs, .totals-bar { flex-wrap: wrap; overflow: visible; }
+.chart-table-scroll { max-height: none; }
+.drawer-body { min-width: 0;  }
+.drawer-body > *, .field, .field > *, .accounting-line > *, .rendition-line > * { min-width: 0; max-width: 100%; }
+.drawer-footer { flex-wrap: wrap; flex-shrink: 0; }
+.continue-work-row { gap: 12px; }
+.continue-work-row > div { min-width: 0; overflow-wrap: anywhere; }
+@container (max-width: 1050px) {
+ .mobile-cards .table-scroll table, .mobile-cards .table-scroll tbody { display: block; width: 100%; min-width: 0; }
+ .mobile-cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+ .mobile-cards tbody tr { display: block; border: 1px solid var(--gray-200); border-radius: 10px; margin-bottom: 12px; background: var(--surface-panel); }
+ .mobile-cards tbody td, .mobile-cards tbody td.align-right { display: grid; grid-template-columns: minmax(80px, .65fr) minmax(0, 1.5fr); gap: 12px; padding: 10px 12px; width: 100%; max-width: none; text-align: left; height: auto; white-space: normal; position: static; }
+ .mobile-cards td::before { content: attr(data-label); color: var(--gray-600); font-size: 12px; }
+ .mobile-cards .primary-cell span { white-space: normal; max-width: 100%; }
+}
+@media (max-width: 1180px) {
+ .accounting-line, .rendition-line { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+ .accounting-lines { overflow: visible; }
+ .accounting-line-header { display: none; }
+ .quotation-comparison table { min-width: 0; width: 100%; }
+}
+@media (max-width: 900px) {
+ .section-selector { display: grid; gap: 6px; width: 100%; font-size: 13px; }
+ .section-selector select { width: 100%; min-height: 44px; background: var(--surface-panel); color: var(--gray-800); border: 1px solid var(--gray-300); border-radius: 8px; padding: 8px; }
+ .section-links { display: none; }
+ .budget-month-table, .quotation-comparison { overflow: visible; }
+ .budget-month-table table, .budget-month-table tbody, .quotation-comparison table, .quotation-comparison tbody { display: block; width: 100%; min-width: 0; white-space: normal; }
+ .budget-month-table thead, .quotation-comparison thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+ .budget-month-table tr, .quotation-comparison tr { display: block; margin: 12px 0; border: 1px solid var(--gray-200); border-radius: 8px; padding: 8px; }
+ .budget-month-table td, .quotation-comparison td { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 1.5fr); gap: 8px; white-space: normal; overflow-wrap: anywhere; }
+ .budget-month-table td::before, .quotation-comparison td::before { content: attr(data-label); color: var(--gray-600); }
+ .budget-month-table th { display: block; text-align: left; }
+}
+@media (max-width: 640px) {
+ .accounting-line, .rendition-line, .drawer .form-grid, .drawer .supplier-form-grid { grid-template-columns: minmax(0, 1fr); }
+ .accounting-line { min-width: 0; }
+ .continue-work-row { flex-wrap: wrap; }
+ .drawer-footer { position: static; }
+ .table-toolbar-actions, .table-toolbar-primary { width: 100%; flex-wrap: wrap; }
+ .table-search { min-width: 0; width: 100%; }
+ .density-control { display: flex; }
+ .wizard-actions { position: static; }
+}
+
+.budget-month-cards { display: none; }
+@media (max-width: 900px) {
+ .budget-month-table { display: none; }
+ .budget-month-cards { display: grid; gap: 12px; }
+ .budget-month-cards article { display: grid; gap: 8px; border: 1px solid var(--gray-200); padding: 12px; border-radius: 8px; }
+ .budget-month-cards dl > div { display: flex; justify-content: space-between; gap: 12px; }
+ .budget-month-cards dd { margin: 0; }
+}
+
+@media (max-width: 1180px) {
+ .repeatable-line.accounting-rendition-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+ .repeatable-line.accounting-rendition-line { grid-template-columns: minmax(0, 1fr); }
+}
+.mobile-cards tbody td:has(> .row-details)::before { content: none; }
+.mobile-cards tbody td:has(> .row-details) { display: block; }
+.quotation-comparison td[data-label] > small { grid-column: 2; }

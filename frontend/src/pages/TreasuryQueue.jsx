@@ -1,3 +1,4 @@
+import SectionNavigation from "../components/SectionNavigation.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import {
@@ -291,13 +292,13 @@ export default function TreasuryQueue() {
   ];
 
   return <section>
-    <PageHeader title="Treasury Payment Queue" description="Schedule each CXP independently, create bank instructions, confirm execution, isolate bounced transfers, and reconcile paid requests." actions={<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
+    <PageHeader title="Treasury Payment Queue" description="Schedule and confirm payments." actions={<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
     <Message type="error">{actionError || resourceError}</Message>
     <div className="stats-grid"><StatCard label="Payable queue" value={queueTable.pagination.total} tone="amber" /><StatCard label="PEN waiting" value={money("PEN", queueTotals.PEN)} tone="teal" /><StatCard label="USD waiting" value={money("USD", queueTotals.USD)} tone="navy" /><StatCard label="Missing bank details" value={missingBank} tone={missingBank ? "red" : "green"} /><StatCard label="Payment confirmation" value={confirmationTable.pagination.total} tone="amber" /><StatCard label="Bounced payments" value={bouncedTable.pagination.total} tone={bouncedTable.pagination.total ? "red" : "green"} /></div>
 
     {missingBank > 0 && <div className="alert-strip error"><AlertTriangle size={20} /><div><strong>{t("Some payments are blocked")}</strong><p>{t("A payment needs a verified eligible current account, or the immutable employee reimbursement destination, before file generation.")}</p></div></div>}
 
-    <nav className="treasury-section-nav" aria-label={t("Payment stages")}>{[["treasury-prepare", "Prepare bank file"], ["treasury-confirm", "Confirm payments"], ["treasury-returned", "Returned payments"], ["treasury-reconcile", "Reconcile"], ["treasury-history", "Bank file history"]].map(([id, label]) => <a key={id} href={`#${id}`}>{t(label)}</a>)}</nav>
+    <SectionNavigation className="treasury-section-nav" aria-label={t("Payment stages")}>{[["treasury-prepare", "Prepare bank file"], ["treasury-confirm", "Confirm payments"], ["treasury-returned", "Returned payments"], ["treasury-reconcile", "Reconcile"], ["treasury-history", "Bank file history"]].map(([id, label]) => <a key={id} href={`#${id}`}>{t(label)}</a>)}</SectionNavigation>
     <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3>{t("Bank file preparation")}</h3><p>{t("The batch is generated from selected CXP records, not from one request-level payable.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("Bank")}</span><select value={bank} onChange={(event) => { setBank(event.target.value); setSelected([]); }}>{banks.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected([]); }}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field"><span>{t("Payment date")}</span><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label></div></div>
 
     {selected.length > 0 && <div className="selection-bar" role="status"><div><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{money(currency, selectedTotal)}</span></div><button type="button" className="primary-button" onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Review bank file")}</span></button></div>}

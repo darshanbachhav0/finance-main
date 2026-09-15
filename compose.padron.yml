@@ -1,0 +1,19 @@
+services:
+  padron-updater:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.padron
+    restart: unless-stopped
+    init: true
+    environment:
+      SUNAT_PADRON_DATA_DIR: /var/lib/uma/sunat-padron
+    volumes:
+      - uma-padron:/var/lib/uma/sunat-padron
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  uma-padron:
+    name: uma_sunat_padron

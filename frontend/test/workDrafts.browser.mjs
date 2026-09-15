@@ -62,7 +62,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await newPage(context);
   const origin = "http://127.0.0.1:5196";
-  const saved = async p => { try { await p.getByText("Draft saved to your account", { exact: true }).waitFor({ timeout: 10000 }); } catch (err) { console.log("SESSION", await p.evaluate(async () => { const { draftSession } = await import("/src/utils/workDrafts.js"); const params = new URLSearchParams(location.search); const s = draftSession(`${JSON.parse(localStorage.erp_user)._id}:supplier:new:${params.get("workDraft") || "latest"}:0`, {}); return { loaded:s.loaded, closed:s.closed, status:s.status, inflight: !!s.inflight, dirty:s.signature !== s.savedSignature, timer:s.timer, visible:document.visibilityState }; })); console.log("DRAFT DEBUG", await p.locator(".work-draft-status").allTextContents(), await p.locator("textarea").evaluateAll(nodes => nodes.map(n => n.value)), errors); throw err; } };
+  const saved = async p => { try { await p.getByText("Saved", { exact: true }).waitFor({ timeout: 10000 }); } catch (err) { console.log("SESSION", await p.evaluate(async () => { const { draftSession } = await import("/src/utils/workDrafts.js"); const params = new URLSearchParams(location.search); const s = draftSession(`${JSON.parse(localStorage.erp_user)._id}:supplier:new:${params.get("workDraft") || "latest"}:0`, {}); return { loaded:s.loaded, closed:s.closed, status:s.status, inflight: !!s.inflight, dirty:s.signature !== s.savedSignature, timer:s.timer, visible:document.visibilityState }; })); console.log("DRAFT DEBUG", await p.locator(".work-draft-status").allTextContents(), await p.locator("textarea").evaluateAll(nodes => nodes.map(n => n.value)), errors); throw err; } };
   await page.goto(`${origin}/suppliers`);
   await page.getByRole("button", { name: "New supplier", exact: true }).click();
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000001");
@@ -121,6 +121,7 @@ try {
   failSaves = false;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await saved(page);
+  await page.locator(".work-draft-status > details > summary").click();
   await page.getByRole("button", { name: "Discard draft", exact: true }).click();
   await page.locator('.work-draft-confirm').getByRole("button", { name: "Discard draft", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "hidden" });
@@ -142,7 +143,7 @@ try {
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await page.waitForURL("**/login");
   await page.goto(`${origin}/requests/new`);
-  await page.getByLabel("Requirement title", { exact: false }).waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll("input")].some(input => input.value === "Saved financial request"));
   assert.equal(await page.getByLabel("Requirement title", { exact: false }).inputValue(), "Saved financial request");
   assert.deepEqual(errors, []);
   console.log("PASS: supplier close/reopen, cross-device files, conflict copy, encrypted offline recovery, discard, request recovery and mobile layout.");
