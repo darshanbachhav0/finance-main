@@ -1,0 +1,9 @@
+import React,{useState} from "react";
+import {createRoot} from "react-dom/client";
+import InteractionMotion from "../src/components/InteractionMotion.jsx";
+import MotionSurface from "../src/components/MotionSurface.jsx";
+import MotionList from "../src/components/MotionList.jsx";
+import MotionCollapse from "../src/components/MotionCollapse.jsx";
+import "../src/styles/global.css";import "../src/styles/uma.css";import "../src/styles/motion.css";
+function Fixture(){const [step,setStep]=useState(0),[items,setItems]=useState([1]),[open,setOpen]=useState(false),[busy,setBusy]=useState(false);return <main style={{padding:20}}><InteractionMotion/><button onClick={()=>setStep(step+1)}>Next</button><button onClick={()=>setStep(step-1)}>Back</button><MotionSurface changeKey={step} directional><input aria-label="Retained value"/><p>Step {step}</p></MotionSurface><details><summary>Native details</summary><p>Expanded information</p></details><button onClick={()=>setOpen(!open)}>Toggle section</button><MotionCollapse open={open}><input aria-label="Section value"/></MotionCollapse><button onClick={()=>setItems([...items,Math.max(...items,0)+1])}>Add item</button><MotionList className="official-line-list">{items.map(id=><article key={id} data-motion-key={id} className="request-item-card">Item {id}<button onClick={()=>setItems(items.filter(item=>item!==id))}>Remove {id}</button></article>)}</MotionList><button className="primary-button" disabled={busy} onClick={()=>{setBusy(true);setTimeout(()=>setBusy(false),250);}}>{busy?"Saving...":"Save"}</button><div className="analytics-tabs"><button className={step%2===0?"active":""} onClick={()=>setStep(0)}>First tab</button><button className={step%2!==0?"active":""} onClick={()=>setStep(1)}>Second tab</button></div></main>}
+createRoot(document.getElementById("root")).render(<Fixture/>);

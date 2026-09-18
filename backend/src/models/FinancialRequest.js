@@ -1,3 +1,4 @@
+import { canonicalRequestStatus, LEGACY_WORKFLOW_STATUSES, statusAliases } from "../../../shared/workflowStatus.mjs";
 import mongoose from "mongoose";
 import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
 import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
@@ -41,7 +42,9 @@ const lineSchema = new mongoose.Schema(
     costCenterSnapshot: {
       code: String,
       name: String,
-      area: String
+      area: String,
+      organizationalUnit: String,
+      organizationalUnitCode: String
     },
     expenseTypeSnapshot: {
       code: String,
@@ -115,6 +118,7 @@ const attachmentSchema = new mongoose.Schema(
         "PURCHASE_ORDER",
         "CONTRACT",
         "CONFORMITY",
+        "FEE_RECEIPT",
         "ACTIVITY_REPORT",
         "SUPPORTING",
         "RENDITION",
@@ -166,6 +170,7 @@ const xmlValidationSchema = new mongoose.Schema(
     validatedAt: Date,
     provider: { type: String, default: "LOCAL_XML" },
     supplierMatch: Boolean,
+    currencyMatch: Boolean,
     documentNumberMatch: Boolean,
     dateMatch: Boolean,
     netMatch: Boolean,
@@ -207,6 +212,8 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
 
 const financialRequestSchema = new mongoose.Schema(
   {
+    workflowVersion: { type: Number, default: 2 },
+    legacyWorkflowStatus: String,
     developmentScenarioKey: { type: String, sparse: true, unique: true, immutable: true },
     requestNumber: { type: String, required: true, unique: true, immutable: true, match: /^(SOL|REQ)-\d{4}-\d{5,7}$/ },
     areaCorrelative: { type: String, trim: true, index: true },
@@ -217,6 +224,13 @@ const financialRequestSchema = new mongoose.Schema(
     requesterArea: { type: String, trim: true },
     requestingArea: { type: String, trim: true },
     requesterCostCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter" },
+    requesterCostCenterSnapshot: {
+      code: String,
+      name: String,
+      area: String,
+      organizationalUnit: String,
+      organizationalUnitCode: String
+    },
     authorizedCostCenterOverride: {
       authorized: { type: Boolean, default: false },
       authorizedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -258,6 +272,8 @@ const financialRequestSchema = new mongoose.Schema(
     exchangeRate: { type: Number, default: 1, min: 0 },
     exchangeRateDate: Date,
     exchangeRateSource: String,
+    exchangeRateEvidence: mongoose.Schema.Types.Mixed,
+    fiscalValidation: mongoose.Schema.Types.Mixed,
     totalNet: { type: Number, default: 0, min: 0 },
     totalIGV: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, default: 0, min: 0 },
@@ -279,7 +295,7 @@ const financialRequestSchema = new mongoose.Schema(
       legalName: String,
       homologationStatus: String
     },
-    status: { type: String, enum: CANONICAL_REQUEST_STATUSES, default: REQUEST_STATUS.DRAFT, index: true, set: (value) => LEGACY_STATUS_MAP[value] || value },
+    status: { type: String, enum: CANONICAL_REQUEST_STATUSES, default: REQUEST_STATUS.DRAFT, index: true, set: function (value) { return this instanceof mongoose.Query ? value : (LEGACY_STATUS_MAP[value] || value); } },
     description: { type: String, required: true, trim: true },
     quotations: { type: [quotationSchema], default: [] },
     supplierSelectionReason: { type: String, trim: true, default: "" },
@@ -587,4 +603,25 @@ financialRequestSchema.index(
   }
 );
 
+
+for (const option of ["toJSON", "toObject"]) financialRequestSchema.set(option, {
+  transform(_doc, value) { value.status = canonicalRequestStatus(value.status); return value; }
+});
+function expandStatuses(query) {
+  if (!query || typeof query !== "object") return;
+  for (const key of ["$and", "$or", "$nor"]) query[key]?.forEach(expandStatuses);
+  const value = query.status;
+  if (typeof value === "string" && value !== "RENDICION_PENDIENTE") query.status = { $in: statusAliases(canonicalRequestStatus(value)) };
+  else if (value && typeof value === "object") {
+    for (const op of ["$in", "$nin"]) if (Array.isArray(value[op])) value[op] = [...new Set(value[op].flatMap(v => statusAliases(canonicalRequestStatus(v))))];
+    if (value.$ne) { value.$nin = [...new Set([...(value.$nin || []), ...statusAliases(canonicalRequestStatus(value.$ne))])]; delete value.$ne; }
+  }
+}
+for (const operation of ["find", "findOne", "countDocuments", "distinct"]) financialRequestSchema.pre(operation, function () { expandStatuses(this.getQuery()); });
+financialRequestSchema.pre("aggregate", function () {
+  this.pipeline().unshift({ $set: { status: { $switch: {
+    branches: Object.entries(LEGACY_WORKFLOW_STATUSES).map(([legacy, canonical]) => ({ case: { $eq: ["$status", legacy] }, then: canonical })),
+    default: "$status"
+  } } } });
+});
 export default mongoose.model("FinancialRequest", financialRequestSchema);

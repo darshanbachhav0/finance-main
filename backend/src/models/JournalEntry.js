@@ -27,6 +27,7 @@ const journalEntrySchema = new mongoose.Schema(
     currency: { type: String, enum: CURRENCY, required: true },
     originalAmount: { type: Number, required: true, min: 0 },
     exchangeRate: { type: Number, required: true, min: 0 },
+    exchangeRateEvidence: mongoose.Schema.Types.Mixed,
     penEquivalent: { type: Number, required: true, min: 0 },
     lines: {
       type: [journalLineSchema],

@@ -1,3 +1,7 @@
+import BudgetException from "../models/BudgetException.js";
+import { runFinancialOperation } from "./transactionService.js";
+import { assertRequestActive, assertClosureAllowed, getFinancialProgress, getFinancialProgressForRequests } from "./financialProgressService.js";
+import { canonicalRequestStatus, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
@@ -19,6 +23,7 @@ import {
   assertConfiguredDocuments,
   configuredDocumentRequirements,
   configuredQuotationPolicy,
+  documentStatusByPhase,
   validateStructuredQuotationComparison
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
@@ -28,12 +33,13 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./qu
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { assertSupplierEligibleForRequestReview, assertSupplierUsable } from "./supplierService.js";
-import { transitionRequest } from "./workflowService.js";
+import { transitionRequest, canTransition } from "./workflowService.js";
 import { validateXmlAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
 import { AppError } from "../utils/AppError.js";
 import {
+  DOCUMENT_PHASE,
   ERROR_CODES,
   FLOW_TYPE,
   REQUEST_STATUS,
@@ -43,6 +49,7 @@ import {
 import { canModifyRequest, canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
+import { allowedRequestActions } from "./requestActionPolicy.js";
 
 export const requestPopulate = [
   { path: "supplier" },
@@ -69,7 +76,7 @@ export const requestListSelect = [
   "requestNumber", "issueDate", "accountingPeriod", "requester", "solicitor", "requesterArea", "requestingArea",
   "schoolOrDepartment", "flowType", "requestType", "expenseNature", "priority", "project", "areaCorrelative", "title", "currency", "exchangeRate",
   "totalNet", "totalIGV", "totalAmount", "totalPENEquivalent", "supplier", "supplierSnapshot", "status",
-  "description", "approvalStage", "approvalDueAt", "createdAt", "updatedAt"
+  "description", "payment", "rendition", "approvalStage", "approvalDueAt", "approvalRouteSnapshot", "purchaseOrder", "createdAt", "updatedAt"
 ].join(" ");
 
 export const requestListPopulate = [
@@ -81,6 +88,7 @@ export const requestListPopulate = [
 const attachmentKinds = Object.freeze({
   xml: "XML",
   pdf: "PDF",
+  feeReceipt: "FEE_RECEIPT",
   quotation: "QUOTATION",
   purchaseOrder: "PURCHASE_ORDER",
   contract: "CONTRACT",
@@ -349,6 +357,13 @@ async function validateHeaderCostCenter(request, user, { required = false } = {}
     );
   }
   request.requesterCostCenter = center._id;
+  request.requesterCostCenterSnapshot = {
+    code: center.code,
+    name: center.name,
+    area: center.area,
+    organizationalUnit: center.organizationalUnit,
+    organizationalUnitCode: center.organizationalUnitCode
+  };
   return center;
 }
 
@@ -531,7 +546,7 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
     } else {
       assertSupplierUsable(supplier);
     }
-    await assertConfiguredDocuments(request);
+    await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
     if (request.flowType === FLOW_TYPE.B && !request.xmlValidation?.validated) {
       throw new AppError(422, "A valid XML fiscal document is required.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
     }
@@ -540,11 +555,11 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
 }
 
 async function submitPreparedRequest(request, { user, req, comments }) {
+  assertRequestActive(request);
   await initializeApprovalRoute(request);
   request.rejectionReason = "";
   await request.save();
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.VALIDATION, user, req, action: "VALIDATION_STARTED", comments });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.SENT, user, req, action: "SUBMITTED", comments });
+
   await transitionRequest({
     request,
     targetStatus: REQUEST_STATUS.PENDING_APPROVAL,
@@ -574,7 +589,9 @@ export async function listRequestsPage(queryParams, user) {
   const query = {};
   if (user.role === ROLES.SOLICITOR) query.$or = [{ requester: user._id }, { solicitor: user._id }];
   if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) query.status = { $ne: REQUEST_STATUS.DRAFT };
-  if (queryParams.status) query.status = queryParams.status;
+  if (queryParams.status === "RENDICION_PENDIENTE") { query.flowType = "C"; query["rendition.status"] = { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }; query.status = { $nin: terminalStatusValues }; }
+  else if (queryParams.status) query.status = { $in: statusAliases(canonicalRequestStatus(queryParams.status)) };
+  applyRenditionStatusFilter(query, queryParams.renditionStatus);
   if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role) && queryParams.status === REQUEST_STATUS.DRAFT) query.status = "__FORBIDDEN_DRAFT__";
   if (queryParams.type || queryParams.requestType) query.requestType = queryParams.type || queryParams.requestType;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
@@ -612,7 +629,9 @@ export async function listRequestsPage(queryParams, user) {
     FinancialRequest.find(query).select(requestListSelect).populate(requestListPopulate).sort(sort).skip(skip).limit(pageSize),
     FinancialRequest.countDocuments(query)
   ]);
-  return paginatedPayload(data, total, page, pageSize);
+  const progress = await getFinancialProgressForRequests(data);
+  const rows = data.map(record => ({ ...record.toObject(), status: canonicalRequestStatus(record.status), financialProgress: progress.get(String(record._id)), allowedActions: allowedRequestActions(record, user) }));
+  return paginatedPayload(rows, total, page, pageSize);
 }
 
 export async function getRequestDetail(id, user) {
@@ -632,8 +651,24 @@ export async function getRequestDetail(id, user) {
     MassUploadBatch.find({ request: request._id }).select("-inputFile.path").populate("purchaseOrder", "poNumber originalAmount consumedAmount remainingAmount currency status").sort({ createdAt: -1 }),
     InvoiceObservation.find({ request: request._id }).select("-xmlPath -pdfPath").populate("batch", "batchCode status").populate("purchaseOrder", "poNumber remainingAmount currency status").sort({ updatedAt: -1 })
   ]);
+  const financialProgress = await getFinancialProgress(request);
+  const hasActiveObligations = accountsPayable.some(item => item.status !== "CANCELLED");
+  const closureReady = canonicalRequestStatus(request.status) === REQUEST_STATUS.RECONCILED
+    && financialProgress?.status === REQUEST_STATUS.RECONCILED
+    && !financialProgress?.orderOpen
+    && (request.flowType !== FLOW_TYPE.C || (request.rendition?.status === "VALIDATED"
+      && !Number(request.rendition?.balanceOutstanding || 0)
+      && !Number(request.rendition?.nonDeductibleOutstanding || 0)));
   return {
     request,
+    allowedActions: allowedRequestActions(request, user, {
+      hasActiveObligations,
+      closureReady,
+      procurementReady: Boolean(procurementReadiness?.readyForOrderCreation)
+    }),
+    budgetExceptions: await BudgetException.find({ request: request._id }).lean(),
+    financialProgress,
+    reconciliations: await Reconciliation.find({ request: request._id }).populate("reconciledBy", "name email role"),
     accountsPayable: serializePaymentRecords(accountsPayable, user),
     journalEntries,
     paymentBatches: serializePaymentBatches(paymentBatches, user),
@@ -645,6 +680,14 @@ export async function getRequestDetail(id, user) {
     massUploadBatches,
     invoiceObservations
   };
+}
+
+export function applyRenditionStatusFilter(query, rawStatus) {
+  if (!rawStatus) return query;
+  const values = String(rawStatus).split(",").map(value => value.trim().toUpperCase()).filter(Boolean);
+  const expanded = values.flatMap(value => value === "RENDICION_PENDIENTE" ? ["PENDING", "SUBMITTED", "OBSERVED"] : [value]);
+  if (expanded.length) query["rendition.status"] = { $in: [...new Set(expanded)] };
+  return query;
 }
 
 export async function getRequestProcurementReadiness(id, user) {
@@ -785,8 +828,15 @@ export async function voidFinancialRequest({ id, user, req, comments }) {
   const request = await FinancialRequest.findById(id);
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "VOID", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
-  await releaseBudget(request, user._id, reason);
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.VOIDED, user, req, action: "VOIDED", comments: reason });
+  assertRequestActive(request);
+  const obligations = await AccountsPayable.exists({ request: request._id, status: { $ne: "CANCELLED" } });
+  if (obligations) throw new AppError(409, "A request with financial obligations cannot be voided through ordinary cancellation. Accounting must resolve the obligations first.");
+  await runFinancialOperation(async session => {
+    // Validate the transition before changing any budget balances.
+    if (!canTransition(request.status, REQUEST_STATUS.VOIDED)) throw new AppError(409, "This request cannot be cancelled at its current stage.");
+    await releaseBudget(request, user._id, reason, { session });
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.VOIDED, user, req, action: "VOIDED", comments: reason, session });
+  });
   await request.populate(requestPopulate);
   return request;
 }
@@ -795,7 +845,8 @@ export async function closeFinancialRequest({ id, user, req, comments }) {
   const request = await FinancialRequest.findById(id);
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "CLOSE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAID_CLOSED, user, req, action: "PAID_CLOSED", comments: comments || "Payment completed and financial file closed." });
+  await assertClosureAllowed(request);
+  await transitionRequest({ request, targetStatus: REQUEST_STATUS.CLOSED, user, req, action: "CLOSED", comments: comments || "All obligations reconciled and financial file closed." });
   await resolveNotification(`request:${request._id}:close`);
   await request.populate(requestPopulate);
   return request;
@@ -804,8 +855,8 @@ export async function closeFinancialRequest({ id, user, req, comments }) {
 export async function deleteFinancialRequest({ id, user, req }) {
   const request = await FinancialRequest.findById(id).select("+attachments.path");
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
-  if (!canModifyRequest(request, user) || ![REQUEST_STATUS.DRAFT, REQUEST_STATUS.REJECTED].includes(request.status)) {
-    throw new AppError(403, "Only permitted draft or rejected requests can be deleted.", { status: request.status }, ERROR_CODES.FORBIDDEN);
+  if (!canModifyRequest(request, user) || request.status !== REQUEST_STATUS.DRAFT) {
+    throw new AppError(403, "Only permitted draft requests can be deleted.", { status: request.status }, ERROR_CODES.FORBIDDEN);
   }
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "DELETE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await recordAudit({ entityType: "FinancialRequest", entity: request, action: "DELETED", user, req, module: "REQUESTS", oldValues: { status: request.status, requestNumber: request.requestNumber } });
@@ -817,7 +868,14 @@ export async function deleteFinancialRequest({ id, user, req }) {
 export async function requestDocumentRequirements(query) {
   const flowType = query.flowType || FLOW_TYPE.A1;
   const requestType = normalizeRequestTypeForTrack(flowType, query.requestType);
-  return configuredDocumentRequirements({ flowType, requestType, expenseNature: query.expenseNature, attachments: [] });
+  return configuredDocumentRequirements({ flowType, requestType, expenseNature: query.expenseNature, attachments: [] }, query.phase || DOCUMENT_PHASE.SUBMISSION);
+}
+
+export async function requestDocumentStatus(id, user) {
+  const request = await FinancialRequest.findById(id);
+  if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
+  if (!canViewRequest(request, user)) throw new AppError(403, "You cannot view this request.", undefined, ERROR_CODES.FORBIDDEN);
+  return documentStatusByPhase(request);
 }
 
 export async function requestFormPolicy(query) {
@@ -825,7 +883,7 @@ export async function requestFormPolicy(query) {
   const requestType = normalizeRequestTypeForTrack(flowType, query.requestType);
   const request = { flowType, requestType, expenseNature: query.expenseNature, attachments: [] };
   const [documentRequirements, quotationPolicy] = await Promise.all([
-    configuredDocumentRequirements(request),
+    configuredDocumentRequirements(request, DOCUMENT_PHASE.SUBMISSION),
     configuredQuotationPolicy(request)
   ]);
   return { documentRequirements, quotationPolicy };
@@ -839,7 +897,7 @@ export async function requestAuthorizedCostCenters(user) {
       .map((value) => value?._id || value);
     query._id = { $in: allowed };
   }
-  return CostCenter.find(query).select("code name area active annualBudget committedAmount executedAmount paidAmount budgetMode availableAmount").sort({ code: 1 });
+  return CostCenter.find(query).select("code name area organizationalUnit organizationalUnitCode active annualBudget committedAmount executedAmount paidAmount budgetMode availableAmount importProvenance").sort({ code: 1 });
 }
 
 export async function previewFinancialRequestBudget({ payload, user }) {
@@ -886,8 +944,10 @@ export async function previewFinancialRequestBudget({ payload, user }) {
     scenarioPercentage: percentage, deferredCommitment: flowType === FLOW_TYPE.C };
 }
 
-export function publicRequestPayload(value) {
+export function publicRequestPayload(value, user, actionContext) {
   const object = value?.toObject ? value.toObject() : structuredClone(value);
+  if (object?.status) object.status = canonicalRequestStatus(object.status);
+  if (object && user && !object.allowedActions) object.allowedActions = allowedRequestActions(value, user, actionContext);
   for (const attachment of object?.attachments || []) delete attachment.path;
   return object;
 }

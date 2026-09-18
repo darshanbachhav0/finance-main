@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "../api/client.js";
 import Message from "../components/Message.jsx";
 import ResourceManager from "../components/ResourceManager.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 import { approvalLevels, roles } from "../utils/options.js";
 
 export default function AdminUsers() {
@@ -10,7 +11,7 @@ export default function AdminUsers() {
   useEffect(() => {
     api.get("/cost-centers", { params: { pageSize: 100 } }).then((response) => setCostCenters(response.data.data || [])).catch((err) => setError(err.message));
   }, []);
-  const centerOptions = costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` }));
+  const centerOptions = costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}${item.organizationalUnitCode ? ` · ${item.organizationalUnitCode}` : ""}` }));
 
   return <>
     <Message type="error">{error}</Message>
@@ -22,6 +23,8 @@ export default function AdminUsers() {
       duplicateFields={["email"]}
       fields={[
         { name: "name", label: "Name", required: true },
+        { name: "dni", label: "Employee DNI", placeholder: "8 digits", validate: (value) => value && !/^\d{8}$/.test(String(value)) ? "Enter an 8-digit DNI." : "" },
+        { name: "employeeCode", label: "Employee code" },
         { name: "email", label: "Email", type: "email", required: true },
         { name: "password", label: "Password", type: "password", requiredOnCreate: true, hint: "At least 10 characters; required only when creating a user." },
         { name: "role", label: "Role", type: "select", required: true, options: roles },
@@ -34,10 +37,11 @@ export default function AdminUsers() {
         { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ]}
       columns={[
-        { key: "name", label: "Name" }, { key: "email", label: "Email" }, { key: "role", label: "Role" },
+        { key: "name", label: "Employee", render: (row) => <div className="primary-cell"><strong>{row.name}</strong><span>{row.dni ? `DNI ${row.dni}` : row.employeeCode || "No DNI linked"}</span></div> }, { key: "email", label: "Email" }, { key: "role", label: "Role" },
         { key: "approvalLevel", label: "Approval level", render: (row) => ["Approver", "Management"].includes(row.role) ? row.approvalLevel : "-" },
-        { key: "area", label: "Area" }, { key: "costCenter", label: "Default Cost Center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" },
-        { key: "active", label: "Status" }
+        { key: "costCenter", label: "Default Cost Center", render: (row) => row.costCenter ? <div className="primary-cell"><strong>{row.costCenter.code} - {row.costCenter.name}</strong><span>{row.costCenter.organizationalUnitCode ? `${row.costCenter.organizationalUnitCode} · ${row.costCenter.organizationalUnit}` : row.area}</span></div> : "Manual review" },
+        { key: "authorizedCostCenters", label: "Authorized CeCos", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.authorizedCostCenters?.length || 0}</strong><span>{(row.authorizedCostCenters || []).slice(0, 3).map((item) => item.code || item).join(", ") || "No additional CeCos"}{row.authorizedCostCenters?.length > 3 ? "…" : ""}</span></div> },
+        { key: "active", label: "Status", render: (row) => <StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} /> }
       ]}
       transformSubmit={(form) => {
         const payload = {

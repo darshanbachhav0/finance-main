@@ -105,6 +105,9 @@ export const sunatService = {
     voucher,
     context
   ) {
+    if (["PADRON", "PUBLIC_PADRON", "PUBLIC-PADRON"].includes(String(process.env.SUNAT_PROVIDER_MODE || "").toUpperCase()) && process.env.SUNAT_VOUCHER_ENDPOINT) {
+      return new ProductionSunatProvider().validateVoucher(voucher, context);
+    }
     return getSunatProvider()
       .validateVoucher(
         voucher,

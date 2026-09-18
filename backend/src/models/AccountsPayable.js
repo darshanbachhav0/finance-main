@@ -27,6 +27,7 @@ const accountsPayableSchema = new mongoose.Schema(
     originalAmount: { type: Number, required: true, min: 0 },
     currency: { type: String, enum: CURRENCY, required: true },
     exchangeRate: { type: Number, required: true, min: 0 },
+    exchangeRateEvidence: mongoose.Schema.Types.Mixed,
     penEquivalent: { type: Number, required: true, min: 0 },
     outstandingAmount: { type: Number, required: true, min: 0 },
     dueDate: Date,
@@ -63,6 +64,9 @@ const accountsPayableSchema = new mongoose.Schema(
       ownershipResult: String,
       capturedAt: Date
     },
+    scheduledFor: Date,
+    reconciliation: { type: mongoose.Schema.Types.ObjectId, ref: "Reconciliation" },
+    reconciledAt: Date,
     paidDate: Date,
     bouncedPayment: {
       bouncedAt: Date,

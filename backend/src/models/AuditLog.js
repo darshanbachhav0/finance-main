@@ -14,6 +14,9 @@ const auditLogSchema = new mongoose.Schema(
     requestId: { type: mongoose.Schema.Types.ObjectId, ref: "FinancialRequest", index: true },
     requestNumber: String,
     action: { type: String, required: true },
+    eventKey: String,
+    statusFrom: String,
+    statusTo: String,
     message: String,
     comments: String,
     oldValues: { type: mongoose.Schema.Types.Mixed },
@@ -35,9 +38,15 @@ auditLogSchema.pre("save", function preventAuditMutation(next) {
   next();
 });
 
-for (const operation of ["updateOne", "updateMany", "findOneAndUpdate", "deleteOne", "deleteMany", "findOneAndDelete"]) {
+for (const operation of ["updateOne", "updateMany", "findOneAndUpdate", "replaceOne", "findOneAndReplace", "deleteOne", "deleteMany", "findOneAndDelete"]) {
   auditLogSchema.pre(operation, immutable);
 }
+auditLogSchema.pre("deleteOne", { document: true, query: false }, immutable);
+auditLogSchema.pre("bulkWrite", function rejectBulkMutation(next, operations) {
+  if (operations.some(operation => !operation.insertOne)) return immutable(next);
+  next();
+});
+auditLogSchema.index({ eventKey: 1 }, { unique: true, partialFilterExpression: { eventKey: { $type: "string" } }, name: "audit_event_unique" });
 
 auditLogSchema.index({ entityType: 1, entityId: 1, createdAt: -1 });
 auditLogSchema.index({ requestId: 1, createdAt: -1 });

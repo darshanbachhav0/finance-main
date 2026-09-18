@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { EXPENSE_NATURES, REQUEST_TYPES } from "../utils/constants.js";
+import { DOCUMENT_PHASE, DOCUMENT_PHASES, EXPENSE_NATURES, FLOW_TYPES, REQUEST_TYPES } from "../utils/constants.js";
 
 const documentRequirementSchema = new mongoose.Schema(
   {
@@ -13,6 +13,8 @@ const documentRequirementSchema = new mongoose.Schema(
 const documentRuleSchema = new mongoose.Schema(
   {
     code: { type: String, required: true, unique: true, trim: true, uppercase: true },
+    flowType: { type: String, enum: ["*", ...FLOW_TYPES], default: "*" },
+    phase: { type: String, enum: DOCUMENT_PHASES, default: DOCUMENT_PHASE.SUBMISSION },
     requestType: { type: String, enum: ["*", ...REQUEST_TYPES], default: "*" },
     expenseNature: { type: String, enum: ["*", ...EXPENSE_NATURES], default: "*" },
     requirements: { type: [documentRequirementSchema], default: [] },
@@ -27,6 +29,6 @@ const documentRuleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-documentRuleSchema.index({ active: 1, requestType: 1, expenseNature: 1 });
+documentRuleSchema.index({ active: 1, phase: 1, flowType: 1, requestType: 1, expenseNature: 1 });
 
 export default mongoose.model("DocumentRule", documentRuleSchema);

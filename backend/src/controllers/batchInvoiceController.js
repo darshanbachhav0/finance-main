@@ -24,7 +24,7 @@ export const retryBatch = asyncHandler(async (req, res) => res.status(202).json(
 export const observations = asyncHandler(async (req, res) => res.json(await listInvoiceObservations(req.query)));
 
 export const resolveObservation = asyncHandler(async (req, res) => {
-  const result = await retryInvoiceObservation({ observationId: req.params.id, files: req.files, user: req.user, req });
+  const result = await retryInvoiceObservation({ observationId: req.params.id, files: req.files, acceptXmlValues: req.body.acceptXmlValues === "true" || req.body.acceptXmlValues === true, user: req.user, req });
   res.json({ data: result.observation, voucher: result.voucher, accountsPayable: result.accountsPayable, request: result.request });
 });
 

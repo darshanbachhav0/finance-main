@@ -1,3 +1,8 @@
+import { assertPostingAllowed } from "./financialProgressService.js";
+import { assertBudgetBeforePosting, executeBudgetAmount } from "./budgetService.js";
+import SunatVoucher from "../models/SunatVoucher.js";
+import { assertVoucherXmlMatches } from "./xmlValidationService.js";
+import { validateVoucherWithSunat, createSunatVoucher, findDuplicateVoucher } from "./sunatVoucherService.js";
 import AccountsPayable from "../models/AccountsPayable.js";
 import { resolvePayablePaymentTerms, resolvePayableDueDate } from "./payablePaymentTermsService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
@@ -6,7 +11,7 @@ import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { requireAccountingMapping } from "./accountingMappingService.js";
 import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
-import { applyExchangeRate } from "./exchangeRateService.js";
+import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notifyRoles, resolveNotification } from "./notificationService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -14,6 +19,7 @@ import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   AP_STATUS,
+  DOCUMENT_PHASE,
   ERROR_CODES,
   FLOW_TYPE,
   MANDATORY_XML_TYPES,
@@ -138,11 +144,25 @@ async function provisionJournalLines(request) {
 }
 
 async function createJournal({ request, accountsPayable, entryType, sourceTransaction, lines, userId, originalAmount, currency, exchangeRate, penEquivalent, session }) {
+  await assertPostingAllowed(request, { user: { _id: userId } });
+  if (["PROVISION", "ADVANCE", "RENDITION"].includes(entryType)) await assertBudgetBeforePosting(request, { session, userId });
   const identity = accountsPayable?._id
     ? { accountsPayable: accountsPayable._id, entryType, sourceTransaction }
     : { request: request._id, entryType, sourceTransaction };
   const existing = await JournalEntry.findOne(identity).session(session || null);
   if (existing) return existing;
+  if (entryType === "PROVISION" && request.flowType !== FLOW_TYPE.C) {
+    const evidence = await SunatVoucher.findById(accountsPayable?.sunatVoucher).select("+xmlPath").session(session || null);
+    const fiscal = evidence?.validationEvidence?.fiscal;
+    if (!evidence?.validationEvidence?.valid || !fiscal?.valid || fiscal.voucherVerified === false || fiscal.publicDataset || (process.env.NODE_ENV === "production" && fiscal.source === "MOCK")) {
+      throw new AppError(422, "Individual invoice validation evidence is required before posting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+    }
+    await assertVoucherXmlMatches(evidence.xmlPath, {
+      ruc: accountsPayable.supplierIdentifierSnapshot, series: accountsPayable.voucher.series, number: accountsPayable.voucher.number,
+      issueDate: accountsPayable.voucher.documentDate, currency: accountsPayable.currency,
+      netAmount: evidence.netAmount, igvAmount: evidence.igvAmount, totalAmount: accountsPayable.originalAmount
+    });
+  }
   const totalDebit = sumMoney(lines.map((line) => line.debit));
   const totalCredit = sumMoney(lines.map((line) => line.credit));
   if (!moneyEquals(totalDebit, totalCredit)) {
@@ -157,6 +177,7 @@ async function createJournal({ request, accountsPayable, entryType, sourceTransa
     currency: currency || request.currency,
     originalAmount: roundMoney(originalAmount ?? request.totalAmount),
     exchangeRate: Number(exchangeRate ?? request.exchangeRate ?? 1),
+    exchangeRateEvidence: accountsPayable?.exchangeRateEvidence || request.exchangeRateEvidence,
     penEquivalent: roundMoney(penEquivalent ?? request.totalPENEquivalent ?? request.penEquivalent),
     lines,
     totalDebit,
@@ -165,6 +186,11 @@ async function createJournal({ request, accountsPayable, entryType, sourceTransa
     postedAt: new Date(),
     generatedBy: userId
   }], session ? { session } : undefined);
+  await recordAudit({ entityType: "JournalEntry", entity: journal, requestId: request._id,
+    action: "ACCOUNTING_POSTED", user: { _id: userId }, module: "ACCOUNTING", session,
+    statusFrom: request.status, statusTo: request.status,
+    comments: `${entryType} journal ${journal.entryNumber} posted.`,
+    oldValues: { journalStatus: null }, newValues: { journalStatus: journal.status, entryType, accountsPayable: accountsPayable?._id, period: journal.period } });
   return journal;
 }
 
@@ -290,6 +316,7 @@ export async function createAccountsPayableFromVoucher({
   flowType,
   session
 }) {
+  await assertPostingAllowed(request, { user });
   const supplierId = supplier?._id || supplier || request.supplier?._id || request.supplier;
   const supplierIdentifier = voucher.ruc || supplier?.normalizedIdentifier || supplier?.rucDni || request.supplierSnapshot?.identifier || request.rendition?.beneficiarySnapshot?.employeeCode || request.requester?.email || request.requestNumber;
   const series = normalizeToken(voucher.series || String(voucher.invoiceNumber || "").split("-")[0]);
@@ -309,8 +336,21 @@ export async function createAccountsPayableFromVoucher({
     if (sameRequest && samePurchaseOrder && sameBatch && sameVoucher) return existing;
     throw new AppError(409, "The fiscal voucher is already registered in Accounts Payable.", { accountsPayable: existing._id, request: existing.request }, ERROR_CODES.DUPLICATE_VOUCHER);
   }
+  let validatedVoucher;
   const total = roundMoney(voucher.totalAmount);
-  const exchangeRate = Number(request.exchangeRate || 1);
+  const rateEvidence = request.flowType === FLOW_TYPE.C ? request.exchangeRateEvidence : await resolveExchangeRateSnapshot(voucher.currency || request.currency, voucher.issueDate || request.issueDate);
+  const exchangeRate = Number(rateEvidence?.rate || request.exchangeRate || 1);
+  await assertBudgetBeforePosting(request, { session, userId: user?._id || user, amount: multiplyMoney(total, exchangeRate), allowFxTopUp: (voucher.currency || request.currency) === "USD", exchangeRateEvidence: rateEvidence });
+  if (request.flowType !== FLOW_TYPE.C) {
+    const evidence = await SunatVoucher.findById(sunatVoucher?._id || sunatVoucher).select("+xmlPath").session(session || null);
+    await assertVoucherXmlMatches(evidence?.xmlPath, voucher);
+    const fiscalValidation = await validateVoucherWithSunat(voucher, { request, user });
+    if (!fiscalValidation.valid) throw new AppError(422, fiscalValidation.detail, { validation: fiscalValidation }, ERROR_CODES.XML_VALIDATION_FAILED);
+    validatedVoucher = evidence;
+    evidence.validationEvidence = fiscalValidation;
+    await evidence.save({ session });
+    request.fiscalValidation = fiscalValidation;
+  }
   const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier, purchaseOrder, session });
   const [accountsPayable] = await AccountsPayable.create([{
     request: request._id,
@@ -336,6 +376,7 @@ export async function createAccountsPayableFromVoucher({
     originalAmount: total,
     currency: voucher.currency || request.currency,
     exchangeRate,
+    exchangeRateEvidence: rateEvidence,
     penEquivalent: multiplyMoney(total, exchangeRate),
     outstandingAmount: total,
     dueDate: resolvePayableDueDate({
@@ -356,7 +397,16 @@ export async function createAccountsPayableFromVoucher({
     exchangeRate
   }, user?._id || user, { session });
   accountsPayable.provisionJournal = journal._id;
+  if (request.flowType !== FLOW_TYPE.C && !accountsPayable.budgetExecutedAt) {
+    await executeBudgetAmount(request, user?._id || user, accountsPayable.penEquivalent, { session });
+    accountsPayable.budgetExecutedAt = new Date();
+  }
   await accountsPayable.save({ session });
+  if (validatedVoucher) {
+    validatedVoucher.accountsPayable = accountsPayable._id;
+    validatedVoucher.provisionedAt = new Date();
+    await validatedVoucher.save({ session });
+  }
   request.accountsPayables ||= [];
   if (!request.accountsPayables.some((id) => String(id) === String(accountsPayable._id))) request.accountsPayables.push(accountsPayable._id);
   request.accountsPayable ||= accountsPayable._id;
@@ -490,12 +540,6 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   if (fiscal.fiscalPeriod !== request.accountingPeriod) {
     await guardAccountingPeriod({ period: fiscal.fiscalPeriod, action: "ACCOUNT", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   }
-  await applyExchangeRate(request);
-  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, user });
-  await assertConfiguredDocuments(request);
-  if (MANDATORY_XML_TYPES.includes(request.requestType) && !request.xmlValidation?.validated) {
-    throw new AppError(422, "A valid XML fiscal document is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
-  }
   const duplicate = await AccountsPayable.findOne({
     request: { $ne: request._id },
     supplierIdentifierSnapshot: fiscal.supplierIdentifierNormalized,
@@ -506,6 +550,22 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   if (duplicate) {
     throw new AppError(409, "The supplier voucher is already registered.", { accountsPayable: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
   }
+  await applyExchangeRate(request);
+  await assertBudgetBeforePosting(request, { userId: user._id, amount: multiplyMoney(request.totalAmount, request.exchangeRate) });
+  if (request.flowType !== FLOW_TYPE.C) {
+    const xml = [...(request.attachments || [])].reverse().find(item => item.kind === "XML");
+    const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };
+    await assertVoucherXmlMatches(xml?.path, voucher);
+    const validation = await validateVoucherWithSunat(voucher, { request, user });
+    if (!validation.valid) throw new AppError(422, validation.detail, { validation }, ERROR_CODES.XML_VALIDATION_FAILED);
+    request.fiscalValidation = validation;
+  }
+  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, user });
+  await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING);
+  if (MANDATORY_XML_TYPES.includes(request.requestType) && !request.xmlValidation?.validated) {
+    throw new AppError(422, "A valid XML fiscal document is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+  }
+
 
   const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier: request.supplier });
 
@@ -527,6 +587,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
         originalAmount: request.totalAmount,
         currency: request.currency,
         exchangeRate: request.exchangeRate,
+        exchangeRateEvidence: request.exchangeRateEvidence,
         penEquivalent: request.totalPENEquivalent ?? request.penEquivalent,
         outstandingAmount: request.totalAmount,
         dueDate: resolvePayableDueDate({ dueDate: payload.dueDate, voucher: fiscal, paymentTermsSnapshot, flowType: request.flowType }),
@@ -535,8 +596,24 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
         history: [{ status: AP_STATUS.OPEN, by: user._id, comments: "CXP created after fiscal validation." }]
       }], session ? { session } : undefined);
     }
+    if (request.flowType !== FLOW_TYPE.C) {
+      const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };
+      let evidence = await findDuplicateVoucher(voucher, { session });
+      if (evidence && String(evidence.request) !== String(request._id)) throw new AppError(409, "Fiscal document already registered.", undefined, ERROR_CODES.DUPLICATE_VOUCHER);
+      if (!evidence) evidence = await createSunatVoucher({ request, supplier: request.supplier, voucher, validationStatus: "VALID", sunatResult: request.fiscalValidation, xmlFile: [...request.attachments].reverse().find(item => item.kind === "XML"), user, session });
+      evidence.accountsPayable = accountsPayable._id;
+      evidence.provisionedAt = new Date();
+      evidence.validationEvidence = request.fiscalValidation;
+      evidence.validationStatus = "VALID";
+      await evidence.save({ session });
+      accountsPayable.sunatVoucher = evidence._id;
+    }
     const journal = await createProvisionJournal(request, accountsPayable, user._id, { session });
     accountsPayable.provisionJournal = journal._id;
+    if (request.flowType !== FLOW_TYPE.C && !accountsPayable.budgetExecutedAt) {
+      await executeBudgetAmount(request, user._id, accountsPayable.penEquivalent, { session });
+      accountsPayable.budgetExecutedAt = new Date();
+    }
     await accountsPayable.save({ session });
     request.accountsPayable = accountsPayable._id;
     request.accountsPayables ||= [];
@@ -608,7 +685,6 @@ export async function getConsolidation(period) {
     REQUEST_STATUS.SCHEDULED,
     REQUEST_STATUS.BANK_FILE_GENERATED,
     REQUEST_STATUS.PAID,
-    REQUEST_STATUS.RENDITION_PENDING,
     REQUEST_STATUS.RECONCILED,
     REQUEST_STATUS.CLOSED
   ];

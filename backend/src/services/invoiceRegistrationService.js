@@ -1,8 +1,10 @@
+import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import { createAccountsPayableFromVoucher } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
+import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { executeBudgetAmount } from "./budgetService.js";
 import { notifyRoles } from "./notificationService.js";
 import {
@@ -22,7 +24,17 @@ import { runFinancialOperation } from "./transactionService.js";
 import { fileChecksum, parseInvoiceXml } from "./xmlValidationService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+
+const invoiceAttachmentKinds = Object.freeze({
+  xml: "XML",
+  pdf: "PDF",
+  feeReceipt: "FEE_RECEIPT",
+  conformity: "CONFORMITY",
+  activityReport: "ACTIVITY_REPORT",
+  contract: "CONTRACT",
+  supporting: "SUPPORTING"
+});
 
 function attachment(file, kind, userId) {
   return {
@@ -39,11 +51,10 @@ function attachment(file, kind, userId) {
 }
 
 function addAttemptAttachments(request, files, userId) {
-  for (const value of [
-    files.xml && attachment(files.xml, "XML", userId),
-    files.pdf && attachment(files.pdf, "PDF", userId),
-    files.conformity && attachment(files.conformity, "CONFORMITY", userId)
-  ].filter(Boolean)) {
+  for (const value of Object.entries(invoiceAttachmentKinds).flatMap(([field, kind]) => {
+    const file = files[field];
+    return file ? [attachment(file, kind, userId)] : [];
+  })) {
     const exists = request.attachments.some((item) => item.kind === value.kind && item.checksum && item.checksum === value.checksum);
     if (!exists) request.attachments.push(value);
   }
@@ -51,7 +62,7 @@ function addAttemptAttachments(request, files, userId) {
 
 async function observeRequest(request, status, code, detail, user, req, { session } = {}) {
   request.observation = { code, detail, observedAt: new Date(), observedBy: user._id };
-  if (request.status === REQUEST_STATUS.PAYMENT_BOUNCED) {
+  if ([REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {
     await request.save({ session });
   } else if (request.status !== status) {
     await transitionRequest({ request, targetStatus: status, user, req, action: code, comments: detail, skipControls: true, session });
@@ -112,7 +123,7 @@ async function saveObservedVoucher({ request, purchaseOrder, supplier, voucher, 
   return placeholder;
 }
 
-async function recordObservation({ request, purchaseOrder, voucher, status, requestStatus, code, detail, sunatResult, xmlFile, pdfFile, conformityFile, user, req, placeholder }) {
+async function recordObservation({ request, purchaseOrder, voucher, status, requestStatus, code, detail, sunatResult, xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder }) {
   let storedVoucher = placeholder;
   if (voucher?.ruc && voucher?.series && voucher?.number && voucher?.totalAmount) {
     storedVoucher = await saveObservedVoucher({
@@ -129,7 +140,7 @@ async function recordObservation({ request, purchaseOrder, voucher, status, requ
       placeholder
     });
   }
-  addAttemptAttachments(request, { xml: xmlFile, pdf: pdfFile, conformity: conformityFile }, user._id);
+  addAttemptAttachments(request, evidenceFiles || { xml: xmlFile, pdf: pdfFile, conformity: conformityFile }, user._id);
   await observeRequest(request, requestStatus, code, detail, user, req);
   await recordAudit({
     entityType: storedVoucher ? "SunatVoucher" : "FinancialRequest",
@@ -150,19 +161,18 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
   if (request.flowType !== FLOW_TYPE.A1) {
     throw new AppError(422, "This invoice endpoint is only for Track A1 requests.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
   }
+  await assertPostingAllowed(request, { user, req });
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
   if (user.role === ROLES.SOLICITOR && String(ownerId) !== String(user._id)) {
     throw new AppError(403, "Solicitors can register invoices only for their own requests.", undefined, ERROR_CODES.FORBIDDEN);
   }
-  if (![REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {
+  if (![REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {
     throw new AppError(409, "Track A1 invoice can only be registered after PO/budget approval.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
-  const xmlTemp = files?.xml?.[0];
-  const pdfTemp = files?.pdf?.[0];
-  const conformityTemp = files?.conformity?.[0];
-  if (!xmlTemp || !pdfTemp || !conformityTemp) {
-    throw new AppError(422, "Track A1 requires XML, PDF and conformity evidence.", { required: ["xml", "pdf", "conformity"] }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
-  }
+  const incomingAttachments = Object.entries(invoiceAttachmentKinds).flatMap(([field, kind]) => (files?.[field] || []).map(() => ({ kind })));
+  const availableAttachments = [...(request.attachments || []), ...incomingAttachments];
+  await assertConfiguredDocuments(request, DOCUMENT_PHASE.INVOICE_REGISTRATION, incomingAttachments);
+  await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING, availableAttachments);
   const purchaseOrder = await PurchaseOrder.findOne({ request: request._id });
   if (!purchaseOrder) throw new AppError(409, "Purchase Order is required for Track A1 invoice matching.", undefined, ERROR_CODES.PROCUREMENT_NOT_READY);
 
@@ -170,9 +180,11 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
   let evidenceAdopted = false;
   try {
     persisted = await persistUploadedFiles(files, { domain: "requests", entityId: request._id });
-    const xmlFile = persisted.xml[0];
-    const pdfFile = persisted.pdf[0];
-    const conformityFile = persisted.conformity[0];
+    const xmlFile = persisted.xml?.[0];
+    const pdfFile = persisted.pdf?.[0] || persisted.feeReceipt?.[0];
+    const conformityFile = persisted.conformity?.[0];
+    const evidenceFiles = Object.fromEntries(Object.keys(invoiceAttachmentKinds).map((field) => [field, persisted[field]?.[0]]));
+    if (!xmlFile?.path) throw new AppError(422, "Invoice XML is required before accounting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
     xmlFile.checksum ||= await fileChecksum(xmlFile.path);
     const data = await parseInvoiceXml(xmlFile.path);
     const parts = splitVoucherNumber(data.invoiceNumber);
@@ -187,12 +199,12 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
     const { duplicate, placeholder } = await reusablePlaceholder(voucher, request._id);
 
     if (!data.ruc || data.ruc !== expectedRuc) {
-      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "RUC_MISMATCH", detail: "The XML issuer RUC does not match the approved supplier.", xmlFile, pdfFile, conformityFile, user, req, placeholder });
+      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "RUC_MISMATCH", detail: "The XML issuer RUC does not match the approved supplier.", xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
       evidenceAdopted = true;
       return result;
     }
     if (duplicate && !placeholder) {
-      addAttemptAttachments(request, { xml: xmlFile, pdf: pdfFile, conformity: conformityFile }, user._id);
+      addAttemptAttachments(request, evidenceFiles, user._id);
       await observeRequest(request, REQUEST_STATUS.OBSERVED_SUNAT, "DUPLICATE_VOUCHER", "The RUC + voucher type + series + number already exists.", user, req);
       evidenceAdopted = true;
       await recordAudit({ entityType: "FinancialRequest", entity: request, requestId: request._id, action: "DUPLICATE_VOUCHER", user, req, module: "ACCOUNTING", newValues: { duplicateVoucher: duplicate._id } });
@@ -206,12 +218,12 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
       const detail = error.code === ERROR_CODES.INTEGRATION_NOT_CONFIGURED
         ? "Automated SUNAT validation is not configured. Configure the production gateway or use MOCK mode only in development."
         : error.message;
-      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "OBSERVADO_SUNAT", detail, xmlFile, pdfFile, conformityFile, user, req, placeholder });
+      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "OBSERVADO_SUNAT", detail, xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
       evidenceAdopted = true;
       return result;
     }
     if (!sunatResult.valid) {
-      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "OBSERVADO_SUNAT", detail: sunatResult.detail || "SUNAT validation failed.", sunatResult, xmlFile, pdfFile, conformityFile, user, req, placeholder });
+      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "OBSERVADO_SUNAT", detail: sunatResult.detail || "SUNAT validation failed.", sunatResult, xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
       evidenceAdopted = true;
       return result;
     }
@@ -219,7 +231,7 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
     try {
       await assertPurchaseOrderInvoiceFits(purchaseOrder._id, data.totalAmount, { currency: voucher.currency });
     } catch (error) {
-      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_AMOUNT_EXCEEDED", requestStatus: REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, code: "OBSERVADO_MONTO_EXCEDIDO", detail: error.message, sunatResult, xmlFile, pdfFile, conformityFile, user, req, placeholder });
+      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_AMOUNT_EXCEEDED", requestStatus: REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, code: "OBSERVADO_MONTO_EXCEDIDO", detail: error.message, sunatResult, xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
       evidenceAdopted = true;
       return result;
     }
@@ -231,6 +243,7 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
         const currentRequest = await FinancialRequest.findById(request._id).select("+attachments.path").populate("supplier").session(session || null);
         const currentPurchaseOrder = await PurchaseOrder.findById(purchaseOrder._id).session(session || null);
         if (!currentRequest || !currentPurchaseOrder) throw new AppError(404, "Request or Purchase Order no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
+        await assertPostingAllowed(currentRequest, { user, req });
         const duplicateCheck = await reusablePlaceholder(voucher, currentRequest._id, session);
         if (duplicateCheck.duplicate && !duplicateCheck.placeholder) {
           throw new AppError(409, "The supplier voucher is already registered.", { voucher: duplicateCheck.duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
@@ -306,7 +319,7 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
           await accountsPayable.save({ session });
         }
 
-        addAttemptAttachments(currentRequest, { xml: xmlFile, pdf: pdfFile, conformity: conformityFile }, user._id);
+        addAttemptAttachments(currentRequest, evidenceFiles, user._id);
         currentRequest.fiscalData = {
           supplierIdentifierNormalized: expectedRuc,
           voucherType: "FACTURA",
@@ -321,30 +334,7 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
           comments: "A1 invoice matched to Purchase Order and SUNAT."
         };
         currentRequest.observation = undefined;
-        if ([REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.PAYMENT_BOUNCED].includes(currentRequest.status)) {
-          await currentRequest.save({ session });
-          await recordAudit({
-            entityType: "FinancialRequest",
-            entity: currentRequest,
-            requestId: currentRequest._id,
-            action: "A1_ADDITIONAL_INVOICE_PROVISIONED",
-            user,
-            req,
-            module: "ACCOUNTING",
-            newValues: { accountsPayable: accountsPayable._id, voucher: sunatVoucher._id },
-            session
-          });
-        } else {
-          await transitionRequest({
-            request: currentRequest,
-            targetStatus: REQUEST_STATUS.PROVISIONED_CXP,
-            user,
-            req,
-            action: "A1_INVOICE_PROVISIONED",
-            comments: "Invoice matched to PO, validated with SUNAT, and provisioned to CXP.",
-            session
-          });
-        }
+        await syncFinancialProgress({ request: currentRequest, user, req, session, action: "A1_INVOICE_PROVISIONED" });
         return { request: currentRequest, sunatVoucher, accountsPayable };
       });
       evidenceAdopted = true;

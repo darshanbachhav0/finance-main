@@ -48,7 +48,7 @@ test("budget simulator uses live annual/monthly limits and never writes a financ
     await assert.rejects(() => previewFinancialRequestBudget({ payload, user: { role: "Solicitor", costCenter: new mongoose.Types.ObjectId() } }), error => error.statusCode === 403);
     const usd = { ...payload, currency: "USD", exchangeRate: 99 };
     assert.equal((await previewFinancialRequestBudget({ payload: usd, user })).reason, "EXCHANGE_RATE_MISSING");
-    await ExchangeRate.create({ currency: "USD", date: new Date("2036-01-05"), period: "2036-01", rate: 3.8 });
+    await ExchangeRate.create({ currency: "USD", date: new Date("2036-01-05"), period: "2036-01", rate: 3.8, providerMode: "SUNAT", source: "SUNAT", sourceLabel: "SUNAT", authoritative: true });
     assert.equal((await previewFinancialRequestBudget({ payload: usd, user })).totalRequested, 5700, "Uses stored FX, not a forged client rate");
     assert.equal(JSON.stringify(payload), input);
     const tiny = await previewFinancialRequestBudget({ payload: { ...payload, lines: [{ ...payload.lines[0], unitPrice: 0.01 }], scenario: { percentage: 1 } }, user });

@@ -139,3 +139,56 @@ input::placeholder, textarea::placeholder { color: var(--gray-500); opacity: 1; 
 .draft-file-list { font-size: .8rem; overflow-wrap: anywhere; }
 [data-theme="dark"] .work-draft-status { background: var(--surface-card, #192237); color: #e6ecf5; border-color: #374357; }
 @media(max-width: 600px) { .work-draft-status { padding: 10px; } .work-draft-actions { width: 100%; } .continue-work-row strong { font-size: .85rem; } }
+.financial-progress-summary {
+  display: grid;
+  gap: .45rem;
+  min-width: 0;
+}
+
+.financial-progress-summary.compact { gap: .3rem; }
+.financial-progress-status,
+.financial-progress-rendition,
+.financial-progress-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem .65rem;
+}
+.financial-progress-status > span:first-child,
+.financial-progress-rendition > span:first-child { color: var(--text-muted, var(--gray-600)); font-size: .78rem; }
+.financial-progress-counts { color: var(--text-muted, var(--gray-600)); font-size: .78rem; }
+.financial-progress-rendition small { flex-basis: 100%; color: var(--warning-text, #8a5b00); }
+
+.workflow-legend {
+  margin: 0 0 1rem;
+  padding: .75rem 1rem;
+  border: 1px solid var(--border-color, var(--gray-200));
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface, var(--surface-panel));
+}
+.workflow-legend summary { cursor: pointer; font-weight: 700; }
+.workflow-legend-content { display: grid; gap: .8rem; padding-top: .8rem; }
+.workflow-legend-badges { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+.workflow-legend-content p { margin: 0; color: var(--text-muted, var(--gray-600)); }
+
+.exchange-rate-evidence {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .35rem 1rem;
+  margin-bottom: 1rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--border-color, var(--gray-200));
+  border-left: 4px solid var(--uma-teal, #087c75);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface, var(--surface-panel));
+}
+.exchange-rate-evidence.warning { border-left-color: #d18a00; }
+.exchange-rate-evidence div:first-child { display: grid; gap: .2rem; min-width: 0; }
+.exchange-rate-evidence div:first-child span { color: var(--text-muted, var(--gray-600)); overflow-wrap: anywhere; }
+.exchange-rate-evidence-badges { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.exchange-rate-evidence small { grid-column: 1 / -1; }
+
+@media (max-width: 720px) {
+  .exchange-rate-evidence { grid-template-columns: 1fr; }
+  .exchange-rate-evidence small { grid-column: auto; }
+}

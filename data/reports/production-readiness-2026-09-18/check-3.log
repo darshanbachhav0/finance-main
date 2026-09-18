@@ -1,0 +1,22 @@
+[
+  {
+    "file": "TEST-ONLY-BBVA-PEN.txt",
+    "currency": "PEN",
+    "paymentCount": 8,
+    "totalCents": "1771190",
+    "headerBytes": 151,
+    "detailBytes": 277,
+    "identicalToReference": true,
+    "sha256": "6aa37416902877757da33b1fdc154f00a38342251f5ef4abc053882f7fb40c01"
+  },
+  {
+    "file": "TEST-ONLY-BBVA-USD.txt",
+    "currency": "USD",
+    "paymentCount": 1,
+    "totalCents": "369470",
+    "headerBytes": 151,
+    "detailBytes": 277,
+    "identicalToReference": true,
+    "sha256": "381ffd9e9ed7375ae0cae6ee65c29f243772b0b8894cbf469603520b547db107"
+  }
+]

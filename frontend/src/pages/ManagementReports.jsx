@@ -1,3 +1,4 @@
+import { REQUEST_LIFECYCLE } from "../../../shared/workflowStatus.mjs";
 import { Download, Printer, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -20,7 +21,7 @@ const emptyData = Object.freeze({
   byType: [], byMonth: [], byYear: [], byArea: [], byProject: [], byCostCenter: [], byAccount: [], payable: [], payableAgeing: [], paymentComparison: [], treasurySchedule: [], approvalTiming: [], approvalSla: [], observed: [], accounting: [], bankFiles: [], commitments: [], commitmentAnalysis: [], budgetExceptionAnalysis: [], supplierConcentration: [], renditionAnalysis: [], statusFunnel: [], reconciliationStatus: [], budget: {}, budgetAllocations: [], budgetWarnings: [], comparison: {}, periodClose: { blockers: {} }, filterOptions: { areas: [], projects: [], costCenters: [] }, overdueApprovals: 0, overduePayables: 0
 });
 
-const lifecycleOrder = ["BORRADOR", "EN_VALIDACION", "ENVIADO", "PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "RENDICION_PENDIENTE", "CERRADO", "OBSERVADO", "DEVUELTO", "RECHAZADO", "ANULADO"];
+const lifecycleOrder = [...REQUEST_LIFECYCLE, "OBSERVADO", "DEVUELTO", "RECHAZADO", "ANULADO"];
 
 function requestPath(filters) {
   const params = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== ""));
@@ -166,7 +167,7 @@ export default function ManagementReports() {
           <AnalyticsChart title="Request lifecycle funnel" description="Requests at each controlled workflow status." data={statusRows} horizontal compact series={countSeries} valueFormatter={(value) => formatNumber(value, language)} loading={loading} onDrillDown={(row) => navigate(requestPath({ status: row._id, period: filters.period }))} />
           <AnalyticsChart title="Approval SLA compliance" description="Completed decisions inside and outside configured SLA." type="donut" data={slaRows} series={countSeries} valueFormatter={(value) => formatNumber(value, language)} loading={loading} />
           <AnalyticsChart title="Average approval time" description="Average completed approval hours by area." data={data.approvalTiming.map((row) => ({ ...row, name: row._id || t("Unassigned") }))} horizontal series={[{ key: "averageHours", label: "Average hours", color: "#2463a6" }]} valueFormatter={(value) => `${formatNumber(value, language, { maximumFractionDigits: 1 })} h`} loading={loading} />
-          <AnalyticsChart title="Rendition pending" description="Outstanding advances requiring evidence or Accounting validation." data={data.renditionAnalysis.map((row) => ({ ...row, name: row._id || t("Unassigned") }))} horizontal series={[{ key: "outstanding", label: "Outstanding", color: "#d18a00" }]} valueFormatter={money} loading={loading} onDrillDown={() => navigate(requestPath({ status: "RENDICION_PENDIENTE" }))} />
+          <AnalyticsChart title="Rendition pending" description="Outstanding advances requiring evidence or Accounting validation. Rendition remains separate from payment status." data={data.renditionAnalysis.map((row) => ({ ...row, name: row._id || t("Unassigned") }))} horizontal series={[{ key: "outstanding", label: "Outstanding", color: "#d18a00" }]} valueFormatter={money} loading={loading} onDrillDown={() => navigate(requestPath({ renditionStatus: "PENDING,SUBMITTED,OBSERVED" }))} />
           <AnalyticsChart title="Returned and observed work" description="Correction workload by requesting area." data={data.observed.map((row) => ({ ...row, name: row._id || t("Unassigned") }))} horizontal series={countSeries} valueFormatter={(value) => formatNumber(value, language)} loading={loading} />
         </>}
 

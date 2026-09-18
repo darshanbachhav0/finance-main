@@ -24,6 +24,7 @@ const sunatVoucherSchema = new mongoose.Schema(
     sunatStatus: String,
     taxpayerStatus: String,
     sunatProvider: String,
+    validationEvidence: mongoose.Schema.Types.Mixed,
     sunatResponseReference: String,
     xmlPath: { type: String, select: false },
     xmlUrl: String,

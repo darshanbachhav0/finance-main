@@ -24,7 +24,7 @@ const requests = ["Materiales de laboratorio para el semestre", "Mantenimiento d
   issueDate: "2026-09-07", accountingPeriod: "2026-09", createdAt: "2026-09-07T12:00:00Z", updatedAt: "2026-09-07T12:00:00Z",
   approvalDueAt: "2026-09-09T12:00:00Z", approvalStage: "AREA_DIRECTOR", businessJustification: "Materiales necesarios para las prácticas del semestre académico.",
   lines: [{ _id: "line", itemDescription: "Equipo para prácticas de laboratorio", quantity: 10, unitPrice: 1000, unitOfMeasure: "UNIT", costCenter: center, expenseType: expense, totalAmount: 11800, netAmount: 10000, igvAmount: 1800 }],
-  quotations: [], attachments: [], approvalHistory: [], budgetPreview: { status: "AVAILABLE", lines: [] },
+  quotations: [], attachments: [], approvalHistory: [], allowedActions: index === 0 ? ["APPROVE", "OBSERVE", "RETURN", "REJECT"] : ["EDIT", "SUBMIT", "DELETE"], budgetPreview: { status: "AVAILABLE", lines: [] },
   budgetStatus: "AVAILABLE", approvalRoute: [], payments: [], audit: []
 }));
 const plan = { _id: "plan", period: "2026", planningMode: "ANNUAL_MONTHLY", assignedAmount: 240000, committedAmount: 28000, executedAmount: 76000, paidAmount: 56000, availableAmount: 136000, distributedAmount: 216000, unallocatedAmount: 24000, __v: 0, costCenter: center, expenseType: expense, project: "", active: true,
@@ -111,20 +111,20 @@ try {
   assert.equal(await page.locator(".sidebar").getAttribute("inert"), null);
   await page.keyboard.press("Escape");
   assert.equal(await page.locator(".sidebar").getAttribute("inert"), "");
-  await page.getByRole("button", { name: "Table view", exact: true }).click();
-  assert.equal(await page.locator(".data-table").first().evaluate((node) => node.classList.contains("mobile-cards")), false);
-  await page.getByRole("button", { name: "Card view", exact: true }).click();
+  assert.equal(await page.locator(".data-table").first().evaluate((node) => node.classList.contains("mobile-cards")), true, "Small screens use cards without horizontal table navigation");
   await page.locator(".table-search input").first().fill("no-such-record");
   await page.getByText("No matching results", { exact: true }).waitFor();
   await page.locator(".empty-state").getByRole("button", { name: "Clear filters" }).click();
   await page.getByText("SOL-2026-00100", { exact: true }).waitFor();
+  await page.getByText("Table options", { exact: true }).first().click();
   await page.getByRole("button", { name: "Save current view" }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("View name").fill("UMA saved view");
   await dialog.getByRole("button", { name: "Save view", exact: true }).click();
   assert.equal(await page.getByLabel("Saved views").inputValue(), "UMA saved view");
   await page.goto("http://127.0.0.1:5190/approvals");
-  await page.locator(".decision-button").first().click();
+  await page.locator(".row-details > summary").first().click();
+  await page.locator(".decision-button:visible").first().click();
   await page.getByRole("dialog").getByText("Approve this request?", { exact: true }).waitFor();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goto("http://127.0.0.1:5190/budget");
@@ -146,6 +146,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("http://127.0.0.1:5190/requests/request-0");
   await page.locator(".request-section-toggle").first().click();
+  await page.locator(".request-section-content").first().waitFor({ state: "hidden" });
   assert.equal(await page.locator(".request-section-content").first().isVisible(), false);
   await page.emulateMedia({ media: "print" });
   assert.equal(await page.locator(".request-section-content").first().isVisible(), true);

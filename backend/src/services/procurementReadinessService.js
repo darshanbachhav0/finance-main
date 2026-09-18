@@ -10,6 +10,7 @@ import {
 import { AppError } from "../utils/AppError.js";
 import {
   BUDGET_STATUS,
+  DOCUMENT_PHASE,
   FLOW_TYPE,
   ERROR_CODES,
   EXPENSE_NATURE,
@@ -84,7 +85,7 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
     loadSupplier(request),
     loadCommitment(request, session, suppliedCommitment),
     configuredQuotationPolicy(request),
-    configuredDocumentRequirements(request),
+    configuredDocumentRequirements(request, DOCUMENT_PHASE.PROCUREMENT),
     PurchaseOrder.findOne({ request: request._id }).session(session || null)
   ]);
   const quotationResult = validateStructuredQuotationComparison(request, quotationPolicy);

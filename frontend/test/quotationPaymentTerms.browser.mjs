@@ -120,6 +120,7 @@ try {
   assert.equal(await percentage.inputValue(), "99.99");
   await slider.press("ArrowLeft");
   assert.equal(await percentage.inputValue(), "99.98");
+  await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => Number.isFinite(animation.effect.getComputedTiming().endTime)).map(animation => animation.finished.catch(() => {}))));
   const box = await slider.boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   assert.equal(await percentage.inputValue(), await slider.inputValue(), "Pointer interaction updates the number input");

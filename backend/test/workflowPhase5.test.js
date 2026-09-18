@@ -1,3 +1,6 @@
+import { fiscalFixture } from "./fiscalFixtures.js";
+import fs from "node:fs/promises";
+import AccountingPeriod from "../src/models/AccountingPeriod.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import mongoose from "mongoose";
@@ -44,6 +47,7 @@ const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1"
 test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, async (t) => {
   const databaseName = `erp_workflow_phase5_${process.pid}_${Date.now()}`;
   await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
+  const fiscalFiles = [];
   try {
     await Promise.all([
       AccountsPayable.init(),
@@ -56,7 +60,8 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       User.init()
     ]);
 
-    const center = await CostCenter.create({ code: "CC-PH5-100", name: "Health Sciences", area: "Health Sciences", budgetMode: "TRANSITIONAL", active: true });
+    await AccountingPeriod.create({ period: "2026-08", status: "OPEN" });
+    const center = await CostCenter.create({ code: "CC-PH5-100", name: "Health Sciences", area: "Health Sciences", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
     const expense = await ExpenseType.create({ code: "PH5-GOODS", name: "Medical supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
     const users = {
       solicitor: await User.create({ name: "Phase 5 Requester", email: "phase5.requester@uma.edu.pe", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id }),
@@ -268,7 +273,8 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       Object.assign(invoiceRequest.quotations[0], { paymentCondition: "100%_ADVANCE" });
       await invoiceRequest.save();
       const voucher = { ruc: mainSupplier.rucDni, series: "F099", number: "001", issueDate: "2026-09-01", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
-      const args = { request: invoiceRequest, supplier: mainSupplier, purchaseOrder: order, voucher, user: users.accounting, flowType: "A1" };
+      const evidence = await fiscalFixture(invoiceRequest, mainSupplier, voucher, users.accounting, fiscalFiles);
+      const args = { sunatVoucher: evidence.stored, request: invoiceRequest, supplier: mainSupplier, purchaseOrder: order, voucher, user: users.accounting, flowType: "A1" };
       const payable = await createAccountsPayableFromVoucher(args);
       const loaded = await AccountsPayable.findById(payable._id);
       assert.equal(loaded.paymentTermsSnapshot.source, "PURCHASE_ORDER");
@@ -449,6 +455,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(hasPermission(users.accounting, PERMISSIONS.PAYMENT_CONFIRM), false);
     });
   } finally {
+    await Promise.all(fiscalFiles.map(file => fs.rm(file, { force: true })));
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
   }

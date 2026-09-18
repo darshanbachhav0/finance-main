@@ -20,6 +20,6 @@ router.post("/plans/:id/adjustments", authorize(ROLES.ADMIN, ROLES.BUDGET), chan
 router.get("/allocations", listBudgetAllocations);
 router.get("/commitments", listBudgetCommitments);
 router.get("/exceptions", listBudgetExceptions);
-router.post("/exceptions/:id/decision", authorize(ROLES.ADMIN, ROLES.BUDGET), decideBudgetException);
+router.post("/exceptions/:id/decision", authorize(ROLES.ADMIN, ROLES.BUDGET, ROLES.MANAGEMENT), decideBudgetException);
 router.post("/requests/:id/commit", authorize(ROLES.ADMIN, ROLES.BUDGET), commitRequestBudget);
 export default router;

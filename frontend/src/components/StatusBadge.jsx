@@ -1,3 +1,4 @@
+import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
 const classes = {
@@ -59,6 +60,10 @@ const classes = {
   PAYMENT_FILE_CREATED: "badge badge-indigo",
   CANCELLED: "badge badge-red",
   VALIDATED: "badge badge-green",
+  VALID: "badge badge-green",
+  EXPORTED: "badge badge-blue",
+  MANUAL_REVIEW: "badge badge-amber",
+  MISSING_VOUCHER_LINK: "badge badge-red",
   PENDING: "badge badge-amber",
   APPROVED: "badge badge-green",
   REJECTED: "badge badge-red",
@@ -89,11 +94,15 @@ const classes = {
   SUBMITTED: "badge badge-blue",
   DEMO: "badge badge-amber",
   OVERDUE: "badge badge-red",
+  SLA_DUE_SOON: "badge badge-amber",
+  SLA_OVERDUE: "badge badge-red",
+  SLA_ESCALATION: "badge badge-red",
   REIMBURSEMENT: "badge badge-blue",
   PAYROLL_DEDUCTION: "badge badge-indigo"
 };
 
 export default function StatusBadge({ status }) {
+  if (status !== "RENDICION_PENDIENTE") status = canonicalRequestStatus(status);
   const { t } = useLanguage();
   return <span className={classes[status] || "badge badge-gray"}><span className="badge-label">{t(status || "N/A")}</span></span>;
 }

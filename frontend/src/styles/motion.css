@@ -1,0 +1,16 @@
+.motion-surface { min-width: 0; }
+.analytics-tabs, .section-tabs { position: relative; }
+.analytics-tabs::after, .section-tabs::after { content: ""; position: absolute; pointer-events: none; left: var(--tab-left,0); top: var(--tab-top,100%); width: var(--tab-width,0); height: 2px; background: var(--uma-primary); border-radius: 2px; transition: left 180ms ease, top 180ms ease, width 180ms ease; }
+.primary-button, .secondary-button, .danger-button, .icon-button { transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
+button.motion-busy:not(:has(.spin))::after { content:""; display:inline-block; width:14px; height:14px; flex-shrink:0; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:uma-button-spin 700ms linear infinite; }
+@keyframes uma-button-spin { to {transform:rotate(360deg);} }
+.toast { animation-duration:180ms; }
+.drawer-backdrop, .modal-backdrop, .drawer, .confirm-dialog { transition-duration:180ms; }
+@starting-style {
+ .drawer-backdrop.motion-entered, .modal-backdrop.motion-entered { opacity:0; }
+ .motion-entered .drawer { opacity:0; transform:translateX(20px); }
+ .motion-entered .confirm-dialog { opacity:0; transform:scale(.985); }
+}
+@media (prefers-reduced-motion:reduce) {
+ *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+}

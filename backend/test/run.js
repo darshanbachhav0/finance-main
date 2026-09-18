@@ -22,3 +22,12 @@ import "./budgetSimulator.test.js";
 
 import "./workDrafts.test.js";
 import "./supplierProposalValidation.test.js";
+
+import "./workflowStatus.test.js";
+import "./documentApprovalWorkflow.test.js";
+import "./budgetFiscalImprovements.test.js";
+import "./cecoImport.test.js";
+import "./bbvaFormat.test.js";
+import "./requestApiAlignment.test.js";
+import "./sireVoucherExport.test.js";
+import "./slaMonitoring.test.js";

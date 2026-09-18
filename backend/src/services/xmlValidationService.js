@@ -10,7 +10,7 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   removeNSPrefix: true,
-  parseTagValue: true,
+    parseTagValue: false,
   trimValues: true,
   processEntities: false,
   allowBooleanAttributes: false
@@ -114,6 +114,7 @@ export async function buildXmlValidationResult(filePath, requestData) {
   const expectedDocument = normalizeVoucher(requestData.documentNumber || requestData.fiscalData?.documentNumber || requestData.fiscalData?.number);
   const expectedDate = requestData.documentDate || requestData.issueDate;
   const comparisons = {
+    currencyMatch: Boolean(data.currency && data.currency === requestData.currency),
     supplierMatch: Boolean(expectedIdentifier && data.ruc && expectedIdentifier === data.ruc),
     documentNumberMatch: expectedDocument ? Boolean(data.invoiceNumber && expectedDocument === data.invoiceNumber) : null,
     dateMatch: expectedDate ? Boolean(data.issueDate && dateOnly(expectedDate) === data.issueDate) : null,
@@ -121,6 +122,8 @@ export async function buildXmlValidationResult(filePath, requestData) {
     igvMatch: data.igvAmount !== undefined && moneyEquals(data.igvAmount, requestData.totalIGV ?? requestData.igvAmount),
     totalMatch: data.totalAmount !== undefined && moneyEquals(data.totalAmount, requestData.totalAmount)
   };
+
+  if (!comparisons.currencyMatch) errors.push(`Currency does not match XML. Form ${requestData.currency}, XML ${data.currency || "missing"}.`);
 
   if (!data.ruc) errors.push("XML does not include supplier RUC/DNI.");
   else if (!comparisons.supplierMatch) errors.push(`Supplier RUC/DNI does not match XML. Expected ${expectedIdentifier}, XML ${data.ruc}.`);
@@ -145,6 +148,22 @@ export async function buildXmlValidationResult(filePath, requestData) {
     rawMetadataReference: checksum,
     data
   };
+}
+
+// Compare per-invoice inputs, never the aggregate Purchase Order/request total.
+export async function assertVoucherXmlMatches(filePath, voucher) {
+  if (!filePath) throw new AppError(422, "Invoice XML is required before accounting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+  const result = await buildXmlValidationResult(filePath, {
+    supplier: { normalizedIdentifier: voucher.ruc || voucher.rucIssuer },
+    documentNumber: voucher.invoiceNumber || `${voucher.series}-${voucher.number}`,
+    documentDate: voucher.issueDate || voucher.documentDate,
+    currency: voucher.currency,
+    netAmount: voucher.netAmount,
+    igvAmount: voucher.igvAmount,
+    totalAmount: voucher.totalAmount
+  });
+  if (!result.validated) throw new AppError(422, "Invoice values disagree with XML. Resolve the differences before accounting.", { validation: result }, ERROR_CODES.XML_AMOUNT_MISMATCH);
+  return result;
 }
 
 export async function validateXmlAgainstRequest(filePath, requestData, attempt = {}) {

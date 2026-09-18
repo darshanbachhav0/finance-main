@@ -1,8 +1,10 @@
+import { assertVoucherXmlMatches } from "./xmlValidationService.js";
+import { assertPostingAllowed } from "./financialProgressService.js";
 import Supplier from "../models/Supplier.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import User from "../models/User.js";
 import { createAccountsPayableFromVoucher } from "./accountingService.js";
-import { deferBudget, executeBudget } from "./budgetService.js";
+import { reserveBudget, executeBudget } from "./budgetService.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat } from "./sunatVoucherService.js";
 import { transitionRequest } from "./workflowService.js";
@@ -115,6 +117,9 @@ export async function preflightDirectPayment({ request, user, req, observe = tru
     throw new AppError(422, "Track B requires a validated invoice XML.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }
   const voucher = xmlVoucher(request);
+  await assertVoucherXmlMatches(latestAttachment(request, "XML")?.path, {
+    ...voucher, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount
+  });
   const supplier = request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier);
   const duplicate = await findDuplicateVoucher(voucher);
   const placeholder = sameObservedRequestVoucher(duplicate, request) ? duplicate : null;
@@ -151,6 +156,7 @@ export async function preflightDirectPayment({ request, user, req, observe = tru
 }
 
 export async function provisionDirectPayment({ request, user, req, session, preflight }) {
+  await assertPostingAllowed(request, { user, req });
   if (request.flowType !== FLOW_TYPE.B) throw new AppError(422, "Direct-payment provisioning is only available for Track B.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
   if (request.status !== REQUEST_STATUS.BUDGET_COMMITTED) throw new AppError(409, "Track B can be provisioned only after approval and budget commitment.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   const checked = preflight || await preflightDirectPayment({ request, user, req, observe: false });
@@ -241,11 +247,12 @@ export async function provisionDirectPayment({ request, user, req, session, pref
   await executeBudget(request, user._id, { session, comments: "Track B budget executed at automatic CXP provision." });
   accountsPayable.budgetExecutedAt = new Date();
   await accountsPayable.save({ session });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.PROVISIONED_CXP, user, req, action: "DIRECT_PAYMENT_PROVISIONED", comments: "Track B invoice validated with SUNAT and automatically provisioned to CXP.", session });
+  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "DIRECT_PAYMENT_PROVISIONED", comments: "Track B invoice validated with SUNAT and automatically provisioned to CXP.", session });
   return { observed: false, sunatVoucher, accountsPayable };
 }
 
 export async function provisionTrackCAdvance({ request, user, req, session }) {
+  await assertPostingAllowed(request, { user, req });
   if (request.flowType !== FLOW_TYPE.C) throw new AppError(422, "Advance provisioning is only available for Track C.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
   if (![REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status)) throw new AppError(409, "Track C can be provisioned only after all approvals are complete or after a budget observation is resolved.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   const requester = request.requester?._id ? request.requester : await User.findById(request.requester || request.solicitor).session(session || null);
@@ -271,7 +278,7 @@ export async function provisionTrackCAdvance({ request, user, req, session }) {
     verificationStatus: bank.verificationStatus,
     capturedAt: new Date()
   };
-  const commitment = await deferBudget(request, user._id, { session });
+  const commitment = await reserveBudget(request, user._id, { session });
   request.budgetCommitment = commitment._id;
   const voucher = {
     ruc: requester.employeeCode || String(requester._id),
@@ -285,6 +292,6 @@ export async function provisionTrackCAdvance({ request, user, req, session }) {
     totalAmount: request.totalAmount
   };
   const accountsPayable = await createAccountsPayableFromVoucher({ request, voucher, user, paymentPriority: "PRIORITY", dueDate: new Date(), session });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.PROVISIONED_CXP, user, req, action: "ADVANCE_PROVISIONED", comments: "Track C advance posted to Account 14; expense budget remains deferred until rendition validation.", session, skipControls: true });
+  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "ADVANCE_PROVISIONED", comments: "Track C budget reserved before the advance is posted to Account 14; expense execution remains deferred until rendition validation.", session, skipControls: true });
   return { accountsPayable, commitment };
 }

@@ -38,7 +38,7 @@ export async function validateVoucherWithSunat(voucher, { request, user, manualD
   const taxpayer = await sunatService.validateTaxpayer(identity.rucIssuer, context);
   if (!taxpayer?.valid) return { valid: false, status: taxpayer?.status || taxpayer?.taxpayerStatus || "RUC_NO_HABIDO", taxpayer, detail: "SUNAT taxpayer validation failed or issuer is not HABIDO/active." };
   const fiscal = await sunatService.validateVoucher({ ...voucher, ruc: identity.rucIssuer, ...identity }, context);
-  if (!fiscal?.valid) return { valid: false, status: fiscal?.status || "COMPROBANTE_INVALIDO", taxpayer, fiscal, detail: "SUNAT voucher validation failed or voucher is not ACEPTADO." };
+  if (!fiscal?.valid || fiscal.voucherVerified === false || fiscal.publicDataset || (process.env.NODE_ENV === "production" && fiscal.source === "MOCK")) return { valid: false, status: fiscal?.status || "COMPROBANTE_NO_VERIFICADO", taxpayer, fiscal, detail: "The supplier check does not verify this invoice. Individual voucher validation is required before accounting." };
   return { valid: true, status: fiscal?.status || "ACEPTADO", taxpayer, fiscal };
 }
 
@@ -62,6 +62,7 @@ export async function createSunatVoucher({ request, purchaseOrder, batch, suppli
     sunatStatus: sunatResult?.status || sunatResult?.fiscal?.status,
     taxpayerStatus: sunatResult?.taxpayer?.condition || sunatResult?.taxpayer?.status,
     sunatProvider: sunatResult?.fiscal?.source || sunatResult?.taxpayer?.source,
+    validationEvidence: sunatResult,
     xmlPath: xmlFile?.path,
     xmlUrl: xmlFile?.url,
     pdfPath: pdfFile?.path,

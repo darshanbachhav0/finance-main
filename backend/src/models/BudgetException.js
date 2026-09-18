@@ -21,6 +21,10 @@ const budgetExceptionSchema = new mongoose.Schema(
     requestedAmount: { type: Number, required: true },
     status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING", index: true },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    preparedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    preparedAt: Date,
+    preparationComments: String,
+    history: [{ action: String, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, at: { type: Date, default: Date.now }, comments: String }],
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     reviewedAt: Date,
     comments: String

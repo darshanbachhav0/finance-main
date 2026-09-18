@@ -80,7 +80,7 @@ export default function BudgetControl() {
     try {
       if (confirm.kind === "decision") {
         await api.post(`/budget/exceptions/${confirm.row._id}/decision`, { status: confirm.status, comments });
-        notify(confirm.status === "APPROVED" ? "Budget exception approved." : "Budget exception rejected.");
+        notify(confirm.status === "REVIEWED" ? "Budget review saved for Management." : confirm.status === "APPROVED" ? "Budget exception approved." : "Budget exception rejected.");
       } else {
         await api.post(`/budget/requests/${confirm.row.request._id}/commit`);
         notify("Budget commitment completed and sent to Accounting.");
@@ -94,12 +94,15 @@ export default function BudgetControl() {
   }
 
   function exceptionActions(row) {
-    if (!canDecide) return [];
+    if (row.status === "PENDING" && canDecide) return [{ label: "Prepare / review", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "REVIEWED", title: "Review budget exception", description: "Record your recommendation for Management. This does not authorize an overrun.", confirmLabel: "Save review", inputLabel: "Recommendation", inputRequired: true }) }];
+    const id = value => String(value?._id || value || "");
+    const canApprove = user.role === "Management" && ![row.requestedBy, row.preparedBy, row.request?.requester, row.request?.solicitor].some(value => value && id(value) === id(user._id));
+    if (row.status === "PENDING" && !canApprove) return [];
     if (row.status === "PENDING") return [
       { label: "Approve exception", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "APPROVED", title: "Approve budget exception?", description: "This records an audited exception decision. A budget-increase strategy still requires sufficient allocation before commitment.", confirmLabel: "Approve exception", inputLabel: "Decision comments", inputRequired: true }) },
       { label: "Reject exception", icon: XCircle, tone: "danger", onClick: () => setConfirm({ kind: "decision", row, status: "REJECTED", title: "Reject budget exception?", description: "The request will remain blocked from budget commitment.", confirmLabel: "Reject exception", inputLabel: "Decision comments", inputRequired: true, tone: "danger" }) }
     ];
-    if (row.status === "APPROVED") return [{ label: "Retry budget commitment", icon: RotateCw, onClick: () => setConfirm({ kind: "commit", row, title: "Retry budget commitment?", description: "The backend will re-check current dimensional availability and the approved exception strategy.", confirmLabel: "Commit budget" }) }];
+    if (row.status === "APPROVED" && canDecide) return [{ label: "Retry budget commitment", icon: RotateCw, onClick: () => setConfirm({ kind: "commit", row, title: "Retry budget commitment?", description: "The backend will re-check current dimensional availability and the approved exception strategy.", confirmLabel: "Commit budget" }) }];
     return [];
   }
 
@@ -129,6 +132,7 @@ export default function BudgetControl() {
 
     <div className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget exceptions")}</h3><p>{t("Insufficient-budget branches require an explicit decision and remain auditable.")}</p></div><span className="section-count">{exceptionTable.pagination.total}</span></div><DataTable rows={exceptionTable.rows} loading={exceptionTable.loading} remote={exceptionTable.remote} filters={[{ key: "status", label: "statuses", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED"] }]} rowActions={exceptionActions} columns={[
       { key: "request", label: "Request", sortable: false, getValue: (row) => row.request?.requestNumber, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
+      { key: "preparationComments", label: "Budget review", render: row => row.preparationComments || "Pending review" },
       { key: "strategy", label: "Strategy" }, { key: "costCenter", label: "Cost center", sortable: false, render: (row) => row.costCenter?.code || "-" }, { key: "expenseType", label: "Expense type", sortable: false, render: (row) => row.expenseType?.accountNumber || "-" },
       { key: "budgetLimits", label: "Annual / monthly limits", sortable: false, render: (row) => row.budgetLimits?.planningMode ? <BudgetLimitSummary line={row.budgetLimits} /> : "—" },
       { key: "availableAmount", label: "Available", align: "right", render: (row) => money(row.availableAmount) }, { key: "requestedAmount", label: "Requested", align: "right", render: (row) => <strong>{money(row.requestedAmount)}</strong> }, { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }

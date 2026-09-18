@@ -5,6 +5,7 @@ import { APPROVAL_STAGES, PERMISSIONS, ROLES } from "../utils/constants.js";
 const userSchema = new mongoose.Schema(
   {
     employeeCode: { type: String, trim: true, uppercase: true, unique: true, sparse: true },
+    dni: { type: String, trim: true, unique: true, sparse: true },
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
@@ -16,6 +17,12 @@ const userSchema = new mongoose.Schema(
     },
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter" },
     authorizedCostCenters: [{ type: mongoose.Schema.Types.ObjectId, ref: "CostCenter" }],
+    costCenterAssignment: {
+      source: { type: String, trim: true },
+      sourceRow: Number,
+      assignedAt: Date,
+      matchedBy: { type: String, enum: ["DNI", "EMPLOYEE_CODE"] }
+    },
     approvalAreas: [{ type: String, trim: true }],
     permissions: [{ type: String, enum: Object.values(PERMISSIONS) }],
     area: { type: String, trim: true, default: "General" },

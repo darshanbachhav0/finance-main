@@ -49,6 +49,9 @@ const budgetCommitmentSchema = new mongoose.Schema(
     releasedAt: Date,
     releasedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     releaseReason: String,
+    legacyUnreservedSnapshot: mongoose.Schema.Types.Mixed,
+    renditionReservationSnapshot: mongoose.Schema.Types.Mixed,
+    adjustments: { type: [mongoose.Schema.Types.Mixed], default: [] },
     history: { type: [commitmentHistorySchema], default: [] }
   },
   { timestamps: true, optimisticConcurrency: true }

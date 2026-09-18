@@ -9,7 +9,7 @@ export default function RequestItemLine({ line, index, currency, errors = {}, on
   const amount = value => `${currency} ${formatNumber(value, language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const errorFor = field => errors[`lines.${index}.${field}`];
   const errorText = field => errorFor(field) && <small className="field-error-text">{t(errorFor(field))}</small>;
-  return <div className="official-line request-item-card">
+  return <div className="official-line request-item-card" data-motion-key={line.clientId}>
     <div className="official-line-head"><strong>{t("Item")} {index + 1}</strong><button type="button" className="icon-button danger" onClick={onRemove} disabled={!canRemove} aria-label={`${t("Remove line")} ${index + 1}`} title={t("Remove line")}><Trash2 size={16} /></button></div>
     <label className="field"><span>{t("Item / service description")} *</span><input value={line.itemDescription} onChange={event => onChange({ itemDescription: event.target.value })} aria-invalid={Boolean(errorFor("itemDescription"))} />{errorText("itemDescription")}</label>
     <div className="request-item-inputs">

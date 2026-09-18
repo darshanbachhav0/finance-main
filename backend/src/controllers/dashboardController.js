@@ -10,6 +10,8 @@ import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBankAccount.js";
 import User from "../models/User.js";
+import { slaStatus } from "../services/approvalRuleService.js";
+import { slaConfiguration } from "../services/slaPolicy.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { budgetOverview } from "../services/budgetOverviewService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
@@ -23,7 +25,7 @@ function ownerScope(user) {
 }
 
 function approvalScope(user) {
-  const query = { status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] } };
+  const query = { status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalStage: { $ne: "COMPLETE" } };
   if (user.role !== ROLES.ADMIN) {
     query.approvalStage = user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR;
     if (query.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
@@ -53,6 +55,10 @@ async function buildTasks(user) {
     ]);
     items.push({ key: "approval", label: "Requests awaiting approval", count, path: "/approvals", tone: "amber" });
     items.push({ key: "approvalOverdue", label: "Approval SLA overdue", count: overdue, path: "/approvals", tone: "red" });
+    const config = slaConfiguration();
+    items.push({ key: "approvalDueSoon", label: "Approval due soon", count: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $gte: new Date(), $lte: new Date(Date.now() + config.dueSoonHours * 3600000) } }), path: "/approvals", tone: "amber" });
+    const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope({ role: ROLES.ADMIN }) : query;
+    items.push({ key: "approvalEscalated", label: "SLA escalation", count: await FinancialRequest.countDocuments({ ...escalationScope, approvalDueAt: { $lte: new Date(Date.now() - config.escalationHours * 3600000) } }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "red" });
   }
   if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role)) {
     const payable = await AccountsPayable.countDocuments({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED] } });
@@ -61,9 +67,9 @@ async function buildTasks(user) {
     items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: "/treasury", tone: "amber" });
   }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SOLICITOR].includes(user.role)) {
-    const query = { status: REQUEST_STATUS.RENDITION_PENDING };
+    const query = { flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } };
     if (user.role === ROLES.SOLICITOR) query.$or = [{ requester: user._id }, { solicitor: user._id }];
-    items.push({ key: "rendition", label: "Renditions outstanding", count: await FinancialRequest.countDocuments(query), path: "/requests?status=RENDICION_PENDIENTE", tone: "amber" });
+    items.push({ key: "rendition", label: "Renditions outstanding", count: await FinancialRequest.countDocuments(query), path: "/requests?renditionStatus=PENDING%2CSUBMITTED%2COBSERVED", tone: "amber" });
   }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
     items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: await EmployeeReimbursementBankAccount.countDocuments({ active: true, verificationStatus: "PENDING" }), path: "/reimbursement-bank?verificationStatus=PENDING", tone: "amber" });
@@ -113,7 +119,7 @@ async function roleDetails(user, common) {
     metrics.push(
       { key: "requests", label: "Total requests", value: common.total, tone: "navy" },
       { key: "users", label: "Active users", value: activeUsers, tone: "green" },
-      { key: "workflow", label: "In active workflow", value: common.total - statusCount(common, REQUEST_STATUS.CLOSED) - statusCount(common, REQUEST_STATUS.VOIDED), tone: "teal" },
+      { key: "workflow", label: "In active workflow", value: common.total - statusCount(common, REQUEST_STATUS.CLOSED) - statusCount(common, REQUEST_STATUS.VOIDED) - statusCount(common, REQUEST_STATUS.REJECTED), tone: "teal" },
       { key: "supplierWarnings", label: "Supplier validations", value: pendingSuppliers, tone: "amber" },
       { key: "blocked", label: "Blocked controls (30d)", value: blockedActions, tone: blockedActions ? "red" : "neutral" }
     );
@@ -123,9 +129,9 @@ async function roleDetails(user, common) {
   if (user.role === ROLES.SOLICITOR) {
     metrics.push(
       { key: "drafts", label: "My drafts", value: statusCount(common, REQUEST_STATUS.DRAFT), tone: "neutral" },
-      { key: "returned", label: "Returned / observed", value: statusCount(common, REQUEST_STATUS.RETURNED) + statusCount(common, REQUEST_STATUS.OBSERVED) + statusCount(common, REQUEST_STATUS.REJECTED), tone: "red" },
+      { key: "returned", label: "Returned / observed", value: statusCount(common, REQUEST_STATUS.RETURNED) + statusCount(common, REQUEST_STATUS.OBSERVED), tone: "red" },
       { key: "pending", label: "Pending approvals", value: statusCount(common, REQUEST_STATUS.PENDING_APPROVAL) + statusCount(common, REQUEST_STATUS.DIRECTOR_APPROVED) + statusCount(common, REQUEST_STATUS.VICE_RECTOR_APPROVED), tone: "amber" },
-      { key: "rendition", label: "Rendition tasks", value: statusCount(common, REQUEST_STATUS.RENDITION_PENDING), tone: "teal" },
+      { key: "rendition", label: "Rendition tasks", value: await FinancialRequest.countDocuments({ ...ownerScope(user), flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } }), tone: "teal" },
       { key: "closed", label: "Closed requests", value: statusCount(common, REQUEST_STATUS.CLOSED), tone: "green" }
     );
   }
@@ -144,7 +150,7 @@ async function roleDetails(user, common) {
       { key: "oldest", label: "Oldest approval", value: oldest[0] ? Math.max(0, Math.floor((Date.now() - oldest[0].createdAt.getTime()) / 86400000)) : 0, suffix: "days", tone: "navy" },
       { key: "overdue", label: "SLA overdue", value: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $lt: new Date() } }), tone: "red" }
     );
-    data.oldestRequests = oldest;
+    data.oldestRequests = oldest.map(request => ({ ...request.toObject(), sla: slaStatus(request) }));
     data.recentDecisions = decisions;
   }
 

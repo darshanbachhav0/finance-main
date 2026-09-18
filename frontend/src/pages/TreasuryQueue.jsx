@@ -32,7 +32,8 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { banks, flowTypes, requestTypes } from "../utils/options.js";
+import { flowTypes, requestTypes } from "../utils/options.js";
+const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 
 const money = (currency, value) => `${currency || "PEN"} ${Number(value || 0).toLocaleString(undefined, {
   minimumFractionDigits: 2,
@@ -47,7 +48,7 @@ export default function TreasuryQueue() {
   const { notify } = useToast();
   const [selected, setSelected] = useState([]);
   const [accountSelections, setAccountSelections] = useState({});
-  const [bank, setBank] = useState("BCP");
+  const [bank, setBank] = useState("BBVA");
   const [currency, setCurrency] = useState("PEN");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [quickViewId, setQuickViewId] = useState(null);
@@ -70,8 +71,8 @@ export default function TreasuryQueue() {
   useDraftResume("payment-bounce", id => resumeDraftRecord("/treasury/payment-confirmations", id, payableIdOf, setBounceRow, setActionError));
   const reprogramDraft = useWorkDraft({ scope: "payment-reprogram", recordId: reprogramRow ? String(payableIdOf(reprogramRow)) : "new", title: "Payment reprogram", enabled: Boolean(reprogramRow), value: reprogramForm, restore: setReprogramForm, sourceVersion: reprogramRow?.updatedAt });
   useDraftResume("payment-reprogram", id => resumeDraftRecord("/treasury/bounced-payments", id, payableIdOf, setReprogramRow, setActionError));
-  const reconciliationDraft = useWorkDraft({ scope: "payment-reconciliation", recordId: reconciliationRow ? String(requestIdOf(reconciliationRow)) : "new", title: "Payment reconciliation", enabled: Boolean(reconciliationRow), value: reconciliationForm, restore: setReconciliationForm, sourceVersion: reconciliationRow?.updatedAt });
-  useDraftResume("payment-reconciliation", id => resumeDraftRecord("/treasury/reconciliation", id, requestIdOf, openReconciliation, setActionError));
+  const reconciliationDraft = useWorkDraft({ scope: "payment-reconciliation", recordId: reconciliationRow ? String(payableIdOf(reconciliationRow)) : "new", title: "Payment reconciliation", enabled: Boolean(reconciliationRow), value: reconciliationForm, restore: setReconciliationForm, sourceVersion: reconciliationRow?.updatedAt });
+  useDraftResume("payment-reconciliation", id => resumeDraftRecord("/treasury/reconciliation", id, payableIdOf, openReconciliation, setActionError));
 
   const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: { bank, currency }, persistKey: "treasury-queue" });
   const historyTable = usePaginatedResource("/treasury/bank-files");
@@ -103,7 +104,7 @@ export default function TreasuryQueue() {
         const locked = row.destinationLocked || row.paymentDestination
           ? row.paymentDestination
           : null;
-        const eligible = accounts.filter((account) => account.bank === bank && account.currency === currency);
+        const eligible = accounts.filter((account) => account.currency === currency);
         const existing = eligible.find((account) => String(account._id) === String(current[payableId]));
         const account = locked || existing || eligible.find((item) => item.preferred) || eligible[0];
         const accountId = account?.bankAccountId || account?.employeeBankAccountId || account?._id;
@@ -115,14 +116,14 @@ export default function TreasuryQueue() {
 
   const matchingAccounts = (row) => {
     if (row.paymentDestination?.sourceType === "EMPLOYEE_REIMBURSEMENT") {
-      if (row.paymentDestination.bank === bank && row.paymentDestination.currency === currency) return [row.paymentDestination];
+      if (row.paymentDestination.currency === currency) return [row.paymentDestination];
       return [];
     }
     if (row.destinationLocked || row.paymentDestination) {
-      if (row.paymentDestination?.bank === bank && row.paymentDestination?.currency === currency) return [row.paymentDestination];
+      if (row.paymentDestination?.currency === currency) return [row.paymentDestination];
       return [];
     }
-    return (row.eligibleBankAccounts || row.activeBankAccounts || []).filter((account) => account.bank === bank && account.currency === currency);
+    return (row.eligibleBankAccounts || row.activeBankAccounts || []).filter((account) => account.currency === currency);
   };
   const destinationBank = (row) => {
     if (row.paymentDestination) return row.paymentDestination.bank;
@@ -252,9 +253,9 @@ export default function TreasuryQueue() {
     event.preventDefault();
     setProcessing(true);
     try {
-      await api.post(`/treasury/requests/${requestIdOf(reconciliationRow)}/reconcile`, reconciliationForm);
+      await api.post(`/treasury/payables/${payableIdOf(reconciliationRow)}/reconcile`, reconciliationForm);
       await reconciliationDraft.complete();
-      notify("Payment reconciled. The request is ready for Accounting closure.");
+      notify("Payment reconciled. Request progress has been updated.");
       setReconciliationRow(null);
       setActionError("");
       reloadAll();
@@ -299,7 +300,7 @@ export default function TreasuryQueue() {
     {missingBank > 0 && <div className="alert-strip error"><AlertTriangle size={20} /><div><strong>{t("Some payments are blocked")}</strong><p>{t("A payment needs a verified eligible current account, or the immutable employee reimbursement destination, before file generation.")}</p></div></div>}
 
     <SectionNavigation className="treasury-section-nav" aria-label={t("Payment stages")}>{[["treasury-prepare", "Prepare bank file"], ["treasury-confirm", "Confirm payments"], ["treasury-returned", "Returned payments"], ["treasury-reconcile", "Reconcile"], ["treasury-history", "Bank file history"]].map(([id, label]) => <a key={id} href={`#${id}`}>{t(label)}</a>)}</SectionNavigation>
-    <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3>{t("Bank file preparation")}</h3><p>{t("The batch is generated from selected CXP records, not from one request-level payable.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("Bank")}</span><select value={bank} onChange={(event) => { setBank(event.target.value); setSelected([]); }}>{banks.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected([]); }}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field"><span>{t("Payment date")}</span><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label></div></div>
+    <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3>{t("Bank file preparation")}</h3><p>{t("The batch is generated from selected CXP records, not from one request-level payable.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("UMA source bank")}</span><input value={bank} readOnly aria-readonly="true" /><small className="field-hint">{t("New payment files use BBVA. Beneficiary accounts may use another bank through CCI.")}</small></label><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected([]); }}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field"><span>{t("Payment date")}</span><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label></div></div>
 
     {selected.length > 0 && <div className="selection-bar" role="status"><div><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{money(currency, selectedTotal)}</span></div><button type="button" className="primary-button" onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Review bank file")}</span></button></div>}
     {result && <div className="success-result" role="status"><div><strong>{t("Bank instruction generated")}</strong><span>{result.fileName} · {result.notice}</span></div>{result.url && <ProtectedAssetButton className="secondary-button" resourcePath={result.url} fileName={result.fileName}><Download size={16} />{t("Download")}</ProtectedAssetButton>}</div>}
@@ -326,13 +327,14 @@ export default function TreasuryQueue() {
     <div id="treasury-reconcile" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Reconciliation")}</h3><p>{t("Match all confirmed CXP payments to the bank statement before Accounting closure.")}</p></div><span className="section-count">{reconciliationTable.pagination.total}</span></div><DataTable rows={reconciliationTable.rows} loading={reconciliationTable.loading} remote={reconciliationTable.remote} rowActions={(row) => [{ label: "Reconcile payment", icon: Scale, onClick: () => openReconciliation(row) }]} columns={[
       { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${requestIdOf(row)}`}>{row.requestNumber}</Link> },
       { key: "supplier", label: "Supplier", sortable: false, render: (row) => row.supplier?.legalName || row.supplier?.name || row.requester?.name || "UMA collaborator" },
+      { key: "voucher", label: "Voucher", sortable: false, render: (row) => [row.accountsPayable?.voucher?.series, row.accountsPayable?.voucher?.number].filter(Boolean).join("-") || "-" },
       { key: "operation", label: "Operation number", render: (row) => row.payment?.operationNumber || "-" },
       { key: "paidAt", label: "Paid date", render: (row) => row.payment?.paidAt ? new Date(row.payment.paidAt).toLocaleDateString() : "-" },
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
       { key: "amount", label: "Confirmed", align: "right", render: (row) => <strong>{money(row.currency, row.payment?.confirmedAmount)}</strong> }
     ]} /></div>
 
-    <div id="treasury-history" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Generated bank-file history")}</h3><p>{t("Every batch retains its checksum, adapter mode, CXP items, and generation user.")}</p></div></div><DataTable rows={historyTable.rows} loading={historyTable.loading} remote={historyTable.remote} filters={[{ key: "bank", label: "banks", allLabel: "All banks", options: banks }, { key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
+    <div id="treasury-history" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Generated bank-file history")}</h3><p>{t("Every batch retains its checksum, adapter mode, CXP items, and generation user.")}</p></div></div><DataTable rows={historyTable.rows} loading={historyTable.loading} remote={historyTable.remote} filters={[{ key: "bank", label: "banks", allLabel: "All banks", options: historicalSourceBanks }, { key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
       { key: "batchNumber", label: "Batch" },
       { key: "fileName", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
       { key: "bank", label: "Bank" },
@@ -345,7 +347,7 @@ export default function TreasuryQueue() {
     ]} /></div>
 
     <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
-    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="This creates a DEMO / NOT CERTIFIED instruction and changes each selected CXP to PAYMENT_FILE_CREATED. It does not confirm payment." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, { label: "Total", value: money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
+    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, { label: "Total", value: money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
 
     <Drawer open={Boolean(paymentRow)} title="Confirm actual bank payment" description={paymentRow ? `${paymentRow.requestNumber} - ${paymentRow.supplier?.legalName || paymentRow.supplier?.name || "UMA collaborator"}` : ""} onClose={() => !processing && setPaymentRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setPaymentRow(null)}>{t("Cancel")}</button><button type="submit" form="payment-confirmation-form" className="primary-button" disabled={processing}><CircleCheckBig size={16} />{t(processing ? "Processing..." : "Confirm payment")}</button></>}><div className="document-requirement required"><AlertTriangle size={20} /><div><strong>{t("This settles the selected Accounts Payable record")}</strong><p>{t("Confirmation posts the payment journal and does not infer payment from a downloaded TXT.")}</p></div></div><DraftPanel busy={processing} draft={paymentDraft} onDiscard={() => setPaymentRow(null)}><form id="payment-confirmation-form" className="form-grid" onSubmit={confirmPayment}><label className="field"><span>{t("Operation number")} *</span><input required value={paymentForm.operationNumber} onChange={(event) => setPaymentForm({ ...paymentForm, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Actual payment date")} *</span><input required type="date" value={paymentForm.paidAt} onChange={(event) => setPaymentForm({ ...paymentForm, paidAt: event.target.value })} /></label><label className="field"><span>{t("Confirmed amount")} *</span><input required type="number" min="0.01" step="0.01" value={paymentForm.confirmedAmount} onChange={(event) => setPaymentForm({ ...paymentForm, confirmedAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={paymentForm.comments} onChange={(event) => setPaymentForm({ ...paymentForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 

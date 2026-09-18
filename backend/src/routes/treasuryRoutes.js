@@ -13,6 +13,7 @@ import {
   paymentQueue,
   reconciliationQueue,
   reconcileRequestPayment,
+  reconcilePayablePayment,
   schedulePaymentRequests
 } from "../controllers/treasuryController.js";
 import { authorize, protect } from "../middleware/auth.js";
@@ -36,5 +37,6 @@ router.post("/payables/:id/confirm-payment", confirmPayablePayment);
 router.post("/payables/:id/bounce", bouncePayablePayment);
 router.post("/payables/:id/reprogram", uploadFields, reprogramPayablePayment);
 router.post("/requests/:id/reconcile", reconcileRequestPayment);
+router.post("/payables/:id/reconcile", reconcilePayablePayment);
 
 export default router;

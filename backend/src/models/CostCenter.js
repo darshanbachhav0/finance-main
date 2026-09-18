@@ -11,7 +11,16 @@ const costCenterSchema = new mongoose.Schema(
     paidAmount: { type: Number, default: 0, min: 0 },
     budgetMode: { type: String, enum: ["TRANSITIONAL", "ACTIVE"], default: "TRANSITIONAL" },
     availableAmount: { type: Number, default: 0 },
-    active: { type: Boolean, default: true }
+    active: { type: Boolean, default: true },
+    organizationalUnit: { type: String, trim: true, default: "" },
+    organizationalUnitCode: { type: String, trim: true, default: "" },
+    sourceRows: [{ type: Number, min: 2 }],
+    importProvenance: {
+      source: { type: String, trim: true },
+      importedAt: Date,
+      sourceSheet: { type: String, trim: true },
+      status: { type: String, enum: ["ACTIVE", "INACTIVE", "MANUAL_REVIEW"] }
+    }
   },
   { timestamps: true }
 );

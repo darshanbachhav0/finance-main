@@ -4,6 +4,22 @@ import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
+  "Replace entered invoice values with the XML values (audited). All validation checks still apply.": "Reemplazar los datos ingresados por los del XML (con auditoría). Se aplicarán todas las validaciones.",
+  "Financial validation": "Validación financiera",
+  "Exchange rate evidence": "Evidencia del tipo de cambio",
+  "Supplier / RUC validation": "Validación del proveedor / RUC",
+  "Invoice validation": "Validación del comprobante",
+  "Budget availability": "Presupuesto disponible",
+  "Not verified": "Sin verificar",
+  "Prepare / review": "Preparar / revisar",
+  "Budget review": "Revisión de Presupuesto",
+  "Recommendation": "Recomendación",
+  "Save review": "Guardar revisión",
+  "currencyMatch": "Moneda coincide",
+  "SUNAT selling rates are verified on the server. Manual and BCRP/SBS records remain references; historical rates are preserved.": "El tipo de cambio venta SUNAT se verifica en el servidor. Los registros manuales y BCRP/SBS son referencias; se conserva la evidencia histórica.",
+  "Retrieve the applicable SUNAT selling rate and its publication date.": "Consultar el tipo de cambio venta SUNAT aplicable y su fecha de publicación.",
+  "SUNAT values must match the provider evidence.": "Los valores SUNAT deben coincidir con la evidencia del proveedor.",
+  "A rate for this date already exists. Historical evidence is preserved.": "Ya existe un tipo de cambio para esta fecha. Se conserva la evidencia histórica.",
   "ERP Financial Control": "Control Financiero ERP",
   "Financial Control": "Control Financiero",
   "Requests & payments": "Solicitudes y pagos",
@@ -527,10 +543,30 @@ const additionalSpanish = {
   "Validate preview": "Validar vista previa",
   "Export SIRE CSV": "Exportar CSV SIRE",
   "Eligible purchases": "Compras elegibles",
+  "Eligible vouchers": "Comprobantes elegibles",
+  "Reviewed vouchers": "Comprobantes revisados",
+  "Excluded vouchers": "Comprobantes excluidos",
+  "Manual review": "Revisión manual",
   "Validation warnings": "Advertencias de validación",
   "Purchase total": "Total de compras",
   "Resolve validation warnings before filing": "Resuelve las advertencias antes de presentar",
   "SIRE preview": "Vista previa SIRE",
+  SLA_DUE_SOON: "Por vencer",
+  SLA_OVERDUE: "Plazo vencido",
+  SLA_ESCALATION: "Escalado a Gerencia",
+  "Approval due soon": "Aprobación por vencer",
+  "Approval overdue": "Aprobación vencida",
+  "Approval escalated to Management": "Aprobación escalada a Gerencia",
+  "SLA escalation": "Escalamiento de aprobación",
+  "SIRE voucher preview": "Vista previa de comprobantes SIRE",
+  "Each row represents one fiscal voucher. Only individually validated vouchers are included in the CSV.": "Cada fila representa un comprobante fiscal. Solo los comprobantes validados individualmente se incluyen en el CSV.",
+  Voucher: "Comprobante",
+  "Fiscal validation": "Validación fiscal",
+  "Export status": "Estado de exportación",
+  "RUC missing": "RUC faltante",
+  EXPORTED: "EXPORTADO",
+  MANUAL_REVIEW: "REVISIÓN MANUAL",
+  MISSING_VOUCHER_LINK: "SIN VÍNCULO DE COMPROBANTE",
   "Only approved requests with a successfully validated XML are included.": "Solo se incluyen solicitudes aprobadas con XML validado correctamente.",
   "Previously generated SIRE reports remain available for download.": "Los reportes SIRE generados permanecen disponibles para descarga.",
   Warnings: "Advertencias",
@@ -1741,6 +1777,12 @@ const quotationPaymentSpanish = {
 };
 
 const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish };
+Object.assign(spanishDictionary, {
+  "Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed.": "Generar una instrucción BBVA de ancho fijo. El pago queda pendiente hasta confirmar la ejecución bancaria.",
+  "BBVA confirmed configuration (JSON)": "Configuración BBVA confirmada (JSON)",
+  "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format.": "Configurar BBVA en PEN y USD con campos confirmados por Tesorería. Los archivos históricos conservan su formato original.",
+  "Use the documented field configuration. Set confirmed only after Treasury reviews every field.": "Use la configuración documentada. Active confirmed solo después de la revisión de todos los campos por Tesorería."
+});
 
 const LanguageContext = createContext(null);
 

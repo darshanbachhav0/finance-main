@@ -36,7 +36,7 @@ export class ProductionSunatProvider extends SunatProvider {
     const token = env("SUNAT_API_TOKEN");
     const taxpayerEndpoint = env("SUNAT_TAXPAYER_ENDPOINT");
     const voucherEndpoint = env("SUNAT_VOUCHER_ENDPOINT");
-    const configured = Boolean(baseUrl && token && taxpayerEndpoint && voucherEndpoint);
+    const configured = Boolean(baseUrl && token && (taxpayerEndpoint || voucherEndpoint || env("SUNAT_EXCHANGE_RATE_ENDPOINT")));
     super({ mode: "PRODUCTION", configured });
     this.baseUrl = baseUrl;
     this.token = token;
@@ -48,7 +48,7 @@ export class ProductionSunatProvider extends SunatProvider {
   }
 
   assertConfigured(capability = "validation") {
-    if (!this.configured) {
+    if (!this.configured || (capability === "taxpayer-validation" && !this.taxpayerEndpoint) || (capability === "voucher-validation" && !this.voucherEndpoint)) {
       throw new AppError(
         503,
         "SUNAT production integration is not configured.",
@@ -127,9 +127,12 @@ export class ProductionSunatProvider extends SunatProvider {
       monto: voucher?.totalAmount
     };
     const response = await this.request(this.voucherEndpoint, payload);
-    const status = String(firstValue(response, ["status", "estado", "voucherStatus", "data.status", "data.estado"], "")).trim().toUpperCase();
+    const status = String(firstValue(response, ["voucherStatus", "data.estadoCp", "estadoCp", "status", "estado", "data.status", "data.estado"], "")).trim().toUpperCase();
     const valid = boolFrom(firstValue(response, ["valid", "accepted", "data.valid", "data.accepted"], undefined), ["ACEPTADO", "ACCEPTED", "VALID", "VALIDO", "VÁLIDO"].includes(status));
-    return { valid, source: "SUNAT_PRODUCTION", status, raw: response };
+    const accepted = ["1", "ACEPTADO", "ACCEPTED", "VALID", "VALIDO", "VÁLIDO"].includes(status) || firstValue(response, ["voucherVerified", "data.voucherVerified"], false) === true;
+    const explicitlyUnverified = firstValue(response, ["voucherVerified", "data.voucherVerified"], undefined) === false || firstValue(response, ["publicDataset", "data.publicDataset"], false) === true;
+    const verified = (valid || status === "1") && accepted && !explicitlyUnverified;
+    return { valid: verified, voucherVerified: verified, source: "SUNAT_PRODUCTION", status, raw: response };
   }
 
   async getSellingExchangeRate({ date }) {
@@ -139,6 +142,9 @@ export class ProductionSunatProvider extends SunatProvider {
     const response = await this.request(this.exchangeRateEndpoint, { date });
     const value = Number(firstValue(response, ["sellingRate", "venta", "rate", "data.sellingRate", "data.venta", "data.rate"], 0));
     if (!(value > 0)) throw new AppError(422, "SUNAT provider did not return a valid selling exchange rate.", { date }, ERROR_CODES.EXCHANGE_RATE_MISSING);
-    return { rate: value, date, source: "SUNAT_PRODUCTION", authoritative: true, raw: response };
+    const publishedDate = firstValue(response, ["date", "fecha", "data.date", "data.fecha"], "");
+    const source = firstValue(response, ["source", "data.source"], "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(publishedDate) || publishedDate > date || !["SUNAT", "SUNAT_PRODUCTION"].includes(source)) throw new AppError(502, "The exchange-rate adapter must return the actual SUNAT publication date and source.");
+    return { rate: value, date: publishedDate, source, sourceUrl: normalizedEndpoint(this.baseUrl, this.exchangeRateEndpoint), authoritative: true, raw: response };
   }
 }

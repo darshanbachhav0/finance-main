@@ -1,3 +1,7 @@
+import { fiscalFixture } from "./fiscalFixtures.js";
+import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
+import { inspectBbvaFile } from "../src/integrations/banks/BbvaBankFileAdapter.js";
+import { deferBudget } from "../src/services/budgetService.js";
 import assert from "node:assert/strict";
 import fs from "fs/promises";
 import path from "path";
@@ -14,6 +18,7 @@ import CostCenter from "../src/models/CostCenter.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import JournalEntry from "../src/models/JournalEntry.js";
 import PaymentBatch from "../src/models/PaymentBatch.js";
+import PurchaseOrder from "../src/models/PurchaseOrder.js";
 import Supplier from "../src/models/Supplier.js";
 import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
@@ -52,7 +57,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       AuditLog.init(),
       PaymentBatch.init()
     ]);
-    const center = await CostCenter.create({ code: "CC-LIFE", name: "Lifecycle", area: "Operations", budgetMode: "TRANSITIONAL", active: true });
+    const center = await CostCenter.create({ code: "CC-LIFE", name: "Lifecycle", area: "Operations", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
     const activeCenter = await CostCenter.create({ code: "CC-ACTIVE", name: "Active Budget", area: "Operations", annualBudget: 1000, budgetMode: "ACTIVE", active: true });
     const insufficientCenter = await CostCenter.create({ code: "CC-LOW", name: "Low Budget", area: "Research", annualBudget: 50, budgetMode: "ACTIVE", active: true });
     const opex = await ExpenseType.create({ code: "EXP-OPEX", name: "OPEX Service", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", deductible: true, permittedRequestTypes: [REQUEST_TYPE.OPEX, REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_CON_SUSTENTO], active: true });
@@ -112,6 +117,11 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
         files: {}, user: users.solicitor, req
       });
       cleanupPaths.push(path.join(uploadRoot, "requests", String(request._id)));
+      request.attachments.push(
+        { kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: users.solicitor._id },
+        { kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 10, uploadedBy: users.solicitor._id }
+      );
+      await request.save();
       assert.equal(request.status, REQUEST_STATUS.DRAFT);
       assert.equal(request.totalAmount, 118);
     });
@@ -125,7 +135,8 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     await t.test("3. missing required attachment blocks submit", async () => {
       await assert.rejects(() => createFinancialRequest({
         payload: {
-          requestType: REQUEST_TYPE.REEMBOLSO_CON_SUSTENTO,
+          flowType: "B",
+          requestType: REQUEST_TYPE.OPEX,
           expenseNature: EXPENSE_NATURE.ADVERTISING,
           issueDate,
           accountingPeriod: period,
@@ -209,6 +220,9 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
 
     let payable;
     await t.test("15-17. duplicate voucher protection, CXP creation, and balanced provision", async () => {
+      const { xmlFile } = await fiscalFixture(request, supplier, { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F001", number: "0001", issueDate, currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 }, users.accounting, cleanupPaths);
+      request.attachments.push({ ...xmlFile, kind: "XML", uploadedBy: users.accounting._id });
+      await request.save();
       const result = await processAccountsPayable({ requestId: request._id, payload: { documentType: "FACTURA", series: "F001", number: "0001", documentDate: issueDate, accountingDate: issueDate, fiscalPeriod: period, accountNumber: opex.accountNumber, dueDate: "2026-09-30" }, user: users.accounting, req });
       request = result.request;
       payable = result.accountsPayable;
@@ -223,7 +237,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.equal(historicalPayable.paymentTermsSnapshot.option, "CREDIT_30");
       assert.equal(historicalPayable.paymentTermsSnapshot.days, 30);
       assert.equal(result.journal.totalDebit, result.journal.totalCredit);
-      const duplicateRequest = await FinancialRequest.create({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, issueDate, accountingPeriod: period, currency: "PEN", supplier: supplier._id, solicitor: users.solicitor._id, status: REQUEST_STATUS.BUDGET_COMMITTED, description: "Duplicate voucher", lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }] });
+      const duplicateRequest = await FinancialRequest.create({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, issueDate, accountingPeriod: period, currency: "PEN", supplier: supplier._id, solicitor: users.solicitor._id, status: REQUEST_STATUS.BUDGET_COMMITTED, description: "Duplicate voucher", attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 10, uploadedBy: users.solicitor._id }], lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }] });
       await assert.rejects(() => processAccountsPayable({ requestId: duplicateRequest._id, payload: { documentType: " factura ", series: " f001 ", number: " 0001 ", documentDate: issueDate, accountingDate: issueDate, fiscalPeriod: period }, user: users.accounting, req }), (error) => error.code === "DUPLICATE_VOUCHER");
     });
 
@@ -236,6 +250,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     let advanceRequest;
     await t.test("21-22. Entrega a Rendir posts Account 14 then recognizes expense on rendition", async () => {
       advanceRequest = await FinancialRequest.create({ requestType: REQUEST_TYPE.ENTREGA_RENDIR, expenseNature: EXPENSE_NATURE.MAINTENANCE, issueDate, accountingPeriod: period, currency: "PEN", supplier: supplier._id, solicitor: users.solicitor._id, requester: users.solicitor._id, status: REQUEST_STATUS.BUDGET_COMMITTED, description: "Advance", lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }] });
+      await deferBudget(advanceRequest, users.accounting._id);
       const processed = await processAccountsPayable({ requestId: advanceRequest._id, payload: { documentType: "RECIBO", series: "ADV", number: "1", documentDate: issueDate, accountingDate: issueDate, fiscalPeriod: period }, user: users.accounting, req });
       assert.equal(processed.journal.entryType, "ADVANCE");
       assert.equal(processed.journal.lines[0].accountNumber, "141301");
@@ -266,7 +281,12 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
 
     let batch;
     await t.test("26-27. bank TXT batch persists but does not mark CXP paid", async () => {
-      const result = await generatePaymentBatch({ requestIds: [request._id.toString()], bank: "BCP", currency: "PEN", paymentDate: issueDate, user: users.treasury, req });
+      await installBbvaTestConfiguration();
+      await AccountingMapping.create({code:"TEST-BBVA-BANK",name:"BBVA source",purpose:"BANK",bank:"BBVA",currency:"PEN",accountNumber:"104102",active:true});
+      const attempts = await Promise.allSettled([1,2].map(()=>generatePaymentBatch({ requestIds: [request._id.toString()], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: users.treasury, req })));
+      assert.equal(attempts.filter(item=>item.status==="fulfilled").length,1);
+      assert.equal(attempts.filter(item=>item.status==="rejected").length,1);
+      const result = attempts.find(item=>item.status==="fulfilled").value;
       batch = result.batch;
       cleanupPaths.push(path.join(generatedRoot, "bank-files", batch.fileName));
       request = await FinancialRequest.findById(request._id);
@@ -274,7 +294,17 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.equal(request.status, REQUEST_STATUS.BANK_FILE_GENERATED);
       assert.equal(payable.status, AP_STATUS.PAYMENT_FILE_CREATED);
       assert.equal(await JournalEntry.countDocuments({ request: request._id, entryType: "PAYMENT" }), 0);
-      assert.match(result.content, /UMA_DEMO_NOT_CERTIFIED/);
+      assert.equal(inspectBbvaFile(result.content).paymentCount,1);
+      assert.equal(batch.adapterMode,"FIXED_WIDTH");
+      const audit = await AuditLog.findOne({entityId:batch._id,action:"GENERATED_BBVA_BANK_FILE"});
+      assert.equal(audit.newValues.checksum,batch.checksum);
+      assert.equal(audit.newValues.specificationVersion,batch.specificationVersion);
+      assert.equal(audit.newValues.itemCount,1);
+      const before = await PaymentBatch.countDocuments();
+      await assert.rejects(()=>generatePaymentBatch({requestIds:[String(request._id)],bank:"BBVA",currency:"PEN",paymentDate:issueDate,user:users.treasury,req}));
+      assert.equal(await PaymentBatch.countDocuments(),before);
+      assert.equal(await AuditLog.countDocuments({action:"GENERATED_BBVA_BANK_FILE"}),1);
+      assert.deepEqual(await fs.readFile(path.join(generatedRoot,"bank-files",batch.fileName)),result.content);
     });
 
     await t.test("28-29. payment confirmation settles CXP and creates payment journal", async () => {
@@ -291,6 +321,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       const result = await reconcilePayment({ requestId: request._id, payload: { bankReference: "STM-100", statementAmount: 118, comments: "Matched" }, user: users.treasury, req });
       request = result.request;
       assert.equal(request.status, REQUEST_STATUS.RECONCILED);
+      await PurchaseOrder.updateOne({ request: request._id }, { $set: { remainingAmount: 0, status: "LIQUIDATED" } });
       request = await closeFinancialRequest({ id: request._id, user: users.accounting, req, comments: "Closed" });
       assert.equal(request.status, REQUEST_STATUS.CLOSED);
     });
@@ -308,6 +339,16 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     });
 
     await t.test("33. audit records are immutable through normal operations", async () => {
+      const transitions = await AuditLog.find({ requestId: request._id, module: "WORKFLOW", "oldValues.status": { $exists: true } });
+      assert.ok(transitions.length > 0);
+      for (const event of transitions) {
+        assert.equal(event.statusFrom, event.oldValues.status);
+        assert.equal(event.statusTo, event.newValues.status);
+        assert.ok(event.user && event.createdAt);
+      }
+      const postingAudit = await AuditLog.findOne({ requestId: request._id, action: "ACCOUNTING_POSTED" });
+      assert.ok(postingAudit?.user && postingAudit.statusFrom && postingAudit.statusTo);
+      assert.ok(await AuditLog.exists({ requestId: request._id, action: "BBVA_TXT_GENERATED" }));
       const audit = await recordAudit({ entityType: "FinancialRequest", entity: request, action: "IMMUTABLE_TEST", user: users.admin, req });
       audit.message = "Changed";
       await assert.rejects(() => audit.save(), /append-only/);

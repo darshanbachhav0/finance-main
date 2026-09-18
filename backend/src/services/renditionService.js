@@ -1,3 +1,5 @@
+import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
+import { assertRequestActive, assertPostingAllowed } from "./financialProgressService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import AccountsPayable from "../models/AccountsPayable.js";
 import CostCenter from "../models/CostCenter.js";
@@ -5,7 +7,8 @@ import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBan
 import { createRenditionJournal, createRenditionSettlementJournal } from "./accountingService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { clientIp, recordAudit, workflowEvent } from "./auditService.js";
-import { executeDeferredBudget } from "./budgetService.js";
+import { executeDeferredBudget, assertRenditionBudgetAvailable } from "./budgetService.js";
+import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { parseRequestLines, requestPopulate } from "./requestService.js";
@@ -15,9 +18,8 @@ import { runFinancialOperation } from "./transactionService.js";
 import { evaluateConfiguredMobilityLines, getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { nextRenditionNumber } from "./sequenceService.js";
-import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, FINANCE_CONFIGURATION_KEYS, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+import { DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 import { canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney, toMinorUnits } from "../utils/money.js";
 
@@ -89,9 +91,10 @@ function parseUnsupportedExpenseLines(value) {
 }
 
 function assertSubmissionState(request) {
+  assertRequestActive(request);
   if (!APPLICABLE_TYPES.includes(request.requestType)) throw new AppError(409, "The official rendition form does not apply to this request type.", { requestType: request.requestType }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   const validStatus = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR
-    ? request.status === REQUEST_STATUS.RENDITION_PENDING
+    ? [REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED].includes(canonicalRequestStatus(request.status))
     : request.status === REQUEST_STATUS.BUDGET_COMMITTED;
   if (!validStatus || !["PENDING", "OBSERVED", "NOT_REQUIRED"].includes(request.rendition?.status || "NOT_REQUIRED")) {
     throw new AppError(409, "This rendition cannot be submitted at its current lifecycle stage.", { requestType: request.requestType, status: request.status, renditionStatus: request.rendition?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
@@ -190,7 +193,7 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
   try {
     persisted = await persistUploadedFiles(files, { domain: "requests", entityId: request._id });
     const attachments = renditionAttachments(persisted, user._id);
-    if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && !attachments.length && !(request.attachments || []).some((item) => item.kind === "RENDITION")) throw new AppError(422, "At least one rendition evidence file is required.", undefined, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
+    await assertConfiguredDocuments(request, DOCUMENT_PHASE.RENDITION, [...(request.attachments || []), ...attachments]);
     const firstNewAttachment = request.attachments.length;
     request.attachments.push(...attachments);
     request.rendition.lines = lines.map((line) => ({ ...line, currency: request.currency, exchangeRate: request.exchangeRate, penEquivalent: multiplyMoney(line.totalAmount, request.exchangeRate) }));
@@ -241,7 +244,7 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
 
 function assertReviewable(request) {
   const correctLifecycle = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR
-    ? [REQUEST_STATUS.RENDITION_PENDING, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status)
+    ? [REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED].includes(canonicalRequestStatus(request.status))
     : request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO && request.status === REQUEST_STATUS.BUDGET_COMMITTED;
   if (!correctLifecycle || request.rendition?.status !== "SUBMITTED" || request.rendition?.financeReview?.result !== "PENDING") {
     throw new AppError(409, "Only a submitted rendition pending Finance review can be reviewed.", { status: request.status, renditionStatus: request.rendition?.status, financeReview: request.rendition?.financeReview?.result }, ERROR_CODES.INVALID_STATUS_TRANSITION);
@@ -285,22 +288,11 @@ export async function reviewRendition({ requestId, action, comments, user, req }
   if (hasOfficialDetails && !request.rendition?.beneficiaryAcknowledgment?.reference) throw new AppError(422, "Authenticated beneficiary acknowledgment is missing.", undefined, ERROR_CODES.BENEFICIARY_ACKNOWLEDGMENT_REQUIRED);
   if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
     if (!moneyEquals(request.rendition.balanceOutstanding, 0)) throw new AppError(422, "The full advance must be rendered or returned before validation.", { balanceOutstanding: request.rendition.balanceOutstanding }, ERROR_CODES.RENDITION_REQUIRED);
-    if (!(request.attachments || []).some((item) => item.kind === "RENDITION")) throw new AppError(422, "Rendition evidence is missing.", undefined, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
+    await assertConfiguredDocuments(request, DOCUMENT_PHASE.RENDITION);
   } else if (!request.rendition?.reimbursementBankSnapshot?.profile || request.rendition?.reimbursementBankSnapshot?.verificationStatus !== "VERIFIED") {
     throw new AppError(422, "A verified reimbursement bank snapshot is required.", undefined, ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED);
   }
 
-  if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && request.status === REQUEST_STATUS.OBSERVED_BUDGET) {
-    await transitionRequest({
-      request,
-      targetStatus: REQUEST_STATUS.RENDITION_PENDING,
-      user,
-      req,
-      action: "RENDITION_BUDGET_RETRY",
-      comments: "Rendition returned to validation after budget adjustment.",
-      skipControls: true
-    });
-  }
 
   if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) await request.populate("rendition.lines.expenseType");
   const nonDeductibleOutstanding = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR
@@ -313,6 +305,10 @@ export async function reviewRendition({ requestId, action, comments, user, req }
 
   try {
     const result = await runFinancialOperation(async (session) => {
+      if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
+        await assertPostingAllowed(request, { user, req });
+        await assertRenditionBudgetAvailable(request, user._id, deductibleBudgetLines, { session });
+      }
       const journal = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR ? await createRenditionJournal(request, accountsPayable, user._id, { session }) : null;
       if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
         await executeDeferredBudget(request, user._id, { session, lines: deductibleBudgetLines });
@@ -332,9 +328,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       request.approvalHistory.push(workflowEvent({ action: "RENDITION_APPROVED", from: request.status, to: request.status, user, req, comments: reviewComments || (journal ? "Rendition validated and eligible actual expense recognized." : "Official reimbursement detail approved for existing Accounting processing."), request }));
       await request.save({ session });
       await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_APPROVED", user, req, module: "RENDITION", newValues: { financeReview: "APPROVED", journal: journal?.entryNumber, amountRendered: request.rendition.amountRendered, reimbursementTotal: request.rendition.reimbursementTotal, nonDeductibleOutstanding }, session });
-      if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && nonDeductibleOutstanding <= 0) {
-        await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAID_CLOSED, user, req, action: "RENDITION_CLOSED", comments: "Advance fully rendered/returned; Account 14 cleared and expense budget executed.", session });
-      }
+
       await resolveNotification(`request:${request._id}:rendition-review`);
       await request.populate(requestPopulate);
       return { request, journal };
@@ -349,7 +343,8 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     const observed = await FinancialRequest.findById(requestId);
     if (observed && observed.status !== REQUEST_STATUS.OBSERVED_BUDGET) {
       observed.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, observedAt: new Date(), observedBy: user._id };
-      await transitionRequest({ request: observed, targetStatus: REQUEST_STATUS.OBSERVED_BUDGET, user, req, action: "RENDITION_BUDGET_OBSERVED", comments: error.message, skipControls: true });
+      await observed.save();
+      await recordAudit({ entityType: "FinancialRequest", entity: observed, user, req, module: "RENDITION", action: "RENDITION_BUDGET_OBSERVED", comments: error.message });
     }
     await notifyRoles({ roles: [ROLES.BUDGET, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: "Rendition budget adjustment required", message: `${request.requestNumber} cannot execute its final expense budget until the budget is adjusted.`, path: "/budget", entityType: "FinancialRequest", entityId: request._id });
     throw new AppError(409, "Rendition observed due to insufficient budget. Adjust the budget and retry approval.", error.details, ERROR_CODES.INSUFFICIENT_BUDGET);
@@ -380,9 +375,6 @@ export async function settleNonDeductibleRendition({ requestId, amount, method, 
     }
     await request.save({ session });
     await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_NON_DEDUCTIBLE_SETTLED", user, req, module: "RENDITION", newValues: { method: settlementMethod, amount: settlementAmount, reference: settlementReference, remaining: request.rendition.nonDeductibleOutstanding, journal: journal.entryNumber }, session });
-    if (request.rendition.nonDeductibleOutstanding <= 0 && request.status !== REQUEST_STATUS.PAID_CLOSED) {
-      await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAID_CLOSED, user, req, action: "RENDITION_CLOSED", comments: "Non-deductible Account 14 balance regularized; rendition closed.", session });
-    }
     await request.populate(requestPopulate);
     return { request, journal };
   });

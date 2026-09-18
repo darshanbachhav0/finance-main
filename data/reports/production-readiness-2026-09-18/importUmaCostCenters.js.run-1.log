@@ -1,0 +1,28 @@
+MongoDB connected: erp_readiness_review_40008_1789751039358
+{
+  "mode": "DRY_RUN",
+  "source": "Centro de Costo - Tesoreria.xlsx",
+  "worksheet": "Hoja1",
+  "rowsRead": 153,
+  "validRows": 153,
+  "uniqueCecoCodes": 39,
+  "costCentersReady": 34,
+  "costCentersToInsert": 34,
+  "costCentersToUpdate": 0,
+  "conflictingCostCenters": 5,
+  "duplicateCecoGroups": 27,
+  "demoCentersToDeactivate": 6,
+  "employeesReadyForAssignment": 0,
+  "unmatchedEmployees": 125,
+  "ambiguousEmployees": 28,
+  "invalidRows": 0,
+  "sourceEncodingWarnings": 0,
+  "highlightedManualReview": [
+    "50103",
+    "20007",
+    "30004",
+    "20002",
+    "40020"
+  ],
+  "reportPath": "C:\\Users\\TI-SJL-0010\\Downloads\\finance-main-triple-track-updated\\finance-main\\data\\reports\\production-readiness-2026-09-18\\ceco-dry-run.json"
+}

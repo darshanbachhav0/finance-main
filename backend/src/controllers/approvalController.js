@@ -16,7 +16,7 @@ function decisionHandler(action) {
       user: req.user,
       req
     });
-    res.json({ data: publicRequestPayload(result.request), warning: result.budgetWarning });
+    res.json({ data: publicRequestPayload(result.request, req.user), warning: result.budgetWarning });
   });
 }
 

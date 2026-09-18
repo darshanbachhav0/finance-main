@@ -9,6 +9,7 @@ import {
   getBudgetPreview,
   getProcurementReadiness,
   getRequestDocumentRequirements,
+  getRequestDocumentStatus,
   getRequestFormPolicy,
   getRenditionFormPolicy,
   getRenditionPaymentDestination,
@@ -37,6 +38,7 @@ router.get("/form-policy", getRequestFormPolicy);
 router.get("/authorized-cost-centers", authorize(...REQUEST_CREATOR_ROLES), getAuthorizedCostCenters);
 router.post("/budget-preview", authorize(...REQUEST_CREATOR_ROLES), getBudgetPreview);
 router.route("/").get(listRequests).post(authorize(...REQUEST_CREATOR_ROLES), uploadFields, createRequest);
+router.get("/:id/document-requirements", getRequestDocumentStatus);
 router.route("/:id").get(getRequest).put(uploadFields, updateRequest).delete(deleteRequest);
 router.get("/:id/procurement-readiness", getProcurementReadiness);
 router.post("/:id/procurement-order", authorize(ROLES.ADMIN, ROLES.BUDGET), createProcurementOrder);

@@ -9,6 +9,8 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import WorkflowStatusLegend from "../components/WorkflowStatusLegend.jsx";
+import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
@@ -64,10 +66,11 @@ export default function Dashboard() {
   }
 
   const requestColumns = [
+    ...(summary?.role === "Approver" ? [{ key: "approvalDueAt", label: "SLA due", render: row => <div className="primary-cell"><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><span>{row.approvalDueAt ? formatDateTime(row.approvalDueAt, language) : "-"}</span></div> }] : []),
     { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
     { key: "supplier", label: "Supplier", getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.name || "-" },
     { key: "totalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.totalAmount, row.currency, language) },
-    { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }
+    { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> }
   ];
   const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
   const workspace = {
@@ -101,6 +104,7 @@ export default function Dashboard() {
               <StatCard key={metric.key} label={metric.label} value={metricValue(metric)} suffix={metric.suffix} tone={metric.tone} icon={metricIcons[metric.key] || FileText} {...dashboardMetricLink(summary.role, metric.key)} />
             ))}
           </div>
+          <WorkflowStatusLegend />
 
           {summary.warnings?.length > 0 && (
             <div className="alert-strip" role="status">

@@ -41,14 +41,13 @@ export const generateBankFile = asyncHandler(async (req, res) => {
     data: result.batch,
     fileName: result.batch.fileName,
     url: result.batch.url,
-    content: result.content,
     processed: result.batch.items.map((item) => item.requestNumber),
     totals: [{ currency: result.batch.currency, total: result.batch.totalAmount, count: result.batch.items.length }],
     statusChangesApplied: true,
     paymentEntriesCreated: false,
     paymentConfirmed: false,
     adapterMode: result.batch.adapterMode,
-    notice: "DEMO / NOT CERTIFIED. File generation does not confirm payment or settle CXP."
+    notice: "BBVA fixed-width instruction generated. Confirm payment only after bank execution."
   });
 });
 
@@ -74,5 +73,10 @@ export const reprogramPayablePayment = asyncHandler(async (req, res) => {
 
 export const reconcileRequestPayment = asyncHandler(async (req, res) => {
   const result = await reconcilePayment({ requestId: req.params.id, payload: req.body, user: req.user, req });
+  res.json({ data: publicRequestPayload(result.request), reconciliation: result.reconciliation });
+});
+
+export const reconcilePayablePayment = asyncHandler(async (req, res) => {
+  const result = await reconcilePayment({ accountsPayableId: req.params.id, payload: req.body, user: req.user, req });
   res.json({ data: publicRequestPayload(result.request), reconciliation: result.reconciliation });
 });

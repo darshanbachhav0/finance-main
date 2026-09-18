@@ -12,5 +12,5 @@ test("Track C enforces a ten-day deadline and blocks new overdue advances", () =
 });
 test("non-deductible Account 14 balance supports reimbursement or payroll deduction", () => {
   const rendition = source("../src/services/renditionService.js");
-  for (const token of ["nonDeductibleOutstanding", "REIMBURSEMENT", "PAYROLL_DEDUCTION", "REQUEST_STATUS.PAID_CLOSED"]) assert.ok(rendition.includes(token), `Missing ${token}`);
+  for (const token of ["nonDeductibleOutstanding", "REIMBURSEMENT", "PAYROLL_DEDUCTION", "createRenditionSettlementJournal"]) assert.ok(rendition.includes(token), `Missing ${token}`);
 });

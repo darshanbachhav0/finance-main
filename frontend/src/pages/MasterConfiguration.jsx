@@ -6,10 +6,12 @@ import Message from "../components/Message.jsx";
 import ResourceManager from "../components/ResourceManager.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { approvalLevels, banks, currencies, expenseNatureLabels, expenseNatures, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
+import { approvalLevels, banks, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
 
 const requestTypeOptions = ["*", ...requestTypes].map((value) => ({ value, label: requestTypeLabels[value] || value }));
 const natureOptions = ["*", ...expenseNatures].map((value) => ({ value, label: expenseNatureLabels[value] || value }));
+const flowOptions = ["*", ...flowTypes].map((value) => ({ value, label: flowTypeLabels[value] || value }));
+const documentPhases = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
 
 function parseJsonArray(value) {
   const parsed = JSON.parse(value || "[]");
@@ -50,10 +52,10 @@ export default function MasterConfiguration() {
         { name: "name", label: "Name", required: true }, { name: "approvalLevel", label: "Approval level", type: "select", required: true, options: approvalLevels },
         { name: "role", label: "Role", type: "select", required: true, options: roles }, { name: "area", label: "Area", defaultValue: "*", required: true },
         { name: "amountFrom", label: "Amount from", type: "number", min: 0, step: "0.01", defaultValue: 0 }, { name: "amountTo", label: "Amount to", type: "number", min: 0, step: "0.01" },
-        { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "sequence", label: "Sequence", type: "number", min: 1, defaultValue: 1, required: true },
+        { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "flowType", label: "Track", type: "select", defaultValue: "*", options: flowOptions }, { name: "sequence", label: "Sequence", type: "number", min: 1, defaultValue: 1, required: true },
         { name: "slaHours", label: "SLA hours", type: "number", min: 1, defaultValue: 24, required: true }, { name: "required", label: "Required", type: "checkbox", defaultValue: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
+      columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "flowType", label: "Track" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
     },
     "budget-rules": {
       label: "Budget Rules", roles: ["Admin", "Budget"], endpoint: "/budget-rules",
@@ -80,15 +82,16 @@ export default function MasterConfiguration() {
     },
     "document-rules": {
       label: "Document Rules", roles: ["Admin", "Accounting"], endpoint: "/document-rules",
-      description: "Configure the evidence required by request type and expense nature. Requirements use kind, minCount, and labelKey.",
+      description: "Configure evidence by track, workflow phase, request type and expense nature. Requirements use kind, minCount, and labelKey.",
       fields: [
-        { name: "code", label: "Code", required: true }, { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions },
+        { name: "code", label: "Code", required: true }, { name: "flowType", label: "Track", type: "select", defaultValue: "*", options: flowOptions },
+        { name: "phase", label: "Document phase", type: "select", defaultValue: "SUBMISSION", options: documentPhases }, { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions },
         { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
         { name: "requirements", label: "Requirements JSON", type: "textarea", rows: 7, required: true, defaultValue: "[]", getValue: (row) => JSON.stringify(row.requirements || [], null, 2), validate: (value) => { try { parseJsonArray(value); return ""; } catch (error) { return error.message; } } },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       transformSubmit: (form) => ({ ...form, requirements: parseJsonArray(form.requirements) }),
-      columns: [{ key: "code", label: "Code" }, { key: "requestType", label: "Request type" }, { key: "expenseNature", label: "Expense nature" }, { key: "requirements", label: "Requirements", getValue: (row) => row.requirements?.map((item) => item.kind).join(" "), render: (row) => row.requirements?.map((item) => `${item.kind} x${item.minCount}`).join(", ") || "-" }, { key: "active", label: "Status" }]
+      columns: [{ key: "code", label: "Code" }, { key: "flowType", label: "Track" }, { key: "phase", label: "Phase" }, { key: "requestType", label: "Request type" }, { key: "expenseNature", label: "Expense nature" }, { key: "requirements", label: "Requirements", getValue: (row) => row.requirements?.map((item) => item.kind).join(" "), render: (row) => row.requirements?.map((item) => `${item.kind} x${item.minCount}`).join(", ") || "-" }, { key: "active", label: "Status" }]
     },
     "accounting-mappings": {
       label: "Accounting Mappings", roles: ["Admin", "Accounting"], endpoint: "/accounting-mappings",
@@ -104,11 +107,13 @@ export default function MasterConfiguration() {
     },
     "bank-formats": {
       label: "Bank Formats", roles: ["Admin"], endpoint: "/bank-formats",
-      description: "Record bank-adapter mode and specification version. Demo formats remain clearly marked as not certified.",
+      description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format.",
+      transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [
-        { name: "bank", label: "Bank", type: "select", required: true, options: banks }, { name: "currency", label: "Currency", type: "select", required: true, options: currencies },
-        { name: "mode", label: "Mode", type: "select", options: ["DEMO", "CERTIFIED"], defaultValue: "DEMO" }, { name: "specificationVersion", label: "Specification version", required: true, defaultValue: "UMA-DEMO-1" },
-        { name: "certified", label: "Certified", type: "checkbox", defaultValue: false }, { name: "notes", label: "Notes", type: "textarea", defaultValue: "DEMO / NOT CERTIFIED" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+        { name: "bank", label: "Bank", type: "select", required: true, options: ["BBVA"] }, { name: "currency", label: "Currency", type: "select", required: true, options: currencies },
+        { name: "mode", label: "Mode", type: "select", options: ["FIXED_WIDTH"], defaultValue: "FIXED_WIDTH" }, { name: "specificationVersion", label: "Specification version", required: true, defaultValue: "UMA-BBVA-151-277-v1" },
+        { name: "bbva", label: "BBVA confirmed configuration (JSON)", type: "textarea", rows: 14, getValue: (row) => JSON.stringify(row.bbva || {}, null, 2), hint: "Use the documented field configuration. Set confirmed only after Treasury reviews every field." },
+        { name: "certified", label: "Certified", type: "checkbox", defaultValue: false }, { name: "notes", label: "Notes", type: "textarea", defaultValue: "" }, { name: "active", label: "Active", type: "checkbox", defaultValue: false }
       ],
       columns: [{ key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "mode", label: "Mode" }, { key: "specificationVersion", label: "Specification version" }, { key: "certified", label: "Certified", render: (row) => row.certified ? t("Yes") : t("No") }, { key: "notes", label: "Notes" }, { key: "active", label: "Status" }]
     }

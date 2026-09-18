@@ -1,3 +1,5 @@
+import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { assertClosureAllowed, getFinancialProgress, assertPostingAllowed } from "./financialProgressService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import { recordAudit, workflowEvent } from "./auditService.js";
@@ -7,6 +9,7 @@ import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_STAGES,
+  DOCUMENT_PHASE,
   ERROR_CODES,
   FLOW_TYPE,
   REQUEST_STATUS,
@@ -23,31 +26,20 @@ const observationStates = [
 ];
 
 const transitionGraph = Object.freeze({
-  [REQUEST_STATUS.DRAFT]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.VALIDATION]: [REQUEST_STATUS.SENT, ...observationStates, REQUEST_STATUS.RETURNED],
-  [REQUEST_STATUS.SENT]: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.RETURNED],
-  [REQUEST_STATUS.PENDING_APPROVAL]: [REQUEST_STATUS.DIRECTOR_APPROVED, ...observationStates, REQUEST_STATUS.RETURNED, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.DIRECTOR_APPROVED]: [REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, ...observationStates, REQUEST_STATUS.RETURNED, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.VICE_RECTOR_APPROVED]: [REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, ...observationStates, REQUEST_STATUS.RETURNED, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.BUDGET_COMMITTED]: [REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.PROVISIONED_CXP, ...observationStates, REQUEST_STATUS.RETURNED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.ACCOUNTED]: [REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.PROVISIONED_CXP]: [REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAYMENT_BOUNCED, REQUEST_STATUS.PAID, ...observationStates, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.SCHEDULED]: [REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAYMENT_BOUNCED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.BANK_FILE_GENERATED]: [REQUEST_STATUS.PAID, REQUEST_STATUS.PAYMENT_BOUNCED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.PAYMENT_BOUNCED]: [REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.PAID]: [REQUEST_STATUS.RENDITION_PENDING, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.PAID_CLOSED],
-  [REQUEST_STATUS.RENDITION_PENDING]: [REQUEST_STATUS.RECONCILED, REQUEST_STATUS.PAID_CLOSED, ...observationStates],
-  [REQUEST_STATUS.RECONCILED]: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED],
-  [REQUEST_STATUS.CLOSED]: [REQUEST_STATUS.PAID_CLOSED],
-  [REQUEST_STATUS.PAID_CLOSED]: [],
-  [REQUEST_STATUS.OBSERVED]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.RETURNED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.OBSERVED_BUDGET]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.RENDITION_PENDING, REQUEST_STATUS.RETURNED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.OBSERVED_SUNAT]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.RETURNED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.RETURNED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.OBSERVED_BATCH]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.RETURNED, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.RETURNED]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.REJECTED]: [REQUEST_STATUS.VALIDATION, REQUEST_STATUS.VOIDED],
-  [REQUEST_STATUS.VOIDED]: []
+  BORRADOR: ["PENDIENTE_APROBACION", "ANULADO"],
+  PENDIENTE_APROBACION: ["APROBADO_DIRECTOR", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  APROBADO_DIRECTOR: ["APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  APROBADO_VICERRECTOR: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  COMPROMISO_PRESUPUESTAL: ["CONTABILIZADO", ...observationStates, "DEVUELTO", "ANULADO"],
+  CONTABILIZADO: ["PROGRAMADO", ...observationStates, "ANULADO"],
+  PROGRAMADO: ["TXT_GENERADO", "CONTABILIZADO", "PAGO_REBOTADO", "ANULADO"],
+  TXT_GENERADO: ["PAGADO", "PAGO_REBOTADO", "ANULADO"],
+  PAGO_REBOTADO: ["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "ANULADO"],
+  PAGADO: ["CONCILIADO"],
+  CONCILIADO: ["CERRADO"],
+  CERRADO: [], RECHAZADO: [], ANULADO: [],
+  ...Object.fromEntries([...observationStates, "DEVUELTO"].map(status => [status,
+    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "ANULADO"]]))
 });
 
 const roleTargets = Object.freeze({
@@ -57,16 +49,13 @@ const roleTargets = Object.freeze({
   [REQUEST_STATUS.DIRECTOR_APPROVED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT],
   [REQUEST_STATUS.VICE_RECTOR_APPROVED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT],
   [REQUEST_STATUS.BUDGET_COMMITTED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.BUDGET, ROLES.ACCOUNTING],
-  [REQUEST_STATUS.ACCOUNTED]: [ROLES.ADMIN, ROLES.ACCOUNTING],
-  [REQUEST_STATUS.PROVISIONED_CXP]: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.APPROVER, ROLES.BUDGET, ROLES.SOLICITOR],
+  [REQUEST_STATUS.ACCOUNTED]: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.APPROVER, ROLES.BUDGET, ROLES.SOLICITOR],
   [REQUEST_STATUS.SCHEDULED]: [ROLES.ADMIN, ROLES.TREASURY],
   [REQUEST_STATUS.BANK_FILE_GENERATED]: [ROLES.ADMIN, ROLES.TREASURY],
   [REQUEST_STATUS.PAYMENT_BOUNCED]: [ROLES.ADMIN, ROLES.TREASURY],
   [REQUEST_STATUS.PAID]: [ROLES.ADMIN, ROLES.TREASURY],
-  [REQUEST_STATUS.RENDITION_PENDING]: [ROLES.ADMIN, ROLES.TREASURY, ROLES.ACCOUNTING],
   [REQUEST_STATUS.RECONCILED]: [ROLES.ADMIN, ROLES.TREASURY, ROLES.ACCOUNTING],
   [REQUEST_STATUS.CLOSED]: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY],
-  [REQUEST_STATUS.PAID_CLOSED]: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY],
   [REQUEST_STATUS.OBSERVED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT, ROLES.ACCOUNTING],
   [REQUEST_STATUS.OBSERVED_BUDGET]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT, ROLES.BUDGET, ROLES.ACCOUNTING],
   [REQUEST_STATUS.OBSERVED_SUNAT]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT, ROLES.ACCOUNTING, ROLES.SOLICITOR],
@@ -77,8 +66,8 @@ const roleTargets = Object.freeze({
   [REQUEST_STATUS.VOIDED]: [ROLES.ADMIN, ROLES.ACCOUNTING]
 });
 
-export function allowedTransitions(status) { return [...(transitionGraph[status] || [])]; }
-export function canTransition(from, to) { return allowedTransitions(from).includes(to); }
+export function allowedTransitions(status) { return [...(transitionGraph[canonicalRequestStatus(status)] || [])]; }
+export function canTransition(from, to) { return allowedTransitions(from).includes(canonicalRequestStatus(to)); }
 
 function requesterId(request) {
   return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
@@ -91,6 +80,7 @@ function requiresFiscalXml(request) {
 }
 
 function assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason } = {}) {
+  if (String(adminOverrideReason || "").trim()) throw new AppError(403, "Emergency approval overrides are disabled. Use the assigned approval route.");
   if (!user) throw new AppError(401, "Authentication is required.", undefined, ERROR_CODES.FORBIDDEN);
   const allowedRoles = roleTargets[targetStatus] || [];
   if (!allowedRoles.includes(user.role)) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
@@ -104,7 +94,7 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
     const currentStage = approvalStage || request.approvalStage || APPROVAL_STAGES.AREA_DIRECTOR;
     if (currentStage !== expectedStage) throw new AppError(409, "This request is assigned to a different approval level.", { expectedStage, currentStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     if (requesterId(request) === String(user._id)) {
-      if (user.role !== ROLES.ADMIN || !String(adminOverrideReason || "").trim()) throw new AppError(403, "A requester cannot approve their own request.", { segregationOfDuties: true }, ERROR_CODES.FORBIDDEN);
+      throw new AppError(403, "A requester cannot approve their own request.", { segregationOfDuties: true }, ERROR_CODES.FORBIDDEN);
     }
     if (user.role === ROLES.APPROVER && (user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR) !== expectedStage) throw new AppError(403, "This approval belongs to a different approval level.", { expectedStage }, ERROR_CODES.FORBIDDEN);
   }
@@ -129,30 +119,46 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
   }
 
   if ([REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED].includes(targetStatus)) {
-    await assertConfiguredDocuments(request);
+    await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
     if (requiresFiscalXml(request) && !request.xmlValidation?.validated) throw new AppError(422, "A valid XML fiscal document is required.", { requestType: request.requestType, flowType: request.flowType }, ERROR_CODES.XML_VALIDATION_FAILED);
   }
 
   if (targetStatus === REQUEST_STATUS.BUDGET_COMMITTED && !request.budgetCommitment) throw new AppError(422, "A budget commitment is required before this transition.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
+  if (targetStatus === REQUEST_STATUS.ACCOUNTED) await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING);
   if (targetStatus === REQUEST_STATUS.ACCOUNTED && (!request.fiscalData?.processedAt || !request.accountsPayable)) throw new AppError(422, "Fiscal processing and Accounts Payable creation are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  if (targetStatus === REQUEST_STATUS.PROVISIONED_CXP && !(request.accountsPayable || request.accountsPayables?.length)) throw new AppError(422, "At least one Accounts Payable record is required before provisioning.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  if (targetStatus === REQUEST_STATUS.ACCOUNTED && !(request.accountsPayable || request.accountsPayables?.length)) throw new AppError(422, "At least one Accounts Payable record is required before provisioning.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.SCHEDULED && !(request.accountsPayable || request.accountsPayables?.length)) throw new AppError(422, "An open Accounts Payable record is required before Treasury scheduling.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.BANK_FILE_GENERATED && !request.paymentBatch && request.flowType !== FLOW_TYPE.A2) throw new AppError(422, "A persisted payment batch is required before TXT_GENERADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.PAID && (!request.payment?.confirmedAt || !request.payment?.operationNumber) && request.flowType !== FLOW_TYPE.A2) throw new AppError(422, "Actual Treasury payment confirmation is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.RECONCILED && !request.reconciliation) throw new AppError(422, "A reconciliation record is required before CONCILIADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  if ([REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED].includes(targetStatus) && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && request.rendition?.status !== "VALIDATED") throw new AppError(422, "A validated rendition is required before closure.", undefined, ERROR_CODES.RENDITION_REQUIRED);
-  if ([REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED].includes(targetStatus) && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Non-deductible rendition balances must be reimbursed or assigned to payroll before closure.", { nonDeductibleOutstanding: request.rendition?.nonDeductibleOutstanding }, ERROR_CODES.RENDITION_REQUIRED);
+  if (targetStatus === REQUEST_STATUS.CLOSED && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && request.rendition?.status !== "VALIDATED") throw new AppError(422, "A validated rendition is required before closure.", undefined, ERROR_CODES.RENDITION_REQUIRED);
+  if (targetStatus === REQUEST_STATUS.CLOSED && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Non-deductible rendition balances must be reimbursed or assigned to payroll before closure.", { nonDeductibleOutstanding: request.rendition?.nonDeductibleOutstanding }, ERROR_CODES.RENDITION_REQUIRED);
 }
 
 export async function transitionRequest({ request, targetStatus, user, req, action, comments, approvalStage, nextApprovalStage, dueAt, adminOverrideReason, eventDueAt, skipControls = false, session }) {
-  const from = request.status;
+  const originalStatus = request.status;
+  const from = canonicalRequestStatus(originalStatus);
+  targetStatus = canonicalRequestStatus(targetStatus);
+  if (isTerminalRequest(from)) throw new AppError(409, "Terminal requests cannot transition.", { from, to: targetStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   if (from === targetStatus) return request;
   if (!canTransition(from, targetStatus)) throw new AppError(409, `Invalid request status transition from ${from} to ${targetStatus}.`, { from, to: targetStatus, allowed: allowedTransitions(from) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason });
+  // Period and financial evidence are mandatory, including internal recovery/batch calls.
+  await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
+  if (targetStatus === "CONTABILIZADO") await assertPostingAllowed(request, { user, req });
+  if (["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"].includes(targetStatus)) {
+    const progress = await getFinancialProgress(request, { session });
+    const stages = ["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"];
+    if (!progress.status || stages.indexOf(progress.status) < stages.indexOf(targetStatus)) throw new AppError(422, "Child financial evidence does not satisfy this milestone.", progress, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  if (targetStatus === "CERRADO") await assertClosureAllowed(request, { session });
   if (!skipControls) await assertTransitionControls(request, targetStatus, { user, req, periodAction: [REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED].includes(targetStatus) ? "APPROVE" : undefined });
 
   const oldValues = { status: from, approvalStage: request.approvalStage, approvalDueAt: request.approvalDueAt };
   const previousDueAt = request.approvalDueAt;
+
+  if (originalStatus !== from) request.legacyWorkflowStatus ||= originalStatus;
+  request.workflowVersion = 2;
   request.status = targetStatus;
   if (nextApprovalStage !== undefined) request.approvalStage = nextApprovalStage;
   if (dueAt !== undefined) request.approvalDueAt = dueAt;

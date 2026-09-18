@@ -1,3 +1,7 @@
+import FinancialValidationSummary from "../components/FinancialValidationSummary.jsx";
+import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
+import { REQUEST_LIFECYCLE, canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
+import MotionCollapse from "../components/MotionCollapse.jsx";
 import SectionNavigation from "../components/SectionNavigation.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
@@ -34,6 +38,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
+import { displayedRequestStatus, renditionRequirements as summarizeRenditionRequirements } from "../utils/requestPresentation.js";
 import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
@@ -44,27 +49,16 @@ import {
   requestTypeLabels
 } from "../utils/options.js";
 
-const workflow = [
-  "BORRADOR",
-  "PENDIENTE_APROBACION",
-  "COMPROMISO_PRESUPUESTAL",
-  "PROVISIONADO_CXP",
-  "PROGRAMADO",
-  "TXT_GENERADO",
-  "PAGADO",
-  "CONCILIADO",
-  "PAGADO_CERRADO"
+const workflow = REQUEST_LIFECYCLE;
+const documentPhaseOrder = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
+const invoiceDocumentFields = [
+  { key: "xml", kind: "XML", label: "Invoice XML", accept: ".xml,text/xml,application/xml" },
+  { key: "pdf", kind: "PDF", label: "Invoice PDF", accept: ".pdf,application/pdf" },
+  { key: "feeReceipt", kind: "FEE_RECEIPT", label: "Recibo por Honorarios", accept: ".pdf,application/pdf" },
+  { key: "conformity", kind: "CONFORMITY", label: "Conformity evidence", accept: ".pdf,.jpg,.jpeg,.png" },
+  { key: "activityReport", kind: "ACTIVITY_REPORT", label: "Activity report", accept: ".pdf,.doc,.docx" },
+  { key: "supporting", kind: "SUPPORTING", label: "Supporting documents", accept: ".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" }
 ];
-
-const statusPosition = {
-  EN_VALIDACION: 1,
-  ENVIADO: 1,
-  APROBADO_DIRECTOR: 1,
-  APROBADO_VICERRECTOR: 2,
-  CONTABILIZADO: 3,
-  RENDICION_PENDIENTE: 6,
-  CERRADO: 8
-};
 
 const interruptionStatuses = [
   "OBSERVADO",
@@ -76,17 +70,6 @@ const interruptionStatuses = [
   "DEVUELTO",
   "RECHAZADO",
   "ANULADO"
-];
-
-const editableStatuses = [
-  "BORRADOR",
-  "RECHAZADO",
-  "OBSERVADO",
-  "OBSERVADO_PRESUPUESTO",
-  "OBSERVADO_SUNAT",
-  "OBSERVADO_MONTO_EXCEDIDO",
-  "OBSERVADO_CARGA_MASIVA",
-  "DEVUELTO"
 ];
 
 const emptyRelated = {
@@ -112,7 +95,7 @@ function requesterName(request) {
 
 function RequestStatusFlow({ request }) {
   const { t } = useLanguage();
-  const currentIndex = statusPosition[request.status] ?? workflow.indexOf(request.status);
+  const currentIndex = workflow.indexOf(request.status);
   return (
     <ol className="status-flow" aria-label={t("Request workflow status")}>
       {workflow.map((status, index) => (
@@ -147,7 +130,7 @@ function Section({ title, description, children, className = "" }) {
   return (
     <div className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
       <h3 style={{ margin: 0 }}><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong></span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button></h3>
-      <div className="request-section-content" id={`${sectionId}-content`} hidden={!expanded}>{description && <details className="page-help"><summary>{t("About this section")}</summary><p>{t(description)}</p></details>}{children}</div>
+      <MotionCollapse className="request-section-content" id={`${sectionId}-content`} open={expanded}>{description && <details className="page-help"><summary>{t("About this section")}</summary><p>{t(description)}</p></details>}{children}</MotionCollapse>
     </div>
   );
 }
@@ -161,33 +144,30 @@ export default function RequestDetail() {
   const [request, setRequest] = useState(null);
   const [related, setRelated] = useState(emptyRelated);
   const [requirements, setRequirements] = useState([]);
+  const [documentStatus, setDocumentStatus] = useState({ currentPhase: "SUBMISSION", phases: {} });
   const [masters, setMasters] = useState({ costCenters: [], expenseTypes: [] });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [confirm, setConfirm] = useState(null);
-  const [invoiceFiles, setInvoiceFiles] = useState({ xml: null, pdf: null, conformity: null });
+  const [invoiceFiles, setInvoiceFiles] = useState(Object.fromEntries(invoiceDocumentFields.map((field) => [field.key, null])));
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
       const response = await api.get(`/requests/${id}`);
-      const nextRequest = response.data.data;
+      const nextRequest = { ...response.data.data, status: canonicalRequestStatus(response.data.data.status) };
       setRequest(nextRequest);
       setRelated({ ...emptyRelated, ...(response.data.related || {}) });
       const [requirementsResponse, centersResponse, expensesResponse] = await Promise.all([
-        api.get("/requests/document-requirements", {
-          params: {
-            requestType: nextRequest.requestType,
-            expenseNature: nextRequest.expenseNature,
-            flowType: nextRequest.flowType
-          }
-        }),
+        api.get(`/requests/${id}/document-requirements`),
         api.get("/cost-centers", { params: { pageSize: 100, active: true } }),
         api.get("/expense-types", { params: { pageSize: 100, active: true } })
       ]);
-      setRequirements(requirementsResponse.data.data || []);
+      const nextDocumentStatus = requirementsResponse.data.data || { currentPhase: "SUBMISSION", phases: {} };
+      setDocumentStatus(nextDocumentStatus);
+      setRequirements(nextDocumentStatus.phases?.SUBMISSION?.requirements || []);
       setMasters({
         costCenters: centersResponse.data.data || [],
         expenseTypes: expensesResponse.data.data || []
@@ -206,34 +186,21 @@ export default function RequestDetail() {
 
   const permissions = useMemo(() => {
     if (!request) return {};
-    const ownerId = request.requester?._id || request.solicitor?._id || request.requester || request.solicitor;
-    const owner = String(ownerId) === String(user._id);
-    const invoiceStates = [
-      "COMPROMISO_PRESUPUESTAL",
-      "PROVISIONADO_CXP",
-      "OBSERVADO_SUNAT",
-      "OBSERVADO_MONTO_EXCEDIDO",
-      "PAGO_REBOTADO"
-    ];
+    const actions = new Set(request.allowedActions || []);
     return {
-      owner,
-      modifiable: editableStatuses.includes(request.status) && (user.role === "Admin" || owner),
-      deletable: ["BORRADOR", "RECHAZADO"].includes(request.status) && (user.role === "Admin" || owner),
-      canApprove:
-        ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR"].includes(request.status)
-        && ["Admin", "Approver", "Management"].includes(user.role)
-        && (user.role === "Admin" || user.approvalLevel === request.approvalStage),
-      canCommitBudget: request.status === "APROBADO_VICERRECTOR" && ["Admin", "Budget"].includes(user.role),
-      canIssueOrder: Boolean(related.procurementReadiness?.readyForOrderCreation) && ["Admin", "Budget"].includes(user.role),
-      canRegisterInvoice:
-        request.flowType === "A1"
-        && Boolean(request.purchaseOrder)
-        && invoiceStates.includes(request.status)
-        && (["Admin", "Accounting"].includes(user.role) || (user.role === "Solicitor" && owner)),
-      canClose: ["CONCILIADO"].includes(request.status) && ["Admin", "Accounting"].includes(user.role),
-      canVoid: !["BORRADOR", "CERRADO", "PAGADO_CERRADO", "ANULADO"].includes(request.status) && ["Admin", "Accounting"].includes(user.role)
+      modifiable: actions.has("EDIT"),
+      deletable: actions.has("DELETE"),
+      canApprove: actions.has("APPROVE"),
+      canObserve: actions.has("OBSERVE"),
+      canReturn: actions.has("RETURN"),
+      canReject: actions.has("REJECT"),
+      canCommitBudget: actions.has("COMMIT_BUDGET"),
+      canIssueOrder: actions.has("ISSUE_ORDER"),
+      canRegisterInvoice: actions.has("REGISTER_INVOICE"),
+      canClose: actions.has("CLOSE"),
+      canVoid: actions.has("CANCEL")
     };
-  }, [request, user, related.procurementReadiness]);
+  }, [request]);
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
@@ -242,6 +209,14 @@ export default function RequestDetail() {
       present: attachments.filter((item) => item.kind === rule.kind).length
     }))
     .filter((rule) => rule.present < rule.minCount), [requirements, attachments]);
+
+  const invoiceRequirements = useMemo(() => {
+    const combined = [
+      ...(documentStatus.phases?.INVOICE_REGISTRATION?.requirements || []),
+      ...(documentStatus.phases?.ACCOUNTING?.requirements || [])
+    ];
+    return [...new Map(combined.map((item) => [item.kind, item])).values()];
+  }, [documentStatus]);
 
   const journalLines = useMemo(() => (related.journalEntries || []).flatMap((journal) =>
     (journal.lines || []).map((line) => ({
@@ -255,6 +230,7 @@ export default function RequestDetail() {
 
   const latestPayable = related.accountsPayable?.[related.accountsPayable.length - 1];
   const procurementReadiness = related.procurementReadiness;
+  const trackCRenditionRequirements = useMemo(() => summarizeRenditionRequirements(documentStatus), [documentStatus]);
 
   async function runAction(type, comments = "") {
     setProcessing(true);
@@ -312,20 +288,19 @@ export default function RequestDetail() {
   async function submitInvoice(event) {
     event.preventDefault(); if (!invoiceDraft.ready || invoiceDraft.status === "conflict") return;
     event.preventDefault();
-    if (!invoiceFiles.xml || !invoiceFiles.pdf || !invoiceFiles.conformity) {
-      setError("XML, PDF and conformity evidence are required for Track A1.");
+    const missingInvoiceFiles = invoiceRequirements.filter((requirement) => !invoiceFiles[invoiceDocumentFields.find((field) => field.kind === requirement.kind)?.key]);
+    if (missingInvoiceFiles.length) {
+      setError(`Required invoice documents are missing: ${missingInvoiceFiles.map((item) => item.labelKey || item.kind).join(", ")}.`);
       return;
     }
     setInvoiceSubmitting(true);
     try {
       const data = new FormData();
-      data.append("xml", invoiceFiles.xml);
-      data.append("pdf", invoiceFiles.pdf);
-      data.append("conformity", invoiceFiles.conformity);
+      invoiceDocumentFields.forEach((field) => { if (invoiceFiles[field.key]) data.append(field.key, invoiceFiles[field.key]); });
       const response = await api.post(`/requests/${id}/invoice`, data);
       await invoiceDraft.complete();
       notify(response.data.observed ? "Invoice isolated for correction; the observation is now traceable." : "Invoice validated, matched to the PO and provisioned in CXP.");
-      setInvoiceFiles({ xml: null, pdf: null, conformity: null });
+      setInvoiceFiles(Object.fromEntries(invoiceDocumentFields.map((field) => [field.key, null])));
       event.currentTarget.reset();
       await load();
     } catch (err) {
@@ -428,7 +403,7 @@ export default function RequestDetail() {
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
         <div><dt>{t("Supplier / beneficiary")}</dt><dd>{entityName(supplier, "") || request.rendition?.beneficiarySnapshot?.name || requesterName(request)}</dd></div>
         <div><dt>{t("Accounting period")}</dt><dd>{request.accountingPeriod || "—"}</dd></div>
-        <div><dt>{t("Current status")}</dt><dd><StatusBadge status={request.status} /></dd></div>
+        <div><dt>{t("Current status")}</dt><dd><FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact /></dd></div>
       </dl>
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]}>{t(nextAction[1])}</a></div>}
       <SectionNavigation className="request-section-nav" aria-label={t("Request sections")}>
@@ -445,9 +420,9 @@ export default function RequestDetail() {
             <span className={`track-pill track-${request.flowType || "A1"}`}>{t(flowTypeLabels[request.flowType] || request.flowType || "A1")}</span>
             {latestPayable?.paymentPriority === "PRIORITY" && <span className="priority-pill">{t("Priority payment")}</span>}
           </div>
-          <StatusBadge status={request.status} />
+          <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         </div>
-        <details className="workflow-details"><summary>{t("View workflow")}</summary><RequestStatusFlow request={request} /></details>
+        <details className="workflow-details"><summary>{t("View workflow")}</summary><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></details>
       </div>
 
       <div className="request-detail-layout">
@@ -499,7 +474,7 @@ export default function RequestDetail() {
               rows={request.lines || []}
               columns={[
                 { key: "itemDescription", label: "Description" },
-                { key: "costCenter", label: "Cost center", render: (row) => `${row.costCenter?.code || row.costCenterSnapshot?.code || "-"} · ${row.costCenter?.name || row.costCenterSnapshot?.name || ""}` },
+                { key: "costCenter", label: "Cost center", render: (row) => `${row.costCenterSnapshot?.code || row.costCenter?.code || "-"} · ${row.costCenterSnapshot?.name || row.costCenter?.name || ""}` },
                 { key: "expenseType", label: "Expense type / account", render: (row) => `${row.expenseType?.code || row.expenseTypeSnapshot?.code || "-"} · ${row.expenseType?.accountNumber || row.expenseTypeSnapshot?.accountNumber || ""}` },
                 { key: "quantity", label: "Qty", align: "right" },
                 { key: "unitPrice", label: "Unit price", align: "right", render: (row) => formatCurrency(row.unitPrice, row.currency || request.currency, language) },
@@ -595,6 +570,10 @@ export default function RequestDetail() {
           )}
 
           <Section title="Documents and fiscal validation" description="Original evidence is protected and fiscal amounts come from server-side XML parsing.">
+            <div className="document-phase-heading">
+              <span>{t("Current document phase")}</span>
+              <StatusBadge status={documentStatus.currentPhase || "SUBMISSION"} />
+            </div>
             <div className={`evidence-summary ${missingDocuments.length ? "warning" : "success"}`}>
               <FileCheck2 size={19} />
               <div>
@@ -603,6 +582,16 @@ export default function RequestDetail() {
                   ? requirements.map((rule) => `${t(rule.labelKey)} ${attachments.filter((item) => item.kind === rule.kind).length}/${rule.minCount}`).join(" · ")
                   : t("No additional configured evidence for this classification.")}</p>
               </div>
+            </div>
+            <div className="document-phase-grid">
+              {documentPhaseOrder.map((phase) => {
+                const phaseStatus = documentStatus.phases?.[phase] || { requirements: [], missing: [], valid: true };
+                return <article key={phase} className={`document-phase-card${documentStatus.currentPhase === phase ? " current" : ""}`}>
+                  <div><strong>{t(phase)}</strong><StatusBadge status={phaseStatus.valid ? "COMPLIANT" : "PENDING"} /></div>
+                  {phaseStatus.missing?.length > 0 && <p>{t("Missing documents")}: {phaseStatus.missing.map((item) => t(item.label || item.kind)).join(", ")}</p>}
+                  {phaseStatus.requirements?.length ? <ul>{phaseStatus.requirements.map((item) => <li key={item.kind} className={item.present >= item.minCount ? "complete" : "missing"}><span>{t(item.labelKey || item.kind)}</span><strong>{item.present}/{item.minCount}</strong></li>)}</ul> : <p>{t("No documents required in this phase.")}</p>}
+                </article>;
+              })}
             </div>
             <DataTable
               controls={false}
@@ -620,7 +609,7 @@ export default function RequestDetail() {
               <div>
                 <strong>{t(request.xmlValidation?.validated ? "XML validation passed" : "XML validation not passed")}</strong>
                 <p>{request.xmlValidation
-                  ? ["supplierMatch", "documentNumberMatch", "dateMatch", "netMatch", "igvMatch", "totalMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
+                  ? ["supplierMatch", "documentNumberMatch", "dateMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
                   : t("No XML validation result is stored.")}</p>
                 {request.xmlValidation?.errors?.length > 0 && <p className="text-danger">{request.xmlValidation.errors.join(" ")}</p>}
               </div>
@@ -628,12 +617,10 @@ export default function RequestDetail() {
           </Section>
 
           {permissions.canRegisterInvoice && (
-            <Section title="Register A1 invoice and conformity" description="Upload the supplier XML, PDF and reception conformity. Amount fields are immutable and read from XML.">
+            <Section title="Register A1 invoice and conformity" description="Upload the documents required for invoice registration and Accounting. Amount fields are immutable and read from XML.">
               <DraftPanel busy={invoiceSubmitting} draft={invoiceDraft}><form className="invoice-registration-panel" onSubmit={submitInvoice}>
                 <p className="draft-file-list">{Object.values(invoiceFiles).filter(Boolean).map(file => file.name).join(", ")}</p><div className="file-upload-grid">
-                  <label className="field"><span>{t("Invoice XML")} *</span><input type="file" accept=".xml,text/xml,application/xml" onChange={(event) => setInvoiceFiles((current) => ({ ...current, xml: event.target.files?.[0] || null }))} required={!invoiceFiles.xml} /></label>
-                  <label className="field"><span>{t("Invoice PDF")} *</span><input type="file" accept=".pdf,application/pdf" onChange={(event) => setInvoiceFiles((current) => ({ ...current, pdf: event.target.files?.[0] || null }))} required={!invoiceFiles.pdf} /></label>
-                  <label className="field"><span>{t("Conformity evidence")} *</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setInvoiceFiles((current) => ({ ...current, conformity: event.target.files?.[0] || null }))} required={!invoiceFiles.conformity} /></label>
+                  {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => item.kind === field.kind)).map((field) => <label className="field" key={field.kind}><span>{t(field.label)} *</span><input type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key]} /></label>)}
                 </div>
                 <div className="invoice-control-note">
                   <strong>{order?.poNumber}</strong>
@@ -704,6 +691,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
+          <FinancialValidationSummary request={request} related={related} />
           <Section title="Financial control records" description="Budget, purchase order, CXP, journals, bank batches, payment, and reconciliation remain independently traceable.">
             <DefinitionGrid>
               <Definition label="Budget status"><StatusBadge status={request.budgetCommitment?.status || "NO_BUDGET"} /></Definition>
@@ -714,7 +702,7 @@ export default function RequestDetail() {
               {order?.paymentTermsSnapshot && <Definition label="Order payment terms"><PaymentTermsSummary terms={order.paymentTermsSnapshot} amount={order.paymentTermsSnapshot.quotationAmount} currency={order.paymentTermsSnapshot.quotationCurrency || order.currency} /></Definition>}
               <Definition label="PO remaining balance">{order ? formatCurrency(order.remainingAmount, order.currency, language) : "-"}</Definition>
               <Definition label="Payment operation">{request.payment?.operationNumber || request.payment?.confirmations?.at(-1)?.operationNumber || "-"}</Definition>
-              <Definition label="Reconciliation">{related.reconciliation ? `${related.reconciliation.bankReference} / ${formatCurrency(related.reconciliation.difference, "PEN", language)}` : "-"}</Definition>
+              <Definition label="Reconciliation">{(related.reconciliations || (related.reconciliation ? [related.reconciliation] : [])).map(record => `${record.bankReference}: ${formatCurrency(record.paidAmount, request.currency, language)}`).join("; ") || "-"}</Definition>
             </DefinitionGrid>
 
             {related.accountsPayable?.length > 0 && (
@@ -811,10 +799,10 @@ export default function RequestDetail() {
               )}
               {permissions.canApprove && (
                 <div className="action-buttons">
-                  <button type="button" className="primary-button" onClick={() => decision("approve")}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>
-                  <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>
-                  <button type="button" className="secondary-button" onClick={() => decision("return")}><CornerUpLeft size={16} /><span>{t("Return")}</span></button>
-                  <button type="button" className="danger-button subtle" onClick={() => decision("reject")}><XCircle size={16} /><span>{t("Reject")}</span></button>
+                  {permissions.canApprove && <button type="button" className="primary-button" onClick={() => decision("approve")}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>}
+                  {permissions.canObserve && <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>}
+                  {permissions.canReturn && <button type="button" className="secondary-button" onClick={() => decision("return")}><CornerUpLeft size={16} /><span>{t("Return")}</span></button>}
+                  {permissions.canReject && <button type="button" className="danger-button subtle" onClick={() => decision("reject")}><XCircle size={16} /><span>{t("Reject")}</span></button>}
                 </div>
               )}
               {permissions.canCommitBudget && (
@@ -847,7 +835,7 @@ export default function RequestDetail() {
                   description: "Only a reconciled request in an open permitted period can be closed.",
                   confirmLabel: "Close request",
                   inputLabel: "Closing comments",
-                  details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes from CONCILIADO to PAGADO_CERRADO." }]
+                  details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes from CONCILIADO to CERRADO." }]
                 })}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
               )}
               {permissions.canVoid && (

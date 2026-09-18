@@ -1,3 +1,4 @@
+import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -10,6 +11,7 @@ import SunatVoucher from "../models/SunatVoucher.js";
 import User from "../models/User.js";
 import { createAccountsPayableFromVoucher } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
+import { configuredDocumentRequirements, validateDocumentRequirements } from "./documentRuleService.js";
 import { executeBudgetAmount } from "./budgetService.js";
 import { notifyRoles } from "./notificationService.js";
 import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance, restorePurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
@@ -18,12 +20,12 @@ import { nextMassUploadBatchNumber } from "./sequenceService.js";
 import { cleanupUploadedFiles, persistUploadedFiles, uploadRoot } from "./storageService.js";
 import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat, voucherIdentity } from "./sunatVoucherService.js";
 import { runFinancialOperation } from "./transactionService.js";
-import { parseInvoiceXml } from "./xmlValidationService.js";
+import { parseInvoiceXml, assertVoucherXmlMatches } from "./xmlValidationService.js";
 import { transitionRequest } from "./workflowService.js";
 import { configureBatchInvoiceRunner, enqueueBatch } from "../queues/batchInvoiceQueue.js";
 import { AppError } from "../utils/AppError.js";
 import { readZipFile } from "../utils/zipReader.js";
-import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 const OBSERVED_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
 const RETRYABLE_OBSERVATION_STATUSES = new Set([...OBSERVED_STATUSES, "FAILED"]);
@@ -462,6 +464,7 @@ async function provisionCandidate({ request, purchaseOrder, batch, item, candida
   let createdVoucherId;
   try {
     const result = await runFinancialOperation(async (session) => {
+      await assertPostingAllowed(request, { user });
       await assertPurchaseOrderInvoiceFits(purchaseOrder._id, voucher.totalAmount, { currency: voucher.currency, session });
       await consumePurchaseOrderBalance(purchaseOrder._id, voucher.totalAmount, { session });
       if (!session) consumedWithoutTransaction = true;
@@ -548,12 +551,22 @@ async function provisionCandidate({ request, purchaseOrder, batch, item, candida
   }
 }
 
-async function processCandidate({ batch, request, purchaseOrder, candidate, item, user }) {
+async function processCandidate({ batch, request, purchaseOrder, candidate, item, user, invoiceRequirements }) {
   item.attemptCount = Number(item.attemptCount || 0) + 1;
   item.status = "PROCESSING";
   item.errorCode = undefined;
   item.errorDetail = undefined;
   item.processedAt = undefined;
+
+  const documentResult = validateDocumentRequirements(request, invoiceRequirements, [
+    ...(candidate.xmlFile ? [{ kind: "XML" }] : []),
+    ...(candidate.pdfFile ? [{ kind: "PDF" }] : [])
+  ]);
+  if (!documentResult.valid) {
+    const voucher = normalizeVoucher(candidate);
+    applyVoucherToItem(item, voucher);
+    return markCandidateObserved({ batch, item, request, purchaseOrder, candidate, voucher, status: "OBSERVED_BATCH", errorCode: ERROR_CODES.MISSING_REQUIRED_DOCUMENT, detail: `Missing invoice documents: ${documentResult.missing.map((entry) => entry.kind).join(", ")}.`, user });
+  }
 
   if (candidate.parseError) {
     const voucher = normalizeVoucher({ voucher: {} });
@@ -649,15 +662,12 @@ async function refreshBatchCounters(batch) {
 }
 
 async function updateRequestAfterBatch({ request, batch, user }) {
+  await assertPostingAllowed(request, { user });
   if (batch.processedSuccess > 0) {
-    if (request.status !== REQUEST_STATUS.PROVISIONED_CXP && [REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.OBSERVED_BATCH, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED].includes(request.status)) {
-      request.observation = undefined;
-      await transitionRequest({ request, targetStatus: REQUEST_STATUS.PROVISIONED_CXP, user, action: "A2_BATCH_PROVISIONED", comments: `${batch.processedSuccess} batch invoices were provisioned; invalid invoices were isolated for Accounting.`, skipControls: true });
-    }
-    return;
-  }
-  if ((batch.observed || batch.failed) && request.status === REQUEST_STATUS.BUDGET_COMMITTED) {
-    request.observation = { code: REQUEST_STATUS.OBSERVED_BATCH, detail: `${batch.batchCode} completed without valid invoices. Review the isolated items.`, observedAt: new Date(), observedBy: user?._id || user };
+    request.observation = undefined;
+    await syncFinancialProgress({ request, user, action: "A2_BATCH_PROVISIONED" });
+  } else if ((batch.observed || batch.failed) && request.status === REQUEST_STATUS.BUDGET_COMMITTED) {
+    request.observation = { code: REQUEST_STATUS.OBSERVED_BATCH, detail: `${batch.batchCode} has no valid invoices.`, observedAt: new Date(), observedBy: user?._id || user };
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.OBSERVED_BATCH, user, action: "A2_BATCH_OBSERVED", comments: request.observation.detail, skipControls: true });
   }
 }
@@ -673,6 +683,7 @@ export async function createMassUploadBatch({ purchaseOrderId, files, user, req 
     throw new AppError(409, "Purchase Order has no available balance for batch liquidation.", { status: purchaseOrder.status, remainingAmount: purchaseOrder.remainingAmount }, ERROR_CODES.PURCHASE_ORDER_EXHAUSTED);
   }
   const request = purchaseOrder.request;
+  await assertPostingAllowed(request, { user, req });
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
   if (user.role === ROLES.SOLICITOR && String(ownerId) !== String(user._id)) {
     throw new AppError(403, "Solicitors can upload invoice batches only for their own Purchase Orders.", { purchaseOrderId }, ERROR_CODES.FORBIDDEN);
@@ -718,7 +729,9 @@ export async function processMassUploadBatch(batchId) {
     const purchaseOrder = await PurchaseOrder.findById(batch.purchaseOrder);
     const user = await User.findById(batch.uploadedBy);
     if (!request || !purchaseOrder || !user) throw new AppError(404, "Batch request, Purchase Order, or uploader no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
+    await assertPostingAllowed(request, { user });
     const { candidates, totalFiles } = await loadCandidates(batch);
+    const invoiceRequirements = await configuredDocumentRequirements({ requestType: request.requestType, expenseNature: request.expenseNature, flowType: FLOW_TYPE.A2 }, DOCUMENT_PHASE.INVOICE_REGISTRATION);
     batch.totalFiles = totalFiles;
     batch.totalVouchers = candidates.length;
     if (!candidates.length) throw new AppError(422, "The batch contains no invoice XML/data rows.", undefined, ERROR_CODES.BATCH_UPLOAD_INVALID);
@@ -727,7 +740,7 @@ export async function processMassUploadBatch(batchId) {
       const item = itemFor(batch, candidate);
       if (item.status === "PROVISIONED") continue;
       await batch.save();
-      await processCandidate({ batch, request, purchaseOrder, candidate, item, user });
+      await processCandidate({ batch, request, purchaseOrder, candidate, item, user, invoiceRequirements });
       await batch.save();
       request = await FinancialRequest.findById(batch.request).populate("supplier");
     }
@@ -776,6 +789,9 @@ export async function retryMassUploadBatch(batchId, user) {
   if (batch.items.length && batch.items.every((item) => item.status === "PROVISIONED")) {
     throw new AppError(409, "Every invoice in this batch is already provisioned.", { batchId }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
+  const request = await FinancialRequest.findById(batch.request);
+  if (!request) throw new AppError(404, "Financial request not found.");
+  await assertPostingAllowed(request, { user });
   batch.status = "QUEUED";
   batch.completedAt = undefined;
   batch.errorMessage = undefined;
@@ -926,7 +942,7 @@ async function updateObservationFailure({ observation, candidate, voucher, statu
   );
 }
 
-export async function retryInvoiceObservation({ observationId, files = {}, user, req }) {
+export async function retryInvoiceObservation({ observationId, files = {}, acceptXmlValues = false, user, req }) {
   let observation = await InvoiceObservation.findById(observationId).select("+xmlPath +pdfPath");
   if (!observation) observation = await InvoiceObservation.findOne({ voucher: observationId, resolutionStatus: "OPEN" }).select("+xmlPath +pdfPath");
   if (!observation) throw new AppError(404, "Invoice observation not found.", { observationId }, ERROR_CODES.NOT_FOUND);
@@ -938,6 +954,7 @@ export async function retryInvoiceObservation({ observationId, files = {}, user,
   const batch = await MassUploadBatch.findById(observation.batch);
   if (!request || !purchaseOrder || !batch) throw new AppError(404, "Observation request, Purchase Order, or batch no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
 
+  await assertPostingAllowed(request, { user, req });
   let persisted;
   try {
     persisted = await persistUploadedFiles(files, { domain: "requests", entityId: request._id });
@@ -952,12 +969,28 @@ export async function retryInvoiceObservation({ observationId, files = {}, user,
       igvAmount: observation.igvAmount,
       totalAmount: observation.totalAmount
     };
-    if (persisted.xml?.[0]) voucher = await parseInvoiceXml(persisted.xml[0].path);
+    const evidenceCandidate = candidateFromObservation(observation, persisted, voucher);
+    if (evidenceCandidate.xmlFile?.path) {
+      const parsed = await parseInvoiceXml(evidenceCandidate.xmlFile.path);
+      try {
+        await assertVoucherXmlMatches(evidenceCandidate.xmlFile.path, acceptXmlValues ? { ...parsed, voucherType: voucher.voucherType } : voucher);
+      } catch (error) {
+        await updateObservationFailure({ observation, candidate: evidenceCandidate, voucher, status: "OBSERVED_BATCH", errorCode: error.code, detail: error.message, user });
+        throw error;
+      }
+      if (acceptXmlValues) await recordAudit({ entityType: "InvoiceObservation", entity: observation, requestId: request._id, action: "XML_VALUES_CORRECTED", user, req, module: "BATCH_INVOICES", oldValues: voucher, newValues: { ...parsed, xmlChecksum: evidenceCandidate.xmlFile.checksum }, comments: "Accounting explicitly accepted the replacement XML values; all fiscal, duplicate, budget and period checks still apply." });
+      voucher = { ...parsed, voucherType: voucher.voucherType };
+    }
     voucher = normalizeVoucher({ voucher });
     const candidate = candidateFromObservation(observation, persisted, voucher);
-    if (batch.inputType === "ZIP" && !candidate.pdfFile) {
-      const detail = "A PDF paired with the XML is required before this observation can be resolved.";
-      await updateObservationFailure({ observation, candidate, voucher, status: "OBSERVED_BATCH", errorCode: "PDF_MISSING", detail, user });
+    const invoiceRequirements = await configuredDocumentRequirements({ requestType: request.requestType, expenseNature: request.expenseNature, flowType: FLOW_TYPE.A2 }, DOCUMENT_PHASE.INVOICE_REGISTRATION);
+    const documentResult = validateDocumentRequirements(request, invoiceRequirements, [
+      ...(candidate.xmlFile ? [{ kind: "XML" }] : []),
+      ...(candidate.pdfFile ? [{ kind: "PDF" }] : [])
+    ]);
+    if (!documentResult.valid) {
+      const detail = `Missing invoice documents: ${documentResult.missing.map((entry) => entry.kind).join(", ")}.`;
+      await updateObservationFailure({ observation, candidate, voucher, status: "OBSERVED_BATCH", errorCode: ERROR_CODES.MISSING_REQUIRED_DOCUMENT, detail, user });
       throw new AppError(422, detail, undefined, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
     }
     const identity = itemIdentity(voucher);

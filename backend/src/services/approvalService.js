@@ -27,6 +27,7 @@ import { validateXmlAgainstRequest } from "./xmlValidationService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_STAGES,
+  DOCUMENT_PHASE,
   ERROR_CODES,
   FLOW_TYPE,
   PERMISSIONS,
@@ -34,6 +35,7 @@ import {
   ROLES
 } from "../utils/constants.js";
 import { canApproveStage, hasPermission } from "../utils/permissions.js";
+import { allowedRequestActions } from "./requestActionPolicy.js";
 
 const activeApprovalStatuses = [
   REQUEST_STATUS.PENDING_APPROVAL,
@@ -46,6 +48,7 @@ function requesterId(request) {
 }
 
 function assertApprovalActor(request, user, step, adminOverrideReason) {
+  if (String(adminOverrideReason || "").trim()) throw new AppError(403, "Emergency approval overrides are disabled. Use the assigned approval route.");
   if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) {
     throw new AppError(403, "You do not have approval permission.", undefined, ERROR_CODES.FORBIDDEN);
   }
@@ -65,7 +68,7 @@ function assertApprovalActor(request, user, step, adminOverrideReason) {
       }
     }
   }
-  if (requesterId(request) === String(user._id) && (user.role !== ROLES.ADMIN || !String(adminOverrideReason || "").trim())) {
+  if (requesterId(request) === String(user._id)) {
     throw new AppError(403, "A requester cannot approve their own request.", { segregationOfDuties: true }, ERROR_CODES.FORBIDDEN);
   }
 }
@@ -84,7 +87,7 @@ async function validateApprovalControls(request, user) {
   const supplier = request.flowType === FLOW_TYPE.C ? null : (request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier));
   await applyExchangeRate(request);
   await request.validate();
-  await assertConfiguredDocuments(request);
+  await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
   const xmlAttachment = [...(request.attachments || [])].reverse().find((item) => item.kind === "XML");
   if (xmlAttachment) {
     request.xmlValidation = await validateXmlAgainstRequest(xmlAttachment.path, {
@@ -142,6 +145,7 @@ export async function listApprovalInbox(queryParams, user) {
   const data = requests.map((request) => {
     const object = request.toObject();
     object.sla = slaStatus(request);
+    object.allowedActions = allowedRequestActions(request, user);
     for (const attachment of object.attachments || []) delete attachment.path;
     return object;
   });

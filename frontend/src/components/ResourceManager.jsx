@@ -33,7 +33,8 @@ export default function ResourceManager({
   confirmSubmit,
   renderDetails,
   detailsTitle = "Record details",
-  renderHeaderActions
+  renderHeaderActions,
+  renderBeforeTable
 }) {
   const { t } = useLanguage();
   const { notify } = useToast();
@@ -209,6 +210,7 @@ export default function ResourceManager({
         )}
       />
       <Message type="error">{actionError || resourceTable.error}</Message>
+      {renderBeforeTable?.({ rows, loading, reload: resourceTable.reload })}
       <div className="workspace-panel">
         <DataTable rows={rows} columns={normalizedColumns} loading={loading} filters={tableFilters} rowActions={actions} caption={title} remote={resourceTable.remote} />
       </div>

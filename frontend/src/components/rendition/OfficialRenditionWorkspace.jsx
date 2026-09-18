@@ -23,6 +23,7 @@ import Message from "../Message.jsx";
 import StatusBadge from "../StatusBadge.jsx";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import { useToast } from "../../context/ToastContext.jsx";
+import { canonicalRequestStatus } from "../../../../shared/workflowStatus.mjs";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const key = () => `${Date.now()}-${Math.random()}`;
@@ -95,7 +96,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
   const isReimbursement = request.requestType === "REEMBOLSO_SIN_SUSTENTO";
   const canSubmit = (user.role === "Admin" || owner)
     && ["PENDING", "OBSERVED", "NOT_REQUIRED"].includes(request.rendition?.status || "NOT_REQUIRED")
-    && (isAdvance ? request.status === "RENDICION_PENDIENTE" : request.status === "COMPROMISO_PRESUPUESTAL")
+    && (isAdvance ? ["PAGADO", "CONCILIADO"].includes(canonicalRequestStatus(request.status)) : canonicalRequestStatus(request.status) === "COMPROMISO_PRESUPUESTAL")
     && request.rendition?.financeReview?.result !== "REJECTED";
   const canReview = ["Admin", "Accounting"].includes(user.role)
     && request.rendition?.status === "SUBMITTED"
@@ -249,7 +250,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     </Section>
 
     {isAdvance && request.rendition?.status === "VALIDATED" && <Section icon={Landmark} title="Account 14 Regularization" description="Non-deductible amounts remain charged to the collaborator until reimbursement or payroll deduction is recorded.">
-      <div className="non-deductible-summary"><div><span>{t("Non-deductible outstanding")}</span><strong className={nonDeductibleOutstanding > 0 ? "text-warning" : "text-success"}>PEN {nonDeductibleOutstanding.toFixed(2)}</strong></div><div><span>{t("Settlement status")}</span><StatusBadge status={nonDeductibleOutstanding > 0 ? "PENDING" : "PAGADO_CERRADO"} /></div></div>
+      <div className="non-deductible-summary"><div><span>{t("Non-deductible outstanding")}</span><strong className={nonDeductibleOutstanding > 0 ? "text-warning" : "text-success"}>PEN {nonDeductibleOutstanding.toFixed(2)}</strong></div><div><span>{t("Settlement status")}</span><StatusBadge status={nonDeductibleOutstanding > 0 ? "PENDING" : "RESOLVED"} /></div></div>
       {(request.rendition?.nonDeductibleSettlements || []).length > 0 && <div className="compact-lines">{request.rendition.nonDeductibleSettlements.map((item, index) => <div key={item._id || `${item.method}-${item.settledAt}-${index}`}><span>{new Date(item.settledAt).toLocaleString()} · {t(item.method)} · {item.reference}</span><strong>PEN {Number(item.amount || 0).toFixed(2)}</strong></div>)}</div>}
       {canSettle && <DraftPanel busy={processing} draft={settlementDraft}><form className="non-deductible-settlement-form" onSubmit={settleNonDeductible}><label className="field"><span>{t("Settlement method")} *</span><select required value={settlement.method} onChange={(event) => setSettlement({ ...settlement, method: event.target.value })}><option value="REIMBURSEMENT">{t("Employee reimbursement")}</option><option value="PAYROLL_DEDUCTION">{t("Payroll deduction")}</option></select></label><label className="field"><span>{t("Amount")} *</span><input required type="number" min="0.01" max={nonDeductibleOutstanding} step="0.01" value={settlement.amount} onChange={(event) => setSettlement({ ...settlement, amount: event.target.value })} /></label><label className="field"><span>{t("Receipt / payroll reference")} *</span><input required value={settlement.reference} onChange={(event) => setSettlement({ ...settlement, reference: event.target.value })} /></label><button type="submit" className="primary-button" disabled={processing}><CheckCircle2 size={16} />{t(processing ? "Processing..." : "Regularize balance")}</button></form></DraftPanel>}
     </Section>}

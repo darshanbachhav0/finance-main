@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { REQUEST_LIFECYCLE, canonicalRequestStatus, isTerminalRequest, renditionPending } from "../../shared/workflowStatus.mjs";
+import { requestStatuses } from "../src/utils/options.js";
+
+assert.deepEqual(REQUEST_LIFECYCLE, ["BORRADOR", "PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "CERRADO"]);
+for (const status of REQUEST_LIFECYCLE) assert.ok(requestStatuses.includes(status));
+for (const status of ["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"]) assert.equal(isTerminalRequest(status), true);
+assert.equal(canonicalRequestStatus("PAGADO_CERRADO"), "CERRADO");
+assert.equal(canonicalRequestStatus("PROVISIONADO_CXP"), "CONTABILIZADO");
+assert.equal(renditionPending({ flowType: "C", status: "PAGADO", rendition: { status: "PENDING" } }), true);
+assert.equal(renditionPending({ flowType: "C", status: "CERRADO", rendition: { status: "PENDING" } }), false);
+const read = file => fs.readFileSync(new URL(file, import.meta.url), "utf8");
+const detail = read("../src/pages/RequestDetail.jsx");
+const list = read("../src/pages/RequestsList.jsx");
+const treasury = read("../src/pages/TreasuryQueue.jsx");
+const progress = read("../src/components/FinancialProgressSummary.jsx");
+assert.ok(detail.includes("FinancialProgressSummary") && list.includes("FinancialProgressSummary"));
+assert.ok(progress.includes("counts.paid") && progress.includes("counts.reconciled"));
+assert.ok(treasury.includes("/treasury/payables/") && treasury.includes("/reconcile"));
+assert.ok(read("../src/components/StatusBadge.jsx").includes("canonicalRequestStatus"));
+console.log("PASS canonical workflow UI: lifecycle, historical closure, terminal states, separate rendition and child payment/reconciliation progress");

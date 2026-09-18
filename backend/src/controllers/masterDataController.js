@@ -1,3 +1,4 @@
+import { fetchSunatSellingRate } from "../services/sunatExchangeRateProvider.js";
 import AccountingMapping from "../models/AccountingMapping.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import ApprovalRule from "../models/ApprovalRule.js";
@@ -12,12 +13,29 @@ import FinanceConfiguration from "../models/FinanceConfiguration.js";
 import Project from "../models/Project.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
-import { fetchLatestUsdPenSellingRate } from "../services/exchangeRateProvider.js";
+import { resolveExchangeRateSnapshot } from "../services/exchangeRateService.js";
 import { closeAccountingPeriod, createAccountingPeriod, reopenAccountingPeriod } from "../services/periodAdministrationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { assertLegacyAllocationChange } from "../services/budgetPlanService.js";
+
+async function verifyExchangeRatePayload(payload) {
+  if (!Number.isFinite(Number(payload.rate)) || Number(payload.rate) <= 0) throw new AppError(422, "A positive selling rate is required.");
+  const date = new Date(payload.date);
+  if (Number.isNaN(date.getTime())) throw new AppError(422, "A valid exchange-rate date is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  payload.date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  payload.period = payload.date.toISOString().slice(0, 7);
+  if (payload.providerMode === "SUNAT") {
+    const verified = await fetchSunatSellingRate(payload.date.toISOString().slice(0, 10));
+    if (verified.date !== payload.date.toISOString().slice(0, 10) || Number(payload.rate) !== verified.rate) throw new AppError(422, "Rate/date disagree with authoritative SUNAT evidence.");
+    payload.source = payload.sourceLabel = verified.source;
+    payload.authoritative = true;
+  } else {
+    payload.providerMode = payload.providerMode === "BCRP_FALLBACK" ? "BCRP_FALLBACK" : "MANUAL";
+    payload.authoritative = false;
+  }
+}
 
 function pick(source, fields) {
   return Object.fromEntries(fields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]]));
@@ -33,7 +51,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
         const regex = new RegExp(escapedRegex(req.query.search), "i");
         query.$or = searchFields.map((field) => ({ [field]: regex }));
       }
-      for (const field of ["period", "status", "category", "purpose", "requestType", "expenseNature", "bank", "currency", "mode", "costCenter", "expenseType", "project"]) {
+      for (const field of ["period", "status", "category", "purpose", "requestType", "expenseNature", "flowType", "phase", "bank", "currency", "mode", "costCenter", "expenseType", "project"]) {
         if (req.query[field] !== undefined && Model.schema.path(field)) query[field] = req.query[field];
       }
       const { page, pageSize, skip } = parsePagination({ ...req.query, pageSize: req.query.pageSize || 100 });
@@ -46,15 +64,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
     create: asyncHandler(async (req, res) => {
       const payload = pick(req.body, fields);
       if (Model === BudgetAllocation) await assertLegacyAllocationChange(payload);
-      if (Model === ExchangeRate) {
-        const date = new Date(payload.date);
-        if (Number.isNaN(date.getTime())) throw new AppError(422, "A valid exchange-rate date is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
-        payload.date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-        payload.period = payload.period || payload.date.toISOString().slice(0, 7);
-        payload.createdBy = req.user._id;
-        payload.providerMode ||= "MANUAL";
-        payload.authoritative = payload.providerMode === "SUNAT" && payload.authoritative === true;
-      }
+      if (Model === ExchangeRate) { await verifyExchangeRatePayload(payload); payload.createdBy = req.user._id; }
       if (Model === FinanceConfiguration) payload.createdBy = req.user._id;
       const data = await Model.create(payload);
       await recordAudit({ entityType: label, entity: data, action: "CREATED", user: req.user, req, module: "MASTER_DATA", newValues: data.toObject() });
@@ -66,10 +76,9 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
       const oldValues = data.toObject();
       const payload = pick(req.body, fields.filter((field) => field !== "createdBy"));
       if (Model === BudgetAllocation) await assertLegacyAllocationChange(payload, data);
-      if (Model === ExchangeRate && payload.date) {
-        const date = new Date(payload.date);
-        payload.date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-        payload.period = payload.period || payload.date.toISOString().slice(0, 7);
+      if (Model === ExchangeRate && Object.keys(payload).some(key => key !== "active")) {
+        Object.assign(payload, { date: payload.date || data.date, rate: payload.rate ?? data.rate, providerMode: payload.providerMode || data.providerMode });
+        await verifyExchangeRatePayload(payload);
       }
       if (Model === FinanceConfiguration) payload.updatedBy = req.user._id;
       Object.assign(data, payload);
@@ -96,9 +105,9 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
 export const costCenters = resourceController({
   Model: CostCenter,
   label: "CostCenter",
-  fields: ["code", "name", "area", "annualBudget", "committedAmount", "executedAmount", "paidAmount", "budgetMode", "active"],
-  searchFields: ["code", "name", "area"],
-  sortFields: ["code", "name", "area", "annualBudget", "active"],
+  fields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode", "annualBudget", "committedAmount", "executedAmount", "paidAmount", "budgetMode", "active"],
+  searchFields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode"],
+  sortFields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode", "annualBudget", "active"],
   defaultSort: { code: 1 }
 });
 
@@ -122,15 +131,8 @@ export const exchangeRates = {
     populate: [{ path: "createdBy", select: "name email role" }]
   }),
   current: asyncHandler(async (_req, res) => {
-    const data = await fetchLatestUsdPenSellingRate();
-    res.json({
-      data: {
-        ...data,
-        providerMode: "BCRP_FALLBACK",
-        authoritative: false,
-        notice: "Online BCRP/SBS reference. It is not labelled as the authoritative SUNAT rate and must be reviewed before saving."
-      }
-    });
+    const data = await resolveExchangeRateSnapshot("USD", _req.query.date || new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" }));
+    res.json({ data: { ...data, date: data.date.toISOString().slice(0, 10), period: data.date.toISOString().slice(0, 7), baseCurrency: "USD", quoteCurrency: "PEN", notice: data.authoritative ? "SUNAT selling rate" : "Reference fallback; not authoritative SUNAT" } });
   })
 };
 
@@ -147,7 +149,7 @@ export const projects = resourceController({
 export const approvalRules = resourceController({
   Model: ApprovalRule,
   label: "ApprovalRule",
-  fields: ["name", "approvalLevel", "role", "area", "amountFrom", "amountTo", "requestType", "required", "sequence", "slaHours", "active"],
+  fields: ["name", "approvalLevel", "role", "area", "amountFrom", "amountTo", "requestType", "flowType", "required", "sequence", "slaHours", "active"],
   searchFields: ["name", "area", "approvalLevel"],
   sortFields: ["sequence", "name", "approvalLevel", "active"],
   defaultSort: { sequence: 1 }
@@ -174,7 +176,7 @@ export const budgetAllocations = resourceController({
 export const documentRules = resourceController({
   Model: DocumentRule,
   label: "DocumentRule",
-  fields: ["code", "requestType", "expenseNature", "requirements", "quotationPolicy", "active"],
+  fields: ["code", "flowType", "phase", "requestType", "expenseNature", "requirements", "quotationPolicy", "active"],
   searchFields: ["code", "requestType", "expenseNature"],
   sortFields: ["code", "requestType", "expenseNature", "active"],
   defaultSort: { code: 1 }
@@ -192,7 +194,7 @@ export const accountingMappings = resourceController({
 export const bankFormats = resourceController({
   Model: BankFormatConfiguration,
   label: "BankFormatConfiguration",
-  fields: ["bank", "currency", "mode", "specificationVersion", "certified", "notes", "active"],
+    fields: ["bank", "currency", "mode", "specificationVersion", "certified", "notes", "active", "bbva"],
   searchFields: ["bank", "specificationVersion", "notes"],
   sortFields: ["bank", "currency", "mode", "active"],
   defaultSort: { bank: 1, currency: 1 }

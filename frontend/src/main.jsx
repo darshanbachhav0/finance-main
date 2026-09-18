@@ -1,3 +1,4 @@
+import InteractionMotion from "./components/InteractionMotion.jsx";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -10,6 +11,7 @@ import "./styles/global.css";
 import "./styles/uma.css";
 import "./styles/experience.css";
 import "./styles/responsive.css";
+import "./styles/motion.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -18,7 +20,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <ThemeProvider>
         <ToastProvider>
           <AuthProvider>
-            <App />
+            <InteractionMotion /><App />
           </AuthProvider>
         </ToastProvider>
         </ThemeProvider>

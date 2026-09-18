@@ -7,7 +7,8 @@ import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
-import StatusBadge from "../components/StatusBadge.jsx";
+import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
+import WorkflowStatusLegend from "../components/WorkflowStatusLegend.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
@@ -28,6 +29,7 @@ export default function RequestsList() {
     initialSearch: searchParams.get("search") || "",
     initialFilters: {
       status: searchParams.get("status") || "",
+      renditionStatus: searchParams.get("renditionStatus") || "",
       flowType: searchParams.get("flowType") || "",
       requestType: searchParams.get("requestType") || "",
       currency: searchParams.get("currency") || "",
@@ -52,11 +54,11 @@ export default function RequestsList() {
   }
 
   function canModify(row) {
-    return ["BORRADOR", "RECHAZADO", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA", "DEVUELTO"].includes(row.status) && isOwner(row);
+    return ["BORRADOR", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA", "DEVUELTO"].includes(row.status) && isOwner(row);
   }
 
   function canDelete(row) {
-    return ["BORRADOR", "RECHAZADO"].includes(row.status) && isOwner(row);
+    return ["BORRADOR"].includes(row.status) && isOwner(row);
   }
 
   async function removeRequest() {
@@ -83,6 +85,7 @@ export default function RequestsList() {
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}
       />
       <Message type="error">{actionError || requestsTable.error}</Message>
+      <WorkflowStatusLegend />
       <div className="workspace-panel">
         <DataTable
           tableId="requests"
@@ -92,6 +95,10 @@ export default function RequestsList() {
           remote={requestsTable.remote}
           filters={[
             { key: "status", label: "statuses", allLabel: "All statuses", options: requestStatuses },
+            { key: "renditionStatus", label: "rendition statuses", allLabel: "All rendition statuses", options: [
+              { value: "PENDING,SUBMITTED,OBSERVED", label: "Pending / submitted / observed" },
+              "VALIDATED", "NOT_REQUIRED"
+            ] },
             { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes },
             { key: "requestType", label: "types", allLabel: "All types", options: requestTypes },
             { key: "expenseNature", label: "expense natures", allLabel: "All expense natures", options: expenseNatures },
@@ -119,7 +126,7 @@ export default function RequestsList() {
             { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "accountingPeriod", label: "Period" },
             { key: "totalAmount", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
-            { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+            { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> },
             { key: "updatedAt", label: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() }
           ]}
         />
@@ -129,7 +136,7 @@ export default function RequestsList() {
       <ConfirmDialog
         open={Boolean(deleteRow)}
         title="Permanently delete this request?"
-        description="Only draft or rejected requests can be deleted. This action cannot be undone."
+        description="Only draft requests can be deleted. This action cannot be undone."
         details={deleteRow ? [{ label: "Request", value: deleteRow.requestNumber }, { label: "Result", value: "The request and its draft data will be permanently removed." }] : []}
         confirmLabel="Delete permanently"
         tone="danger"

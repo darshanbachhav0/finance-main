@@ -35,6 +35,10 @@
     "worker:batch": "npm run worker:batch --workspace backend",
     "migrate:triple-track": "npm run migrate:triple-track --workspace backend",
     "migrate:triple-track:apply": "npm run migrate:triple-track:apply --workspace backend",
+    "migrate:document-phases": "npm run migrate:document-phases --workspace backend",
+    "migrate:document-phases:apply": "npm run migrate:document-phases:apply --workspace backend",
+    "import:ceco": "npm run import:ceco --workspace backend",
+    "import:ceco:apply": "npm run import:ceco:apply --workspace backend",
     "sunat:padron:index": "npm run sunat:padron:index --workspace backend",
     "sunat:padron:sync": "npm run sunat:padron:sync --workspace backend",
     "sunat:padron:sync:force": "npm run sunat:padron:sync:force --workspace backend"

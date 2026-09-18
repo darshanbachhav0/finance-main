@@ -46,6 +46,7 @@ export const uploadFields = multer({
 }).fields([
   { name: "xml", maxCount: 1 },
   { name: "pdf", maxCount: 1 },
+  { name: "feeReceipt", maxCount: 1 },
   { name: "quotation", maxCount: 20 },
   { name: "purchaseOrder", maxCount: 2 },
   { name: "contract", maxCount: 2 },

@@ -74,7 +74,13 @@ export async function validateAccountingDimensions({ requestType, expenseNature,
       throw new AppError(422, `Line ${lineNumber} account is not permitted for this expense nature.`, { line: lineNumber, expenseNature: canonicalNature }, ERROR_CODES.VALIDATION_ERROR);
     }
 
-    line.costCenterSnapshot = { code: center.code, name: center.name, area: center.area };
+    line.costCenterSnapshot = {
+      code: center.code,
+      name: center.name,
+      area: center.area,
+      organizationalUnit: center.organizationalUnit,
+      organizationalUnitCode: center.organizationalUnitCode
+    };
     line.expenseTypeSnapshot = {
       code: expense.code,
       name: expense.name,

@@ -1,3 +1,6 @@
+import { Suspense } from "react";
+import MotionSurface from "../components/MotionSurface.jsx";
+import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import {
   BarChart3,
   Bell,
@@ -292,7 +295,7 @@ export default function AppLayout() {
                     <div className="notification-list-heading"><strong>{t("Notifications")}</strong>{notifications.unreadCount > 0 && <button type="button" className="text-button" onClick={markAllRead}>{t("Mark all read")}</button>}</div>
                     {notifications.data.map((item) => (
                       <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
-                        <span className={`task-indicator tone-${item.readAt ? "neutral" : "teal"}`} />
+                        <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "red" : item.type === "SLA_DUE_SOON" ? "amber" : item.readAt ? "neutral" : "teal"}`} />
                         <span><strong>{t(item.title)}</strong><small>{t(item.message)}</small></span>
                       </Link>
                     ))}
@@ -333,7 +336,7 @@ export default function AppLayout() {
         </header>
         <main className="content" id="main-content" tabIndex={-1}>
           <div className="uma-print-header"><UmaBrand /><span>{t(pageTitle)}</span></div>
-          <Outlet />
+          <Suspense fallback={<WorkspaceSkeleton />}><MotionSurface changeKey={location.pathname}><Outlet /></MotionSurface></Suspense>
         </main>
       </div>
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} pages={commandPages} />

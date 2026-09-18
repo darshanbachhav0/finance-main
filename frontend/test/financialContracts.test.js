@@ -16,13 +16,13 @@ function test(name, callback) {
 
 test("canonical request statuses contain the complete lifecycle", () => {
   for (const status of [
-    "BORRADOR", "EN_VALIDACION", "ENVIADO", "PENDIENTE_APROBACION",
+    "BORRADOR", "PENDIENTE_APROBACION",
     "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL",
     "CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO",
-    "RENDICION_PENDIENTE", "CERRADO", "OBSERVADO", "DEVUELTO", "RECHAZADO", "ANULADO"
+    "CERRADO", "OBSERVADO", "DEVUELTO", "RECHAZADO", "ANULADO"
   ]) assert.ok(requestStatuses.includes(status), `Missing status ${status}`);
 
-  for (const legacy of ["APROBADO_POR_PAGAR", "PROCESADO_BANCO", "LIQUIDADO_CERRADO"])
+  for (const legacy of ["APROBADO_POR_PAGAR", "PROCESADO_BANCO", "LIQUIDADO_CERRADO", "PAGADO_CERRADO", "PROVISIONADO_CXP", "RENDICION_PENDIENTE"])
     assert.equal(requestStatuses.includes(legacy), false, `Legacy status ${legacy} must not drive the UI`);
 });
 

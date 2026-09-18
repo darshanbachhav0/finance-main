@@ -5,7 +5,8 @@ const bankFormatConfigurationSchema = new mongoose.Schema(
   {
     bank: { type: String, enum: BANKS, required: true },
     currency: { type: String, enum: CURRENCY, required: true },
-    mode: { type: String, enum: ["DEMO", "CERTIFIED"], default: "DEMO" },
+    mode: { type: String, enum: ["DEMO", "CERTIFIED", "FIXED_WIDTH"], default: "DEMO" },
+    bbva: { type: mongoose.Schema.Types.Mixed },
     specificationVersion: { type: String, required: true, default: "UMA-DEMO-1" },
     certified: { type: Boolean, default: false },
     notes: { type: String, trim: true, default: "DEMO / NOT CERTIFIED" },
@@ -17,4 +18,3 @@ const bankFormatConfigurationSchema = new mongoose.Schema(
 bankFormatConfigurationSchema.index({ bank: 1, currency: 1 }, { unique: true });
 
 export default mongoose.model("BankFormatConfiguration", bankFormatConfigurationSchema);
-

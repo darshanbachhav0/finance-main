@@ -1,3 +1,5 @@
+import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
+import { getFinancialProgressForRequests } from "../services/financialProgressService.js";
 import mongoose from "mongoose";
 import AccountsPayable from "../models/AccountsPayable.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
@@ -199,7 +201,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
     BudgetCommitment.aggregate([...linkedRequestPipeline(match, period ? { period } : {}), { $group: { _id: "$status", total: { $sum: "$totalAmount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }]),
     BudgetException.aggregate([...linkedRequestPipeline(match), { $group: { _id: { status: "$status", strategy: "$strategy" }, requested: { $sum: "$requestedAmount" }, available: { $sum: "$availableAmount" }, count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     FinancialRequest.aggregate([{ $match: match }, { $group: { _id: "$supplier", total: { $sum: "$totalPENEquivalent" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }, { $limit: 10 }, { $lookup: { from: "suppliers", localField: "_id", foreignField: "_id", as: "supplier" } }, { $unwind: { path: "$supplier", preserveNullAndEmptyArrays: true } }, { $project: { _id: 1, total: 1, count: 1, name: { $ifNull: ["$supplier.legalName", "$supplier.name"] }, identifier: { $ifNull: ["$supplier.normalizedIdentifier", "$supplier.rucDni"] } } }]),
-    FinancialRequest.aggregate([{ $match: { ...match, status: REQUEST_STATUS.RENDITION_PENDING } }, { $group: { _id: { $ifNull: ["$requesterArea", "$requestingArea"] }, total: { $sum: "$totalPENEquivalent" }, outstanding: { $sum: "$rendition.balanceOutstanding" }, count: { $sum: 1 } } }, { $sort: { outstanding: -1 } }]),
+    FinancialRequest.aggregate([{ $match: { ...match, flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } } }, { $group: { _id: { $ifNull: ["$requesterArea", "$requestingArea"] }, total: { $sum: "$totalPENEquivalent" }, outstanding: { $sum: "$rendition.balanceOutstanding" }, count: { $sum: 1 } } }, { $sort: { outstanding: -1 } }]),
     FinancialRequest.aggregate([{ $match: workflowMatch }, { $group: { _id: "$status", total: { $sum: "$totalPENEquivalent" }, count: { $sum: 1 } } }]),
     FinancialRequest.aggregate([{ $match: { ...match, status: { $in: [REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.CLOSED] } } }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalPENEquivalent" } } }]),
     Promise.all([
@@ -223,7 +225,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
   const [periodRecord, pendingFiscal, pendingRenditions, missingFx, unbalancedJournals, paidAwaitingReconciliation] = await Promise.all([
     AccountingPeriod.findOne({ period: selectedPeriod }).select("period status closingDate updatedAt").lean(),
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, status: REQUEST_STATUS.BUDGET_COMMITTED }),
-    FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, status: REQUEST_STATUS.RENDITION_PENDING }),
+    FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } }),
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, currency: "USD", $or: [{ exchangeRateDate: null }, { exchangeRate: { $lte: 0 } }] }),
     JournalEntry.countDocuments({ period: selectedPeriod, status: "POSTED", $expr: { $ne: ["$totalDebit", "$totalCredit"] } }),
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, status: REQUEST_STATUS.PAID })
@@ -295,6 +297,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
 
 export const exportManagementReport = asyncHandler(async (req, res) => {
   const requests = await FinancialRequest.find(requestMatch(req.query, req.user)).populate("supplier", "rucDni normalizedIdentifier name legalName").populate("requester", "name area").sort({ createdAt: -1 });
+  const progress = await getFinancialProgressForRequests(requests);
   const rows = requests.map((request) => ({
     requestNumber: request.requestNumber,
     type: request.requestType,
@@ -304,7 +307,11 @@ export const exportManagementReport = asyncHandler(async (req, res) => {
     supplierRucDni: request.supplierSnapshot?.identifier || request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "",
     supplier: request.supplierSnapshot?.legalName || request.supplier?.legalName || request.supplier?.name || "",
     period: request.accountingPeriod,
-    status: request.status,
+    status: canonicalRequestStatus(request.status),
+    payableCount: progress.get(String(request._id))?.counts.total || 0,
+    paidCount: progress.get(String(request._id))?.counts.paid || 0,
+    reconciledCount: progress.get(String(request._id))?.counts.reconciled || 0,
+    renditionStatus: request.rendition?.status || "NOT_REQUIRED",
     currency: request.currency,
     originalAmount: request.totalAmount,
     exchangeRate: request.exchangeRate,

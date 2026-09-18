@@ -1,4 +1,5 @@
 import ApprovalRule from "../models/ApprovalRule.js";
+import { classifyApprovalSla } from "./slaPolicy.js";
 import { APPROVAL_STAGES, DEFAULT_APPROVAL_SLA_HOURS, FLOW_TYPE, ROLES } from "../utils/constants.js";
 
 const defaultRoute = Object.freeze([
@@ -24,6 +25,18 @@ function dueDate(hours, startedAt = new Date()) {
   return new Date(startedAt.getTime() + Number(hours || DEFAULT_APPROVAL_SLA_HOURS) * 60 * 60 * 1000);
 }
 
+function routeValue(rule, overrides = {}) {
+  return { ...(rule?.toObject ? rule.toObject() : rule), ...overrides };
+}
+
+export function defaultApprovalRouteForFlow(flowType) {
+  if (flowType === FLOW_TYPE.B) return [
+    { ...defaultRoute[0], name: "Track B Area Director approval", sequence: 1, slaHours: 4 },
+    { ...defaultRoute[1], name: "Track B Vice Rector approval", sequence: 2, slaHours: 4 }
+  ];
+  return defaultRoute.map((rule) => ({ ...rule }));
+}
+
 export async function resolveApprovalRoute(request) {
   const area = request.requesterArea || request.requestingArea || "General";
   const amount = Number(request.totalPENEquivalent ?? request.penEquivalent ?? request.totalAmount ?? 0);
@@ -37,22 +50,28 @@ export async function resolveApprovalRoute(request) {
   }).sort({ sequence: 1, area: -1, requestType: -1 });
   if (rules.length) {
     const exactFlowRules = rules.filter((rule) => rule.flowType === request.flowType);
-    if (exactFlowRules.length) return exactFlowRules;
-    // Track B is intentionally not allowed to inherit a slow wildcard route.
-    // It must use an explicitly configured B route or the four-hour express default.
+    if (exactFlowRules.length) {
+      if (request.flowType !== FLOW_TYPE.B) return exactFlowRules;
+      const director = exactFlowRules.find((rule) => rule.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR) || { ...defaultRoute[0], slaHours: 4 };
+      const viceRector = exactFlowRules.find((rule) => rule.approvalLevel === APPROVAL_STAGES.VICE_RECTOR) || { ...defaultRoute[1], name: "Track B Vice Rector approval", slaHours: 4 };
+      return [routeValue(director, { sequence: 1 }), routeValue(viceRector, { sequence: 2 })];
+    }
+    // Track B uses only an explicitly configured B route; wildcard rules may
+    // contain unrelated higher-value stages.
     if (request.flowType !== FLOW_TYPE.B) return rules;
   }
   if (request.flowType === FLOW_TYPE.B) {
-    return [{ ...defaultRoute[0], name: "Express direct-payment approval", slaHours: 4 }];
+    return defaultApprovalRouteForFlow(FLOW_TYPE.B);
   }
-  return defaultRoute;
+  return defaultApprovalRouteForFlow(request.flowType);
 }
 
 export async function initializeApprovalRoute(request) {
-  const rules = await resolveApprovalRoute(request);
+  const existing = [...(request.approvalRouteSnapshot || [])].sort((a, b) => a.sequence - b.sequence);
+  const rules = existing.length ? existing : await resolveApprovalRoute(request);
   const startedAt = new Date();
   request.approvalRouteSnapshot = rules.map((rule, index) => ({
-    rule: rule._id,
+    rule: rule.rule?._id || rule.rule || rule._id,
     approvalLevel: rule.approvalLevel,
     role: rule.role,
     sequence: rule.sequence,
@@ -60,7 +79,9 @@ export async function initializeApprovalRoute(request) {
     required: rule.required !== false,
     status: rule.required === false ? "SKIPPED" : "PENDING",
     startedAt: index === 0 && rule.required !== false ? startedAt : undefined,
-    dueAt: index === 0 && rule.required !== false ? dueDate(rule.slaHours, startedAt) : undefined
+    dueAt: index === 0 && rule.required !== false ? dueDate(rule.slaHours, startedAt) : undefined,
+    completedAt: undefined,
+    completedBy: undefined
   }));
   const first = activeApprovalStep(request);
   request.approvalStage = first?.approvalLevel || APPROVAL_STAGES.COMPLETE;
@@ -105,12 +126,5 @@ export function stopApprovalRoute(request, status) {
 }
 
 export function slaStatus(stepOrRequest, now = new Date()) {
-  const dueAt = stepOrRequest?.dueAt || stepOrRequest?.approvalDueAt;
-  if (!dueAt) return { severity: "LOW", overdue: false, remainingMs: null };
-  const remainingMs = new Date(dueAt).getTime() - now.getTime();
-  const overdue = remainingMs < 0;
-  const hours = remainingMs / (60 * 60 * 1000);
-  const severity = overdue ? "OVERDUE" : hours <= 4 ? "HIGH" : hours <= 12 ? "MEDIUM" : "LOW";
-  return { severity, overdue, remainingMs, dueAt };
+  return classifyApprovalSla(activeApprovalStep(stepOrRequest)?.dueAt || stepOrRequest?.dueAt || stepOrRequest?.approvalDueAt, now);
 }
-

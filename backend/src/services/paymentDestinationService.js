@@ -69,7 +69,7 @@ export async function listEligibleSupplierPaymentAccounts({ supplierId, bank, cu
 }
 
 function assertSnapshotBatchMatch(snapshot, bank, currency) {
-  if (snapshot.bank !== bank || snapshot.currency !== currency) {
+  if ((bank && snapshot.bank !== bank) || snapshot.currency !== currency) {
     throw new AppError(
       422,
       "The frozen payment destination does not match the selected bank and currency.",

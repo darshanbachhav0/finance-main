@@ -7,22 +7,27 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import ApprovalTimeline from "./ApprovalTimeline.jsx";
 import Drawer from "./Drawer.jsx";
 import Message from "./Message.jsx";
-import StatusBadge from "./StatusBadge.jsx";
+import FinancialProgressSummary from "./FinancialProgressSummary.jsx";
 
 export default function RequestQuickView({ requestId, onClose }) {
   const { user } = useAuth();
   const { t } = useLanguage();
   const [request, setRequest] = useState(null);
+  const [financialProgress, setFinancialProgress] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!requestId) return;
     setRequest(null);
+    setFinancialProgress(null);
     setError("");
-    api.get(`/requests/${requestId}`).then((response) => setRequest(response.data.data)).catch((err) => setError(err.message));
+    api.get(`/requests/${requestId}`).then((response) => {
+      setRequest(response.data.data);
+      setFinancialProgress(response.data.related?.financialProgress || null);
+    }).catch((err) => setError(err.message));
   }, [requestId]);
 
-  const editable = request && ["BORRADOR", "RECHAZADO", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA", "DEVUELTO"].includes(request.status) && (user.role === "Admin" || (request.requester?._id || request.solicitor?._id) === user._id);
+  const editable = request && ["BORRADOR", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA", "DEVUELTO"].includes(request.status) && (user.role === "Admin" || (request.requester?._id || request.solicitor?._id) === user._id);
 
   return (
     <Drawer
@@ -43,7 +48,7 @@ export default function RequestQuickView({ requestId, onClose }) {
       {request && (
         <div className="detail-stack">
           <div className="quick-view-summary">
-            <StatusBadge status={request.status} />
+            <FinancialProgressSummary request={request} financialProgress={financialProgress} compact />
             <h3>{request.supplier?.name || request.supplier?.legalName || request.rendition?.beneficiarySnapshot?.name || request.requester?.name || "-"}</h3>
             <span>{request.supplier?.rucDni || request.rendition?.beneficiarySnapshot?.employeeCode || `Track ${request.flowType || "A1"}`}</span>
             <strong>{request.currency} {Number(request.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>

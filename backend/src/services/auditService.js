@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import AuditLog from "../models/AuditLog.js";
+import FinancialRequest from "../models/FinancialRequest.js";
+import User from "../models/User.js";
 
 export function clientIp(req) {
   return String(req?.headers?.["x-forwarded-for"] || req?.ip || req?.socket?.remoteAddress || "unknown")
@@ -70,15 +72,22 @@ export async function recordAudit({
   blockReason,
   period,
   requestId,
+  eventKey,
+  statusFrom,
+  statusTo,
   session
 }) {
   const entityId = entity?._id || entity;
   const requestEntityId = requestId || (entityType === "FinancialRequest" ? entityId : entity?.request?._id || entity?.request);
+  const requestStatus = entityType === "FinancialRequest" ? entity?.status
+    : requestEntityId ? (await FinancialRequest.findById(requestEntityId).select("status").session(session || null).lean())?.status : undefined;
+  const actor = user?._id && (!user.name || !user.role)
+    ? await User.findById(user._id).select("name role").session(session || null).lean() : user;
   const payload = {
     user: user?._id,
     actor: user?._id,
-    actorName: user?.name,
-    role: user?.role,
+    actorName: actor?.name || user?.name,
+    role: actor?.role || user?.role,
     ip: clientIp(req),
     module,
     entity: entityType,
@@ -87,6 +96,9 @@ export async function recordAudit({
     requestId: requestEntityId,
     requestNumber: entity?.requestNumber,
     action,
+    eventKey,
+    statusFrom: statusFrom ?? oldValues?.status ?? changes?.from ?? requestStatus,
+    statusTo: statusTo ?? newValues?.status ?? changes?.to ?? requestStatus,
     message: message || comments,
     comments,
     oldValues,

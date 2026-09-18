@@ -706,45 +706,40 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
     slaHours: 4,
     active: true
   });
+  await upsert(ApprovalRule, { name: "Vicerrectorado - Vía B" }, {
+    approvalLevel: APPROVAL_STAGES.VICE_RECTOR,
+    role: ROLES.APPROVER,
+    area: "*",
+    amountFrom: 0,
+    requestType: "*",
+    flowType: FLOW_TYPE.B,
+    required: true,
+    sequence: 2,
+    slaHours: 4,
+    active: true
+  });
 
   const documentRules = [
-    ["DOC-UMA-COTIZACION", REQUEST_TYPE.PAGO_CON_COTIZACION, "*", [
-      { kind: "XML", minCount: 1, labelKey: "XML de comprobante" },
-      { kind: "PDF", minCount: 1, labelKey: "PDF de comprobante" }
-    ]],
-    ["DOC-UMA-REEMBOLSO", REQUEST_TYPE.REEMBOLSO_CON_SUSTENTO, "*", [
-      { kind: "XML", minCount: 1, labelKey: "XML de comprobante" },
-      { kind: "PDF", minCount: 1, labelKey: "PDF de comprobante" }
-    ]],
-    ["DOC-UMA-BIENES", "*", EXPENSE_NATURE.GOODS, [
-      { kind: "QUOTATION", minCount: 3, labelKey: "tres cotizaciones" },
-      { kind: "PDF", minCount: 1, labelKey: "factura o comprobante" }
-    ]],
-    ["DOC-UMA-SERVICIOS", "*", EXPENSE_NATURE.SERVICES, [
-      { kind: "PDF", minCount: 1, labelKey: "comprobante electrónico" },
-      { kind: "CONTRACT", minCount: 1, labelKey: "contrato firmado" },
-      { kind: "CONFORMITY", minCount: 1, labelKey: "conformidad del servicio" }
-    ]],
-    ["DOC-UMA-MANTENIMIENTO", "*", EXPENSE_NATURE.MAINTENANCE, [
-      { kind: "PDF", minCount: 1, labelKey: "comprobante" },
-      { kind: "CONTRACT", minCount: 1, labelKey: "orden o contrato" },
-      { kind: "CONFORMITY", minCount: 1, labelKey: "conformidad de mantenimiento" }
-    ]],
-    ["DOC-UMA-VIAJE", "*", EXPENSE_NATURE.TRAVEL, [
-      { kind: "SUPPORTING", minCount: 1, labelKey: "sustento de viaje o movilidad" }
-    ]],
-    ["DOC-UMA-CAJA", "*", EXPENSE_NATURE.PETTY_CASH, [
-      { kind: "SUPPORTING", minCount: 1, labelKey: "comprobantes de sustento" }
-    ]],
-    ["DOC-UMA-LIQUIDACION", "*", EXPENSE_NATURE.REIMBURSEMENT_LIQUIDATION, [
-      { kind: "SUPPORTING", minCount: 1, labelKey: "evidencia validada" }
-    ]]
+    ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 3, labelKey: "tres cotizaciones" }]],
+    ["DOC-A1-GOODS-INVOICE", FLOW_TYPE.A1, "INVOICE_REGISTRATION", "*", EXPENSE_NATURE.GOODS, [{ kind: "XML", minCount: 1, labelKey: "XML de factura" }, { kind: "PDF", minCount: 1, labelKey: "PDF de factura" }]],
+    ["DOC-A1-GOODS-ACCOUNTING", FLOW_TYPE.A1, "ACCOUNTING", "*", EXPENSE_NATURE.GOODS, [{ kind: "CONFORMITY", minCount: 1, labelKey: "conformidad de bienes" }]],
+    ["DOC-A1-SERVICES-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.SERVICES, [{ kind: "CONTRACT", minCount: 1, labelKey: "contrato o acuerdo de servicio" }]],
+    ["DOC-A1-SERVICES-INVOICE", FLOW_TYPE.A1, "INVOICE_REGISTRATION", "*", EXPENSE_NATURE.SERVICES, [{ kind: "XML", minCount: 1, labelKey: "XML de factura" }, { kind: "PDF", minCount: 1, labelKey: "PDF de factura" }]],
+    ["DOC-A1-SERVICES-ACCOUNTING", FLOW_TYPE.A1, "ACCOUNTING", "*", EXPENSE_NATURE.SERVICES, [{ kind: "CONFORMITY", minCount: 1, labelKey: "conformidad del servicio" }]],
+    ["DOC-A1-FEES-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.PROFESSIONAL_FEES, [{ kind: "CONTRACT", minCount: 1, labelKey: "contrato o acuerdo de servicio" }]],
+    ["DOC-A1-FEES-INVOICE", FLOW_TYPE.A1, "INVOICE_REGISTRATION", "*", EXPENSE_NATURE.PROFESSIONAL_FEES, [{ kind: "XML", minCount: 1, labelKey: "XML del recibo" }, { kind: "FEE_RECEIPT", minCount: 1, labelKey: "Recibo por Honorarios" }]],
+    ["DOC-A1-FEES-ACCOUNTING", FLOW_TYPE.A1, "ACCOUNTING", "*", EXPENSE_NATURE.PROFESSIONAL_FEES, [{ kind: "ACTIVITY_REPORT", minCount: 1, labelKey: "informe de actividades" }]],
+    ["DOC-A2-INVOICE", FLOW_TYPE.A2, "INVOICE_REGISTRATION", "*", "*", [{ kind: "XML", minCount: 1, labelKey: "XML de factura" }, { kind: "PDF", minCount: 1, labelKey: "PDF de factura" }]],
+    ["DOC-B-SUBMISSION", FLOW_TYPE.B, "SUBMISSION", "*", "*", [{ kind: "XML", minCount: 1, labelKey: "XML de comprobante" }, { kind: "PDF", minCount: 1, labelKey: "PDF de comprobante" }]],
+    ["DOC-C-RENDITION", FLOW_TYPE.C, "RENDITION", "*", "*", [{ kind: "RENDITION", minCount: 1, labelKey: "documentos de sustento de rendición" }]]
   ];
-  for (const [code, requestType, expenseNature, requirements] of documentRules) {
+  for (const [code, flowType, phase, requestType, expenseNature, requirements] of documentRules) {
     const quotationRequirement = requirements.find((item) => item.kind === "QUOTATION");
     await upsert(DocumentRule, { code }, {
       requestType,
       expenseNature,
+      flowType,
+      phase,
       requirements,
       quotationPolicy: {
         enabled: Boolean(quotationRequirement),

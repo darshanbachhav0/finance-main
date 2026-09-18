@@ -1,0 +1,33 @@
+{
+  "bank": "BBVA",
+  "currency": "PEN",
+  "active": false,
+  "mode": "FIXED_WIDTH",
+  "specificationVersion": "UMA-BBVA-151-277-v1",
+  "bbva": {
+    "confirmed": false,
+    "encoding": "latin1",
+    "lineEnding": "LF",
+    "finalNewline": false,
+    "truncateText": true,
+    "debitAccount": "00110615220100001253",
+    "headerPrefix": "750",
+    "headerControl": "A         ",
+    "headerLabel": "PAGO PROV                ",
+    "headerTrailer": "S000000000000000000                                                  ",
+    "detailPrefix": "002",
+    "rucCode": "R",
+    "dniCode": "L",
+    "internalCode": "P",
+    "interbankCode": "I",
+    "internalAccountLength": 20,
+    "internalAccountPrefix": "",
+    "descriptionControl": "N",
+    "contactControl": "E",
+    "detailTrailer": "00000000000000000000000000000000                  ",
+    "defaultContact": "TREASURY@EXAMPLE.INVALID",
+    "orderingContact": "NAYRUT FLORES",
+    "documentCodes": {}
+  },
+  "notes": "Sample-derived values only. Treasury must verify all documented fields before activation."
+}

@@ -1,3 +1,4 @@
+import { recordBudgetExceptionDecision } from "../services/budgetExceptionService.js";
 import BudgetException from "../models/BudgetException.js";
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import CostCenter from "../models/CostCenter.js";
@@ -83,10 +84,10 @@ export const listBudgetExceptions = asyncHandler(async (req, res) => {
   const sort = parseSort(req.query, ["status", "strategy", "availableAmount", "requestedAmount", "createdAt"], { createdAt: -1 });
   const [data, total] = await Promise.all([
     BudgetException.find(query)
-      .populate("request", "requestNumber requestType status totalPENEquivalent accountingPeriod")
+      .populate("request", "requestNumber requestType status totalPENEquivalent accountingPeriod requester solicitor")
       .populate("costCenter", "code name area")
       .populate("expenseType", "code name accountNumber")
-      .populate("requestedBy reviewedBy", "name role")
+      .populate("requestedBy reviewedBy preparedBy", "name role")
       .sort(sort).skip(skip).limit(pageSize),
     BudgetException.countDocuments(query)
   ]);
@@ -94,23 +95,12 @@ export const listBudgetExceptions = asyncHandler(async (req, res) => {
 });
 
 export const decideBudgetException = asyncHandler(async (req, res) => {
-  const status = String(req.body.status || "").toUpperCase();
-  if (!["APPROVED", "REJECTED"].includes(status)) throw new AppError(422, "Budget exception decision must be APPROVED or REJECTED.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  if (!String(req.body.comments || "").trim()) throw new AppError(422, "Decision comments are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  const exception = await BudgetException.findById(req.params.id);
-  if (!exception) throw new AppError(404, "Budget exception not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
-  if (exception.status !== "PENDING") throw new AppError(409, "Budget exception has already been decided.", { status: exception.status }, ERROR_CODES.CONFLICT);
-  exception.status = status;
-  exception.reviewedBy = req.user._id;
-  exception.reviewedAt = new Date();
-  exception.comments = req.body.comments;
-  await exception.save();
-  await recordAudit({ entityType: "BudgetException", entity: exception, requestId: exception.request, action: status, user: req.user, req, module: "BUDGET", comments: req.body.comments, newValues: { status, strategy: exception.strategy } });
+  const exception = await recordBudgetExceptionDecision(req.params.id, String(req.body.status || "").toUpperCase(), req.body.comments, req.user, req);
   res.json({ data: exception });
 });
 
 export const commitRequestBudget = asyncHandler(async (req, res) => {
-  const request = await FinancialRequest.findById(req.params.id).populate("supplier");
+  const request = await FinancialRequest.findById(req.params.id).select("+attachments.path").populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   await commitApprovedRequestBudget({ request, user: req.user, req });
   res.json({ data: publicRequestPayload(request) });

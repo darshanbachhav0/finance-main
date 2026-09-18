@@ -33,10 +33,11 @@ export const umaCopy = {
   "ACTIVE": "Active", "INACTIVE": "Inactive", "VERIFIED": "Verified", "HOMOLOGATED": "Homologated",
   "PARTIALLY_PAID": "Partially paid", "PARTIALLY_EXECUTED": "Partially executed",
   "PAYMENT_FILE_CREATED": "Bank file generated", "PAYMENT_BOUNCED": "Payment returned",
-  "PAGO_REBOTADO": "Payment returned", "PAGADO_CERRADO": "Paid and closed",
+  "PAGO_REBOTADO": "Payment returned", "PAGADO_CERRADO": "Closed",
   "INSUFFICIENT": "Insufficient budget", "NO_BUDGET": "Transitional budget",
   "LINKED_ANNUAL_PLAN": "Annual budget plan", "DIMENSIONAL_ALLOCATION": "Legacy allocation",
-  "TRANSITIONAL_COST_CENTER": "Cost Center balance", "TRANSITIONAL": "Transitional"
+  "TRANSITIONAL_COST_CENTER": "Cost Center balance", "TRANSITIONAL": "Transitional",
+  "SUBMISSION": "Submission", "PROCUREMENT": "Procurement", "INVOICE_REGISTRATION": "Invoice registration", "ACCOUNTING": "Accounting", "RENDITION": "Rendition"
 };
 
 export const umaSpanish = {
@@ -139,5 +140,7 @@ export const umaSpanish = {
   "Verified": "Verificado", "Homologated": "Homologado", "Partially paid": "Pagado parcialmente",
   "Partially executed": "Ejecutado parcialmente", "Payment returned": "Pago devuelto", "Paid and closed": "Pagado y cerrado",
   "Insufficient budget": "Presupuesto insuficiente", "Transitional budget": "Presupuesto transitorio",
-  "Annual budget plan": "Plan presupuestal anual", "Cost Center balance": "Saldo del centro de costos", "Transitional": "Transitorio"
+  "Annual budget plan": "Plan presupuestal anual", "Cost Center balance": "Saldo del centro de costos", "Transitional": "Transitorio",
+  "Submission": "Presentación", "Procurement": "Compras", "Invoice registration": "Registro de comprobante", "Accounting": "Contabilidad", "Rendition": "Rendición",
+  "Current document phase": "Fase documental actual", "Missing documents": "Documentos faltantes", "No documents required in this phase.": "No se requieren documentos en esta fase."
 };

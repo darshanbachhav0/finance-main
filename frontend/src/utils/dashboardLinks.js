@@ -23,7 +23,7 @@ export function dashboardMetricLink(role, key) {
       capex: ["/requests?requestType=CAPEX", "View requests"],
       opex: ["/requests?requestType=OPEX", "View requests"],
       drafts: ["/requests?status=BORRADOR", "View drafts"],
-      rendition: ["/requests?status=RENDICION_PENDIENTE", "View requests"],
+      rendition: ["/requests?renditionStatus=PENDING%2CSUBMITTED%2COBSERVED", "View pending renditions"],
       closed: ["/requests?status=CERRADO", "View requests"]
     }[key] || ["/requests", "View requests"];
   }

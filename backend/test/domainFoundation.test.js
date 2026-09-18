@@ -18,7 +18,7 @@ test("canonical workflow graph does not permit payment directly from Accounting"
   assert.equal(canTransition(REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED), true);
   assert.equal(canTransition(REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.PAID), false);
   assert.equal(canTransition(REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAID), true);
-  assert.deepEqual(allowedTransitions(REQUEST_STATUS.PAID), [REQUEST_STATUS.RENDITION_PENDING, REQUEST_STATUS.RECONCILED]);
+  assert.deepEqual(allowedTransitions(REQUEST_STATUS.PAID), [REQUEST_STATUS.RECONCILED]);
   assert.deepEqual(allowedTransitions(REQUEST_STATUS.CLOSED), []);
 });
 

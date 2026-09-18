@@ -445,6 +445,16 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .document-requirement strong { font-size: 13px; }
 .document-requirement p { margin: 2px 0 0; color: var(--gray-600); font-size: 12px; }
 .document-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.document-phase-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.document-phase-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 14px 0; }
+.document-phase-card { border: 1px solid var(--border-color, #d9dee7); border-radius: 12px; padding: 12px; background: var(--surface, #fff); }
+.document-phase-card.current { border-color: var(--primary, #e51c4b); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #e51c4b) 14%, transparent); }
+.document-phase-card > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.document-phase-card ul { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.document-phase-card li { display: flex; justify-content: space-between; gap: 8px; font-size: .86rem; }
+.document-phase-card li.missing { color: var(--danger, #b42318); }
+.document-phase-card li.complete { color: var(--success, #067647); }
+.document-phase-card p { margin: 10px 0 0; color: var(--text-muted, #667085); font-size: .86rem; }
 .document-upload { position: relative; min-height: 145px; display: grid; grid-template-columns: 28px 1fr; align-content: center; gap: 8px; padding: 16px; border: 1px dashed var(--gray-400); border-radius: 6px; background: var(--gray-50); cursor: pointer; }
 .document-upload:hover { border-color: var(--teal-600); background: var(--surface-tint-f4fbfa); }
 .document-upload > svg { color: var(--teal-700); }

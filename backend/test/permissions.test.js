@@ -24,16 +24,16 @@ test("Approver cannot access Suppliers while operational roles can", () => {
   assert.equal(canViewSuppliers(ROLES.TREASURY), true);
 });
 
-test("Solicitor can modify only owned draft or rejected requests", () => {
+test("Solicitor can modify only owned editable requests; rejected requests remain terminal", () => {
   const ownedDraft = { solicitor: "user-1", status: REQUEST_STATUS.DRAFT };
   const ownedRejected = { solicitor: "user-1", status: REQUEST_STATUS.REJECTED };
   const ownedPending = { solicitor: "user-1", status: REQUEST_STATUS.PENDING_APPROVAL };
 
   assert.equal(canModifyRequest(ownedDraft, solicitor), true);
-  assert.equal(canModifyRequest(ownedRejected, solicitor), true);
+  assert.equal(canModifyRequest(ownedRejected, solicitor), false);
   assert.equal(canModifyRequest(ownedPending, solicitor), false);
   assert.equal(canModifyRequest(ownedDraft, anotherSolicitor), false);
-  assert.equal(canModifyRequest(ownedPending, admin), true);
+  assert.equal(canModifyRequest(ownedPending, admin), false);
 });
 
 test("Approver cannot view drafts but Accounting and Treasury retain operational visibility", () => {

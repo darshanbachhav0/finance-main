@@ -74,7 +74,7 @@ export async function guardAccountingPeriod({
   }
 
   const policyField = policyFieldByAction[action] || "blockUpdate";
-  const blockedByPolicy = accountingPeriod?.policy?.[policyField] !== false;
+  const blockedByPolicy = ["POST", "ACCOUNT"].includes(action) || accountingPeriod?.policy?.[policyField] !== false;
   if (accountingPeriod?.status === "CLOSED" && blockedByPolicy) {
     await auditBlockedAttempt(normalizedPeriod, action, context, "ACCOUNTING_PERIOD_CLOSED");
     throw new AppError(

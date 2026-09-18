@@ -1,3 +1,4 @@
+import { isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { APPROVAL_STAGES, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
 export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR];
@@ -23,7 +24,8 @@ export function canViewSuppliers(role) {
 }
 
 export function canModifyRequest(request, user) {
-  if (!request || !user) return false;
+  if (!request || !user || isTerminalRequest(request.status)) return false;
+  if (user.role === ROLES.ADMIN && !["BORRADOR", "DEVUELTO", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(request.status)) return false;
   if (user.role === ROLES.ADMIN) return true;
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
   return (
@@ -31,7 +33,6 @@ export function canModifyRequest(request, user) {
     String(ownerId) === String(user._id) &&
     [
       REQUEST_STATUS.DRAFT,
-      REQUEST_STATUS.REJECTED,
       REQUEST_STATUS.RETURNED,
       REQUEST_STATUS.OBSERVED,
       REQUEST_STATUS.OBSERVED_BUDGET,

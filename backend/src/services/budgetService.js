@@ -1,4 +1,5 @@
 import BudgetCommitment from "../models/BudgetCommitment.js";
+import AccountsPayable from "../models/AccountsPayable.js";
 import BudgetException from "../models/BudgetException.js";
 import BudgetRule from "../models/BudgetRule.js";
 import CostCenter from "../models/CostCenter.js";
@@ -72,7 +73,7 @@ export async function previewBudget(request) {
     const available = limits?.available ?? subtractMoney(subtractMoney(assigned, committed), executed);
     const projectedBalance = subtractMoney(available, requested);
     previewSources.set(sourceKey, { available, requested, projectedBalance });
-    const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
+    const mode = "ACTIVE"; // New commitments always enforce available funds.
     lines.push({
       ...line,
       mode,
@@ -141,11 +142,24 @@ async function releaseApplied(applied, session) {
   }
 }
 
-export async function reserveBudget(request, userId, { session } = {}) {
+export async function reserveBudget(request, userId, { session, additionalAmount = 0, exchangeRateEvidence } = {}) {
   const existing = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
-  if (existing) return existing;
+  if (existing && existing.status !== BUDGET_STATUS.NO_BUDGET && !(additionalAmount > 0)) return existing;
+  if (additionalAmount > 0 && (!existing || [BUDGET_STATUS.RELEASED, BUDGET_STATUS.CLOSED, BUDGET_STATUS.NO_BUDGET, BUDGET_STATUS.DEFERRED].includes(existing.status))) throw new AppError(409, "This commitment cannot be increased for an exchange-rate variance.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
+  if (existing?.status === BUDGET_STATUS.NO_BUDGET && (existing.executedAmount > 0 || existing.paidAmount > 0 || await AccountsPayable.exists({ request: request._id }).session(session || null))) {
+    throw new AppError(409, "Historical unreserved budget already has financial postings; a controlled budget adjustment is required.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
+  }
 
   const grouped = groupedRequestLines(request);
+  if (additionalAmount > 0) {
+    const weight = sumMoney(grouped.map(line => line.amount));
+    if (!(weight > 0)) throw new AppError(422, "Budget dimensions are required for the exchange-rate difference.");
+    let assigned = 0;
+    grouped.forEach((line, index) => {
+      line.amount = index === grouped.length - 1 ? subtractMoney(additionalAmount, assigned) : Math.floor(additionalAmount * 100 * line.amount / weight) / 100;
+      assigned = addMoney(assigned, line.amount);
+    });
+  }
   const centers = await CostCenter.find({ _id: { $in: grouped.map((line) => line.costCenter) } }).session(session || null);
   const centerMap = new Map(centers.map((center) => [String(center._id), center]));
   const prepared = [];
@@ -160,8 +174,8 @@ export async function reserveBudget(request, userId, { session } = {}) {
       resolveRule(line, center, request.issueDate),
       findAllocation(request.accountingPeriod, line, session)
     ]);
-    const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
-    const exceptionStrategy = rule.exceptionStrategy || "REJECT";
+    const mode = "ACTIVE"; // New commitments always enforce available funds.
+    const exceptionStrategy = rule.exceptionStrategy === "EXTRAORDINARY_APPROVAL" ? "EXTRAORDINARY_APPROVAL" : "REQUEST_BUDGET_INCREASE";
     const limits = budgetLimits(allocation, request.accountingPeriod, line.amount);
     const sourceKey = String(allocation?._id || center._id);
     const demand = demands.get(sourceKey) || 0;
@@ -170,13 +184,10 @@ export async function reserveBudget(request, userId, { session } = {}) {
       : subtractMoney(subtractMoney(center.annualBudget, center.committedAmount), center.executedAmount));
     const available = subtractMoney(rawAvailable, demand);
     demands.set(sourceKey, addMoney(demand, line.amount));
-    if (mode === "ACTIVE" && available < line.amount && exceptionStrategy === "REJECT") {
-      throw insufficientBudgetError(allocation ? `${center.code} allocation` : center.code, available, line.amount, exceptionStrategy, limits);
-    }
     let budgetException = null;
     let exceptionApproved = false;
     if (mode === "ACTIVE" && available < line.amount) {
-      const key = dimensionKey(line, request.project);
+      const key = dimensionKey(line, request.project) + (additionalAmount > 0 ? `|FX:${addMoney(existing.totalAmount, additionalAmount)}` : "");
       budgetException = await BudgetException.findOne({ request: request._id, dimensionKey: key });
       if (!budgetException) {
         [budgetException] = await BudgetException.create([{
@@ -190,14 +201,15 @@ export async function reserveBudget(request, userId, { session } = {}) {
           availableAmount: available,
           requestedAmount: line.amount,
           budgetLimits: limits || undefined,
-          requestedBy: userId
+          requestedBy: userId,
+          history: [{ action: "CREATED", by: userId, comments: "Insufficient budget detected before commitment." }]
         }]);
       }
-      exceptionApproved = exceptionStrategy === "EXTRAORDINARY_APPROVAL" && budgetException.status === "APPROVED";
+      exceptionApproved = exceptionStrategy === "EXTRAORDINARY_APPROVAL" && budgetException.strategy === "EXTRAORDINARY_APPROVAL" && budgetException.status === "APPROVED" && line.amount <= budgetException.requestedAmount;
       if (!exceptionApproved) {
         throw new AppError(
           409,
-          `Budget exception ${exceptionStrategy} is required before this request can continue.`,
+          `insufficient budget: budget exception ${exceptionStrategy} is required before this request can continue.`,
           { available, required: line.amount, exceptionStrategy, costCenter: center.code, budgetException: budgetException._id, exceptionStatus: budgetException.status, ...limits },
           ERROR_CODES.INSUFFICIENT_BUDGET
         );
@@ -227,7 +239,7 @@ export async function reserveBudget(request, userId, { session } = {}) {
     }
 
     const status = prepared.some((line) => line.mode === "ACTIVE") ? BUDGET_STATUS.COMMITTED : BUDGET_STATUS.NO_BUDGET;
-    const [commitment] = await BudgetCommitment.create([{
+    const values = {
       request: request._id,
       requestNumber: request.requestNumber,
       period: request.accountingPeriod,
@@ -248,12 +260,49 @@ export async function reserveBudget(request, userId, { session } = {}) {
       createdBy: userId,
       reservedAt: new Date(),
       history: [{ status, amount: sumMoney(prepared.map((line) => line.amount)), by: userId, comments: "Budget reservation created." }]
-    }], session ? { session } : undefined);
+    };
+    if (existing && additionalAmount > 0) {
+      existing.adjustments.push({ reason: "EXCHANGE_RATE_VARIANCE", at: new Date(), by: userId, previousTotal: existing.totalAmount, previousLines: existing.lines.map(line => line.toObject()), addedLines: values.lines, amount: additionalAmount, exchangeRateEvidence });
+      for (const added of values.lines) {
+        const line = existing.lines.find(item => dimensionKey(item) === dimensionKey(added) && String(item.allocation || "") === String(added.allocation || "") && item.budgetMonth === added.budgetMonth);
+        if (line) line.amount = addMoney(line.amount, added.amount);
+        else existing.lines.push(added);
+      }
+      existing.totalAmount = addMoney(existing.totalAmount, additionalAmount);
+      existing.status = deriveCommitmentStatus(existing);
+      existing.history.push({ status: existing.status, amount: additionalAmount, by: userId, comments: "Additional budget reserved for the invoice exchange-rate difference within the approved source-currency amount." });
+      await existing.save({ session });
+      return existing;
+    }
+    if (existing) {
+      const history = [...existing.history, ...values.history];
+      const snapshot = existing.toObject();
+      Object.assign(existing, values, { createdBy: existing.createdBy, history, legacyUnreservedSnapshot: snapshot });
+      await existing.save({ session });
+      return existing;
+    }
+    const [commitment] = await BudgetCommitment.create([values], session ? { session } : undefined);
     return commitment;
   } catch (error) {
     await releaseApplied(applied, session);
     throw error;
   }
+}
+
+export async function assertBudgetBeforePosting(request, { session, amount, userId, allowFxTopUp = false, exchangeRateEvidence } = {}) {
+  let commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  if (commitment?.status === BUDGET_STATUS.NO_BUDGET && userId) commitment = await reserveBudget(request, userId, { session });
+  if (!commitment || [BUDGET_STATUS.RELEASED, BUDGET_STATUS.NO_BUDGET].includes(commitment.status) || (commitment.status === BUDGET_STATUS.DEFERRED && request.flowType !== "C")) {
+    throw new AppError(409, "A valid budget commitment is required before accounting.", { request: request._id }, ERROR_CODES.INSUFFICIENT_BUDGET);
+  }
+  if (amount !== undefined && commitment.status !== BUDGET_STATUS.DEFERRED) {
+    const remaining = subtractMoney(commitment.totalAmount, currentTrackedAmount(commitment, "executedAmount"));
+    if (roundMoney(amount) > remaining) {
+      if (allowFxTopUp && request.currency === "USD" && userId) return reserveBudget(request, userId, { session, additionalAmount: subtractMoney(amount, remaining), exchangeRateEvidence });
+      throw new AppError(409, "Invoice exceeds the remaining budget commitment.", { remaining, required: amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
+    }
+  }
+  return commitment;
 }
 
 function trackedLineAmount(line, field) {
@@ -437,8 +486,8 @@ export async function releaseBudget(request, userId, reason, { session } = {}) {
   }
 }
 
-// Track C advances are recorded without reserving/consuming expense budget. The budget is
-// affected only when Finance validates the rendition, as required by the Triple-Track model.
+// Historical compatibility only. New Track C advances use reserveBudget before posting;
+// expense execution remains deferred until Finance validates the rendition.
 export async function deferBudget(request, userId, { session } = {}) {
   const existing = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
   if (existing) return existing;
@@ -472,9 +521,35 @@ export async function deferBudget(request, userId, { session } = {}) {
   return commitment;
 }
 
+export async function assertRenditionBudgetAvailable(request, userId, lines, { session } = {}) {
+  const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  if (!commitment || ![BUDGET_STATUS.COMMITTED, BUDGET_STATUS.DEFERRED, BUDGET_STATUS.CLOSED].includes(commitment.status)) throw new AppError(409, "A valid advance budget record is required before rendition posting.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
+  if (commitment.status === BUDGET_STATUS.CLOSED) return;
+  const preview = await previewBudget({ ...(request.toObject?.() || request), accountingPeriod: commitment.period, lines });
+  const demands = new Map();
+  for (const line of preview.lines) {
+    const sourceId = String(line.allocation || line.costCenter);
+    const requested = addMoney(demands.get(sourceId) || 0, line.amount);
+    demands.set(sourceId, requested);
+    const held = commitment.status === BUDGET_STATUS.COMMITTED
+      ? sumMoney(commitment.lines.filter(item => item.mode === "ACTIVE" && String(item.allocation || item.costCenter) === sourceId).map(item => subtractMoney(item.amount, item.executedAmount || 0))) : 0;
+    const available = subtractMoney(addMoney(line.available || 0, held), subtractMoney(requested, line.amount));
+    if (line.status !== "PENDING_VALIDATION" && available >= line.amount) continue;
+    const key = dimensionKey(line, request.project);
+    const strategy = line.exceptionStrategy === "EXTRAORDINARY_APPROVAL" ? "EXTRAORDINARY_APPROVAL" : "REQUEST_BUDGET_INCREASE";
+    const exception = await BudgetException.findOneAndUpdate({ request: request._id, dimensionKey: key }, { $setOnInsert: {
+      costCenter: line.costCenter, expenseType: line.expenseType, budgetItem: line.budgetItem, project: line.project,
+      strategy, availableAmount: available, requestedAmount: line.amount, requestedBy: userId,
+      history: [{ action: "CREATED", by: userId, comments: "Insufficient actual-expense budget detected before rendition posting." }]
+    } }, { upsert: true, new: true, runValidators: true });
+    if (line.status !== "PENDING_VALIDATION" && strategy === "EXTRAORDINARY_APPROVAL" && exception.strategy === strategy && exception.status === "APPROVED" && exception.requestedAmount >= line.amount) continue;
+    throw new AppError(409, "Rendition exceeds available budget; resolve the budget exception before accounting.", { budgetException: exception._id, available, required: line.amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
+  }
+}
+
 export async function executeDeferredBudget(request, userId, { session, lines } = {}) {
   const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
-  if (!commitment || commitment.status !== BUDGET_STATUS.DEFERRED) return commitment;
+  if (!commitment || ![BUDGET_STATUS.DEFERRED, BUDGET_STATUS.COMMITTED].includes(commitment.status)) return commitment;
 
   const grouped = lines ? groupBudgetLines(lines, request.project) : commitment.lines.map((line) => ({
     allocation: line.allocation,
@@ -486,12 +561,18 @@ export async function executeDeferredBudget(request, userId, { session, lines } 
     mode: line.mode,
     exceptionStrategy: line.exceptionStrategy
   }));
-  const centers = await CostCenter.find({ _id: { $in: grouped.map((line) => line.costCenter) } }).session(session || null);
-  const centerMap = new Map(centers.map((center) => [String(center._id), center]));
+  const hadReservation = commitment.status === BUDGET_STATUS.COMMITTED;
   const prepared = [];
   const appliedUsage = [];
 
   try {
+    if (hadReservation) {
+      commitment.renditionReservationSnapshot = commitment.toObject();
+      for (const line of commitment.lines.filter(item => item.mode === "ACTIVE")) await changeTrackedUsage(line, { committedAmount: -subtractMoney(line.amount, line.executedAmount || 0) }, session, appliedUsage);
+      commitment.history.push({ status: BUDGET_STATUS.RELEASED, amount: Math.max(0, subtractMoney(commitment.totalAmount, sumMoney(grouped.map(line => line.amount)))), by: userId, comments: "Unused advance reservation released; eligible actual expenses replace the reservation at rendition." });
+    }
+    const centers = await CostCenter.find({ _id: { $in: grouped.map((line) => line.costCenter) } }).session(session || null);
+    const centerMap = new Map(centers.map((center) => [String(center._id), center]));
     for (const source of grouped) {
       const center = centerMap.get(String(source.costCenter));
       if (!center?.active) throw new AppError(422, "Every rendition line needs an active Cost Center.", { costCenter: source.costCenter }, ERROR_CODES.VALIDATION_ERROR);
@@ -501,20 +582,22 @@ export async function executeDeferredBudget(request, userId, { session, lines } 
       ]);
       const line = {
         ...source,
-        mode: isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || source.mode || "TRANSITIONAL",
+        mode: "ACTIVE",
         exceptionStrategy: rule.exceptionStrategy || source.exceptionStrategy || "REJECT",
         allocation: allocation?._id || source.allocation,
         budgetMonth: budgetLimits(allocation, commitment.period)?.budgetMonth
       };
       prepared.push(line);
       if (line.mode !== "ACTIVE" || !(line.amount > 0)) continue;
+      const exception = await BudgetException.findOne({ request: request._id, dimensionKey: dimensionKey(line, request.project), strategy: "EXTRAORDINARY_APPROVAL", status: "APPROVED", requestedAmount: { $gte: line.amount } }).session(session || null);
+      const allowOverrun = rule.exceptionStrategy === "EXTRAORDINARY_APPROVAL" && Boolean(exception);
       if (line.allocation) {
         const increments = { executedAmount: line.amount, paidAmount: line.amount };
-        await changeAllocationUsage({ allocation: line.allocation, budgetMonth: line.budgetMonth, increments, required: line.amount, session });
+        await changeAllocationUsage({ allocation: line.allocation, budgetMonth: line.budgetMonth, increments, required: line.amount, allowOverrun, session });
         appliedUsage.push({ kind: "allocation", id: line.allocation, budgetMonth: line.budgetMonth, increments });
       } else {
         const updated = await CostCenter.findOneAndUpdate(
-          { _id: line.costCenter, $expr: { $gte: [{ $subtract: [{ $subtract: ["$annualBudget", { $ifNull: ["$committedAmount", 0] }] }, { $ifNull: ["$executedAmount", 0] }] }, line.amount] } },
+          { _id: line.costCenter, ...(allowOverrun ? {} : { $expr: { $gte: [{ $subtract: [{ $subtract: ["$annualBudget", { $ifNull: ["$committedAmount", 0] }] }, { $ifNull: ["$executedAmount", 0] }] }, line.amount] } }) },
           { $inc: { executedAmount: line.amount, paidAmount: line.amount } },
           { new: true, session }
         );

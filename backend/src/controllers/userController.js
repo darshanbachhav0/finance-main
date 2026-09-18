@@ -6,7 +6,7 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../s
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 
-const editableFields = ["name", "email", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
+const editableFields = ["employeeCode", "dni", "name", "email", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
 
 function editablePayload(body) {
   return Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
@@ -18,7 +18,7 @@ export const listUsers = asyncHandler(async (req, res) => {
   if (req.query.role) query.role = req.query.role;
   if (req.query.search) {
     const search = new RegExp(escapedRegex(req.query.search), "i");
-    query.$or = [{ name: search }, { email: search }, { area: search }];
+    query.$or = [{ name: search }, { email: search }, { employeeCode: search }, { dni: search }, { area: search }];
   }
   const { page, pageSize, skip } = parsePagination({ ...req.query, pageSize: req.query.pageSize || 100 });
   const sort = parseSort(req.query, ["name", "email", "role", "area", "active", "createdAt"], { name: 1 });

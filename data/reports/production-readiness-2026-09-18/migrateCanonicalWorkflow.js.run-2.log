@@ -1,0 +1,19 @@
+MongoDB connected: erp_readiness_review_40008_1789751039358
+{
+  "mode": "DRY_RUN",
+  "reportFile": "C:\\Users\\TI-SJL-0010\\Downloads\\finance-main-triple-track-updated\\finance-main\\backend\\migration-reports\\2026-08-canonical-workflow-v1-dry-run-2026-09-18T17-04-02-177Z.json",
+  "summary": {
+    "requestsScanned": 0,
+    "requestsChanged": 0,
+    "suppliersScanned": 1,
+    "suppliersChanged": 1,
+    "bankAccountsImported": 0,
+    "expenseTypesChanged": 7,
+    "exchangeRatesChanged": 0,
+    "periodsChanged": 3,
+    "usersChanged": 8,
+    "accountsPayableCreated": 0,
+    "requestLineSnapshotsAdded": 0,
+    "manualReview": 0
+  }
+}

@@ -1,3 +1,5 @@
+import { assertRequestActive, assertPostingAllowed, syncFinancialProgress, getFinancialProgress } from "./financialProgressService.js";
+import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -5,11 +7,12 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import GeneratedFile from "../models/GeneratedFile.js";
 import PaymentBatch from "../models/PaymentBatch.js";
+import BankFormatConfiguration from "../models/BankFormatConfiguration.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import Reconciliation from "../models/Reconciliation.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
-import { getBankFileAdapter } from "../integrations/banks/index.js";
+import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/index.js";
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { markBudgetPaidAmount } from "./budgetService.js";
@@ -103,18 +106,20 @@ async function paymentRows({ requestIds = [], payableIds = [] }) {
 }
 
 async function loadPaymentItems(selection, bank, currency, accountSelections = {}) {
+  assertBbvaSource(bank);
   const rows = await paymentRows(selection);
   const items = [];
   for (const { request, accountsPayable } of rows) {
     if (!request) throw new AppError(404, "The request for a selected CXP no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
-    if (![REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {
+    assertRequestActive(request);
+    if (![REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAYMENT_BOUNCED, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.OBSERVED_BATCH, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED].includes(canonicalRequestStatus(request.status))) {
       throw new AppError(409, `${request.requestNumber} is not eligible for Treasury scheduling.`, { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     }
-    if (!accountsPayable || ![AP_STATUS.OPEN, AP_STATUS.SCHEDULED].includes(accountsPayable.status) || accountsPayable.paymentBatch) {
+    if (!accountsPayable || !accountsPayable.provisionJournal || ![AP_STATUS.OPEN, AP_STATUS.SCHEDULED].includes(accountsPayable.status) || accountsPayable.paymentBatch) {
       throw new AppError(409, `${request.requestNumber} CXP is not available for a new payment batch.`, { status: accountsPayable?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     }
     if (accountsPayable.currency !== currency) throw new AppError(422, `${request.requestNumber} CXP uses ${accountsPayable.currency}; one batch can contain only ${currency}.`, undefined, ERROR_CODES.VALIDATION_ERROR);
-    const destination = await resolvePaymentDestination({ request, accountsPayable, bank, currency, selectedAccountId: selectedAccountId(accountSelections, request._id, accountsPayable._id) });
+    const destination = await resolvePaymentDestination({ request, accountsPayable, currency, selectedAccountId: selectedAccountId(accountSelections, request._id, accountsPayable._id) });
     const employee = accountsPayable.beneficiarySnapshot;
     items.push({
       request,
@@ -136,14 +141,13 @@ async function scheduleLoadedItem(item, paymentDate, user, req, session) {
   const { request, accountsPayable, bankAccountSnapshot } = item;
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "SCHEDULE", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   if (accountsPayable.status === AP_STATUS.OPEN) {
+    accountsPayable.scheduledFor = new Date(paymentDate);
     accountsPayable.status = AP_STATUS.SCHEDULED;
     accountsPayable.bankAccountSnapshot = bankAccountSnapshot;
     accountsPayable.history.push({ status: AP_STATUS.SCHEDULED, by: user._id, comments: `Scheduled for ${new Date(paymentDate).toISOString().slice(0, 10)}.` });
     await accountsPayable.save({ session });
   }
-  if (!isPurchaseOrderInvoiceFlow(accountsPayable) && [REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.PROVISIONED_CXP, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {
-    await transitionRequest({ request, targetStatus: REQUEST_STATUS.SCHEDULED, user, req, action: "PAYMENT_SCHEDULED", comments: `Scheduled for ${new Date(paymentDate).toISOString().slice(0, 10)}.`, session, skipControls: request.status === REQUEST_STATUS.PAYMENT_BOUNCED });
-  }
+  await syncFinancialProgress({ request, user, req, session, action: "PAYMENT_SCHEDULED" });
   await recordAudit({ entityType: "AccountsPayable", entity: accountsPayable, requestId: request._id, action: "PAYMENT_DESTINATION_SELECTED", user, req, module: "TREASURY", newValues: { sourceType: bankAccountSnapshot.sourceType, bankAccountId: bankAccountSnapshot.bankAccountId || bankAccountSnapshot.employeeBankAccountId, bank: bankAccountSnapshot.bank, currency: bankAccountSnapshot.currency, accountType: bankAccountSnapshot.accountType, accountLast4: String(bankAccountSnapshot.accountNumber || bankAccountSnapshot.cci || "").slice(-4) }, session });
 }
 
@@ -205,8 +209,8 @@ export async function listTreasuryQueue(queryParams) {
   if (queryParams.supplier) query.supplier = queryParams.supplier;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.paymentPriority) query.paymentPriority = queryParams.paymentPriority;
-  if (queryParams.bank) {
-    const normalizedBank = String(queryParams.bank).toUpperCase();
+  if (queryParams.beneficiaryBank) {
+    const normalizedBank = String(queryParams.beneficiaryBank).toUpperCase();
     const supplierIds = await SupplierBankAccount.distinct("supplier", {
       bank: normalizedBank,
       active: true,
@@ -268,7 +272,7 @@ export async function listTreasuryQueue(queryParams) {
       .sort(sort).skip(skip).limit(pageSize),
     AccountsPayable.countDocuments(query),
     AccountsPayable.aggregate([{ $match: query }, { $group: { _id: "$currency", total: { $sum: "$outstandingAmount" }, count: { $sum: 1 } } }]),
-    countMissingPaymentDestinations(query, queryParams.bank ? String(queryParams.bank).toUpperCase() : undefined)
+    countMissingPaymentDestinations(query, queryParams.beneficiaryBank ? String(queryParams.beneficiaryBank).toUpperCase() : undefined)
   ]);
   const data = await Promise.all(records.map(async (accountsPayable) => {
     const object = accountsPayable.toObject();
@@ -338,7 +342,7 @@ export async function getEligiblePaymentDestinations({ requestId, bank, currency
     };
     return { sourceType: selected.sourceType, locked: true, selected, accounts: [selected] };
   }
-  const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier._id, bank, currency: currency || request.currency });
+  const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier._id, currency: currency || request.currency });
   return { sourceType: "SUPPLIER", locked: false, selected: accounts[0] || null, accounts };
 }
 
@@ -357,7 +361,9 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
   if ((!Array.isArray(requestIds) || !requestIds.length) && (!Array.isArray(payableIds) || !payableIds.length)) throw new AppError(422, "Select at least one payable CXP.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (!paymentDate) throw new AppError(422, "A payment date is required.", { field: "paymentDate" }, ERROR_CODES.VALIDATION_ERROR);
   const normalizedBank = String(bank || "").trim().toUpperCase();
-  const adapter = getBankFileAdapter(normalizedBank);
+  assertBbvaSource(normalizedBank);
+  const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
+  const adapter = getBankFileAdapter(normalizedBank, configuration);
   const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
   adapter.validateBatch(items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot })));
   const batchNumber = await nextPaymentBatchNumber(paymentDate);
@@ -365,11 +371,25 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
   const content = adapter.generateFile({ batchNumber, paymentDate, currency, items: adapterItems });
   const fileName = adapter.getFileName(batchNumber);
   const checksum = crypto.createHash("sha256").update(content).digest("hex");
-  await fs.mkdir(bankFilesDir, { recursive: true });
   const filePath = path.join(bankFilesDir, fileName);
-  await fs.writeFile(filePath, content, "utf8");
+  const claims = AccountsPayable.db.collection("bbvapaymentgenerationclaims");
+  let fileWritten = false;
 
   try {
+    // Atomic claims also protect deployments using a standalone MongoDB server.
+    for (const item of [...items].sort((a,b) => String(a.accountsPayable._id).localeCompare(String(b.accountsPayable._id)))) {
+      try {
+        await claims.insertOne({ _id: item.accountsPayable._id, batchNumber, claimedAt: new Date() });
+      } catch (error) {
+        if (error.code === 11000) throw new AppError(409, "A selected CXP is already being included in another BBVA file.");
+        throw error;
+      }
+      const current = await AccountsPayable.findById(item.accountsPayable._id).select("status paymentBatch updatedAt").lean();
+      if (!current || current.paymentBatch || ![AP_STATUS.OPEN,AP_STATUS.SCHEDULED].includes(current.status) || String(current.updatedAt) !== String(item.accountsPayable.updatedAt)) throw new AppError(409, "Selected CXP changed during BBVA generation. Refresh Treasury before retrying.");
+    }
+    await fs.mkdir(bankFilesDir, { recursive: true });
+    await fs.writeFile(filePath, content, { flag: "wx" });
+    fileWritten = true;
     const result = await runFinancialOperation(async (session) => {
       for (const item of items) await scheduleLoadedItem(item, paymentDate, user, req, session);
       const [batch] = await PaymentBatch.create([{
@@ -395,6 +415,8 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         filePath,
         url: `/generated/bank-files/${fileName}`,
         checksum,
+        paymentCount: items.length,
+        formatSnapshot: configuration.bbva,
         adapterMode: adapter.mode,
         specificationVersion: adapter.specificationVersion,
         status: "GENERATED",
@@ -403,19 +425,23 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
       }], session ? { session } : undefined);
 
       for (const item of items) {
+        await recordAudit({ entityType: "AccountsPayable", entity: item.accountsPayable, requestId: item.request._id,
+          action: "BBVA_TXT_GENERATED", user, req, module: "TREASURY", session,
+          statusFrom: item.request.status, statusTo: item.request.status,
+          comments: `BBVA batch ${batchNumber}; payment awaits bank confirmation.`,
+          oldValues: { payableStatus: item.accountsPayable.status }, newValues: { payableStatus: AP_STATUS.PAYMENT_FILE_CREATED, batchId: batch._id, checksum } });
         item.accountsPayable.status = AP_STATUS.PAYMENT_FILE_CREATED;
         item.accountsPayable.paymentBatch = batch._id;
         item.accountsPayable.bankAccountSnapshot = item.bankAccountSnapshot;
-        item.accountsPayable.history.push({ status: AP_STATUS.PAYMENT_FILE_CREATED, by: user._id, comments: `Included in demo batch ${batchNumber}. Payment is not yet confirmed.` });
+        item.accountsPayable.history.push({ status: AP_STATUS.PAYMENT_FILE_CREATED, by: user._id, comments: `Included in BBVA batch ${batchNumber}. Payment is not yet confirmed.` });
         await item.accountsPayable.save({ session });
         if (!isPurchaseOrderInvoiceFlow(item.accountsPayable)) {
           item.request.paymentBatch = batch._id;
           item.request.bankFile = { bank: normalizedBank, fileName, url: batch.url, generatedAt: new Date(), generatedBy: user._id };
-          if (item.request.status !== REQUEST_STATUS.BANK_FILE_GENERATED) {
-            await transitionRequest({ request: item.request, targetStatus: REQUEST_STATUS.BANK_FILE_GENERATED, user, req, action: "BANK_FILE_GENERATED", comments: `Payment instruction included in ${batchNumber}. Payment has not been confirmed.`, session });
-          }
+
         }
       }
+      for (const request of new Map(items.map(item => [String(item.request._id), item.request])).values()) await syncFinancialProgress({ request, user, req, session, action: "BANK_FILE_GENERATED" });
       await GeneratedFile.create([{
         kind: "BANK_TXT",
         fileName,
@@ -427,6 +453,12 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         generatedBy: user._id,
         metadata: {
           batchNumber,
+          batchId: batch._id,
+          checksum,
+          currency,
+          paymentCount: items.length,
+          totalAmount: batch.totalAmount,
+          generatedAt: batch.generatedAt,
           bank: normalizedBank,
           paymentDate,
           adapterMode: adapter.mode,
@@ -434,18 +466,18 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
           certified: false,
           paymentConfirmed: false,
           paymentEntriesCreated: false,
-          notice: "DEMO / NOT CERTIFIED. TXT generation creates instructions only."
+          notice: "BBVA fixed-width payment instruction. Payment requires separate bank confirmation."
         }
       }], session ? { session } : undefined);
       await recordAudit({
         entityType: "PaymentBatch",
         entity: batch,
-        action: "GENERATED_DEMO_BANK_FILE",
+        action: "GENERATED_BBVA_BANK_FILE",
         user,
         req,
         module: "TREASURY",
-        message: "Demo bank file generated; no payment settlement was posted.",
-        newValues: { batchNumber, bank: normalizedBank, currency, totalAmount: batch.totalAmount, itemCount: items.length, adapterMode: adapter.mode },
+        message: "BBVA fixed-width file generated; payment awaits bank confirmation.",
+        newValues: { batchId: batch._id, batchNumber, bank: normalizedBank, currency, totalAmount: batch.totalAmount, itemCount: items.length, checksum, specificationVersion: adapter.specificationVersion, generatedAt: batch.generatedAt, adapterMode: adapter.mode },
         session
       });
       return { batch, content };
@@ -454,7 +486,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
       await resolveNotification(`request:${item.request._id}:treasury`);
       await notifyRoles({
         roles: ["Treasury"],
-        eventKey: `request:${item.request._id}:payment-confirmation`,
+        eventKey: `request:${item.request._id}:payment-confirmation:${item.accountsPayable._id}`,
         type: "PAYMENT_CONFIRMATION",
         title: "Payment confirmation required",
         message: `${item.requestNumber} is in ${batchNumber}; confirm it only after bank execution.`,
@@ -465,8 +497,11 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
     }
     return result;
   } catch (error) {
-    await fs.rm(filePath, { force: true }).catch(() => undefined);
+    // Keep the original bytes if a batch exists, even if a subsequent notification fails.
+    if (fileWritten && !await PaymentBatch.exists({ batchNumber })) await fs.rm(filePath, { force: true }).catch(() => undefined);
     throw error;
+  } finally {
+    await claims.deleteMany({ batchNumber });
   }
 }
 
@@ -480,23 +515,23 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   }
   const request = await FinancialRequest.findById(accountsPayable.request).populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId: accountsPayable.request }, ERROR_CODES.NOT_FOUND);
+  assertRequestActive(request);
   const purchaseOrderFlow = isPurchaseOrderInvoiceFlow(accountsPayable);
   if (!purchaseOrderFlow && request.status !== REQUEST_STATUS.BANK_FILE_GENERATED) {
     throw new AppError(409, "Payment can only be confirmed after bank-file generation.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
-  if ([REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED].includes(request.status)) {
-    throw new AppError(409, "A closed or voided request cannot receive another payment confirmation.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  }
+  if (Number.isNaN(new Date(payload.paidAt).getTime())) throw new AppError(422, "A valid actual payment date is required.");
   const confirmedAmount = roundMoney(payload.confirmedAmount);
   if (!moneyEquals(confirmedAmount, accountsPayable.outstandingAmount)) {
     throw new AppError(422, "Confirmed amount must equal the outstanding CXP amount.", { confirmedAmount, outstandingAmount: accountsPayable.outstandingAmount }, ERROR_CODES.VALIDATION_ERROR);
   }
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "CONFIRM_PAYMENT", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
 
+  const sourceBatch = accountsPayable.paymentBatch ? await PaymentBatch.findById(accountsPayable.paymentBatch).select("bank") : null;
   const result = await runFinancialOperation(async (session) => {
     appendPaymentConfirmation(request, accountsPayable, payload, user, confirmedAmount);
     const paymentJournal = await createPaymentJournal(request, accountsPayable, user._id, {
-      bank: accountsPayable.bankAccountSnapshot?.bank || request.bankFile?.bank,
+      bank: sourceBatch?.bank || request.bankFile?.bank || accountsPayable.bankAccountSnapshot?.bank,
       session
     });
     accountsPayable.status = AP_STATUS.PAID;
@@ -535,34 +570,8 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
       request.rendition.amountAdvanced = confirmedAmount;
       request.rendition.balanceOutstanding = confirmedAmount;
       request.rendition.dueAt = new Date(new Date(payload.paidAt).getTime() + 10 * 24 * 60 * 60 * 1000);
-      await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAID, user, req, action: "PAYMENT_CONFIRMED", comments: payload.comments || `Advance payment confirmed with operation ${operationNumber}.`, session });
-      await transitionRequest({ request, targetStatus: REQUEST_STATUS.RENDITION_PENDING, user, req, action: "RENDITION_REQUIRED", comments: `Advance paid; rendition is due by ${request.rendition.dueAt.toISOString().slice(0, 10)}.`, session });
-    } else if (purchaseOrderFlow) {
-      const [pendingCount, paidPayables, purchaseOrder] = await Promise.all([
-        AccountsPayable.countDocuments({ request: request._id, status: { $nin: [AP_STATUS.PAID, AP_STATUS.CANCELLED] } }).session(session || null),
-        AccountsPayable.find({ request: request._id, status: AP_STATUS.PAID }).select("originalAmount").session(session || null),
-        PurchaseOrder.findById(accountsPayable.purchaseOrder || request.purchaseOrder).session(session || null)
-      ]);
-      request.payment.confirmedAmount = sumMoney(paidPayables.map((item) => item.originalAmount || 0));
-      const purchaseOrderComplete = !purchaseOrder || purchaseOrder.status === "LIQUIDATED" || Number(purchaseOrder.remainingAmount || 0) <= 0;
-      if (pendingCount === 0 && purchaseOrderComplete) {
-        if (request.status === REQUEST_STATUS.PAYMENT_BOUNCED) {
-          await transitionRequest({ request, targetStatus: REQUEST_STATUS.PROVISIONED_CXP, user, req, action: "ALL_BOUNCED_PAYMENTS_RESOLVED", comments: "All bounced CXP records were resolved.", session, skipControls: true });
-        }
-        if (request.status !== REQUEST_STATUS.PAID) {
-          await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAID, user, req, action: "ALL_PO_INVOICES_PAID", comments: "All provisioned invoices against the Purchase Order were paid.", session, skipControls: true });
-        }
-      } else {
-        await request.save({ session });
-      }
-    } else {
-      if (request.status === REQUEST_STATUS.PAYMENT_BOUNCED) {
-        await transitionRequest({ request, targetStatus: REQUEST_STATUS.PROVISIONED_CXP, user, req, action: "PAYMENT_REPROGRAMMED_AND_PAID", comments: "The bounced payment was corrected and paid.", session, skipControls: true });
-      }
-      if (request.status !== REQUEST_STATUS.PAID) {
-        await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAID, user, req, action: "PAYMENT_CONFIRMED", comments: payload.comments || `Bank payment confirmed with operation ${operationNumber}.`, session });
-      }
     }
+    await syncFinancialProgress({ request, user, req, session, action: "PAYMENT_CONFIRMED" });
 
     await recordAudit({
       entityType: "AccountsPayable",
@@ -578,8 +587,9 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
     return { request, accountsPayable, paymentJournal, batch };
   });
 
-  await resolveNotification(`request:${request._id}:payment-confirmation`);
+  if (!(await AccountsPayable.exists({ request: request._id, status: AP_STATUS.PAYMENT_FILE_CREATED }))) await resolveNotification(`request:${request._id}:payment-confirmation`);
   await resolveNotification(`request:${request._id}:payment-confirmation:${accountsPayable._id}`);
+  await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: "Payment ready for reconciliation", message: `${request.requestNumber}: reconcile the confirmed invoice payment.`, path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
   if (request.flowType === FLOW_TYPE.C) {
     await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: "Rendition pending", message: `${request.requestNumber} was paid. Rendition is due within 10 days.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   } else {
@@ -608,6 +618,7 @@ export async function markPaymentBounced({ accountsPayableId, payload, user, req
   if (accountsPayable.status !== AP_STATUS.PAYMENT_FILE_CREATED) throw new AppError(409, "Only a CXP in a generated payment file can be marked bounced.", { status: accountsPayable.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   const request = await FinancialRequest.findById(accountsPayable.request);
   if (!request) throw new AppError(404, "Financial request not found.", { requestId: accountsPayable.request }, ERROR_CODES.NOT_FOUND);
+  await assertPostingAllowed(request, { user, req });
   const result = await runFinancialOperation(async (session) => {
     accountsPayable.status = AP_STATUS.PAYMENT_BOUNCED;
     accountsPayable.bouncedPayment = { bouncedAt: new Date(), reason, bankReference: payload.bankReference, reportedBy: user._id };
@@ -630,9 +641,7 @@ export async function markPaymentBounced({ accountsPayableId, payload, user, req
           : batch.status;
       await batch.save({ session });
     }
-    if (request.status !== REQUEST_STATUS.PAYMENT_BOUNCED) {
-      await transitionRequest({ request, targetStatus: REQUEST_STATUS.PAYMENT_BOUNCED, user, req, action: "PAYMENT_BOUNCED", comments: reason, session, skipControls: true });
-    }
+    await syncFinancialProgress({ request, user, req, session, action: "PAYMENT_BOUNCED" });
     await recordAudit({ entityType: "AccountsPayable", entity: accountsPayable, requestId: request._id, action: "PAYMENT_BOUNCED", user, req, module: "TREASURY", comments: reason, newValues: { bankReference: payload.bankReference }, session });
     return { request, accountsPayable, batch };
   });
@@ -649,6 +658,7 @@ export async function reprogramBouncedPayment({ accountsPayableId, payload, file
   const request = await FinancialRequest.findById(accountsPayable.request).select("+attachments.path");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId: accountsPayable.request }, ERROR_CODES.NOT_FOUND);
 
+  await assertPostingAllowed(request, { user, req });
   let persisted;
   try {
     persisted = await persistUploadedFiles({ cciLetter: [cciLetter] }, { domain: "requests", entityId: request._id });
@@ -691,23 +701,7 @@ export async function reprogramBouncedPayment({ accountsPayableId, payload, file
       accountsPayable.history.push({ status: AP_STATUS.OPEN, by: user._id, comments: payload.comments || "Reopened after signed CCI replacement evidence." });
       await accountsPayable.save({ session });
 
-      const otherBounced = await AccountsPayable.countDocuments({
-        request: request._id,
-        _id: { $ne: accountsPayable._id },
-        status: AP_STATUS.PAYMENT_BOUNCED
-      }).session(session || null);
-      if (otherBounced === 0 && request.status === REQUEST_STATUS.PAYMENT_BOUNCED) {
-        await transitionRequest({
-          request,
-          targetStatus: REQUEST_STATUS.PROVISIONED_CXP,
-          user,
-          req,
-          action: "PAYMENT_REPROGRAMMED",
-          comments: payload.comments || "CCI evidence updated; payment reopened for Treasury scheduling.",
-          session,
-          skipControls: true
-        });
-      }
+      await syncFinancialProgress({ request, user, req, session, action: "PAYMENT_REPROGRAMMED" });
       await recordAudit({
         entityType: "AccountsPayable",
         entity: accountsPayable,
@@ -740,67 +734,43 @@ export async function reprogramBouncedPayment({ accountsPayableId, payload, file
   }
 }
 
-export async function reconcilePayment({ requestId, payload, user, req }) {
-  const request = await FinancialRequest.findById(requestId);
-  if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
-  if (![REQUEST_STATUS.PAID, REQUEST_STATUS.RENDITION_PENDING].includes(request.status)) {
-    throw new AppError(409, "Only paid requests can be reconciled.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  }
-  if (request.status === REQUEST_STATUS.RENDITION_PENDING && request.rendition?.status !== "VALIDATED") {
-    throw new AppError(422, "The rendition must be validated before reconciliation.", undefined, ERROR_CODES.RENDITION_REQUIRED);
-  }
-  const accountsPayables = await AccountsPayable.find({ request: request._id, status: AP_STATUS.PAID }).sort({ createdAt: 1 });
-  if (!accountsPayables.length) throw new AppError(409, "No paid CXP records are available for reconciliation.", { requestId }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+export async function reconcilePayment({ requestId, accountsPayableId, payload, user, req }) {
+  const selected = accountsPayableId ? await AccountsPayable.findById(accountsPayableId) : null;
+  if (accountsPayableId && !selected) throw new AppError(404, "Accounts Payable record not found.");
+  const request = await FinancialRequest.findById(selected?.request || requestId);
+  if (!request) throw new AppError(404, "Financial request not found.");
+  await assertPostingAllowed(request, { user, req });
+  const payables = selected ? [selected] : await AccountsPayable.find({ request: request._id, status: AP_STATUS.PAID, reconciliation: null });
+  if (!payables.length || payables.some(ap => ap.status !== AP_STATUS.PAID || !ap.paymentJournal || ap.reconciliation)) throw new AppError(409, "Select paid, unreconciled obligations.");
+  const evidence = await getFinancialProgress(request);
+  if (payables.some(ap => !evidence.children.find(child => child.id === String(ap._id))?.paid)) throw new AppError(409, "Actual payment confirmation is required before reconciliation.");
   const bankReference = String(payload.bankReference || "").trim();
-  if (!bankReference || payload.statementAmount === undefined) {
-    throw new AppError(422, "Bank reference and statement amount are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  }
-  const paidAmount = roundMoney(request.payment?.confirmedAmount);
-  const statementAmount = roundMoney(payload.statementAmount);
-  const difference = subtractMoney(statementAmount, paidAmount);
-  if (!moneyEquals(difference, 0)) {
-    throw new AppError(422, "Bank reconciliation difference must be zero.", { statementAmount, paidAmount, difference }, ERROR_CODES.VALIDATION_ERROR);
-  }
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "RECONCILE", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
-  const result = await runFinancialOperation(async (session) => {
-    let reconciliation = await Reconciliation.findOne({ request: request._id }).session(session || null);
-    if (!reconciliation) {
-      [reconciliation] = await Reconciliation.create([{
-        request: request._id,
-        accountsPayable: accountsPayables[0]?._id,
-        accountsPayables: accountsPayables.map((item) => item._id),
-        reconciledBy: user._id,
-        reconciledAt: new Date(),
-        bankReference,
-        statementAmount,
-        paidAmount,
-        difference,
-        comments: payload.comments
+  const paidAmount = sumMoney(payables.map(ap => ap.originalAmount));
+  if (!bankReference || payload.statementAmount === undefined || !moneyEquals(payload.statementAmount, paidAmount)) throw new AppError(422, "Bank reference and an exact matching statement amount are required.");
+  const result = await runFinancialOperation(async session => {
+    const reconciliations = [];
+    for (const ap of payables) {
+      const covered = await Reconciliation.exists({ request: request._id, $or: [{ accountsPayable: ap._id }, { accountsPayables: ap._id }] }).session(session || null);
+      if (covered) throw new AppError(409, "This obligation already has reconciliation evidence.");
+      const [record] = await Reconciliation.create([{
+        scope: "PAYABLE", request: request._id, accountsPayable: ap._id, accountsPayables: [ap._id],
+        reconciledBy: user._id, reconciledAt: new Date(), bankReference,
+        statementAmount: ap.originalAmount, paidAmount: ap.originalAmount, difference: 0, comments: payload.comments
       }], session ? { session } : undefined);
+      ap.reconciliation = record._id; ap.reconciledAt = record.reconciledAt;
+      await ap.save({ session });
+      request.reconciliation ||= record._id;
+      reconciliations.push(record);
+      await recordAudit({ entityType: "Reconciliation", entity: record, requestId: request._id, action: "RECONCILED", user, req, module: "TREASURY", newValues: { accountsPayable: ap._id, bankReference, paidAmount: ap.originalAmount }, session });
     }
-    request.reconciliation = reconciliation._id;
-    request.payment.reconciliationComments = payload.comments;
-    await transitionRequest({
-      request,
-      targetStatus: REQUEST_STATUS.RECONCILED,
-      user,
-      req,
-      action: "RECONCILED",
-      comments: payload.comments || `Reconciled with bank reference ${bankReference}.`,
-      session
-    });
-    await recordAudit({ entityType: "Reconciliation", entity: reconciliation, requestId: request._id, action: "RECONCILED", user, req, module: "TREASURY", newValues: { bankReference, statementAmount, paidAmount, difference }, session });
-    return { request, reconciliation };
+    await syncFinancialProgress({ request, user, req, session, action: "RECONCILIATION_PROGRESS" });
+    return { request, reconciliation: reconciliations[0], reconciliations };
   });
-  await notifyRoles({
-    roles: ["Accounting"],
-    eventKey: `request:${request._id}:close`,
-    type: "ACCOUNTING_CLOSE",
-    title: "Request ready to close",
-    message: `${request.requestNumber} is reconciled and ready for Accounting closure.`,
-    path: `/requests/${request._id}`,
-    entityType: "FinancialRequest",
-    entityId: request._id
+  for (const ap of payables) await resolveNotification(`request:${request._id}:reconcile:${ap._id}`);
+  if (request.status === REQUEST_STATUS.RECONCILED) await notifyRoles({
+    roles: ["Accounting"], eventKey: `request:${request._id}:close`, type: "ACCOUNTING_CLOSE",
+    title: "Request ready for closure review", message: `${request.requestNumber}: all payments reconciled; review remaining closure conditions.`,
+    path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
   });
   return result;
 }
@@ -900,41 +870,24 @@ export async function listBouncedPayments(queryParams = {}) {
 }
 
 export async function listReconciliationQueue(queryParams = {}) {
-  const query = {
-    $or: [
-      { status: REQUEST_STATUS.PAID },
-      { status: REQUEST_STATUS.RENDITION_PENDING, "rendition.status": "VALIDATED" }
-    ]
-  };
-  if (queryParams.currency) query.currency = queryParams.currency;
-  if (queryParams.accountingPeriod) query.accountingPeriod = queryParams.accountingPeriod;
-  if (queryParams.search) {
-    const search = new RegExp(escapedRegex(queryParams.search), "i");
-    query.$and = [{ $or: [{ requestNumber: search }, { description: search }] }];
-  }
   const { page, pageSize, skip } = parsePagination(queryParams);
-  const sort = parseSort(queryParams, ["requestNumber", "currency", "status", "payment.operationNumber", "payment.paidAt", "payment.confirmedAmount", "updatedAt"], { "payment.paidAt": 1, updatedAt: 1 });
-  const [requests, total] = await Promise.all([
-    FinancialRequest.find(query)
-      .populate("supplier", "name legalName rucDni normalizedIdentifier")
-      .populate("requester solicitor", "name email area")
-      .populate("paymentBatch", "batchNumber bank currency paymentDate status")
-      .sort(sort)
-      .skip(skip).limit(pageSize),
-    FinancialRequest.countDocuments(query)
+  const covered = await Reconciliation.find().select("accountsPayable accountsPayables").lean();
+  const excluded = covered.flatMap(r => [r.accountsPayable, ...(r.accountsPayables || [])]).filter(Boolean);
+  const requestQuery = { status: { $nin: ["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"] } };
+  if (queryParams.accountingPeriod) requestQuery.accountingPeriod = queryParams.accountingPeriod;
+  if (queryParams.search) requestQuery.requestNumber = new RegExp(escapedRegex(queryParams.search), "i");
+  const ids = await FinancialRequest.distinct("_id", requestQuery);
+  const query = { status: AP_STATUS.PAID, reconciliation: null, _id: { $nin: excluded }, request: { $in: ids } };
+  if (queryParams.currency) query.currency = queryParams.currency;
+  const [records, total] = await Promise.all([
+    AccountsPayable.find(query).populate({ path: "request", populate: { path: "supplier" } }).sort({ paidDate: 1 }).skip(skip).limit(pageSize),
+    AccountsPayable.countDocuments(query)
   ]);
-  const payableRecords = await AccountsPayable.find({ request: { $in: requests.map((request) => request._id) } });
-  const payablesByRequest = new Map();
-  for (const item of payableRecords) {
-    const key = String(item.request);
-    const list = payablesByRequest.get(key) || [];
-    list.push(item.toObject());
-    payablesByRequest.set(key, list);
-  }
-  return paginatedPayload(requests.map((request) => {
-    const accountsPayables = payablesByRequest.get(String(request._id)) || [];
-    return { ...request.toObject(), accountsPayable: accountsPayables[0], accountsPayables };
-  }), total, page, pageSize);
+  return paginatedPayload(records.map(ap => ({
+    ...ap.request.toObject(), _id: ap._id, requestId: ap.request._id, payableId: ap._id,
+    accountsPayable: ap.toObject(), accountsPayables: [ap.toObject()],
+    payment: { ...ap.request.payment?.toObject?.(), operationNumber: ap.request.payment?.confirmations?.find(item => String(item.accountsPayable) === String(ap._id))?.operationNumber || ap.request.payment?.operationNumber, paidAt: ap.paidDate, confirmedAmount: ap.originalAmount }
+  })), total, page, pageSize);
 }
 
 export async function getEligiblePayablePaymentDestinations({ accountsPayableId, bank, currency }) {
@@ -952,6 +905,6 @@ export async function getEligiblePayablePaymentDestinations({ accountsPayableId,
     const selected = { sourceType: "EMPLOYEE_REIMBURSEMENT", employeeBankAccountId: source.profile, bank: source.bank, currency: source.currency, accountType: "CURRENT", accountHolderName: source.accountHolderName, accountNumber: source.accountNumber, cci: source.cci, verificationStatus: source.verificationStatus, capturedAt: source.capturedAt };
     return { sourceType: selected.sourceType, locked: true, selected, accounts: [selected] };
   }
-  const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier?._id, bank, currency: currency || accountsPayable.currency });
+  const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier?._id, currency: currency || accountsPayable.currency });
   return { sourceType: "SUPPLIER", locked: false, selected: accounts[0] || null, accounts };
 }

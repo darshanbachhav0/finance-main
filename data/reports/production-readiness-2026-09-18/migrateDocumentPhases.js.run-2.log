@@ -1,0 +1,9 @@
+MongoDB connected: erp_readiness_review_40008_1789751039358
+{
+  "mode": "DRY_RUN",
+  "legacyRulesToDeactivate": 8,
+  "legacyCustomRulesToDefault": 0,
+  "canonicalRulesToUpsert": 12,
+  "trackBViceRectorRuleToUpsert": true,
+  "historicalApprovalSnapshotsModified": 0
+}

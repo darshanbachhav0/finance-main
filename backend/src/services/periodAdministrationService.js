@@ -1,3 +1,4 @@
+import { terminalStatusValues } from "../../../shared/workflowStatus.mjs";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import { getConsolidation } from "./accountingService.js";
@@ -6,7 +7,7 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { moneyEquals } from "../utils/money.js";
 
-const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
+const terminalStatuses = terminalStatusValues;
 
 export async function createAccountingPeriod({ payload, user, req }) {
   const period = String(payload.period || "").trim();
@@ -85,4 +86,3 @@ export async function reopenAccountingPeriod({ id, comments, user, req }) {
   await recordAudit({ entityType: "AccountingPeriod", entity: period, action: "REOPENED", user, req, module: "ACCOUNTING_PERIOD", comments, oldValues: { status: "CLOSED" }, newValues: { status: "OPEN" } });
   return period;
 }
-
