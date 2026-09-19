@@ -175,13 +175,14 @@ const overview = await fetch(`${baseUrl}/api/management/v1/overview?period=2026-
 
 ## Render deployment
 
-The repository includes `render.yaml`. Create a Render Blueprint from the GitHub repository, then provide:
+The repository includes a free-tier `render.yaml`. The complete setup sequence is in [`RENDER_FREE_MANAGEMENT_DEPLOYMENT.md`](./RENDER_FREE_MANAGEMENT_DEPLOYMENT.md).
+
+Create a Render Blueprint from branch `codex/management-api-portal`, then provide:
 
 1. `MONGODB_URI`: a MongoDB Atlas connection string restricted to the UMA database user.
 2. `CLIENT_URLS`: the final service origin, such as `https://uma-finance.onrender.com`.
-3. The same `MONGODB_URI` for the SLA worker.
 
-The web service builds the frontend and serves the SPA and API from one origin. A persistent disk is mounted at `/var/data` for uploads, generated evidence, and the local SUNAT Padrón. The SLA worker runs separately. MongoDB Atlas must accept Render connections and should have a tested backup before production migration.
+The web service builds the frontend and serves the SPA and API from one origin. MongoDB Atlas stores the durable database. The free service has no persistent disk, so uploaded documents, generated BBVA/SIRE files, and the local SUNAT Padrón are not durable in this deployment. The free Blueprint therefore uses manual SUNAT mode and demo bank-file mode. It does not start the SLA worker.
 
 After deployment:
 
@@ -191,4 +192,4 @@ After deployment:
 4. Confirm internal UI routes and internal APIs return access denied for that viewer.
 5. Replace or deactivate the test account after verification.
 
-The batch invoice worker is intentionally absent from this Blueprint because Render persistent disks cannot be shared between services and the current worker reads uploaded files from the web service filesystem. Use shared object storage before running that worker as a separate Render service. This limitation does not affect the Management Portal or API.
+The batch invoice and SLA workers are intentionally absent because Render does not offer a free background-worker plan and the current batch worker reads uploaded files from the web service filesystem. Use a paid worker and durable object storage for operational deployment. These limitations do not affect read-only Management Portal demonstrations.

@@ -2,17 +2,14 @@ services:
   - type: web
     name: uma-finance
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
+    region: oregon
     repo: https://github.com/darshanbachhav0/finance-main.git
-    branch: main
+    branch: codex/management-api-portal
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
-    disk:
-      name: uma-finance-data
-      mountPath: /var/data
-      sizeGB: 10
     envVars:
       - key: NODE_ENV
         value: production
@@ -25,11 +22,9 @@ services:
       - key: DRAFT_ENCRYPTION_KEY
         generateValue: true
       - key: UMA_STORAGE_ROOT
-        value: /var/data
-      - key: SUNAT_PADRON_DATA_DIR
-        value: /var/data/sunat-padron
+        value: /tmp/uma-finance
       - key: SUNAT_PROVIDER_MODE
-        value: PADRON
+        value: MANUAL
       - key: MANAGEMENT_API_CACHE_SECONDS
         value: 15
       - key: MANAGEMENT_API_RATE_LIMIT
@@ -37,27 +32,6 @@ services:
       - key: CLIENT_URLS
         sync: false
       - key: BANK_FILE_MODE
-        value: PRODUCTION
+        value: DEMO
       - key: BATCH_INVOICE_INLINE_PROCESSING
         value: "false"
-
-  - type: worker
-    name: uma-finance-sla-worker
-    runtime: node
-    plan: 0.5c-512mb
-    repo: https://github.com/darshanbachhav0/finance-main.git
-    branch: main
-    buildCommand: npm ci
-    startCommand: npm run worker:sla --workspace backend
-    autoDeployTrigger: commit
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: MONGODB_URI
-        sync: false
-      - key: SLA_DUE_SOON_HOURS
-        value: 4
-      - key: SLA_ESCALATION_HOURS
-        value: 24
-      - key: SLA_POLL_MS
-        value: 60000
