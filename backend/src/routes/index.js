@@ -17,6 +17,7 @@ import notificationRoutes from "./notificationRoutes.js";
 import fileRoutes from "./fileRoutes.js";
 import userRoutes from "./userRoutes.js";
 import employeeReimbursementBankRoutes from "./employeeReimbursementBankRoutes.js";
+import externalManagementRoutes from "./externalManagementRoutes.js";
 import {
   accountingPeriodRouter,
   accountingMappingRouter,
@@ -31,12 +32,16 @@ import {
   financeConfigurationRouter,
   projectRouter
 } from "./masterDataRoutes.js";
+import { authorize, protect } from "../middleware/auth.js";
+import { ROLES } from "../utils/constants.js";
 
 const router = Router();
+router.use("/auth", authRoutes);
+router.use("/management/v1", externalManagementRoutes);
+router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.MANAGEMENT));
+
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);
-
-router.use("/auth", authRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/requests", requestRoutes);
 router.use("/approvals", approvalRoutes);

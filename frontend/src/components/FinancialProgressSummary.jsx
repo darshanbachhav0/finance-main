@@ -12,8 +12,8 @@ export default function FinancialProgressSummary({ request, financialProgress, r
   const paymentStatus = progress.status || (["PAGADO", "CONCILIADO", "CERRADO"].includes(status) ? status : "PENDING");
 
   return <div className={`financial-progress-summary${compact ? " compact" : ""}`}>
-    <div className="financial-progress-status"><span>{t("Request status")}</span><StatusBadge status={status} /></div>
-    {total > 0 && <div className="financial-progress-counts" aria-live="polite">
+    <div className="financial-progress-status">{!compact && <span>{t("Request status")}</span>}<StatusBadge status={status} /></div>
+    {(total > 1 || progress.partialPayment || progress.partialReconciliation) && <div className="financial-progress-counts" aria-live="polite">
       <span><strong>{counts.paid || 0}/{total}</strong> {t("Paid invoices")}</span>
       <span><strong>{counts.reconciled || 0}/{total}</strong> {t("Reconciled invoices")}</span>
       {progress.partialPayment && <StatusBadge status="PARTIALLY_PAID" />}

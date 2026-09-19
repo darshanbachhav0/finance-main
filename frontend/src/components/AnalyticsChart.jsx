@@ -75,7 +75,12 @@ export default function AnalyticsChart({
     const color = ({ "#087c75": "#c91545", "#17344c": "#45404e" })[item.color] || item.color;
     return { ...item, label: t(item.label), color: dark && palette.includes(color) ? darkPalette[palette.indexOf(color)] : color };
   });
-  const chartData = useMemo(() => data.map((row, index) => ({ ...row, fill: row.fill || colors[index % colors.length] })), [data, colors]);
+  // Category colors belong to donuts/single-series bars; grouped bars use their series color.
+  const chartData = useMemo(() => data.map((row, index) => (
+    type === "donut" || type === "bar" && series.length === 1
+      ? { ...row, fill: row.fill || colors[index % colors.length] }
+      : row
+  )), [data, colors, type, series.length]);
   const common = { data: chartData, margin: horizontal ? { top: 8, right: 16, left: 20, bottom: 4 } : { top: 8, right: 10, left: 0, bottom: 4 }, accessibilityLayer: true };
   const tooltip = <Tooltip cursor={{ fill: "rgba(12, 27, 42, 0.045)" }} content={<ExactTooltip valueFormatter={valueFormatter} t={t} />} />;
 

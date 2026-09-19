@@ -1,3 +1,4 @@
+import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { Download, Eye, FileCheck2, RefreshCw } from "lucide-react";
@@ -16,6 +17,7 @@ import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 
 export default function AccountingEntries() {
+  const [focusView, setFocusView] = useState("Processing");
   const { t } = useLanguage();
   const { notify } = useToast();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
@@ -112,6 +114,7 @@ export default function AccountingEntries() {
 
   return (
     <section>
+      <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Expense Types", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Accounting Configuration", "/configuration/projects"], ["Audit", "/audit"], ["Management Reports", "/reports"]]} />
       <PageHeader title="Accounting Entries" description="Process fiscal documents, post balanced journals, reconcile the month, and retain export history." actions={<><Link className="secondary-button" to="/accounting/payables">{t("Accounts Payable")}</Link><Link className="secondary-button" to="/accounting/periods">{t("Manage periods")}</Link></>} />
       <Message type="error">{actionError || entriesTable.error || pendingTable.error || historyTable.error}</Message>
 
@@ -124,13 +127,12 @@ export default function AccountingEntries() {
       <div className="stats-grid">
         <StatCard label="Pending fiscal processing" value={pendingTable.pagination.total} tone="amber" />
         <StatCard label="Entries" value={entriesTable.payload.summary?.journalCount || 0} tone="navy" />
-        <StatCard label="Debit total" value={`PEN ${totals.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone="teal" />
-        <StatCard label="Credit total" value={`PEN ${totals.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone="neutral" />
         <StatCard label="Consolidated PEN" value={`PEN ${consolidated.pen.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone="green" />
         <StatCard label="Reconciliation difference" value={`PEN ${Number(previewSummary.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "green" : "red"} />
       </div>
 
-      <div className="workspace-panel">
+      <nav className="focus-tabs" aria-label={t("Sections")}>{["Processing", "Entries", "Consolidation", "History"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
+      <div hidden={focusView !== "Processing"} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
         <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, onClick: () => openFiscalProcessing(row) }]} columns={[
           { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
@@ -143,7 +145,7 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <div className="workspace-panel section-spacer">
+      <div hidden={focusView !== "Entries"} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Accounting entries")}</h3><p>{t("Provision, payment, and rendition entries created by the workflow.")}</p></div></div>
         <DataTable
           rows={entries}
@@ -165,7 +167,7 @@ export default function AccountingEntries() {
         />
       </div>
 
-      <div className="workspace-panel section-spacer">
+      <div hidden={focusView !== "Consolidation"} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Consolidation summary")}</h3><p>{t("Period totals grouped by cost center, expense account, and currency.")}</p></div><span className="section-count">{preview.length}</span></div>
         <DataTable rows={preview.map((row, index) => ({ ...row, id: `${row.costCenterCode}-${row.expenseAccount}-${row.currency}-${index}` }))} rowKey="id" loading={loading} filters={[{ key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
           { key: "costCenterCode", label: "CeCo", render: (row) => <div className="primary-cell"><strong>{row.costCenterCode}</strong><span>{row.costCenterName}</span></div> },
@@ -181,7 +183,7 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <div className="workspace-panel section-spacer">
+      <div hidden={focusView !== "History"} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Export history")}</h3><p>{t("Previously generated consolidation reports remain available for download.")}</p></div></div>
         <DataTable rows={history} loading={historyTable.loading} remote={historyTable.remote} columns={[
           { key: "fileName", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },

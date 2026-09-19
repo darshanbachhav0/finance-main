@@ -4,6 +4,31 @@ import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
+  "Management Portal": "Portal de Gerencia",
+  "Shared Management View": "Vista compartida de Gerencia",
+  ManagementViewer: "Visor de Gerencia",
+  "A secure, read-only view of institutional financial performance. Data refreshes automatically and contains aggregates only.": "Vista institucional segura y de solo lectura. Los datos se actualizan automáticamente y contienen únicamente información consolidada.",
+  "Read-only management view": "Vista de Gerencia de solo lectura",
+  "Loading current snapshot...": "Cargando información actual...",
+  "Pending requests": "Solicitudes pendientes",
+  "Pending approvals": "Aprobaciones pendientes",
+  "Committed budget": "Presupuesto comprometido",
+  "Pending payments": "Pagos pendientes",
+  "Paid this month": "Pagado este mes",
+  "Overdue approvals": "Aprobaciones vencidas",
+  "Workflow position": "Situación del flujo",
+  "Current request volume by controlled status.": "Volumen actual de solicitudes por estado controlado.",
+  "Requests by track": "Solicitudes por circuito",
+  "Aggregate A1, A2, B and C workload.": "Carga consolidada de los circuitos A1, A2, B y C.",
+  "Budget position": "Situación presupuestal",
+  "Assigned, committed, executed, paid and available budget in PEN.": "Presupuesto asignado, comprometido, ejecutado, pagado y disponible en PEN.",
+  "Payment position": "Situación de pagos",
+  "Payables by current Treasury state.": "Obligaciones por estado actual de Tesorería.",
+  "Institutional workload": "Carga institucional",
+  "Aggregate request value by organizational area.": "Valor consolidado de solicitudes por área organizacional.",
+  "Approval SLA": "SLA de aprobaciones",
+  "Current approval queues by SLA condition.": "Colas actuales de aprobación según su condición de SLA.",
+  "This portal contains summarized institutional data. Transaction records, personal data, supplier identifiers, bank details, documents, and audit actors are not exposed.": "Este portal contiene información institucional resumida. No expone transacciones, datos personales, identificadores de proveedores, datos bancarios, documentos ni responsables de auditoría.",
   "Replace entered invoice values with the XML values (audited). All validation checks still apply.": "Reemplazar los datos ingresados por los del XML (con auditoría). Se aplicarán todas las validaciones.",
   "Financial validation": "Validación financiera",
   "Exchange rate evidence": "Evidencia del tipo de cambio",
@@ -1784,6 +1809,11 @@ Object.assign(spanishDictionary, {
   "Use the documented field configuration. Set confirmed only after Treasury reviews every field.": "Use la configuración documentada. Active confirmed solo después de la revisión de todos los campos por Tesorería."
 });
 
+Object.assign(spanishDictionary, {"My Requests": "Mis solicitudes", "Approvals": "Aprobaciones", "Payments": "Pagos", "Payment History": "Historial de pagos", "Administration": "Administración", "Users & Roles": "Usuarios y roles", "Accounting Configuration": "Configuración contable", "BBVA Configuration": "Configuración BBVA", "Other workspaces": "Otras áreas de trabajo", "Current stage": "Etapa actual", "General": "General", "Payment": "Pago", "History": "Historial", "What do these statuses mean?": "¿Qué significan estos estados?", "More filters": "Más filtros", "Related tools": "Herramientas relacionadas", "More insights in Reports": "Más información en Reportes", "Advanced validation details": "Detalles avanzados de validación", "Reference rate": "Tipo de cambio referencial", "Official SUNAT rate": "Tipo de cambio oficial SUNAT", "The advance is paid to the requester. No supplier is required.": "El adelanto se paga al solicitante. No se requiere proveedor.", "Select invoices to include in the BBVA payment file.": "Seleccione los comprobantes para el archivo de pagos BBVA.", "Download previously generated payment files.": "Descargue los archivos de pago generados anteriormente."});
+
+Object.assign(spanishDictionary, { "SUNAT administration": "Administración SUNAT", "Sections": "Secciones", "Processing": "Por procesar", "Entries": "Asientos", "Consolidation": "Consolidación", "Exceptions": "Excepciones", "Commitments": "Compromisos", "Invoices": "Comprobantes", "Pending payments": "Pagos pendientes", "Generate BBVA TXT": "Generar TXT BBVA" });
+Object.assign(spanishDictionary, { "Current phase only": "Solo etapa actual", "All document phases": "Todas las etapas documentales" });
+Object.assign(spanishDictionary, { "Expense category for these items": "Categoría de gasto para estos ítems", "Search expense category...": "Buscar categoría de gasto...", "Choose the expense category for these items.": "Seleccione la categoría de gasto de estos ítems.", "Request month": "Mes de la solicitud", "Hide optional documents": "Ocultar documentos opcionales", "Additional documents": "Documentos adicionales" });
 const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {

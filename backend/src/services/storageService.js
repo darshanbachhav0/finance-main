@@ -6,8 +6,13 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const uploadRoot = path.resolve(__dirname, "..", "..", "uploads");
-export const generatedRoot = path.resolve(__dirname, "..", "..", "generated");
+const persistentRoot = process.env.UMA_STORAGE_ROOT ? path.resolve(process.env.UMA_STORAGE_ROOT) : null;
+export const uploadRoot = process.env.UPLOAD_DIR
+  ? path.resolve(process.env.UPLOAD_DIR)
+  : persistentRoot ? path.join(persistentRoot, "uploads") : path.resolve(__dirname, "..", "..", "uploads");
+export const generatedRoot = process.env.GENERATED_DIR
+  ? path.resolve(process.env.GENERATED_DIR)
+  : persistentRoot ? path.join(persistentRoot, "generated") : path.resolve(__dirname, "..", "..", "generated");
 export const tempUploadDir = path.join(uploadRoot, "tmp");
 const allowedDomains = new Set(["requests", "suppliers"]);
 

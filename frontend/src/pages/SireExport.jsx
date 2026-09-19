@@ -114,7 +114,7 @@ export default function SireExport() {
         ]} />
       </div>
 
-      <div className="workspace-panel section-spacer">
+      <details className="workspace-panel section-spacer"><summary>{t("Export history")}</summary><div className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Report history")}</h3><p>{t("Previously generated SIRE reports remain available for download.")}</p></div></div>
         <DataTable rows={history} loading={historyTable.loading} remote={historyTable.remote} columns={[
           { key: "fileName", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
@@ -125,7 +125,7 @@ export default function SireExport() {
           { key: "createdAt", label: "Generated", render: (row) => new Date(row.createdAt).toLocaleString() },
           { key: "download", label: "", sortable: false, render: (row) => <ProtectedAssetButton className="icon-button" resourcePath={row.url} fileName={row.fileName} title="Download"><Download size={16} /></ProtectedAssetButton> }
         ]} />
-      </div>
+      </div></details>
     </section>
   );
 }

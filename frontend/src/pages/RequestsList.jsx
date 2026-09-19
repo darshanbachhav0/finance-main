@@ -1,3 +1,4 @@
+import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -79,6 +80,7 @@ export default function RequestsList() {
 
   return (
     <section>
+      <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
       <PageHeader
         title="Requests"
         description="Create, track, submit, and review financial requests by status and accounting period."

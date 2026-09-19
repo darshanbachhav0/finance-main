@@ -39,7 +39,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
-import { canAccessNavigation } from "../utils/navigationAccess.js";
+import { canAccessNavigation, roleNavigation } from "../utils/navigationAccess.js";
 
 const groups = [
   {
@@ -70,7 +70,8 @@ const groups = [
       { label: "Budget Control", path: "/budget", icon: WalletCards, counter: "budgetExceptions" },
       { label: "Accounting Periods", path: "/accounting/periods", icon: CalendarRange },
       { label: "SIRE Export", path: "/accounting/sire", icon: FileSpreadsheet },
-      { label: "Management Reports", path: "/reports", icon: ChartNoAxesCombined }
+      { label: "Management Reports", path: "/reports", icon: ChartNoAxesCombined },
+      { label: "Management Portal", path: "/management-view", icon: ChartNoAxesCombined }
     ]
   },
   {
@@ -93,6 +94,10 @@ const groups = [
 ];
 
 const routeTitles = [
+  [/^\/management-view/, "Management Portal"],
+  [/^\/administration/, "Administration"],
+  [/^\/treasury\/history/, "Payment History"],
+  [/^\/accounting\/invoices/, "Invoices"],
   [/^\/$/, "Dashboard"],
   [/^\/requests\/new$/, "New request"],
   [/^\/requests\/[^/]+\/edit$/, "Edit request"],
@@ -125,7 +130,8 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 1080px)");
-  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead } = useNotificationBell(user._id);
+  const managementViewer = user.role === "ManagementViewer";
+  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead } = useNotificationBell(user._id, !managementViewer);
   const [taskOpen, setTaskOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -134,10 +140,7 @@ export default function AppLayout() {
   const sidebarRef = useRef(null);
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
-  const visibleGroups = useMemo(() => groups.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => canAccessNavigation(user.role, item.path))
-  })).filter((group) => group.items.length), [user.role]);
+  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: (roleNavigation[user.role] || []).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || { icon: Settings2 }), label, path })).filter(item => canAccessNavigation(user.role, item.path)) }], [user.role]);
   const commandPages = useMemo(() => visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))), [visibleGroups]);
 
   const pageTitle = routeTitles.find(([pattern]) => pattern.test(location.pathname))?.[1] || "Financial Control";
@@ -239,7 +242,7 @@ export default function AppLayout() {
                   <NavLink
                     key={item.path}
                     to={item.path}
-                    end={item.path === "/" || item.path === "/accounting"}
+                    end={item.path === "/" || item.path === "/accounting" || item.path === "/requests" || item.path === "/treasury"}
                     className="nav-item"
                     data-tooltip={t(item.label)}
                     aria-label={t(item.label)}
@@ -275,11 +278,11 @@ export default function AppLayout() {
           </div>
 
           <div className="topbar-actions" ref={menusRef}>
-            <button type="button" className="command-trigger" onClick={() => setCommandOpen(true)} aria-label={t("Search the system")} aria-keyshortcuts="Control+K Meta+K">
+            {!managementViewer && <button type="button" className="command-trigger" onClick={() => setCommandOpen(true)} aria-label={t("Search the system")} aria-keyshortcuts="Control+K Meta+K">
               <Search size={16} /><span>{t("Search")}</span><kbd>Ctrl K</kbd>
-            </button>
+            </button>}
             <LanguageToggle />
-            <div className="topbar-menu">
+            {!managementViewer && <div className="topbar-menu">
               <button type="button" className="icon-button notification-button" onClick={() => { if (!taskOpen) loadTasks(); setTaskOpen((current) => !current); setUserOpen(false); }} aria-label={t("Open task notifications")} aria-expanded={taskOpen}>
                 <Bell size={19} />
                 {notifications.unreadCount > 0 ? <span className="notification-dot" aria-live="polite" aria-label={t("{count} unread notifications").replace("{count}", notifications.unreadCount)}>{notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}</span> : tasks.total > 0 && <span className="notification-dot" aria-label={t("Pending tasks")}>•</span>}
@@ -312,7 +315,7 @@ export default function AppLayout() {
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
 
             <div className="topbar-menu">
               <button type="button" className="user-menu-button" aria-label={t("Account menu")} onClick={() => { setUserOpen((current) => !current); setTaskOpen(false); }} aria-expanded={userOpen}>

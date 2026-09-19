@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { sanitizeInput } from "./middleware/sanitizeInput.js";
 import routes from "./routes/index.js";
+import managementDocsRoutes from "./routes/managementDocsRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,9 +56,10 @@ app.use(express.urlencoded({ extended: true, limit: process.env.FORM_BODY_LIMIT 
 app.use(sanitizeInput);
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "erp-financial-backend" });
+  res.json({ status: "ok", service: "erp-financial-backend", managementApi: "v1" });
 });
 
+app.use(managementDocsRoutes);
 app.use("/api", routes);
 
 if (isProduction) {
