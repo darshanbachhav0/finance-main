@@ -1,5 +1,41 @@
 # UMA Management API v1
 
+## External gateway already deployed
+
+The separate public gateway is deployed at:
+
+- Viewer portal: `https://uma-management-read-api.onrender.com/`
+- Gateway health: `https://uma-management-read-api.onrender.com/health`
+- Full readiness: `https://uma-management-read-api.onrender.com/ready`
+- Gateway OpenAPI: `https://uma-management-read-api.onrender.com/openapi.yaml`
+
+External consumers authenticate to that gateway with either:
+
+```http
+X-API-Key: YOUR_VIEWER_KEY
+```
+
+or:
+
+```http
+Authorization: Bearer YOUR_VIEWER_KEY
+```
+
+Its read-only endpoints are:
+
+```text
+GET /api/v1/management/dashboard
+GET /api/v1/management/report
+GET /api/v1/management/filters
+GET /api/v1/management/snapshot
+```
+
+Use `GET /api/v1/management/snapshot?period=YYYY-MM` when another application needs one combined payload. The gateway accepts only `GET`, `HEAD`, and `OPTIONS`; it does not expose approvals, edits, accounting, Treasury, payment, reconciliation, supplier, user, or configuration actions.
+
+At the time this documentation was finalized, the gateway itself was deployed but `/ready` reported that `FINANCE_API_BASE_URL` could not resolve the UMA Finance backend. Deploy this repository's Finance web service with a cloud MongoDB connection, then set the gateway's `FINANCE_API_BASE_URL` to that service URL. Do not configure it as `localhost`.
+
+The rest of this document describes the direct versioned API now included in the UMA Finance backend. It is the authoritative aggregate source used by the built-in `/management-view` portal and can also be used by trusted clients with a `ManagementViewer` account.
+
 Version: **1.0.0**
 
 Base URL: `https://YOUR-SERVICE.onrender.com/api`
