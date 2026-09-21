@@ -1,7 +1,9 @@
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function ApprovalTimeline({ history = [] }) {
   const { t } = useLanguage();
+  const { user } = useAuth();
 
   if (!history.length) {
     return <div className="empty-state">{t("No workflow events yet.")}</div>;
@@ -21,7 +23,8 @@ export default function ApprovalTimeline({ history = [] }) {
             <small>
               {item.actor?.name || t("System")} · {new Date(item.createdAt).toLocaleString()}
             </small>
-            {(item.stage || item.signature || item.ip) && <small className="timeline-evidence">{[item.stage && t(item.stage), item.signature, item.ip].filter(Boolean).join(" · ")}</small>}
+            {item.stage && <small>{t(item.stage)}</small>}
+            {["Admin", "Accounting"].includes(user.role) && (item.signature || item.ip) && <details><summary>{t("Technical evidence")}</summary><small className="timeline-evidence">{[item.signature, item.ip].filter(Boolean).join(" · ")}</small></details>}
           </div>
         </div>
       ))}

@@ -3,11 +3,15 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { searchSources } from "../utils/searchSources.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 
 export default function CommandPalette({ open, onClose, pages }) {
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const [searchError, setSearchError] = useState("");
   const navigate = useNavigate();
   const titleId = useId();
   const inputRef = useRef(null);
@@ -25,7 +29,7 @@ export default function CommandPalette({ open, onClose, pages }) {
   }, [pages, query, t]);
   const results = useMemo(() => [
     ...matchingPages.map((item) => ({ ...item, kind: "page", title: t(item.label), subtitle: t(item.group) })),
-    ...requests.map((item) => ({ kind: "request", path: `/requests/${item._id}`, title: item.requestNumber, subtitle: `${item.supplier?.name || item.supplier?.legalName || t("Unknown supplier")} - ${t(item.status)}` }))
+    ...requests.map(item => ({ ...item, subtitle: `${t(item.kind)} · ${item.subtitle || ""}` }))
   ], [matchingPages, requests, t]);
 
   useEffect(() => {
@@ -33,13 +37,14 @@ export default function CommandPalette({ open, onClose, pages }) {
     previousFocus.current = document.activeElement;
     setQuery("");
     setRequests([]);
+    setSearchError("");
     setActiveIndex(0);
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
   useEffect(() => {
-    if (!shouldRender) previousFocus.current?.focus?.({ preventScroll: true });
+    if (!shouldRender && !document.querySelector('[role="dialog"][aria-modal="true"]')) previousFocus.current?.focus?.({ preventScroll: true });
   }, [shouldRender]);
 
   useEffect(() => {
@@ -49,24 +54,35 @@ export default function CommandPalette({ open, onClose, pages }) {
       return undefined;
     }
     const controller = new AbortController();
+    setRequests([]);
+    setSearchError("");
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const response = await api.get("/requests", { params: { search: query.trim(), pageSize: 6, page: 1 }, signal: controller.signal });
-        setRequests(response.data.data || []);
+        const sources = searchSources(user.role);
+        const responses = await Promise.allSettled(sources.map(source => api.get(source.endpoint, { params: { search: query.trim(), pageSize: 5, page: 1 }, signal: controller.signal })));
+        if (controller.signal.aborted) return;
+        setRequests(responses.flatMap((result, index) => {
+          if (result.status !== "fulfilled") return [];
+          const source = sources[index];
+          return (result.value.data.data || []).slice(0, 5).map(row => ({ key: `${source.kind}-${row._id}`, kind: source.kind, title: source.title(row), subtitle: source.subtitle(row), path: source.path(row) })).filter(item => item.title && !item.path.includes("undefined"));
+        }));
+        setSearchError(responses.some(result => result.status === "rejected") ? "Some search sources are unavailable. Try again." : "");
       } catch (error) {
-        if (error.code !== "ERR_CANCELED") setRequests([]);
+        if (!controller.signal.aborted) { setRequests([]); setSearchError(error.message); }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 180);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, query]);
+  }, [open, query, user.role]);
 
   useEffect(() => setActiveIndex((current) => Math.min(current, Math.max(0, results.length - 1))), [results.length]);
+
+  useEffect(() => { dialogRef.current?.querySelector('[role="option"][aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); }, [activeIndex]);
 
   function choose(item) {
     if (!item) return;
@@ -116,14 +132,15 @@ export default function CommandPalette({ open, onClose, pages }) {
         <h2 id={titleId} className="sr-only">{t("Search the system")}</h2>
         <div className="command-search">
           <Search size={19} aria-hidden="true" />
-          <input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} placeholder={t("Search pages or request references...")} aria-label={t("Search pages or request references...")} />
+          <input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} placeholder={t("Search requests, suppliers, RUC, invoices...")} aria-label={t("Search requests, suppliers, RUC, invoices...")} />
           {loading ? <Loader2 className="spin" size={17} aria-label={t("Searching...")} /> : <button type="button" className="icon-button quiet" onClick={onClose} aria-label={t("Close search")}><X size={18} /></button>}
         </div>
+        {searchError && <p role="status" className="command-empty">{t(searchError)}</p>}
         <div className="command-results" role="listbox" aria-label={t("Search results")}>
           {results.map((item, index) => {
             const Icon = item.icon || FileText;
             return (
-              <button type="button" role="option" aria-selected={index === activeIndex} className={index === activeIndex ? "active" : ""} key={`${item.kind}-${item.path}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose(item)}>
+              <button type="button" role="option" aria-selected={index === activeIndex} className={index === activeIndex ? "active" : ""} key={item.key || `${item.kind}-${item.path}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => choose(item)}>
                 <span className="command-result-icon"><Icon size={17} /></span>
                 <span><strong>{item.title}</strong><small>{item.subtitle}</small></span>
                 {index === activeIndex && <CornerDownLeft size={15} aria-hidden="true" />}

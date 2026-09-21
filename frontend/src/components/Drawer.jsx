@@ -43,7 +43,7 @@ export default function Drawer({ open, title, description, size = "medium", chil
   }, [open]);
 
   useEffect(() => {
-    if (!shouldRender) previousFocusRef.current?.focus?.({ preventScroll: true });
+    if (!shouldRender && !document.querySelector('[role="dialog"][aria-modal="true"]')) previousFocusRef.current?.focus?.({ preventScroll: true });
   }, [shouldRender]);
 
   if (!shouldRender) return null;

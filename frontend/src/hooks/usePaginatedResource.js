@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client.js";
 import { buildRemoteTableParams } from "../utils/tableQuery.js";
@@ -13,6 +14,9 @@ export default function usePaginatedResource(endpoint, {
   enabled = true,
   debounceMs = 220
 } = {}) {
+  const location = useLocation();
+  const urlSearch = new URLSearchParams(location.search).get("search");
+  initialSearch = initialSearch || urlSearch || "";
   const storageKey = `erp_table_query:${persistKey || endpoint}`;
   const [query, setQuery] = useState(() => {
     const fallback = { page: 1, pageSize: initialPageSize, search: initialSearch, filters: initialFilters, sort: null };
@@ -25,6 +29,7 @@ export default function usePaginatedResource(endpoint, {
       return fallback;
     }
   });
+  useEffect(() => { if (urlSearch !== null) setQuery(value => ({ ...value, search: urlSearch, page: 1 })); }, [urlSearch]);
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ ...emptyPagination, pageSize: initialPageSize });
   const [payload, setPayload] = useState({});

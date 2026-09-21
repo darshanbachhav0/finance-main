@@ -12,6 +12,7 @@ import "./styles/uma.css";
 import "./styles/experience.css";
 import "./styles/responsive.css";
 import "./styles/motion.css";
+import "./styles/advancedExperience.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

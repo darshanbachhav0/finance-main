@@ -34,14 +34,14 @@ function ExactTooltip({ active, payload, label, valueFormatter, t }) {
   );
 }
 
-function ChartFallback({ data, xKey, series, valueFormatter, t }) {
+function ChartFallback({ data, xKey, series, valueFormatter, t, onDrillDown }) {
   return (
     <details className="chart-data-fallback">
       <summary>{t("View exact data")}</summary>
       <div className="chart-table-scroll">
         <table>
           <thead><tr><th>{t("Category")}</th>{series.map((item) => <th key={item.key}>{t(item.label)}</th>)}</tr></thead>
-          <tbody>{data.map((row, index) => <tr key={`${row[xKey]}-${index}`}><th>{row[xKey] || t("Unassigned")}</th>{series.map((item) => <td key={item.key}>{valueFormatter(row[item.key], item.key)}</td>)}</tr>)}</tbody>
+          <tbody>{data.map((row, index) => <tr key={`${row[xKey]}-${index}`}><th>{onDrillDown ? <button type="button" className="text-button" onClick={() => onDrillDown(row)}>{row[xKey] || t("Unassigned")}</button> : row[xKey] || t("Unassigned")}</th>{series.map((item) => <td key={item.key}>{valueFormatter(row[item.key], item.key)}</td>)}</tr>)}</tbody>
         </table>
       </div>
     </details>
@@ -110,7 +110,7 @@ export default function AnalyticsChart({
         <div className="chart-canvas" style={{ height }} role="img" aria-label={`${t(title)}. ${t(description || "Interactive financial chart.")}`}>
           <ResponsiveContainer width="100%" height="100%">{renderChart()}</ResponsiveContainer>
         </div>
-        <ChartFallback data={chartData} xKey={xKey} series={chartSeries} valueFormatter={valueFormatter} t={t} />
+        <ChartFallback onDrillDown={onDrillDown} data={chartData} xKey={xKey} series={chartSeries} valueFormatter={valueFormatter} t={t} />
       </> : <div className="chart-state">{t(emptyLabel)}</div>}
     </section>
   );

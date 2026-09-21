@@ -8,7 +8,8 @@ import Drawer from "./Drawer.jsx";
 import Message from "./Message.jsx";
 import FinancialProgressSummary from "./FinancialProgressSummary.jsx";
 
-export default function RequestQuickView({ requestId, onClose }) {
+function InlinePreview({ title, children }) { return <div className="inline-request-preview"><h3>{title}</h3>{children}</div>; }
+export default function RequestQuickView({ requestId, onClose, inline = false }) {
   const { t } = useLanguage();
   const [request, setRequest] = useState(null);
   const [financialProgress, setFinancialProgress] = useState(null);
@@ -28,8 +29,9 @@ export default function RequestQuickView({ requestId, onClose }) {
     return () => { active = false; };
   }, [requestId]);
 
+  const Container = inline ? InlinePreview : Drawer;
   return (
-    <Drawer
+    <Container
       open={Boolean(requestId)}
       title={request?.requestNumber || "Request quick view"}
       description={request ? `${request.flowType || "A1"} · ${request.requestType}` : "Loading request..."}
@@ -54,6 +56,7 @@ export default function RequestQuickView({ requestId, onClose }) {
           </div>
         </div>
       )}
-    </Drawer>
+    {inline && request && <Link className="primary-button" to={`/requests/${request._id}`}>{t("Open full details")}</Link>}
+    </Container>
   );
 }

@@ -3,7 +3,7 @@ export default function MotionCollapse({ open, children, ...props }) {
  const ref=useRef(null),first=useRef(true);
  useLayoutEffect(()=>{
   const node=ref.current;
-  if(first.current || matchMedia("(prefers-reduced-motion: reduce)").matches){first.current=false;node.hidden=!open;return;}
+  if(first.current || (matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.reduceMotion === "true")){first.current=false;node.hidden=!open;return;}
   node.hidden=false;
   const height=node.scrollHeight;
   const overflow=node.style.overflow;node.style.overflow="hidden";

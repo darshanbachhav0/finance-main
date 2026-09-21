@@ -1,3 +1,4 @@
+import { BudgetBars } from "../components/ExperienceIndicators.jsx";
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import { useDraftResume } from "../hooks/useWorkDraft.js";
 import { AlertTriangle, CheckCircle2, RefreshCw, RotateCw, XCircle } from "lucide-react";
@@ -123,6 +124,7 @@ export default function BudgetControl() {
     <div className="stats-grid budget-stats"><StatCard label="Assigned budget" value={money(data.totals.assigned)} tone="navy" /><StatCard label="Committed budget" value={money(data.totals.committed)} tone="amber" /><StatCard label="Executed budget" value={money(data.totals.executed)} tone="teal" /><StatCard label="Paid budget" value={money(data.totals.paid)} tone="green" /><StatCard label="Available balance" value={money(data.totals.available)} tone="neutral" /></div>
     {data.warnings?.length > 0 && <div className="alert-strip warning"><AlertTriangle size={20} /><div><strong>{t("Budget attention required")}</strong><p>{t("One or more dimensions have low availability or over-execution.")}</p></div></div>}
 
+    <details className="workspace-panel"><summary>{t("Budget consumption")}</summary><BudgetBars totals={data.totals} /></details>
     <nav className="focus-tabs" aria-label={t("Sections")}>{["Budget", "Exceptions", "Commitments"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
       <div hidden={focusView !== "Budget"} className="workspace-panel"><div className="section-heading"><div><h3>{t("Dimensional budget")}</h3><p>{t("Period, Cost Center, expense classification, and project remain visible together.")}</p></div><span className="section-count">{allocationTable.pagination.total}</span></div><DataTable rows={allocationTable.rows} loading={allocationTable.loading} remote={allocationTable.remote} rowActions={(row) => row.source === "LINKED_ANNUAL_PLAN" ? [{ label: "View annual plan", onClick: () => setWorkspace({ planId: row._id }) }] : []} filters={[{ key: "source", label: "sources", allLabel: "All sources", options: ["LINKED_ANNUAL_PLAN", "DIMENSIONAL_ALLOCATION", "TRANSITIONAL_COST_CENTER"] }]} searchPlaceholder="Search Cost Center, account, project, or period..." columns={[
       { key: "period", label: "Period", render: (row) => row.period || t("Undated legacy balance") },

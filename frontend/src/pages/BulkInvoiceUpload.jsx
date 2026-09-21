@@ -1,3 +1,4 @@
+import FileUploadInput from "../components/FileUploadInput.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { FileArchive, RefreshCw, UploadCloud, Eye } from "lucide-react";
@@ -93,7 +94,7 @@ export default function BulkInvoiceUpload() {
         <div className="document-requirement required"><FileArchive size={22} /><div><strong>{t("Independent batch processing")}</strong><p>{t("SUNAT, duplicate identity, and remaining PO ceiling are checked per invoice. Invalid invoices are isolated instead of stopping the entire batch.")}</p></div></div>
         <DraftPanel busy={submitting} draft={draft} onDiscard={() => { setFile(null); setPurchaseOrderId(""); draft.separateCopy(); }}><form className="form-grid two-column-form" onSubmit={upload}>
           <label className="field"><span>{t("Purchase Order")} *</span><select required disabled={loadingOrders || submitting} value={purchaseOrderId} onChange={(event) => setPurchaseOrderId(event.target.value)}><option value="">{t("Select Purchase Order")}</option>{orders.map((order) => <option value={order._id} key={order._id}>{order.poNumber} · {order.request?.requestNumber || ""} · {money(order.currency, order.remainingAmount)}</option>)}</select></label>
-          <label className="field"><span>{t("Batch file")} * {file?.name}</span><input required={!file} type="file" accept=".zip,.xlsx" disabled={submitting} onChange={(event) => setFile(event.target.files?.[0] || null)} /><small>{t("ZIP: same-name XML + PDF pairs. Excel: one row per voucher.")}</small></label>
+          <label className="field"><span>{t("Batch file")} * {file?.name}</span><FileUploadInput required={!file} type="file" accept=".zip,.xlsx" disabled={submitting} onChange={(event) => setFile(event.target.files?.[0] || null)} /><small>{t("ZIP: same-name XML + PDF pairs. Excel: one row per voucher.")}</small></label>
           {selectedOrder && <div className="form-span-two payment-destination-summary"><strong>{selectedOrder.poNumber} · {money(selectedOrder.currency, selectedOrder.remainingAmount)} {t("remaining")}</strong><span>{selectedOrder.supplier?.legalName || selectedOrder.supplier?.name || ""}</span><small>{selectedOrder.request?.requestNumber}</small></div>}
           <div className="form-span-two"><button className="primary-button" type="submit" disabled={submitting || !file || !purchaseOrderId}><UploadCloud size={16} /><span>{t(submitting ? "Uploading..." : "Process batch")}</span></button></div>
         </form></DraftPanel>

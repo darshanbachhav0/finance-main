@@ -1,4 +1,8 @@
+import { WorkspaceWelcome } from "../components/ExperienceTools.jsx";
 import ContinueWork from "../components/ContinueWork.jsx";
+import DashboardWidgets from "../components/DashboardWidgets.jsx";
+import ActivityFeed from "../components/ActivityFeed.jsx";
+import { BudgetBars, Freshness, HealthIndicators, SlaCountdown } from "../components/ExperienceIndicators.jsx";
 import { AlertTriangle, ArrowRight, CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -66,7 +70,7 @@ export default function Dashboard() {
   }
 
   const requestColumns = [
-    ...(summary?.role === "Approver" ? [{ key: "approvalDueAt", label: "SLA due", render: row => <div className="primary-cell"><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><span>{row.approvalDueAt ? formatDateTime(row.approvalDueAt, language) : "-"}</span></div> }] : []),
+    ...(summary?.role === "Approver" ? [{ key: "approvalDueAt", label: "SLA due", render: row => <div className="primary-cell"><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><span>{row.approvalDueAt ? formatDateTime(row.approvalDueAt, language) : "-"}</span><SlaCountdown request={row} /></div> }] : []),
     { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
     { key: "supplier", label: "Supplier", getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.name || "-" },
     { key: "totalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.totalAmount, row.currency, language) },
@@ -85,9 +89,9 @@ export default function Dashboard() {
 
   return (
     <section>
-      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="secondary-button" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button></>} />
+      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><Freshness at={summary?.lastUpdated} /><button type="button" className="secondary-button" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button></>} />
       <Message type="error">{error}</Message>
-      <ContinueWork />
+      <WorkspaceWelcome /><ContinueWork />
 
       {loading && !summary && (
         <div className="dashboard-loading" role="status" aria-label={t("Loading dashboard...")}>
@@ -101,7 +105,7 @@ export default function Dashboard() {
           {workspace && <div className="dashboard-next"><div><small>UMA · {t("Your workspace")}</small><h2>{t(workspace[0])}</h2><p>{t(workspace[1])}</p></div><Link className="primary-button" to={workspace[2]}>{t(workspace[3])}<ArrowRight size={17} /></Link></div>}
           <div className="stats-grid">
             {summary.metrics.filter(metric => !["credit", "debit", "closed", "files", "assigned", "capex", "opex", "users"].includes(metric.key)).slice(0, 4).map((metric) => (
-              <StatCard key={metric.key} label={metric.label} value={metricValue(metric)} suffix={metric.suffix} tone={metric.tone} icon={metricIcons[metric.key] || FileText} {...dashboardMetricLink(summary.role, metric.key)} />
+              <StatCard key={metric.key} label={metric.label} value={metricValue(metric)} numericValue={metric.format === "text" ? undefined : Number(metric.value)} formatter={value => metricValue({ ...metric, value: metric.format === "currency" ? value : Math.round(value) })} suffix={metric.suffix} tone={metric.tone} icon={metricIcons[metric.key] || FileText} {...dashboardMetricLink(summary.role, metric.key)} />
             ))}
           </div>
 
@@ -118,13 +122,13 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="dashboard-grid">
+          <DashboardWidgets>
             <div className="workspace-panel dashboard-primary">
               <div className="section-heading">
                 <div><h3>{t(summary.role === "Approver" ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3><p>{t("Current operational work in priority order.")}</p></div>
                 <Link className="text-link" to={summary.role === "Approver" ? "/approvals" : summary.role === "Treasury" ? "/treasury" : "/requests"}>{t("View all")}</Link>
               </div>
-              <DataTable className="dashboard-request-table" controls={false} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." />
+              <DataTable className="dashboard-request-table" controls={false} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." emptyAction={workspace ? { label: workspace[3], onClick: () => navigate(workspace[2]) } : undefined} />
             </div>
 
             <AnalyticsChart
@@ -141,14 +145,14 @@ export default function Dashboard() {
             />
 
             {summary.budget ? (
-              <AnalyticsChart
+              <div className="workspace-panel"><h3>{t("Budget execution")}</h3><BudgetBars totals={summary.budget.totals} /><details><summary>{t("View chart")}</summary><AnalyticsChart
                 title="Budget execution"
                 description="Assigned, committed, executed, paid, and available for the current period."
                 data={[{ name: new Date().toISOString().slice(0, 7), ...summary.budget.totals }]}
                 height={245}
                 series={[{ key: "assigned", label: "Assigned", color: "#17344c" }, { key: "committed", label: "Committed", color: "#d18a00" }, { key: "executed", label: "Executed", color: "#087c75" }, { key: "paid", label: "Paid", color: "#2463a6" }, { key: "available", label: "Available", color: "#19733d" }]}
                 valueFormatter={(value) => formatCurrency(value, "PEN", language)}
-              />
+              /></details></div>
             ) : (
               <AnalyticsChart
                 title="Requests by type"
@@ -165,7 +169,8 @@ export default function Dashboard() {
 
             {["Admin", "Approver", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link" to="/reports">{t("More insights in Reports")}</Link>}
 
-          </div>
+          </DashboardWidgets>
+          <div className="experience-secondary"><HealthIndicators warnings={summary.warnings} /><ActivityFeed /></div>
         </>
       )}
     </section>

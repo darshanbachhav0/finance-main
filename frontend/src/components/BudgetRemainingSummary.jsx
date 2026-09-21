@@ -30,7 +30,7 @@ export default function BudgetRemainingSummary({ payload, preview, loading, onRe
           {source.planningMode === "ANNUAL_ONLY" && <p className="remaining-budget-note">{t("Annual-only plan: no separate monthly limit.")}</p>}
           {source.status === "PENDING_VALIDATION" && <p className="remaining-budget-note">{t("Pending validation")}</p>}
         </article>)}
-        {payload.flowType === "C" && <p className="remaining-budget-note">{t("Advances commit their expense budget at rendition. This is a planning estimate, not a commitment on approval.")}</p>}
+        {payload.flowType === "C" && <p className="remaining-budget-note">{t("Funds are reserved before posting the advance. The actual expense is recognized at rendition. This preview does not reserve funds.")}</p>}
         {payload.currency === "USD" && <p className="remaining-budget-note">{t("All balances are in PEN, using the recorded exchange rate for the request date.")}</p>}
       </>}
     </div>

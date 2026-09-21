@@ -1,3 +1,4 @@
+import ResizablePreview from "../components/ResizablePreview.jsx";
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
@@ -17,6 +18,7 @@ import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 
 export default function AccountingEntries() {
+  const [quickViewId, setQuickViewId] = useState(null);
   const [focusView, setFocusView] = useState("Processing");
   const { t } = useLanguage();
   const { notify } = useToast();
@@ -134,7 +136,8 @@ export default function AccountingEntries() {
       <nav className="focus-tabs" aria-label={t("Sections")}>{["Processing", "Entries", "Consolidation", "History"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
       <div hidden={focusView !== "Processing"} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
-        <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, onClick: () => openFiscalProcessing(row) }]} columns={[
+        <ResizablePreview requestId={quickViewId} onClose={() => setQuickViewId(null)} />
+        <DataTable onRowClick={row => setQuickViewId(row._id)} rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) }, { label: "Review fiscal data", icon: Eye, onClick: () => openFiscalProcessing(row) }]} columns={[
           { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
           { key: "supplier", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name}</strong><span>{row.supplier?.rucDni}</span></div> },
           { key: "requestType", label: "Type" },

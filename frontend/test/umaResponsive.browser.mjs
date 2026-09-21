@@ -1,3 +1,4 @@
+import { checkAdvancedExperience } from "./advancedExperience.browser.mjs";
 // Isolated presentation fixtures: never connects to a real finance API or submits a financial action.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -78,6 +79,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${output}/login-mobile.png` });
   await page.evaluate((user) => { localStorage.setItem("erp_user", JSON.stringify(user)); localStorage.setItem("erp_token", "ui-test-only"); localStorage.setItem("erp_language", "en"); }, user);
+  if (!process.env.UMA_ADVANCED_ONLY) {
   await page.goto("http://127.0.0.1:5190/");
   await page.locator(".stat-card-link").first().waitFor();
   assert.equal(await page.locator(".stat-card-link").first().getAttribute("href"), "/requests");
@@ -180,6 +182,8 @@ try {
     assert.equal(await page.locator(".sidebar nav a").count(), expected, `${role} primary navigation`);
   }
 
+  }
+  await checkAdvancedExperience(page, user, output);
   await writeFile(`${output}/results.json`, JSON.stringify({ results, failures, runtimeErrors }, null, 2));
   assert.deepEqual(runtimeErrors, []);
   assert.deepEqual(failures, []);

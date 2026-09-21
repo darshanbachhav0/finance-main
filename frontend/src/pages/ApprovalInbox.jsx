@@ -5,6 +5,7 @@ import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
+import { SlaCountdown } from "../components/ExperienceIndicators.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
 import StatCard from "../components/StatCard.jsx";
@@ -135,7 +136,7 @@ export default function ApprovalInbox() {
             { key: "approvalStage", label: "Current stage", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
-            { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
+            { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><SlaCountdown request={row} /></div> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
             { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve")}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}

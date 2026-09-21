@@ -16,7 +16,7 @@ export default function useAnimatedPresence(open, duration = 180) {
       timer = window.setTimeout(() => {
         setRendered(false);
         setPhase("exited");
-      }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : duration);
+      }, (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.reduceMotion === "true") ? 0 : duration);
     }
 
     return () => {

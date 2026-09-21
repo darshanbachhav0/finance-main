@@ -1,3 +1,5 @@
+import ExperienceTools from "../components/ExperienceTools.jsx";
+import { notificationCategory } from "../utils/experience.js";
 import { Suspense } from "react";
 import MotionSurface from "../components/MotionSurface.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
@@ -29,7 +31,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import useNotificationBell from "../hooks/useNotificationBell.js";
 import CommandPalette from "../components/CommandPalette.jsx";
 import UmaBrand from "../components/UmaBrand.jsx";
@@ -127,6 +129,8 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [notificationFilter, setNotificationFilter] = useState("All");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 1080px)");
@@ -170,14 +174,16 @@ export default function AppLayout() {
         setTaskOpen(false);
         setUserOpen(false);
         setCommandOpen(true);
-      } else if (event.key === "/" && !isEditing) {
+      } else if (event.key.toLowerCase() === "n" && !isEditing && !event.ctrlKey && !event.metaKey && !event.altKey && !document.querySelector('[role="dialog"]') && ["Admin", "Solicitor"].includes(user.role)) {
+        event.preventDefault(); navigate("/requests/new");
+      } else if (event.key === "/" && !isEditing && !document.querySelector('[role="dialog"]')) {
         event.preventDefault();
         setCommandOpen(true);
       }
     };
     window.addEventListener("keydown", openCommand);
     return () => window.removeEventListener("keydown", openCommand);
-  }, []);
+  }, [navigate, user.role]);
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
@@ -281,7 +287,7 @@ export default function AppLayout() {
             {!managementViewer && <button type="button" className="command-trigger" onClick={() => setCommandOpen(true)} aria-label={t("Search the system")} aria-keyshortcuts="Control+K Meta+K">
               <Search size={16} /><span>{t("Search")}</span><kbd>Ctrl K</kbd>
             </button>}
-            <LanguageToggle />
+            <ExperienceTools key={user._id} /><LanguageToggle />
             {!managementViewer && <div className="topbar-menu">
               <button type="button" className="icon-button notification-button" onClick={() => { if (!taskOpen) loadTasks(); setTaskOpen((current) => !current); setUserOpen(false); }} aria-label={t("Open task notifications")} aria-expanded={taskOpen}>
                 <Bell size={19} />
@@ -294,9 +300,10 @@ export default function AppLayout() {
                     <span>{t("{count} unread notifications").replace("{count}", notifications.unreadCount)}</span>
                   </div>
                   {notificationError && <p className="popover-empty" role="status">{t(notificationError)} <button type="button" className="text-button" onClick={loadTasks}>{t("Retry")}</button></p>}
+                  <div className="notification-filters" aria-label={t("Notification filters")}>{["All", "Unread", "Approvals", "Payments", "SLA", "Other"].map(category => <button type="button" key={category} aria-pressed={notificationFilter === category} onClick={() => setNotificationFilter(category)}>{t(category)}</button>)}</div>
                   <div className="task-list">
                     <div className="notification-list-heading"><strong>{t("Notifications")}</strong>{notifications.unreadCount > 0 && <button type="button" className="text-button" onClick={markAllRead}>{t("Mark all read")}</button>}</div>
-                    {notifications.data.map((item) => (
+                    {notifications.data.filter(item => notificationFilter === "All" || notificationFilter === "Unread" && !item.readAt || notificationCategory(item) === notificationFilter).map((item) => (
                       <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
                         <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "red" : item.type === "SLA_DUE_SOON" ? "amber" : item.readAt ? "neutral" : "teal"}`} />
                         <span><strong>{t(item.title)}</strong><small>{t(item.message)}</small></span>

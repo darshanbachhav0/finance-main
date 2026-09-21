@@ -6,7 +6,7 @@ export default function InteractionMotion() {
     const animations=new Set(), detailsRunning=new WeakMap();
     let frame;
     function animate(element,frames,options={}) {
-      if(media.matches || !element?.isConnected)return;
+      if(media.matches || document.documentElement.dataset.reduceMotion === "true" || !element?.isConnected)return;
       const animation=element.animate(frames,{duration:180,easing:"ease-out",...options});
       animations.add(animation);animation.finished.catch(()=>{}).finally(()=>animations.delete(animation));
       return animation;
@@ -49,7 +49,7 @@ export default function InteractionMotion() {
     observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["disabled","class","aria-selected","aria-current"]});
     function expand(event) {
       const summary=event.target.closest("summary");
-      if(!summary || summary.parentElement.tagName!=="DETAILS" || media.matches || event.defaultPrevented)return;
+      if(!summary || summary.parentElement.tagName!=="DETAILS" || media.matches || document.documentElement.dataset.reduceMotion === "true" || event.defaultPrevented)return;
       if(event.target.closest("button,a,input,select"))return;
       const details=summary.parentElement;
       event.preventDefault();
@@ -66,11 +66,11 @@ export default function InteractionMotion() {
       function finish(){if(detailsRunning.get(details)!==state)return;details.open=opening;details.style.overflow=oldOverflow;detailsRunning.delete(details);}
       animation?.finished.then(finish,finish);
     }
-    function reduce(){if(media.matches)for(const animation of document.getAnimations()) {try{animation.finish();}catch{animation.cancel();}}}
+    function reduce(){if(media.matches || document.documentElement.dataset.reduceMotion === "true")for(const animation of document.getAnimations()) {try{animation.finish();}catch{animation.cancel();}}}
     document.addEventListener("click",expand);
     window.addEventListener("resize",updateControls);
-    media.addEventListener("change",reduce);updateControls();
-    return()=>{observer.disconnect();cancelAnimationFrame(frame);document.removeEventListener("click",expand);window.removeEventListener("resize",updateControls);media.removeEventListener("change",reduce);for(const animation of animations)animation.cancel();};
+    media.addEventListener("change",reduce);window.addEventListener("uma:accessibility",reduce);updateControls();
+    return()=>{observer.disconnect();cancelAnimationFrame(frame);document.removeEventListener("click",expand);window.removeEventListener("resize",updateControls);media.removeEventListener("change",reduce);window.removeEventListener("uma:accessibility",reduce);for(const animation of animations)animation.cancel();};
   },[]);
   return null;
 }

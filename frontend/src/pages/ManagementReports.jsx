@@ -1,3 +1,6 @@
+import ManagementPresentation from "../components/ManagementPresentation.jsx";
+import BudgetHeatmap from "../components/BudgetHeatmap.jsx";
+import { Freshness } from "../components/ExperienceIndicators.jsx";
 import { REQUEST_LIFECYCLE } from "../../../shared/workflowStatus.mjs";
 import { Download, Printer, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -118,13 +121,14 @@ export default function ManagementReports() {
         title="Management Reports"
         description="Interactive institutional analysis using current request, budget, Accounting, CXP, Treasury, rendition, and reconciliation data."
         actions={<>
-          <span className="last-updated">{t("Last updated")}: {data.lastUpdated ? formatDateTime(data.lastUpdated, language) : "-"}</span>
+          <Freshness at={data.lastUpdated} /><ManagementPresentation data={data} filters={filters} loading={loading} />
           <button type="button" className="secondary-button" onClick={() => window.print()} disabled={loading}><Printer size={16} />{t("Print report")}</button>
           <button type="button" className="secondary-button" onClick={() => load()} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>
           <button type="button" className="primary-button" onClick={exportReport} disabled={loading || exporting}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Export management CSV")}</span></button>
         </>}
       />
       <Message type="error">{error || exportTable.error}</Message>
+      <BudgetHeatmap rows={data.budgetAllocations} />
       <ReportFilters values={draftFilters} options={data.filterOptions || emptyData.filterOptions} onChange={setDraftFilters} onApply={applyFilters} onClear={clearFilters} loading={loading} />
       <div className="report-context" role="status"><strong>{t("Showing report for")}: {filters.period || t("All periods")}</strong>{Object.entries(filters).filter(([key, value]) => key !== "period" && value).map(([key, value]) => <span key={key}>{t({ dateFrom: "Date from", dateTo: "Date to", currency: "Currency", requestType: "Request type", area: "Area", costCenter: "Cost center", project: "Project" }[key])}: {key === "costCenter" ? data.filterOptions.costCenters.find((center) => center.value === value)?.code || value : t(value)}</span>)}</div>
 

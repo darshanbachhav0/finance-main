@@ -3,7 +3,7 @@ export default function MotionList({ children, className }) {
   const ref = useRef(null), previous = useRef(new Map()), running = useRef(new Set());
   useLayoutEffect(() => {
     const node = ref.current;
-    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = (matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.reduceMotion === "true");
     const next = new Map();
     const structuralChange = previous.current.size !== node.children.length || [...node.children].some(child => !previous.current.has(child.dataset.motionKey));
     for (const child of node.children) {

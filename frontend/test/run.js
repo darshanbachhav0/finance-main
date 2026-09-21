@@ -18,3 +18,5 @@ import "./slaContracts.test.js";
 
 import "./uiCleanup.test.js";
 import "./managementPortal.test.js";
+
+import "./experience.test.js";

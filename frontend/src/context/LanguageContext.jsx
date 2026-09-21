@@ -1,3 +1,4 @@
+import advancedExperienceSpanish from "../utils/experienceSpanish.js";
 import { budgetPlanningSpanish } from "../utils/budgetPlanningSpanish.js";
 import experienceSpanish from "./experienceSpanish.js";
 import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
@@ -1814,6 +1815,7 @@ Object.assign(spanishDictionary, {"My Requests": "Mis solicitudes", "Approvals":
 Object.assign(spanishDictionary, { "SUNAT administration": "Administración SUNAT", "Sections": "Secciones", "Processing": "Por procesar", "Entries": "Asientos", "Consolidation": "Consolidación", "Exceptions": "Excepciones", "Commitments": "Compromisos", "Invoices": "Comprobantes", "Pending payments": "Pagos pendientes", "Generate BBVA TXT": "Generar TXT BBVA" });
 Object.assign(spanishDictionary, { "Current phase only": "Solo etapa actual", "All document phases": "Todas las etapas documentales" });
 Object.assign(spanishDictionary, { "Expense category for these items": "Categoría de gasto para estos ítems", "Search expense category...": "Buscar categoría de gasto...", "Choose the expense category for these items.": "Seleccione la categoría de gasto de estos ítems.", "Request month": "Mes de la solicitud", "Hide optional documents": "Ocultar documentos opcionales", "Additional documents": "Documentos adicionales" });
+Object.assign(spanishDictionary, advancedExperienceSpanish);
 const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {

@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { LayoutList, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useToast } from "../context/ToastContext.jsx";
+import RequestStageIndicator from "./RequestStageIndicator.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import EmptyState from "./EmptyState.jsx";
 import RowActionMenu from "./RowActionMenu.jsx";
 import TableTools from "./TableTools.jsx";
@@ -49,10 +52,13 @@ export default function DataTable({
   exportable = false,
   onExport,
   emptyDescription = "Adjust filters or create a new record.",
+  emptyAction,
   caption,
   remote
 }) {
   const { t } = useLanguage();
+  const { notify } = useToast();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useState(initialFilters);
   const [sort, setSort] = useState(null);
@@ -76,7 +82,7 @@ export default function DataTable({
     return () => observer.disconnect();
   }, [rows, columns, mobileCards, loading]);
   const tableIdentity = tableId || caption || searchPlaceholder || columns.map((column) => column.key).join("-");
-  const preferenceKey = `erp_table_views:${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}`;
+  const preferenceKey = `erp_table_views:${user?._id || "local"}:${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}`;
 
   const isRemote = Boolean(remote?.onQueryChange);
   const activeSearch = isRemote ? remote.query?.search || "" : search;
@@ -152,6 +158,8 @@ export default function DataTable({
   }
 
   function clearFilters() {
+    const previous = { search: activeSearch, filters: { ...activeFilters }, sort: activeSort, page: currentPage };
+    notify("Filters cleared.", "info", { action: { label: "Undo", onClick: () => { if (isRemote) updateRemote(previous); else { setSearch(previous.search); setFilterValues(previous.filters); setSort(previous.sort); setPage(previous.page); } } } });
     if (isRemote) updateRemote({ search: "", filters: {}, sort: null, page: 1 });
     else {
       setSearch("");
@@ -332,13 +340,13 @@ export default function DataTable({
                   const value = column.render ? column.render(row) : rawValue(column, row);
                   return <td key={column.key} className={column.align ? `align-${column.align}` : ""} data-label={t(column.label)}>{typeof value === "string" ? t(value) : value}</td>;
                 })}
-                {secondaryColumns.length > 0 && <td data-label={t("Details")}><details className="row-details" onClick={event => event.stopPropagation()}><summary>{t("Details")}</summary><dl>{secondaryColumns.map(column => { const value = column.render ? column.render(row) : rawValue(column, row); return <div key={column.key}><dt>{t(column.label)}</dt><dd>{typeof value === "string" ? t(value) : value}</dd></div>; })}</dl></details></td>}
+                {secondaryColumns.length > 0 && <td data-label={t("Details")}><details className="row-details" onClick={event => event.stopPropagation()}><summary>{t("Details")}</summary><dl>{secondaryColumns.map(column => { const value = column.render ? column.render(row) : rawValue(column, row); return <div key={column.key}><dt>{t(column.label)}</dt><dd>{typeof value === "string" ? t(value) : value}</dd></div>; })}</dl>{row.requestNumber && row.status && <RequestStageIndicator request={row} />}</details></td>}
                 {rowActions && <td className="actions-column" data-label={t("Actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
               </tr>
             ))}
           </tbody>
         </table>
-        {!loading && !visibleRows.length && <EmptyState title={hasFilters ? "No matching results" : "No records yet"} filtered={hasFilters} onClear={hasFilters ? clearFilters : undefined} description={hasFilters ? "Try a different search or clear your filters." : emptyDescription} />}
+        {!loading && !visibleRows.length && <EmptyState title={hasFilters ? "No matching results" : "No records yet"} filtered={hasFilters} onClear={hasFilters ? clearFilters : undefined} action={!hasFilters ? emptyAction : undefined} description={hasFilters ? "Try a different search or clear your filters." : emptyDescription} />}
       </div>
 
       {controls && (processed.length > 0 || (isRemote && (remote.pagination?.total || 0) > 0)) && (

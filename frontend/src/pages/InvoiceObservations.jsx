@@ -1,3 +1,4 @@
+import FileUploadInput from "../components/FileUploadInput.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { Download, RefreshCw, RotateCcw } from "lucide-react";
@@ -99,8 +100,8 @@ export default function InvoiceObservations() {
           <div className="inline-document-actions"><button type="button" className="secondary-button" disabled={processing || !selected.xmlUrl} onClick={() => downloadDocument("xml")}><Download size={15} />{t("Download stored XML")}</button><button type="button" className="secondary-button" disabled={processing || !selected.pdfUrl} onClick={() => downloadDocument("pdf")}><Download size={15} />{t("Download stored PDF")}</button></div>
           <p>{t((selected.validationStatus || selected.status) === "OBSERVED_AMOUNT_EXCEEDED" ? "After the PO addendum increases the available ceiling, retry without replacing the XML, or attach a corrected document." : "Attach a corrected XML/PDF when the supplier replaced the voucher. If the stored XML is still valid after an external correction, you can retry without a replacement.")}</p>
           <label className="checkbox-field"><input type="checkbox" checked={acceptXmlValues} onChange={event => setAcceptXmlValues(event.target.checked)} /><span>{t("Replace entered invoice values with the XML values (audited). All validation checks still apply.")}</span></label>
-          <label className="field"><span>{t("Replacement XML")} {xml?.name}</span><input type="file" accept=".xml" onChange={(event) => setXml(event.target.files?.[0] || null)} /></label>
-          <label className="field"><span>{t("Replacement PDF")} {pdf?.name}</span><input type="file" accept=".pdf" onChange={(event) => setPdf(event.target.files?.[0] || null)} /></label>
+          <label className="field"><span>{t("Replacement XML")} {xml?.name}</span><FileUploadInput type="file" accept=".xml" onChange={(event) => setXml(event.target.files?.[0] || null)} /></label>
+          <label className="field"><span>{t("Replacement PDF")} {pdf?.name}</span><FileUploadInput type="file" accept=".pdf" onChange={(event) => setPdf(event.target.files?.[0] || null)} /></label>
         </form></DraftPanel>}
       </Drawer>
     </section>

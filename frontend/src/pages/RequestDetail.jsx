@@ -1,3 +1,5 @@
+import { ResponsiveActionPanel, RequestContextHelp } from "../components/RequestExperience.jsx";
+import FileUploadInput from "../components/FileUploadInput.jsx";
 import RequestStageIndicator from "../components/RequestStageIndicator.jsx";
 import FinancialValidationSummary from "../components/FinancialValidationSummary.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
@@ -26,6 +28,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
+import { ApprovalJourney } from "../components/ExperienceIndicators.jsx";
 import ApprovalTimeline from "../components/ApprovalTimeline.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -412,7 +415,7 @@ export default function RequestDetail() {
         <div><dt>{t("Current status")}</dt><dd><FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact /></dd></div>
       </dl>
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1])}</a></div>}
-      <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
+      <RequestStageIndicator request={request} financialProgress={related.financialProgress} /><RequestContextHelp request={request} documentStatus={documentStatus} />
       <details className="workflow-details"><summary>{t("What do these statuses mean?")}</summary><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></details>
       <nav className="focus-tabs" aria-label={t("Request sections")}>{["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map(tab => <button type="button" key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}>{t(tab)}</button>)}</nav>
 
@@ -582,6 +585,7 @@ export default function RequestDetail() {
               {documentPhaseOrder.filter(phase => showAllPhases || phase === (documentStatus.currentPhase || "SUBMISSION")).map((phase) => {
                 const phaseStatus = documentStatus.phases?.[phase] || { requirements: [], missing: [], valid: true };
                 return <article key={phase} className={`document-phase-card${documentStatus.currentPhase === phase ? " current" : ""}`}>
+                  <progress aria-label={t("Completed requirements")} max={Math.max(1, phaseStatus.requirements?.length || 0)} value={(phaseStatus.requirements || []).filter(item => item.present >= item.minCount).length} />
                   <div><strong>{t(phase)}</strong><StatusBadge status={phaseStatus.valid ? "COMPLIANT" : "PENDING"} /></div>
                   {phaseStatus.missing?.length > 0 && <p>{t("Missing documents")}: {phaseStatus.missing.map((item) => t(item.label || item.kind)).join(", ")}</p>}
                   {phaseStatus.requirements?.length ? <ul>{phaseStatus.requirements.map((item) => <li key={item.kind} className={item.present >= item.minCount ? "complete" : "missing"}><span>{t(item.labelKey || item.kind)}</span><strong>{item.present}/{item.minCount}</strong></li>)}</ul> : <p>{t("No documents required in this phase.")}</p>}
@@ -615,7 +619,7 @@ export default function RequestDetail() {
             <Section title="Register A1 invoice and conformity" description="Upload the documents required for invoice registration and Accounting. Amount fields are immutable and read from XML.">
               <DraftPanel busy={invoiceSubmitting} draft={invoiceDraft}><form className="invoice-registration-panel" onSubmit={submitInvoice}>
                 <p className="draft-file-list">{Object.values(invoiceFiles).filter(Boolean).map(file => file.name).join(", ")}</p><div className="file-upload-grid">
-                  {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => item.kind === field.kind)).map((field) => <label className="field" key={field.kind}><span>{t(field.label)} *</span><input type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key]} /></label>)}
+                  {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => item.kind === field.kind)).map((field) => <label className="field" key={field.kind}><span>{t(field.label)} *</span><FileUploadInput type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key]} /></label>)}
                 </div>
                 <div className="invoice-control-note">
                   <strong>{order?.poNumber}</strong>
@@ -781,7 +785,7 @@ export default function RequestDetail() {
 
         <aside className="request-detail-side" id="request-actions">
           {(permissions.modifiable || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
-            <div className="workspace-panel action-panel">
+            <ResponsiveActionPanel>
               <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
               {permissions.modifiable && (
                 <div className="action-item">
@@ -842,12 +846,12 @@ export default function RequestDetail() {
                   details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes to ANULADO." }]
                 })}><Trash2 size={16} /><span>{t("Annul request")}</span></button>
               )}
-            </div>
+            </ResponsiveActionPanel>
           )}
 
           <div hidden={activeTab !== "Approvals"} className="workspace-panel timeline-panel">
             <div className="section-heading"><div><h3>{t("Approval timeline")}</h3><p>{t("Electronic sign-offs, SLA dates, and workflow decisions.")}</p></div></div>
-            <ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
+            <ApprovalJourney request={request} /><ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
           </div>
 
           <div hidden={activeTab !== "History"} className="workspace-panel timeline-panel">
