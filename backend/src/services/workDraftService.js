@@ -23,8 +23,7 @@ export function assertDraftScope(user, scope) {
       : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Budget"] : ["Admin", "Accounting"] : roles[scope];
   if (!allowed?.includes(user.role)) throw new AppError(403, "Draft access is not available for this role.");
 }
-function key() {
-  const secret = process.env.DRAFT_ENCRYPTION_KEY || process.env.JWT_SECRET;
+function key(secret = process.env.DRAFT_ENCRYPTION_KEY || process.env.JWT_SECRET) {
   if (!secret && process.env.NODE_ENV === "production") throw new AppError(503, "Draft encryption is not configured.");
   return crypto.createHash("sha256").update(`uma-private-drafts:${secret || "local-development-only"}`).digest();
 }
@@ -35,9 +34,20 @@ export function encryptDraft(buffer) {
   return Buffer.concat([iv, cipher.getAuthTag(), data]);
 }
 export function decryptDraft(buffer) {
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key(), buffer.subarray(0, 12));
-  decipher.setAuthTag(buffer.subarray(12, 28));
-  return Buffer.concat([decipher.update(buffer.subarray(28)), decipher.final()]);
+  const keys = [key()];
+  // Imported drafts retain their original encryption. Never overwrite unreadable
+  // payloads; an optional original key supports recovery without changing new writes.
+  if (process.env.DRAFT_LEGACY_ENCRYPTION_KEY) keys.push(key(process.env.DRAFT_LEGACY_ENCRYPTION_KEY));
+  for (const candidate of keys) {
+    try {
+      const decipher = crypto.createDecipheriv("aes-256-gcm", candidate, buffer.subarray(0, 12));
+      decipher.setAuthTag(buffer.subarray(12, 28));
+      return Buffer.concat([decipher.update(buffer.subarray(28)), decipher.final()]);
+    } catch { /* Try the explicitly configured migration key. */ }
+  }
+  throw new AppError(409,
+    "This saved draft cannot be decrypted. Ask an administrator to restore its original draft encryption key. Your saved work has been preserved.",
+    undefined, "DRAFT_KEY_UNAVAILABLE");
 }
 export function draftView(draft, includeData = false) {
   const result = { _id: draft._id, scope: draft.scope, recordId: draft.recordId, route: draft.route, title: draft.title, revision: draft.revision, sourceVersion: draft.sourceVersion, updatedAt: draft.updatedAt };

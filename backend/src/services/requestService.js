@@ -945,9 +945,14 @@ export async function previewFinancialRequestBudget({ payload, user }) {
 }
 
 export function publicRequestPayload(value, user, actionContext) {
-  const object = value?.toObject ? value.toObject() : structuredClone(value);
+  // structuredClone removes BSON ObjectId's JSON serializer from lean/queue rows.
+  // Copy only the fields we sanitize, retaining IDs and dates for Express JSON.
+  const object = value?.toObject ? value.toObject() : value == null ? value : { ...value };
   if (object?.status) object.status = canonicalRequestStatus(object.status);
   if (object && user && !object.allowedActions) object.allowedActions = allowedRequestActions(value, user, actionContext);
-  for (const attachment of object?.attachments || []) delete attachment.path;
+  if (object?.attachments) object.attachments = object.attachments.map(attachment => {
+    const { path, ...publicAttachment } = attachment;
+    return publicAttachment;
+  });
   return object;
 }

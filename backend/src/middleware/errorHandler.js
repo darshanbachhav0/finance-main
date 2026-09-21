@@ -34,6 +34,13 @@ export function errorHandler(error, _req, res, _next) {
     message = `Please check the following fields: ${details.map(item => labels[item.field] || item.field).join(", ")}.`;
   }
 
+  if (error.name === "CastError") {
+    statusCode = 422;
+    code = ERROR_CODES.VALIDATION_ERROR;
+    message = "Invalid record identifier or filter value.";
+    details = { field: error.path };
+  }
+
   if (statusCode >= 500 && !error.isOperational) {
     message = "Internal server error";
     code = "INTERNAL_ERROR";

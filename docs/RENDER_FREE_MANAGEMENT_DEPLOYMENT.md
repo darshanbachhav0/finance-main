@@ -35,6 +35,8 @@ Use a terminal environment variable or the tool's password prompt where possible
 
 This copies MongoDB records only. The 145 labelled sample files remain local and should not be uploaded to Render Free because its filesystem is temporary. The Management aggregates and charts use the database records and continue to work.
 
+Imported private drafts also require the encryption key used on the source deployment. Keep the current Render `DRAFT_ENCRYPTION_KEY` and set `DRAFT_LEGACY_ENCRYPTION_KEY` privately to the source draft key (or the source `JWT_SECRET` if no separate draft key was configured). The BAT deployment uses `.uma-local-jwt-secret` by default. Never commit or publish this file. The fallback reads existing draft payloads and encrypted draft attachments without rewriting them; new saves use the current key. A missing/wrong migration key returns `409 DRAFT_KEY_UNAVAILABLE`, preserves saved work, and requires administrator configuration rather than deleting drafts.
+
 ## 3. Create the Finance web service
 
 1. In Render, select **New → Blueprint**.
