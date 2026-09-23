@@ -3,7 +3,16 @@ import bcrypt from "bcrypt";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import mongoose from "mongoose";
-import { pathToFileURL } from "node:url";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Same scheme as rotateDeploymentPasswords.js, so every generated initial
+// password meets the app's own password-strength rule (min 10 characters).
+function createPassword() {
+  return `${crypto.randomBytes(18).toString("base64url")}!aA7`;
+}
 
 export const MIGRATION_KEY = "2026-09-org-roster-manager-chain";
 
@@ -86,6 +95,7 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
   if (apply) await manifest.createIndex({ migration: 1, dni: 1 }, { unique: true });
 
   const dniToObjectId = new Map();
+  const issuedCredentials = [];
 
   // Pass 1: upsert by dni. $setOnInsert only takes effect for brand-new users,
   // so an existing account's role/permissions/passwordHash/active are never touched.
@@ -101,10 +111,12 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
       continue;
     }
     report.changes.push({ dni: row.dni, name: row.fullName, action: "CREATE_USER", before: null, after: setFields });
-    report.manualReview.push({ dni: row.dni, name: row.fullName, reason: "New user created without a real password; provision credentials before this account can sign in.", passwordResetRequired: true });
-    if (!apply) continue;
-    const placeholderPassword = crypto.randomBytes(32).toString("hex");
-    const passwordHash = await bcrypt.hash(placeholderPassword, 12);
+    if (!apply) {
+      report.manualReview.push({ dni: row.dni, name: row.fullName, reason: "New user will be created with a real initial password; the credential is issued only during --apply and written to a private local file, never printed to this report." });
+      continue;
+    }
+    const initialPassword = createPassword();
+    const passwordHash = await bcrypt.hash(initialPassword, 12);
     const insertResult = await users.updateOne(
       { dni: row.dni },
       { $set: setFields, $setOnInsert: { dni: row.dni, role: "Solicitor", active: true, passwordHash, passwordResetRequired: true, createdAt: new Date() } },
@@ -112,6 +124,7 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
     );
     const created = insertResult.upsertedId ? insertResult.upsertedId._id : (await users.findOne({ dni: row.dni }, { projection: { _id: 1 } }))._id;
     dniToObjectId.set(row.dni, created);
+    issuedCredentials.push({ dni: row.dni, name: row.fullName, password: initialPassword });
     await manifest.updateOne({ migration: MIGRATION_KEY, dni: row.dni }, { $set: { state: "APPLIED", appliedAt: new Date() } }, { upsert: true });
   }
 
@@ -137,6 +150,30 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
     const selfId = dniToObjectId.get(row.dni) || (await users.findOne({ dni: row.dni }, { projection: { _id: 1 } }))?._id;
     const result = await users.updateOne({ _id: selfId }, { $set: { jefe: jefeObjectId } });
     if (!result.matchedCount) report.conflicts.push({ dni: row.dni, reason: "User record disappeared between pass 1 and pass 2." });
+  }
+
+  if (apply && issuedCredentials.length) {
+    const credentialsPath = path.resolve(__dirname, "..", "..", `org-roster-credentials-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`);
+    const lines = [
+      "UMA org roster import - private initial credentials",
+      `Generated: ${new Date().toISOString()}`,
+      `Database: ${db.databaseName}`,
+      "",
+      "Each person logs in with their DNI, not email. Distribute each line only",
+      "to that person, over a secure channel, then delete this file. Every account",
+      "has passwordResetRequired set, but changing the password is not yet",
+      "enforced by the app on first login — treat these as sensitive until that",
+      "is built, and rotate any password you suspect was seen by the wrong person.",
+      ""
+    ];
+    for (const credential of issuedCredentials) {
+      lines.push(`${credential.name} | DNI: ${credential.dni}`);
+      lines.push(`Password: ${credential.password}`);
+      lines.push("");
+    }
+    await fs.writeFile(credentialsPath, `${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+    report.credentialsFile = credentialsPath;
+    report.credentialsIssued = issuedCredentials.length;
   }
 
   return report;
