@@ -29,12 +29,22 @@ export function flattenConsolidationRow(row, costCenter, expenseType) {
 }
 
 export async function persistReportFile(fileName, content) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.csv$/.test(String(fileName || ""))) {
+    throw new AppError(400, "Invalid report file name.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  }
   await fs.mkdir(reportsDir, { recursive: true });
-  await fs.writeFile(path.join(reportsDir, fileName), content, "utf8");
+  const absolutePath = path.resolve(reportsDir, fileName);
+  const rootPrefix = `${path.resolve(reportsDir)}${path.sep}`;
+  if (!absolutePath.startsWith(rootPrefix)) {
+    throw new AppError(400, "Invalid report file name.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  }
+  await fs.writeFile(absolutePath, content, "utf8");
   return `/generated/reports/${fileName}`;
 }
 import fs from "fs/promises";
 import path from "path";
+import { AppError } from "../utils/AppError.js";
+import { ERROR_CODES } from "../utils/constants.js";
 import { generatedRoot } from "./storageService.js";
 
 const reportsDir = path.join(generatedRoot, "reports");

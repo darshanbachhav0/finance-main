@@ -14,12 +14,17 @@ import { budgetOverview } from "../services/budgetOverviewService.js";
 import { persistReportFile, toCsv } from "../services/exportService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { requestVisibilityFilter } from "../utils/permissions.js";
 
 const excludedStatuses = [REQUEST_STATUS.DRAFT, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED];
 const pendingAgreedDate = { $and: [
   { $in: ["$paymentTermsSnapshot.source", ["PURCHASE_ORDER", "QUOTATION"]] },
   { $eq: [{ $ifNull: ["$dueDate", null] }, null] }
 ] };
+
+function safePeriodSegment(value) {
+  return /^\d{4}-\d{2}$/.test(String(value || "")) ? value : "all";
+}
 
 function previousPeriod(period) {
   const date = /^\d{4}-\d{2}$/.test(period || "") ? new Date(`${period}-01T00:00:00.000Z`) : new Date();
@@ -48,9 +53,9 @@ function requestMatch(query, user, { includeInactiveWorkflow = false } = {}) {
   }
   const constraints = [];
   if (query.area) constraints.push(areaConstraint(query.area));
-  if (user?.role === ROLES.APPROVER) {
-    const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
-    if (!areas.includes("*")) constraints.push({ $or: [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }] });
+  if (user && user.role !== ROLES.ADMIN) {
+    const visibility = requestVisibilityFilter(user);
+    if (visibility.$or) constraints.push(visibility);
   }
   if (constraints.length) match.$and = constraints;
   return match;
@@ -318,7 +323,7 @@ export const exportManagementReport = asyncHandler(async (req, res) => {
     penEquivalent: request.totalPENEquivalent
   }));
   const content = toCsv(rows);
-  const fileName = `management-report-${req.query.period || "all"}-${Date.now()}.csv`;
+  const fileName = `management-report-${safePeriodSegment(req.query.period)}-${Date.now()}.csv`;
   const url = await persistReportFile(fileName, content);
   await GeneratedFile.create({ kind: "MANAGEMENT_CSV", fileName, url, period: req.query.period, requestNumbers: rows.map((row) => row.requestNumber), rowCount: rows.length, generatedBy: req.user._id, metadata: { dateFrom: req.query.dateFrom, dateTo: req.query.dateTo, currency: req.query.currency, requestType: req.query.requestType, area: req.query.area, costCenter: req.query.costCenter, project: req.query.project } });
   res.setHeader("Content-Type", "text/csv");

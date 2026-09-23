@@ -29,6 +29,8 @@
     "sla:check": "node src/workers/slaWorker.js --once",
     "migrate:triple-track": "node scripts/migrateTripleTrackWorkflow.js",
     "migrate:triple-track:apply": "node scripts/migrateTripleTrackWorkflow.js --apply",
+    "migrate:org-roster": "node scripts/migrateOrgRosterAndManagerChain.js",
+    "migrate:org-roster:apply": "node scripts/migrateOrgRosterAndManagerChain.js --apply",
     "sunat:padron:index": "node scripts/indexSunatPadron.js",
     "sunat:padron:sync": "node scripts/syncSunatPadron.js",
     "sunat:padron:sync:force": "node scripts/syncSunatPadron.js --force",

@@ -12,10 +12,15 @@ function signToken(user) {
 }
 
 export const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) throw new AppError(400, "Email and password are required.");
+  const { dni, email, password } = req.body;
+  if (!password || (!dni && !email)) throw new AppError(400, "DNI and password are required.");
 
-  const user = await User.findOne({ email: String(email).toLowerCase() });
+  // DNI is the login identifier going forward. The email fallback exists only
+  // for one transition release so already-issued frontend builds keep working;
+  // remove it once every client sends dni.
+  const user = dni
+    ? await User.findOne({ dni: String(dni).trim() })
+    : await User.findOne({ email: String(email).toLowerCase() });
   if (!user || !user.active || !(await user.comparePassword(password))) {
     throw new AppError(401, "Invalid credentials.");
   }
@@ -24,17 +29,18 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const register = asyncHandler(async (req, res) => {
-  const { name, email, password, area } = req.body;
-  if (!name || !email || !password) throw new AppError(400, "Name, email, and password are required.");
+  const { name, dni, email, password, area } = req.body;
+  if (!name || !dni || !password) throw new AppError(400, "Name, DNI, and password are required.");
 
-  const existing = await User.findOne({ email: String(email).toLowerCase() });
-  if (existing) throw new AppError(409, "A user with this email already exists.");
+  const existing = await User.findOne({ dni: String(dni).trim() });
+  if (existing) throw new AppError(409, "A user with this DNI already exists.");
 
   const userCount = await User.countDocuments();
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({
     name,
-    email,
+    dni: String(dni).trim(),
+    email: email || undefined,
     passwordHash,
     area,
     role: userCount === 0 ? ROLES.ADMIN : ROLES.SOLICITOR

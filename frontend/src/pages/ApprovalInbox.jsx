@@ -32,10 +32,17 @@ export default function ApprovalInbox() {
       : 0
   }), [approvalTable.payload.summary]);
 
+  function activeStepOf(row) {
+    const steps = [...(row.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    return steps.find((step) => step.required !== false && step.status === "PENDING") || null;
+  }
+  const isChainRow = (row) => activeStepOf(row)?.source === "MANAGER_CHAIN";
+
   async function decide(comments) {
     setProcessing(true);
     try {
-      const response = await api.post(`/approvals/${confirm.row._id}/${confirm.type}`, { comments });
+      const body = confirm.type === "approve" && typeof confirm.forward === "boolean" ? { comments, forward: confirm.forward } : { comments };
+      const response = await api.post(`/approvals/${confirm.row._id}/${confirm.type}`, body);
       const messages = {
         approve: confirm.row.approvalStage === "AREA_DIRECTOR" ? "Director electronic sign-off recorded." : "Approval electronic sign-off recorded.",
         observe: "Request observed and returned for correction.",
@@ -55,11 +62,26 @@ export default function ApprovalInbox() {
     }
   }
 
-  function openDecision(row, type) {
+  function openDecision(row, type, forward) {
     const approve = type === "approve";
     const directorStage = row.approvalStage === "AREA_DIRECTOR";
+    const chainRow = isChainRow(row);
     const definitions = {
-      approve: {
+      approve: chainRow ? (forward ? {
+        title: "Approve and forward this request?",
+        description: "This records your approval and sends it to the next manager in the chain for a further decision.",
+        confirmLabel: "Approve and forward",
+        tone: "success",
+        inputLabel: "Approval comments",
+        result: "This step is marked approved and the request moves to the next manager in the chain."
+      } : {
+        title: "Approve this request and finalize?",
+        description: "This records your approval as final. No further manager will review it — the request moves directly into the budget/accounting pipeline.",
+        confirmLabel: "Approve and finalize",
+        tone: "success",
+        inputLabel: "Approval comments",
+        result: "The approval chain is closed and budget commitment begins."
+      }) : {
         title: "Approve this request?",
         description: directorStage
           ? "This records an authenticated Area Director electronic sign-off and advances the configured route."
@@ -83,6 +105,7 @@ export default function ApprovalInbox() {
     setConfirm({
       row,
       type,
+      forward,
       title: definition.title,
       description: definition.description,
       confirmLabel: definition.confirmLabel,
@@ -126,6 +149,7 @@ export default function ApprovalInbox() {
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
 
+            { label: "Approve and forward", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE") || !isChainRow(row), onClick: () => openDecision(row, "approve", true) },
             { label: "Observe", icon: MessageSquareWarning, hidden: !hasAction(row, "OBSERVE"), onClick: () => openDecision(row, "observe") },
             { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") },
             { label: "Reject", icon: XCircle, tone: "danger", hidden: !hasAction(row, "REJECT"), onClick: () => openDecision(row, "reject") }
@@ -137,7 +161,7 @@ export default function ApprovalInbox() {
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
             { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
-            { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve")}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
+            { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />
       </div>

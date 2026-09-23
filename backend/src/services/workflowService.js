@@ -27,9 +27,10 @@ const observationStates = [
 
 const transitionGraph = Object.freeze({
   BORRADOR: ["PENDIENTE_APROBACION", "ANULADO"],
-  PENDIENTE_APROBACION: ["APROBADO_DIRECTOR", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  PENDIENTE_APROBACION: ["APROBADO_DIRECTOR", "APROBADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO_DIRECTOR: ["APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO_VICERRECTOR: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  APROBADO: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   COMPROMISO_PRESUPUESTAL: ["CONTABILIZADO", ...observationStates, "DEVUELTO", "ANULADO"],
   CONTABILIZADO: ["PROGRAMADO", ...observationStates, "ANULADO"],
   PROGRAMADO: ["TXT_GENERADO", "CONTABILIZADO", "PAGO_REBOTADO", "ANULADO"],
@@ -39,7 +40,7 @@ const transitionGraph = Object.freeze({
   CONCILIADO: ["CERRADO"],
   CERRADO: [], RECHAZADO: [], ANULADO: [],
   ...Object.fromEntries([...observationStates, "DEVUELTO"].map(status => [status,
-    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "ANULADO"]]))
+    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "APROBADO", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "ANULADO"]]))
 });
 
 const roleTargets = Object.freeze({
@@ -48,6 +49,7 @@ const roleTargets = Object.freeze({
   [REQUEST_STATUS.PENDING_APPROVAL]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.DIRECTOR_APPROVED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT],
   [REQUEST_STATUS.VICE_RECTOR_APPROVED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT],
+  [REQUEST_STATUS.APPROVED]: [ROLES.ADMIN],
   [REQUEST_STATUS.BUDGET_COMMITTED]: [ROLES.ADMIN, ROLES.APPROVER, ROLES.BUDGET, ROLES.ACCOUNTING],
   [REQUEST_STATUS.ACCOUNTED]: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.APPROVER, ROLES.BUDGET, ROLES.SOLICITOR],
   [REQUEST_STATUS.SCHEDULED]: [ROLES.ADMIN, ROLES.TREASURY],
@@ -79,11 +81,11 @@ function requiresFiscalXml(request) {
   return request.flowType === FLOW_TYPE.B;
 }
 
-function assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason } = {}) {
+function assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason, skipRoleCheck = false } = {}) {
   if (String(adminOverrideReason || "").trim()) throw new AppError(403, "Emergency approval overrides are disabled. Use the assigned approval route.");
   if (!user) throw new AppError(401, "Authentication is required.", undefined, ERROR_CODES.FORBIDDEN);
   const allowedRoles = roleTargets[targetStatus] || [];
-  if (!allowedRoles.includes(user.role)) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
+  if (!skipRoleCheck && !allowedRoles.includes(user.role)) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
 
   if ([REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL].includes(targetStatus)) {
     if (user.role !== ROLES.ADMIN && requesterId(request) !== String(user._id)) throw new AppError(403, "Only the requester can submit this request.", undefined, ERROR_CODES.FORBIDDEN);
@@ -110,7 +112,7 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
   const supplierNotRequired = request.flowType === FLOW_TYPE.C;
   if (!supplierNotRequired && ![
     REQUEST_STATUS.DRAFT, REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL,
-    REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.VOIDED,
+    REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.VOIDED,
     ...observationStates
   ].includes(targetStatus)) {
     const supplier = request.supplier?.homologationStatus ? request.supplier : await Supplier.findById(request.supplier);
@@ -118,7 +120,7 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
     if (!valid) throw new AppError(422, "The supplier is not active and homologated.", { supplier: request.supplier }, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
   }
 
-  if ([REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED].includes(targetStatus)) {
+  if ([REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.BUDGET_COMMITTED].includes(targetStatus)) {
     await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
     if (requiresFiscalXml(request) && !request.xmlValidation?.validated) throw new AppError(422, "A valid XML fiscal document is required.", { requestType: request.requestType, flowType: request.flowType }, ERROR_CODES.XML_VALIDATION_FAILED);
   }
@@ -135,14 +137,14 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
   if (targetStatus === REQUEST_STATUS.CLOSED && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Non-deductible rendition balances must be reimbursed or assigned to payroll before closure.", { nonDeductibleOutstanding: request.rendition?.nonDeductibleOutstanding }, ERROR_CODES.RENDITION_REQUIRED);
 }
 
-export async function transitionRequest({ request, targetStatus, user, req, action, comments, approvalStage, nextApprovalStage, dueAt, adminOverrideReason, eventDueAt, skipControls = false, session }) {
+export async function transitionRequest({ request, targetStatus, user, req, action, comments, approvalStage, nextApprovalStage, dueAt, adminOverrideReason, eventDueAt, skipControls = false, skipRoleCheck = false, session }) {
   const originalStatus = request.status;
   const from = canonicalRequestStatus(originalStatus);
   targetStatus = canonicalRequestStatus(targetStatus);
   if (isTerminalRequest(from)) throw new AppError(409, "Terminal requests cannot transition.", { from, to: targetStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   if (from === targetStatus) return request;
   if (!canTransition(from, targetStatus)) throw new AppError(409, `Invalid request status transition from ${from} to ${targetStatus}.`, { from, to: targetStatus, allowed: allowedTransitions(from) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason });
+  assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason, skipRoleCheck });
   // Period and financial evidence are mandatory, including internal recovery/batch calls.
   await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
   if (targetStatus === "CONTABILIZADO") await assertPostingAllowed(request, { user, req });
@@ -152,7 +154,7 @@ export async function transitionRequest({ request, targetStatus, user, req, acti
     if (!progress.status || stages.indexOf(progress.status) < stages.indexOf(targetStatus)) throw new AppError(422, "Child financial evidence does not satisfy this milestone.", progress, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (targetStatus === "CERRADO") await assertClosureAllowed(request, { session });
-  if (!skipControls) await assertTransitionControls(request, targetStatus, { user, req, periodAction: [REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED].includes(targetStatus) ? "APPROVE" : undefined });
+  if (!skipControls) await assertTransitionControls(request, targetStatus, { user, req, periodAction: [REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED].includes(targetStatus) ? "APPROVE" : undefined });
 
   const oldValues = { status: from, approvalStage: request.approvalStage, approvalDueAt: request.approvalDueAt };
   const previousDueAt = request.approvalDueAt;

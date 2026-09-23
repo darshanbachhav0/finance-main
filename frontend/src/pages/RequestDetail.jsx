@@ -208,6 +208,13 @@ export default function RequestDetail() {
     };
   }, [request]);
 
+  const activeApprovalStep = useMemo(() => {
+    const steps = [...(request?.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    return steps.find((step) => step.required !== false && step.status === "PENDING") || null;
+  }, [request]);
+  const isChainApprovalStep = activeApprovalStep?.source === "MANAGER_CHAIN";
+  const canForwardChain = isChainApprovalStep && Boolean(user?.jefe);
+
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
     .map((rule) => ({
@@ -238,11 +245,11 @@ export default function RequestDetail() {
   const procurementReadiness = related.procurementReadiness;
   const trackCRenditionRequirements = useMemo(() => summarizeRenditionRequirements(documentStatus), [documentStatus]);
 
-  async function runAction(type, comments = "") {
+  async function runAction(type, comments = "", forward) {
     setProcessing(true);
     try {
       if (["approve", "observe", "return", "reject"].includes(type)) {
-        await api.post(`/approvals/${id}/${type}`, { comments });
+        await api.post(`/approvals/${id}/${type}`, type === "approve" && typeof forward === "boolean" ? { comments, forward } : { comments });
       }
       if (type === "budget") await api.post(`/budget/requests/${id}/commit`);
       if (type === "order") await api.post(`/requests/${id}/procurement-order`);
@@ -317,10 +324,23 @@ export default function RequestDetail() {
     }
   }
 
-  function decision(type) {
+  function decision(type, forward) {
     const details = { label: "Request", value: request.requestNumber };
     const actions = {
-      approve: {
+      approve: isChainApprovalStep ? (forward ? {
+        title: "Approve and forward this request?",
+        description: `Record your approval and send it to ${activeApprovalStep?.approverSnapshot?.name ? "your manager" : "the next manager"} for a further decision.`,
+        confirmLabel: "Approve and forward",
+        inputLabel: "Approval comments",
+        details: [details, { label: "Result", value: "This step is marked approved and the request moves to the next manager in the chain." }]
+      } : {
+        title: "Approve this request and finalize?",
+        description: "Record your approval as final. No further manager will review it — the request moves directly into the budget/accounting pipeline.",
+        confirmLabel: "Approve and finalize",
+        tone: "success",
+        inputLabel: "Approval comments",
+        details: [details, { label: "Result", value: "The approval chain is closed and budget commitment begins." }]
+      }) : {
         title: "Approve this request?",
         description: "Record an authenticated electronic sign-off and advance the configured route.",
         confirmLabel: "Approve request",
@@ -355,7 +375,7 @@ export default function RequestDetail() {
         details: [details, { label: "Result", value: "Status changes to RECHAZADO." }]
       }
     };
-    setConfirm({ type, ...actions[type] });
+    setConfirm({ type, forward, ...actions[type] });
   }
 
   if (loading && !request) return <WorkspaceSkeleton label="Loading request..." />;
@@ -791,7 +811,13 @@ export default function RequestDetail() {
               )}
               {permissions.canApprove && (
                 <div className="action-buttons">
-                  {permissions.canApprove && <button type="button" className="primary-button" onClick={() => decision("approve")}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>}
+                  {permissions.canApprove && isChainApprovalStep && (
+                    <>
+                      <button type="button" className="primary-button approve-button" onClick={() => decision("approve", false)}><CheckCircle2 size={16} /><span>{t("Approve and finalize")}</span></button>
+                      {canForwardChain && <button type="button" className="secondary-button" onClick={() => decision("approve", true)}><CheckCircle2 size={16} /><span>{t("Approve and forward")}</span></button>}
+                    </>
+                  )}
+                  {permissions.canApprove && !isChainApprovalStep && <button type="button" className="primary-button" onClick={() => decision("approve")}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>}
                   {permissions.canObserve && <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>}
                   {permissions.canReturn && <button type="button" className="secondary-button" onClick={() => decision("return")}><CornerUpLeft size={16} /><span>{t("Return")}</span></button>}
                   {permissions.canReject && <button type="button" className="danger-button subtle" onClick={() => decision("reject")}><XCircle size={16} /><span>{t("Reject")}</span></button>}
@@ -876,7 +902,7 @@ export default function RequestDetail() {
         inputRequired={confirm?.inputRequired}
         loading={processing}
         onClose={() => !processing && setConfirm(null)}
-        onConfirm={(comments) => runAction(confirm.type, comments)}
+        onConfirm={(comments) => runAction(confirm.type, comments, confirm.forward)}
       />
     </section></DetailTab.Provider>
   );

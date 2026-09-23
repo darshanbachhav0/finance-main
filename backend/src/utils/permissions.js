@@ -1,5 +1,6 @@
 import { isTerminalRequest } from "../../../shared/workflowStatus.mjs";
-import { APPROVAL_STAGES, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
+import { activeApprovalStep } from "../services/approvalRuleService.js";
+import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
 export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
@@ -43,13 +44,47 @@ export function canModifyRequest(request, user) {
   );
 }
 
+function requesterIdOf(request) {
+  return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
+}
+
+// Visibility is identity-based for the manager chain: a plain Solicitor (which
+// most chain approvers are) has no blanket view of other people's requests —
+// they see their own, and anything specifically routed to them for approval.
+// Roles with REQUEST_VIEW_ALL (Accounting, Treasury, Budget, Management, and
+// the legacy Approver role kept for backward compatibility) are unaffected.
 export function canViewRequest(request, user) {
   if (!request || !user) return false;
-  if (user.role === ROLES.SOLICITOR) {
-    return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor) === String(user._id);
-  }
+  if (user.role === ROLES.ADMIN) return true;
+  if (requesterIdOf(request) === String(user._id)) return true;
+  if ((request.approvalRouteSnapshot || []).some((step) => step.approverUser && String(step.approverUser?._id || step.approverUser) === String(user._id))) return true;
+  // Preserves the legacy Approver/Management carve-out exactly: broad but
+  // never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
+  // (Accounting, Treasury, Budget) keeps its original unrestricted access.
   if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
-  return hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL) || user.role === ROLES.ADMIN;
+  return hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL);
+}
+
+export function requestVisibilityFilter(user) {
+  if (!user) return { _id: null };
+  if (user.role === ROLES.ADMIN) return {};
+  if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+    return { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
+  }
+  if (hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL)) return {};
+  return {
+    $or: [
+      { requester: user._id },
+      { solicitor: user._id },
+      { "approvalRouteSnapshot.approverUser": user._id }
+    ]
+  };
+}
+
+export function isActiveChainApprover(request, user) {
+  if (!request || !user) return false;
+  const step = activeApprovalStep(request);
+  return Boolean(step) && step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN && String(step.approverUser?._id || step.approverUser) === String(user._id);
 }
 
 export function canApproveStage(request, user) {

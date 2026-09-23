@@ -13,8 +13,17 @@ async function detectTransactionSupport() {
   return transactionsSupported;
 }
 
+function atomicWritesRequired() {
+  return process.env.NODE_ENV === "production" || String(process.env.REQUIRE_ATOMIC_WRITES || "").toLowerCase() === "true";
+}
+
 export async function runFinancialOperation(work) {
-  if (!(await detectTransactionSupport())) return work(null);
+  if (!(await detectTransactionSupport())) {
+    if (atomicWritesRequired()) {
+      throw new Error("MongoDB replica-set transactions are required in this environment; refusing a non-atomic financial write. Deploy against a replica set or set REQUIRE_ATOMIC_WRITES=false only for local/non-production use.");
+    }
+    return work(null);
+  }
   const session = await mongoose.startSession();
   try {
     let result;

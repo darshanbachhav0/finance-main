@@ -35,6 +35,8 @@
     "worker:batch": "npm run worker:batch --workspace backend",
     "migrate:triple-track": "npm run migrate:triple-track --workspace backend",
     "migrate:triple-track:apply": "npm run migrate:triple-track:apply --workspace backend",
+    "migrate:org-roster": "npm run migrate:org-roster --workspace backend",
+    "migrate:org-roster:apply": "npm run migrate:org-roster:apply --workspace backend",
     "migrate:document-phases": "npm run migrate:document-phases --workspace backend",
     "migrate:document-phases:apply": "npm run migrate:document-phases:apply --workspace backend",
     "import:ceco": "npm run import:ceco --workspace backend",
