@@ -46,7 +46,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canModifyRequest, canUseCostCenter, canViewRequest } from "../utils/permissions.js";
+import { canModifyRequest, canUseCostCenter, canViewRequest, requestVisibilityFilter } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
@@ -587,12 +587,10 @@ async function submitPreparedRequest(request, { user, req, comments }) {
 
 export async function listRequestsPage(queryParams, user) {
   const query = {};
-  if (user.role === ROLES.SOLICITOR) query.$or = [{ requester: user._id }, { solicitor: user._id }];
-  if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) query.status = { $ne: REQUEST_STATUS.DRAFT };
+  Object.assign(query, requestVisibilityFilter(user));
   if (queryParams.status === "RENDICION_PENDIENTE") { query.flowType = "C"; query["rendition.status"] = { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }; query.status = { $nin: terminalStatusValues }; }
   else if (queryParams.status) query.status = { $in: statusAliases(canonicalRequestStatus(queryParams.status)) };
   applyRenditionStatusFilter(query, queryParams.renditionStatus);
-  if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role) && queryParams.status === REQUEST_STATUS.DRAFT) query.status = "__FORBIDDEN_DRAFT__";
   if (queryParams.type || queryParams.requestType) query.requestType = queryParams.type || queryParams.requestType;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.expenseNature) query.expenseNature = queryParams.expenseNature;

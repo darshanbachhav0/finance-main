@@ -1,8 +1,8 @@
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "./approvalRuleService.js";
 import { canTransition } from "./workflowService.js";
-import { canApproveStage, canModifyRequest, hasPermission } from "../utils/permissions.js";
-import { PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { canApproveStage, canModifyRequest, hasPermission, isActiveChainApprover } from "../utils/permissions.js";
+import { APPROVAL_ROUTING_MODE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 export const REQUEST_ACTION = Object.freeze({
   EDIT: "EDIT",
@@ -45,9 +45,13 @@ function ownsRequest(request, user) {
 
 function approvalActionsAllowed(request, user) {
   if (!approvalStatuses.has(canonicalRequestStatus(request.status))) return false;
-  if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE) || ownsRequest(request, user)) return false;
-  if (!canApproveStage(request, user)) return false;
+  if (ownsRequest(request, user)) return false;
   const step = activeApprovalStep(request);
+  if (step?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN) {
+    return user.role === ROLES.ADMIN || isActiveChainApprover(request, user);
+  }
+  if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) return false;
+  if (!canApproveStage(request, user)) return false;
   if (step?.role && user.role !== ROLES.ADMIN && step.role !== user.role) return false;
   if ((step?.approvalLevel || request.approvalStage) === "AREA_DIRECTOR" && user.role !== ROLES.ADMIN) {
     const area = request.requesterArea || request.requestingArea;

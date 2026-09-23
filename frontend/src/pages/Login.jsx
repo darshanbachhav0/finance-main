@@ -8,22 +8,24 @@ import ThemeControl from "../components/ThemeControl.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
-const demos = [
-  { key: "admin", role: "Admin", email: "demo.admin@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "solicitor", role: "Solicitor", email: "demo.solicitante.salud@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "director", role: "Area Director", email: "demo.director.salud@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "vice", role: "Vice Rector", email: "demo.vicerrector@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "accounting", role: "Accounting", email: "demo.contabilidad@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "treasury", role: "Treasury", email: "demo.tesoreria@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "budget", role: "Budget", email: "demo.presupuesto@uma.edu.pe", password: "UMA-Demo-2026!" },
-  { key: "management", role: "Management", email: "demo.gerencia@uma.edu.pe", password: "UMA-Demo-2026!" }
-];
+const DEMO_LOGIN_ENABLED = import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
+
+const demos = DEMO_LOGIN_ENABLED ? [
+  { key: "admin", role: "Admin", dni: "10000001", password: "UMA-Demo-2026!" },
+  { key: "solicitor", role: "Solicitor", dni: "10000002", password: "UMA-Demo-2026!" },
+  { key: "director", role: "Area Director", dni: "10000003", password: "UMA-Demo-2026!" },
+  { key: "vice", role: "Vice Rector", dni: "10000004", password: "UMA-Demo-2026!" },
+  { key: "accounting", role: "Accounting", dni: "10000005", password: "UMA-Demo-2026!" },
+  { key: "treasury", role: "Treasury", dni: "10000006", password: "UMA-Demo-2026!" },
+  { key: "budget", role: "Budget", dni: "10000007", password: "UMA-Demo-2026!" },
+  { key: "management", role: "Management", dni: "10000008", password: "UMA-Demo-2026!" }
+] : [];
 
 export default function Login() {
   const { login, isAuthenticated } = useAuth();
   const { t } = useLanguage();
   const [selectedDemo, setSelectedDemo] = useState("");
-  const [email, setEmail] = useState("");
+  const [dni, setDni] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,7 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      await login(email, password);
+      await login(dni, password);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -49,11 +51,11 @@ export default function Login() {
     setSelectedDemo(event.target.value);
     setError("");
     if (account) {
-      setEmail(account.email);
+      setDni(account.dni);
       setPassword(account.password);
       return;
     }
-    setEmail("");
+    setDni("");
     setPassword("");
   }
 
@@ -69,24 +71,28 @@ export default function Login() {
         </div>
         <form className="login-form" onSubmit={submit}>
           <div className="login-form-heading"><LockKeyhole size={24} /><div><h1>{t("Welcome to UMA")}</h1><p>{t("Sign in with your university account.")}</p></div></div>
-          <fieldset className="login-role-access" disabled={loading}>
-            <legend><UsersRound size={16} />{t("Demo role access")}</legend>
-            <label className="field">
-              <span>{t("Choose demo role")}</span>
-              <select value={selectedDemo} onChange={selectDemo} autoFocus>
-                <option value="">{t("Select a role...")}</option>
-                {demos.map((demo) => <option key={demo.key} value={demo.key}>{t(demo.role)}</option>)}
-              </select>
-            </label>
-            <p className={selectedAccount ? "login-role-help is-ready" : "login-role-help"} role="status">
-              {selectedAccount
-                ? t("Demo credentials ready for {role}.").replace("{role}", t(selectedAccount.role))
-                : t("Selecting a role fills the corresponding UMA demo email and password.")}
-            </p>
-          </fieldset>
-          <div className="login-divider"><span>{t("Or sign in with an assigned account")}</span></div>
+          {DEMO_LOGIN_ENABLED && (
+            <>
+              <fieldset className="login-role-access" disabled={loading}>
+                <legend><UsersRound size={16} />{t("Demo role access")}</legend>
+                <label className="field">
+                  <span>{t("Choose demo role")}</span>
+                  <select value={selectedDemo} onChange={selectDemo} autoFocus>
+                    <option value="">{t("Select a role...")}</option>
+                    {demos.map((demo) => <option key={demo.key} value={demo.key}>{t(demo.role)}</option>)}
+                  </select>
+                </label>
+                <p className={selectedAccount ? "login-role-help is-ready" : "login-role-help"} role="status">
+                  {selectedAccount
+                    ? t("Demo credentials ready for {role}.").replace("{role}", t(selectedAccount.role))
+                    : t("Selecting a role fills the corresponding UMA demo DNI and password.")}
+                </p>
+              </fieldset>
+              <div className="login-divider"><span>{t("Or sign in with an assigned account")}</span></div>
+            </>
+          )}
           <Message type="error">{error}</Message>
-          <label className="field"><span>{t("Email")}</span><input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+          <label className="field"><span>{t("DNI")}</span><input type="text" inputMode="numeric" pattern="[0-9]{6,8}" autoComplete="username" value={dni} onChange={(event) => setDni(event.target.value)} required autoFocus={!DEMO_LOGIN_ENABLED} /></label>
           <label className="field"><span>{t("Password")}</span><div className="password-control"><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /><button type="button" className="icon-button quiet" aria-label={t(showPassword ? "Hide password" : "Show password")} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           <button className="primary-button login-submit" type="submit" disabled={loading}><LogIn size={17} /><span>{t(loading ? "Signing in..." : "Sign in")}</span></button>
         </form>

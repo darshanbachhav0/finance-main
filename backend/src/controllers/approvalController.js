@@ -13,6 +13,7 @@ function decisionHandler(action) {
       action,
       comments: req.body.comments,
       adminOverrideReason: req.body.adminOverrideReason,
+      forward: action === "APPROVE" ? req.body.forward : undefined,
       user: req.user,
       req
     });

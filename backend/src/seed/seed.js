@@ -106,6 +106,7 @@ async function seedUsers(costCenters) {
       key: "admin",
       name: "Administración ERP UMA (Demo)",
       email: "demo.admin@uma.edu.pe",
+      dni: "10000001",
       role: ROLES.ADMIN,
       area: AREAS.IT,
       approvalAreas: ["*"]
@@ -114,6 +115,7 @@ async function seedUsers(costCenters) {
       key: "solicitorHealth",
       name: "Solicitante Ciencias de la Salud (Demo)",
       email: "demo.solicitante.salud@uma.edu.pe",
+      dni: "10000002",
       role: ROLES.SOLICITOR,
       area: AREAS.HEALTH,
       costCenter: costCenters.health,
@@ -123,6 +125,7 @@ async function seedUsers(costCenters) {
       key: "directorHealth",
       name: "Dirección de Ciencias de la Salud (Demo)",
       email: "demo.director.salud@uma.edu.pe",
+      dni: "10000003",
       role: ROLES.APPROVER,
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
       area: AREAS.HEALTH,
@@ -132,6 +135,7 @@ async function seedUsers(costCenters) {
       key: "viceRector",
       name: "Vicerrectorado Académico UMA (Demo)",
       email: "demo.vicerrector@uma.edu.pe",
+      dni: "10000004",
       role: ROLES.APPROVER,
       approvalLevel: APPROVAL_STAGES.VICE_RECTOR,
       area: AREAS.RECTORATE,
@@ -141,6 +145,7 @@ async function seedUsers(costCenters) {
       key: "budget",
       name: "Presupuesto UMA (Demo)",
       email: "demo.presupuesto@uma.edu.pe",
+      dni: "10000007",
       role: ROLES.BUDGET,
       area: AREAS.FINANCE,
       approvalAreas: ["*"]
@@ -149,6 +154,7 @@ async function seedUsers(costCenters) {
       key: "accounting",
       name: "Contabilidad UMA (Demo)",
       email: "demo.contabilidad@uma.edu.pe",
+      dni: "10000005",
       role: ROLES.ACCOUNTING,
       area: AREAS.FINANCE,
       approvalAreas: ["*"]
@@ -157,6 +163,7 @@ async function seedUsers(costCenters) {
       key: "treasury",
       name: "Tesorería UMA (Demo)",
       email: "demo.tesoreria@uma.edu.pe",
+      dni: "10000006",
       role: ROLES.TREASURY,
       area: AREAS.FINANCE,
       approvalAreas: ["*"]
@@ -165,6 +172,7 @@ async function seedUsers(costCenters) {
       key: "management",
       name: "Gerencia / Rectorado UMA (Demo)",
       email: "demo.gerencia@uma.edu.pe",
+      dni: "10000008",
       role: ROLES.MANAGEMENT,
       approvalLevel: APPROVAL_STAGES.RECTORATE,
       area: AREAS.RECTORATE,
@@ -174,6 +182,7 @@ async function seedUsers(costCenters) {
       key: "solicitorPharmacy",
       name: "Solicitante Farmacia y Bioquímica (Demo)",
       email: "demo.solicitante.farmacia@uma.edu.pe",
+      dni: "10000009",
       role: ROLES.SOLICITOR,
       area: AREAS.PHARMACY,
       costCenter: costCenters.pharmacy,
@@ -183,6 +192,7 @@ async function seedUsers(costCenters) {
       key: "directorPharmacy",
       name: "Dirección de Farmacia y Bioquímica (Demo)",
       email: "demo.director.farmacia@uma.edu.pe",
+      dni: "10000010",
       role: ROLES.APPROVER,
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
       area: AREAS.PHARMACY,
@@ -192,6 +202,7 @@ async function seedUsers(costCenters) {
       key: "solicitorEngineering",
       name: "Solicitante Ingeniería y Negocios (Demo)",
       email: "demo.solicitante.ingenieria@uma.edu.pe",
+      dni: "10000011",
       role: ROLES.SOLICITOR,
       area: AREAS.ENGINEERING,
       costCenter: costCenters.engineering,
@@ -201,6 +212,7 @@ async function seedUsers(costCenters) {
       key: "directorEngineering",
       name: "Dirección de Ingeniería y Negocios (Demo)",
       email: "demo.director.ingenieria@uma.edu.pe",
+      dni: "10000012",
       role: ROLES.APPROVER,
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
       area: AREAS.ENGINEERING,
@@ -215,6 +227,7 @@ async function seedUsers(costCenters) {
       name: definition.name,
       employeeCode: `UMA-DEMO-${String(index + 1).padStart(3, "0")}`,
       email: definition.email,
+      dni: definition.dni,
       passwordHash,
       role: definition.role,
       approvalLevel: definition.approvalLevel,
@@ -230,6 +243,23 @@ async function seedUsers(costCenters) {
     [AREAS.PHARMACY]: users.directorPharmacy,
     [AREAS.ENGINEERING]: users.directorEngineering
   };
+
+  // A small manager chain so the feature is demoable without running the real
+  // org-roster import: Solicitor -> Area Director -> Vice Rector -> (root).
+  const chainLinks = [
+    ["solicitorHealth", "directorHealth"],
+    ["directorHealth", "viceRector"],
+    ["solicitorPharmacy", "directorPharmacy"],
+    ["directorPharmacy", "viceRector"],
+    ["solicitorEngineering", "directorEngineering"],
+    ["directorEngineering", "viceRector"]
+  ];
+  for (const [reportKey, jefeKey] of chainLinks) {
+    if (users[reportKey] && users[jefeKey]) {
+      users[reportKey].jefe = users[jefeKey]._id;
+      await users[reportKey].save();
+    }
+  }
   return users;
 }
 

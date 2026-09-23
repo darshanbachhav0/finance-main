@@ -25,6 +25,8 @@ import "./supplierProposalValidation.test.js";
 
 import "./workflowStatus.test.js";
 import "./documentApprovalWorkflow.test.js";
+import "./managerChainApproval.test.js";
+import "./authDni.test.js";
 import "./budgetFiscalImprovements.test.js";
 import "./cecoImport.test.js";
 import "./bbvaFormat.test.js";

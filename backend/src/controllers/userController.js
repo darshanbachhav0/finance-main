@@ -6,7 +6,7 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../s
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 
-const editableFields = ["employeeCode", "dni", "name", "email", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
+const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
 
 function editablePayload(body) {
   return Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
@@ -30,13 +30,17 @@ export const listUsers = asyncHandler(async (req, res) => {
 });
 
 export const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
-  if (!name || !email || !password || !role) throw new AppError(400, "Name, email, password, and role are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  const { name, dni, email, password, role } = req.body;
+  if (!name || !dni || !password || !role) throw new AppError(400, "Name, DNI, password, and role are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (String(password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
-  const normalizedEmail = String(email).trim().toLowerCase();
-  if (await User.exists({ email: normalizedEmail })) throw new AppError(409, "A user with this email already exists.", undefined, ERROR_CODES.CONFLICT);
-  const user = await User.create({ ...editablePayload(req.body), email: normalizedEmail, passwordHash: await bcrypt.hash(password, 12) });
-  await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active } });
+  const normalizedDni = String(dni).trim();
+  if (await User.exists({ dni: normalizedDni })) throw new AppError(409, "A user with this DNI already exists.", undefined, ERROR_CODES.CONFLICT);
+  if (email) {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (await User.exists({ email: normalizedEmail })) throw new AppError(409, "A user with this email already exists.", undefined, ERROR_CODES.CONFLICT);
+  }
+  const user = await User.create({ ...editablePayload(req.body), dni: normalizedDni, email: email ? String(email).trim().toLowerCase() : undefined, passwordHash: await bcrypt.hash(password, 12) });
+  await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, dni: user.dni, role: user.role, area: user.area, active: user.active } });
   res.status(201).json({ data: user });
 });
 

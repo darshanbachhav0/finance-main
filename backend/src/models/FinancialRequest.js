@@ -4,6 +4,7 @@ import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.
 import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
 import {
   ACKNOWLEDGMENT_TYPES,
+  APPROVAL_ROUTING_MODE,
   APPROVAL_STAGES,
   CAPEX_ASSET_CATEGORIES,
   CANONICAL_REQUEST_STATUSES,
@@ -205,7 +206,14 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
     startedAt: Date,
     dueAt: Date,
     completedAt: Date,
-    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    approverUser: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    approverSnapshot: {
+      name: String,
+      dni: String,
+      jobTitle: String
+    },
+    source: { type: String, enum: Object.values(APPROVAL_ROUTING_MODE), default: APPROVAL_ROUTING_MODE.RULE_BASED }
   },
   { _id: true }
 );
@@ -315,7 +323,8 @@ const financialRequestSchema = new mongoose.Schema(
     xmlValidationHistory: { type: [xmlValidationSchema], default: [] },
     approvalHistory: [workflowHistorySchema],
     approvalRouteSnapshot: [approvalRouteSnapshotSchema],
-    approvalStage: { type: String, enum: Object.values(APPROVAL_STAGES), default: APPROVAL_STAGES.AREA_DIRECTOR },
+    approvalRoutingMode: { type: String, enum: Object.values(APPROVAL_ROUTING_MODE), default: APPROVAL_ROUTING_MODE.RULE_BASED },
+    approvalStage: { type: String, default: APPROVAL_STAGES.AREA_DIRECTOR },
     approvalDueAt: Date,
     rejectionReason: String,
     draftSavedAt: Date,

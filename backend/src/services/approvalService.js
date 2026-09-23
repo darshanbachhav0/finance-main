@@ -5,6 +5,8 @@ import { recordAudit, workflowEvent } from "./auditService.js";
 import {
   activeApprovalStep,
   advanceApprovalRoute,
+  appendNextChainStep,
+  finalizeChainApproval,
   initializeApprovalRoute,
   slaStatus,
   stopApprovalRoute
@@ -26,6 +28,7 @@ import { transitionRequest } from "./workflowService.js";
 import { validateXmlAgainstRequest } from "./xmlValidationService.js";
 import { AppError } from "../utils/AppError.js";
 import {
+  APPROVAL_ROUTING_MODE,
   APPROVAL_STAGES,
   DOCUMENT_PHASE,
   ERROR_CODES,
@@ -49,22 +52,31 @@ function requesterId(request) {
 
 function assertApprovalActor(request, user, step, adminOverrideReason) {
   if (String(adminOverrideReason || "").trim()) throw new AppError(403, "Emergency approval overrides are disabled. Use the assigned approval route.");
-  if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) {
-    throw new AppError(403, "You do not have approval permission.", undefined, ERROR_CODES.FORBIDDEN);
-  }
   if (!step) throw new AppError(409, "This request has no pending approval step.", undefined, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  if (user.role !== ROLES.ADMIN) {
-    if (!canApproveStage(request, user)) {
-      throw new AppError(403, "This request is assigned to a different approval level.", { approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
+
+  if (step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN) {
+    // Chain steps are assigned to a specific person (the requester's jefe, or
+    // that jefe's own jefe once forwarded) — identity, not role/area pool.
+    if (user.role !== ROLES.ADMIN && String(step.approverUser) !== String(user._id)) {
+      throw new AppError(403, "This approval step is assigned to a different manager.", undefined, ERROR_CODES.FORBIDDEN);
     }
-    if (step.role && step.role !== user.role) {
-      throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role }, ERROR_CODES.FORBIDDEN);
+  } else {
+    if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) {
+      throw new AppError(403, "You do not have approval permission.", undefined, ERROR_CODES.FORBIDDEN);
     }
-    if (step.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR) {
-      const allowedAreas = new Set([user.area, ...(user.approvalAreas || [])].filter(Boolean));
-      const requestArea = request.requesterArea || request.requestingArea;
-      if (requestArea && !allowedAreas.has(requestArea) && !allowedAreas.has("*")) {
-        throw new AppError(403, "This request belongs to another approval area.", { requestArea }, ERROR_CODES.FORBIDDEN);
+    if (user.role !== ROLES.ADMIN) {
+      if (!canApproveStage(request, user)) {
+        throw new AppError(403, "This request is assigned to a different approval level.", { approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
+      }
+      if (step.role && step.role !== user.role) {
+        throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role }, ERROR_CODES.FORBIDDEN);
+      }
+      if (step.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR) {
+        const allowedAreas = new Set([user.area, ...(user.approvalAreas || [])].filter(Boolean));
+        const requestArea = request.requesterArea || request.requestingArea;
+        if (requestArea && !allowedAreas.has(requestArea) && !allowedAreas.has("*")) {
+          throw new AppError(403, "This request belongs to another approval area.", { requestArea }, ERROR_CODES.FORBIDDEN);
+        }
       }
     }
   }
@@ -108,10 +120,20 @@ async function validateApprovalControls(request, user) {
 export async function listApprovalInbox(queryParams, user) {
   const query = { status: { $in: activeApprovalStatuses } };
   if (user.role !== ROLES.ADMIN) {
-    query.approvalStage = user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR;
-    if (query.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
-      const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
-      if (!areas.includes("*")) query.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
+    // A manager-chain approver (any role, typically Solicitor) sees requests
+    // where they are the pending step's specific approver, regardless of
+    // role/area. A legacy Approver/Management user additionally keeps the
+    // original role+area-scoped pool visibility for rule-based requests.
+    const chainMatch = { "approvalRouteSnapshot": { $elemMatch: { approverUser: user._id, status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN } } };
+    if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+      const legacyMatch = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
+      if (legacyMatch.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
+        const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
+        if (!areas.includes("*")) legacyMatch.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
+      }
+      query.$or = [legacyMatch, chainMatch];
+    } else {
+      Object.assign(query, chainMatch);
     }
   }
   if (queryParams.stage) query.approvalStage = queryParams.stage;
@@ -183,7 +205,7 @@ async function appendApprovalWithoutStatusTransition({ request, step, routeResul
 }
 
 export async function commitApprovedRequestBudget({ request, user, req }) {
-  if (![REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status) || activeApprovalStep(request)) {
+  if (![REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status) || activeApprovalStep(request)) {
     throw new AppError(409, "Financial handoff can only run after every required approval is complete or after a budget observation is resolved.", { status: request.status, approvalStage: request.approvalStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
 
@@ -243,7 +265,7 @@ export async function commitApprovedRequestBudget({ request, user, req }) {
   return result;
 }
 
-export async function decideApproval({ id, action, comments, adminOverrideReason, user, req }) {
+export async function decideApproval({ id, action, comments, adminOverrideReason, forward, user, req }) {
   const decision = String(action || "").toUpperCase();
   if (!["APPROVE", "OBSERVE", "RETURN", "REJECT"].includes(decision)) {
     throw new AppError(422, "Unsupported approval action.", { action }, ERROR_CODES.VALIDATION_ERROR);
@@ -259,6 +281,10 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   if (!request.approvalRouteSnapshot?.length) await initializeApprovalRoute(request);
   const step = activeApprovalStep(request);
   assertApprovalActor(request, user, step, adminOverrideReason);
+  const isChainStep = step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+  if (isChainStep && decision === "APPROVE" && typeof forward !== "boolean") {
+    throw new AppError(422, "You must specify whether to forward this approval to the next manager or finalize it here.", { field: "forward" }, ERROR_CODES.VALIDATION_ERROR);
+  }
   await validateApprovalControls(request, user);
 
   if (decision !== "APPROVE") {
@@ -283,7 +309,8 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       comments,
       approvalStage: step.approvalLevel,
       eventDueAt: step.dueAt,
-      adminOverrideReason
+      adminOverrideReason,
+      skipRoleCheck: isChainStep
     });
     await resolveNotification(`request:${request._id}:approval:${step.approvalLevel}`);
     await notifyUser({
@@ -301,6 +328,32 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   }
 
   const routeResult = await runFinancialOperation(async (session) => {
+    if (isChainStep) {
+      const route = forward
+        ? await appendNextChainStep(request, step, user)
+        : finalizeChainApproval(request, step, user);
+      if (!forward) {
+        await transitionRequest({
+          request,
+          targetStatus: REQUEST_STATUS.APPROVED,
+          user,
+          req,
+          action: "CHAIN_APPROVED_FINAL",
+          comments: comments || "Approved by the manager chain.",
+          approvalStage: step.approvalLevel,
+          nextApprovalStage: APPROVAL_STAGES.COMPLETE,
+          dueAt: null,
+          eventDueAt: step.dueAt,
+          adminOverrideReason,
+          skipRoleCheck: true,
+          session
+        });
+      } else {
+        await appendApprovalWithoutStatusTransition({ request, step, routeResult: route, user, req, comments, adminOverrideReason, session });
+      }
+      return route;
+    }
+
     const route = advanceApprovalRoute(request, user._id);
     const targetStatus = step.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR
       ? REQUEST_STATUS.DIRECTOR_APPROVED

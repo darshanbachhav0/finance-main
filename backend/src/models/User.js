@@ -7,8 +7,12 @@ const userSchema = new mongoose.Schema(
     employeeCode: { type: String, trim: true, uppercase: true, unique: true, sparse: true },
     dni: { type: String, trim: true, unique: true, sparse: true },
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    passwordResetRequired: { type: Boolean, default: false },
+    jefe: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    jobTitle: { type: String, trim: true },
+    organizationalUnit: { type: String, trim: true },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.SOLICITOR, required: true },
     approvalLevel: {
       type: String,
@@ -42,5 +46,6 @@ userSchema.methods.toJSON = function toJSON() {
 };
 
 userSchema.index({ active: 1, role: 1 });
+userSchema.index({ jefe: 1 });
 
 export default mongoose.model("User", userSchema);

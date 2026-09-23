@@ -28,8 +28,8 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function login(email, password) {
-    const response = await api.post("/auth/login", { email, password });
+  async function login(dni, password) {
+    const response = await api.post("/auth/login", { dni, password });
     clearDraftSessions();
     localStorage.setItem("erp_token", response.data.token);
     localStorage.setItem("erp_user", JSON.stringify(response.data.user));
