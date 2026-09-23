@@ -12,4 +12,5 @@ data/reports/
 documentation/~$*
 erp-financial-request-payment-control-system.zip
 deployment-credentials.txt
+org-roster-credentials-*.txt
 .uma-local-jwt-secret
