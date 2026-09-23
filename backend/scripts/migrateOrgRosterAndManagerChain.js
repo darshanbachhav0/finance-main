@@ -76,7 +76,8 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
     changes: [],
     fuzzyResolutions: [],
     manualReview: [],
-    conflicts: []
+    conflicts: [],
+    indexesRepaired: []
   };
   if (!rosterPath) throw new Error("A --roster=<path.json> file is required.");
   const rows = JSON.parse(await fs.readFile(rosterPath, "utf8"));
@@ -92,6 +93,20 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
   const byName = new Map(rows.map((row) => [normalizeName(row.fullName), row.dni]));
   const users = db.collection("users");
   const manifest = db.collection("orgrostermigrations");
+
+  // Roster employees have no institutional email. An older, non-sparse unique
+  // index on `users.email` (predating the schema change that made email
+  // optional) treats every missing email as the same "null" value, so the
+  // second such insert collides. Repair it before inserting anyone.
+  const existingIndexes = await users.indexes();
+  const legacyEmailIndex = existingIndexes.find((index) => index.name === "email_1" && index.unique && !index.sparse);
+  if (legacyEmailIndex) {
+    report.indexesRepaired.push({ collection: "users", from: "email_1 (unique, non-sparse)", to: "email_1 (unique, sparse)" });
+    if (apply) {
+      await users.dropIndex("email_1");
+      await users.createIndex({ email: 1 }, { unique: true, sparse: true, name: "email_1" });
+    }
+  }
   if (apply) await manifest.createIndex({ migration: 1, dni: 1 }, { unique: true });
 
   const dniToObjectId = new Map();
