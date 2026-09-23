@@ -1,0 +1,99 @@
+/* Interaction polish layer: hover feedback, entrance motion, and loading states.
+   Loads after every other stylesheet so it can refine existing surfaces
+   without duplicating their tokens or layout rules. */
+
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Buttons and icon controls gain a light lift instead of only a color swap. */
+.primary-button, .secondary-button, .danger-button, .icon-button, .icon-text-button {
+  transition-timing-function: var(--ease-out-expo);
+}
+.primary-button:hover:not(:disabled), .danger-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(24, 16, 24, 0.16);
+}
+.secondary-button:hover:not(:disabled), .icon-button:hover:not(:disabled), .icon-text-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.primary-button:active:not(:disabled), .secondary-button:active:not(:disabled),
+.danger-button:active:not(:disabled), .icon-button:active:not(:disabled), .icon-text-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: none;
+}
+.icon-button.quiet:hover:not(:disabled) { box-shadow: none; }
+
+/* Workspace surfaces settle into place instead of appearing instantly. */
+.workspace-panel, .panel, .analytics-panel, .report-panel,
+.request-wizard, .quotation-comparison, .budget-month-table,
+.request-overview, .dashboard-next {
+  animation: content-in 260ms var(--ease-out-expo) both;
+}
+.stats-grid > *, .compact-stats > *, .budget-stats > *, .report-stats > * {
+  animation: metric-in 220ms var(--ease-out-expo) both;
+}
+.stats-grid > *:nth-child(2), .compact-stats > *:nth-child(2), .budget-stats > *:nth-child(2), .report-stats > *:nth-child(2) { animation-delay: 30ms; }
+.stats-grid > *:nth-child(3), .compact-stats > *:nth-child(3), .budget-stats > *:nth-child(3), .report-stats > *:nth-child(3) { animation-delay: 60ms; }
+.stats-grid > *:nth-child(4), .compact-stats > *:nth-child(4), .budget-stats > *:nth-child(4), .report-stats > *:nth-child(4) { animation-delay: 90ms; }
+.stats-grid > *:nth-child(5), .budget-stats > *:nth-child(5), .report-stats > *:nth-child(5) { animation-delay: 120ms; }
+.stats-grid > *:nth-child(6), .report-stats > *:nth-child(6) { animation-delay: 150ms; }
+
+/* Clickable rows and nav-style links get the same lift language as buttons. */
+.hub-link, .request-section-nav a, .treasury-section-nav a, .supplier-section-nav a {
+  transition: transform 160ms var(--ease-out-expo), background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+.hub-link:hover, .request-section-nav a:hover, .treasury-section-nav a:hover, .supplier-section-nav a:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.table-scroll tbody tr.clickable-row { transition: background-color 140ms ease; }
+.table-scroll tbody tr.clickable-row:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--uma-primary, var(--teal-600));
+}
+
+/* Sidebar icons react a little when a nav item is hovered or becomes active. */
+.nav-item svg { transition: transform 180ms var(--ease-out-expo); }
+.nav-item:hover svg { transform: translateX(2px); }
+.nav-item.active svg { transform: scale(1.05); }
+
+/* Sort affordance rotates instead of swapping instantly. */
+.sort-button svg { transition: transform 160ms var(--ease-out-expo), color 140ms ease; }
+th[aria-sort="ascending"] .sort-button svg, th[aria-sort="descending"] .sort-button svg { color: var(--uma-primary, var(--teal-700)); }
+
+/* Skeleton loading uses a soft sweep instead of a flat opacity pulse. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  animation: none;
+  background: var(--gray-150);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--white) 65%, transparent), transparent);
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  100% { transform: translateX(100%); }
+}
+
+/* Stat values count in with a touch more motion than the base metric-in. */
+.stat-card > strong { animation: metric-in 260ms var(--ease-out-expo) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .primary-button:hover:not(:disabled), .danger-button:hover:not(:disabled),
+  .secondary-button:hover:not(:disabled), .icon-button:hover:not(:disabled), .icon-text-button:hover:not(:disabled),
+  .hub-link:hover, .request-section-nav a:hover, .treasury-section-nav a:hover, .supplier-section-nav a:hover,
+  .nav-item:hover svg, .nav-item.active svg {
+    transform: none;
+  }
+}
