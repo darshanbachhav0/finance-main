@@ -62,11 +62,10 @@ try {
     }
   }, { user, form, initialLine });
   await page.goto("http://127.0.0.1:5192/requests/new");
-  const account = page.getByRole("button", { name: "Expense account for these items", exact: false });
+  const account = page.getByRole("button", { name: "Expense category for these items", exact: false });
   assert.match(await account.innerText(), /Select/, "Ambiguous accounts are not silently guessed");
   await account.click();
-  await page.getByRole("option", { name: "603201 - Supplies", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("option", { name: "Supplies", exact: true }).click();
   const card = page.locator(".request-item-card").first();
   const total = card.getByLabel("Final total", { exact: true });
   const includes = card.getByRole("checkbox");
@@ -102,7 +101,7 @@ try {
   await second.getByRole("button", { name: "Remove line 2" }).click();
   await page.waitForFunction(async () => { const response = await fetch("http://127.0.0.1:5000/api/work-drafts"); return (await response.json()).data.some(draft => draft.value.lines[0].priceIncludesIGV === false); });
   await page.reload();
-  // The item/quotation step is restored automatically.
+  // The request-information step is restored automatically.
   assert.equal(await includes.isChecked(), false);
   assert.equal(await total.innerText(), "PEN 3,540.00");
   await page.locator(".official-line-list").screenshot({ path: `${output}/desktop.png` });
@@ -113,7 +112,6 @@ try {
   assert.equal(submittedLines[0].costCenter, "center");
   assert.equal(saved.totalAmount, 3540);
   await page.goto("http://127.0.0.1:5192/requests/saved/edit");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   assert.equal(await total.innerText(), "PEN 3,540.00");
   assert.equal(await includes.isChecked(), false);
   await includes.check();
@@ -124,7 +122,6 @@ try {
   assert.equal(saved.totalAmount, 3000);
   await page.evaluate(() => localStorage.setItem("erp_language", "es"));
   await page.goto("http://127.0.0.1:5192/requests/saved/edit");
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
   assert.equal(await card.getByRole("checkbox", { name: "El precio unitario ya incluye IGV (18%)" }).isChecked(), true);
   for (const width of [768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });

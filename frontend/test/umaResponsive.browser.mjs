@@ -59,6 +59,12 @@ try {
     else if (path === "/budget/allocations") body = paginate([{ ...plan, source: "LINKED_ANNUAL_PLAN" }]);
     else if (path === "/budget/overview") body = { data: { totals: { assigned: 240000, committed: 28000, executed: 76000, paid: 56000, available: 136000 }, warnings: [] } };
     else if (path === "/reports/management") body = { data: { budget: { assigned: 240000, committed: 28000, executed: 76000, paid: 56000, available: 136000 }, byType: [{ _id: "CAPEX", total: 30000 }, { _id: "OPEX", total: 46000 }], byMonth: [{ _id: "2026-07", total: 22000 }, { _id: "2026-08", total: 30000 }, { _id: "2026-09", total: 24000 }], comparison: { currentPeriod: "2026-09", currentTotal: 24000, previousTotal: 30000, changePercent: -20 }, filterOptions: { areas: [center.area], projects: ["LAB-2026"], costCenters: [{ value: center._id, code: center.code, name: center.name }] } } };
+    else if (path === "/management/v1/filters") body = { apiVersion: "1.0", asOf: "2026-09-07T15:00:00Z", currency: "PEN", appliedFilters: {}, data: { periods: ["2026-09"], areas: [center.area] } };
+    else if (path === "/management/v1/overview") body = { apiVersion: "1.0", asOf: "2026-09-07T15:00:00Z", currency: "PEN", appliedFilters: {}, data: { pendingRequests: 11, pendingApprovals: 3, observedRequests: 2, overdueApprovals: 1, pendingPayments: 4, pendingPaymentAmountPEN: 48000, paidThisMonth: { count: 8, amountPEN: 92000 }, closedRequests: 17, budget: { assignedPEN: 240000, committedPEN: 28000, availablePEN: 136000 } } };
+    else if (path === "/management/v1/budget") body = { apiVersion: "1.0", asOf: "2026-09-07T15:00:00Z", currency: "PEN", appliedFilters: {}, data: { totals: { assignedPEN: 240000, committedPEN: 28000, executedPEN: 76000, paidPEN: 56000, availablePEN: 136000 }, utilizationPercent: 43.3, allocationCount: 4, lowBalanceCount: 0, overExecutedCount: 0 } };
+    else if (path === "/management/v1/workflow") body = { apiVersion: "1.0", asOf: "2026-09-07T15:00:00Z", currency: "PEN", appliedFilters: {}, data: { byStatus: [{ key: "PENDIENTE_APROBACION", count: 3, amountPEN: 35400 }], byFlow: [{ key: "A1", count: 8, amountPEN: 82000 }, { key: "C", count: 3, amountPEN: 18000 }], byPeriod: [], byArea: [{ key: center.area, count: 11, amountPEN: 100000 }], rendition: [] } };
+    else if (path === "/management/v1/payments") body = { apiVersion: "1.0", asOf: "2026-09-07T15:00:00Z", currency: "PEN", appliedFilters: {}, data: { byStatus: [{ key: "SCHEDULED", count: 4, amountPEN: 48000 }], nextSevenDays: [], paidByMonth: [], reconciliation: [], ageing: [] } };
+    else if (path === "/management/v1/sla") body = { apiVersion: "1.0", asOf: "2026-09-07T15:00:00Z", currency: "PEN", appliedFilters: {}, data: { completed: [{ key: "ON_TIME", count: 16 }], averageHoursByArea: [], current: [{ key: "ON_TRACK", count: 2 }, { key: "OVERDUE", count: 1 }] } };
     else if (path === "/treasury/queue") body = { ...paginate([{ ...requests[0], status: "PROGRAMADO", accountsPayable: { _id: "payable", status: "SCHEDULED", currency: "PEN", outstandingAmount: 11800, dueDate: "2026-09-15", paymentPriority: "NORMAL", flowType: "A1" }, eligibleBankAccounts: [{ _id: "account", bank: "BCP", currency: "PEN", cci: "00212300000012345678", preferred: true }] }]), summary: { PEN: 11800, USD: 0 } };
     else if (path === "/users") body = paginate([user]);
     else if (path === "/exchange-rates/current") body = { data: { rate: 3.75, sellingRate: 3.75, currency: "USD", date: "2026-09-07", providerMode: "MANUAL" } };
@@ -91,7 +97,7 @@ try {
   await page.getByRole("alert").waitFor();
   assert.equal(await page.locator(".stat-card-link").count(), 3, "Failed refresh preserves last successful data");
   await page.unroute("**/api/dashboard/summary", refreshRoute);
-  const paths = ["/", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
+  const paths = ["/administration", "/accounting/invoices", "/treasury/history", "/configuration/bank-formats", "/", "/management-view", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
     for (const path of paths) {
@@ -101,7 +107,7 @@ try {
       const okay = overflow.document <= width + 1 && await page.locator(".content").isVisible();
       results.push({ path, width, okay });
       if (!okay) failures.push({ path, width, ...overflow });
-      if ((width === 1440 && ["/", "/requests", "/budget", "/reports", "/requests/request-0"].includes(path)) || (width === 390 && ["/requests", "/budget", "/treasury", "/requests/new"].includes(path))) await page.screenshot({ path: `${output}/${width}-${path.replaceAll("/", "-") || "dashboard"}.png` });
+      if ((width === 1440 && ["/", "/management-view", "/requests", "/budget", "/reports", "/requests/request-0"].includes(path)) || (width === 390 && ["/management-view", "/requests", "/budget", "/treasury", "/requests/new"].includes(path))) await page.screenshot({ path: `${output}/${width}-${path.replaceAll("/", "-") || "dashboard"}.png` });
     }
     console.log(`Checked ${paths.length} pages at ${width}px`);
   }
@@ -123,7 +129,6 @@ try {
   await dialog.getByRole("button", { name: "Save view", exact: true }).click();
   assert.equal(await page.getByLabel("Saved views").inputValue(), "UMA saved view");
   await page.goto("http://127.0.0.1:5190/approvals");
-  await page.locator(".row-details > summary").first().click();
   await page.locator(".decision-button:visible").first().click();
   await page.getByRole("dialog").getByText("Approve this request?", { exact: true }).waitFor();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
@@ -153,6 +158,28 @@ try {
   assert.equal(await page.locator(".uma-print-header").isVisible(), true);
   await page.screenshot({ path: `${output}/request-print.png` });
   await page.emulateMedia({ media: "screen" });
+
+  await page.goto("http://127.0.0.1:5190/requests/request-0");
+  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  assert.equal(await page.locator("#request-section-documents-and-fiscal-validation").isVisible(), true);
+  assert.equal(await page.locator("#request-section-requirement-and-justification").isVisible(), false);
+  await page.getByRole("button", { name: "General", exact: true }).click();
+  assert.equal(await page.locator("#request-section-requirement-and-justification").isVisible(), true);
+  await page.goto("http://127.0.0.1:5190/treasury");
+  await page.getByRole("button", { name: "Confirm payments", exact: true }).click();
+  assert.equal(await page.locator("#treasury-confirm").isVisible(), true);
+  assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
+  await page.goto("http://127.0.0.1:5190/treasury/history");
+  await page.locator("#treasury-history").waitFor({ state: "visible" });
+  assert.equal(await page.locator("#treasury-history").isVisible(), true);
+  assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
+  for (const [role, expected, approvalLevel] of [["Solicitor", 3], ["Approver", 3, "AREA_DIRECTOR"], ["Approver", 3, "VICE_RECTOR"], ["Budget", 3], ["Accounting", 5], ["Treasury", 3], ["Management", 4], ["Admin", 2]]) {
+    user.role = role; user.approvalLevel = approvalLevel;
+    await page.goto("http://127.0.0.1:5190/");
+    await page.waitForLoadState("networkidle");
+    assert.equal(await page.locator(".sidebar nav a").count(), expected, `${role} primary navigation`);
+  }
+
   await writeFile(`${output}/results.json`, JSON.stringify({ results, failures, runtimeErrors }, null, 2));
   assert.deepEqual(runtimeErrors, []);
   assert.deepEqual(failures, []);

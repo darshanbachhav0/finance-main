@@ -1,2 +1,0 @@
-supplierRuc,supplierName,documentType,series,number,invoiceDate,fiscalPeriod,accountingDate,currency,subtotal,igv,total,exchangeRate,requestReference,cxpReference
-20600000001,TEST ONLY Supplier,FACTURA,F001,000001,2026-09-09,2026-09,2026-09-10,PEN,100,18,118,,TEST-ONLY-SIRE,6aad6f05055eed071d2b8305

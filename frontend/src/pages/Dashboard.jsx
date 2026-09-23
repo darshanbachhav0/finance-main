@@ -74,7 +74,7 @@ export default function Dashboard() {
   ];
   const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
   const workspace = {
-    Admin: ["Keep university operations moving", "Review requests and the items that need your team’s attention.", "/requests", "View requests"],
+    Admin: ["Keep university operations moving", "Review requests and the items that need your team’s attention.", "/administration", "Administration"],
     Solicitor: ["Your next request starts here", "Prepare a request or continue work saved in your drafts.", "/requests/new", "New request"],
     Approver: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
     Accounting: ["Keep the accounts up to date", "Review pending entries, documents and accounting observations.", "/accounting", "Open Accounting"],
@@ -100,11 +100,11 @@ export default function Dashboard() {
         <>
           {workspace && <div className="dashboard-next"><div><small>UMA · {t("Your workspace")}</small><h2>{t(workspace[0])}</h2><p>{t(workspace[1])}</p></div><Link className="primary-button" to={workspace[2]}>{t(workspace[3])}<ArrowRight size={17} /></Link></div>}
           <div className="stats-grid">
-            {summary.metrics.map((metric) => (
+            {summary.metrics.filter(metric => !["credit", "debit", "closed", "files", "assigned", "capex", "opex", "users"].includes(metric.key)).slice(0, 4).map((metric) => (
               <StatCard key={metric.key} label={metric.label} value={metricValue(metric)} suffix={metric.suffix} tone={metric.tone} icon={metricIcons[metric.key] || FileText} {...dashboardMetricLink(summary.role, metric.key)} />
             ))}
           </div>
-          <WorkflowStatusLegend />
+
 
           {summary.warnings?.length > 0 && (
             <div className="alert-strip" role="status">
@@ -124,7 +124,7 @@ export default function Dashboard() {
                 <div><h3>{t(summary.role === "Approver" ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3><p>{t("Current operational work in priority order.")}</p></div>
                 <Link className="text-link" to={summary.role === "Approver" ? "/approvals" : summary.role === "Treasury" ? "/treasury" : "/requests"}>{t("View all")}</Link>
               </div>
-              <DataTable className="dashboard-request-table" controls={false} rows={operationalRows} columns={requestColumns} emptyDescription="No current requests." />
+              <DataTable className="dashboard-request-table" controls={false} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." />
             </div>
 
             <AnalyticsChart
@@ -163,37 +163,8 @@ export default function Dashboard() {
               />
             )}
 
-            {summary.recentDecisions && (
-              <div className="workspace-panel dashboard-primary">
-                <div className="section-heading"><div><h3>{t("Recent decisions")}</h3><p>{t("Requests you recently approved or rejected.")}</p></div></div>
-                <DataTable className="dashboard-request-table" controls={false} rows={summary.recentDecisions} columns={requestColumns} />
-              </div>
-            )}
+            {["Admin", "Approver", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link" to="/reports">{t("More insights in Reports")}</Link>}
 
-            {summary.periods && (
-              <div className="workspace-panel dashboard-primary">
-                <div className="section-heading"><div><h3>{t("Recent accounting periods")}</h3><p>{t("Open and closed period status.")}</p></div><Link className="text-link" to="/accounting/periods">{t("Manage periods")}</Link></div>
-                <DataTable controls={false} rows={summary.periods} columns={[
-                  { key: "period", label: "Period" },
-                  { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-                  { key: "closingDate", label: "Closing date", render: (row) => formatDate(row.closingDate, language) },
-                  { key: "closedBy", label: "Closed by", getValue: (row) => row.closedBy?.name, render: (row) => row.closedBy?.name || "-" }
-                ]} />
-              </div>
-            )}
-
-            {summary.recentFiles && (
-              <div className="workspace-panel dashboard-primary">
-                <div className="section-heading"><div><h3>{t("Recent generated files")}</h3><p>{t("Bank and accounting exports created by the team.")}</p></div></div>
-                <DataTable controls={false} rows={summary.recentFiles} columns={[
-                  { key: "fileName", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
-                  { key: "kind", label: "Type" },
-                  { key: "rowCount", label: "Rows" },
-                  { key: "createdAt", label: "Generated", render: (row) => formatDateTime(row.createdAt, language) },
-                  { key: "generatedBy", label: "Generated by", getValue: (row) => row.generatedBy?.name, render: (row) => row.generatedBy?.name || "-" }
-                ]} />
-              </div>
-            )}
           </div>
         </>
       )}

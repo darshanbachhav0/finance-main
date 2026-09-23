@@ -1,27 +1,63 @@
 services:
   - type: web
-    name: uma-financial-access
-    runtime: static
-    repo: https://github.com/darshanbachhav0/finance
+    name: uma-finance
+    runtime: node
+    plan: 0.5c-512mb
+    repo: https://github.com/darshanbachhav0/finance-main.git
     branch: main
-    buildCommand: echo "Static access portal ready"
-    staticPublishPath: ./link-site
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
     autoDeployTrigger: commit
-    renderSubdomainPolicy: enabled
-    routes:
-      - type: rewrite
-        source: /*
-        destination: https://biotechnology-sport-buses-desirable.trycloudflare.com/*
-    headers:
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: Referrer-Policy
-        value: no-referrer
-      - path: /*
-        name: Content-Security-Policy
-        value: "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; script-src 'self'; style-src 'self'"
-      - path: /link.json
-        name: Cache-Control
-        value: no-store, no-cache, must-revalidate, max-age=0
+    disk:
+      name: uma-finance-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: DRAFT_ENCRYPTION_KEY
+        generateValue: true
+      - key: UMA_STORAGE_ROOT
+        value: /var/data
+      - key: SUNAT_PADRON_DATA_DIR
+        value: /var/data/sunat-padron
+      - key: SUNAT_PROVIDER_MODE
+        value: PADRON
+      - key: MANAGEMENT_API_CACHE_SECONDS
+        value: 15
+      - key: MANAGEMENT_API_RATE_LIMIT
+        value: 240
+      - key: CLIENT_URLS
+        sync: false
+      - key: BANK_FILE_MODE
+        value: PRODUCTION
+      - key: BATCH_INVOICE_INLINE_PROCESSING
+        value: "false"
+
+  - type: worker
+    name: uma-finance-sla-worker
+    runtime: node
+    plan: 0.5c-512mb
+    repo: https://github.com/darshanbachhav0/finance-main.git
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm run worker:sla --workspace backend
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: SLA_DUE_SOON_HOURS
+        value: 4
+      - key: SLA_ESCALATION_HOURS
+        value: 24
+      - key: SLA_POLL_MS
+        value: 60000

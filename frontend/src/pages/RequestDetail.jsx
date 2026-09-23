@@ -1,3 +1,4 @@
+import RequestStageIndicator from "../components/RequestStageIndicator.jsx";
 import FinancialValidationSummary from "../components/FinancialValidationSummary.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
 import { REQUEST_LIFECYCLE, canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
@@ -22,7 +23,7 @@ import {
   UploadCloud,
   XCircle
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
 import ApprovalTimeline from "../components/ApprovalTimeline.jsx";
@@ -123,12 +124,15 @@ function Definition({ label, children }) {
   return <div><dt>{t(label)}</dt><dd>{children ?? "-"}</dd></div>;
 }
 
+const DetailTab = createContext("General");
+const sectionTabs = { "Budget preview": "Budget", "Budget commitment": "Budget", "Procurement Readiness": "Budget", "Documents and fiscal validation": "Documents", "Register A1 invoice and conformity": "Documents", "Invoice control register": "Accounting", "Financial control records": "Payment" };
 function Section({ title, description, children, className = "" }) {
   const { t } = useLanguage();
-  const [expanded, setExpanded] = useState(!/history|audit|financial control/i.test(title));
+  const activeTab = useContext(DetailTab);
+  const [expanded, setExpanded] = useState(true);
   const sectionId = `request-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
-    <div className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
+    <div hidden={activeTab !== (sectionTabs[title] || "General")} className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
       <h3 style={{ margin: 0 }}><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong></span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button></h3>
       <MotionCollapse className="request-section-content" id={`${sectionId}-content`} open={expanded}>{description && <details className="page-help"><summary>{t("About this section")}</summary><p>{t(description)}</p></details>}{children}</MotionCollapse>
     </div>
@@ -136,6 +140,8 @@ function Section({ title, description, children, className = "" }) {
 }
 
 export default function RequestDetail() {
+  const [activeTab, setActiveTab] = useState("General");
+  const [showAllPhases, setShowAllPhases] = useState(false);
   const { id } = useParams();
   const { user } = useAuth();
   const { language, t } = useLanguage();
@@ -368,7 +374,7 @@ export default function RequestDetail() {
     : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
 
   return (
-    <section>
+    <DetailTab.Provider value={activeTab}><section className="focused-request-detail">
       <PageHeader
         title={request.requestNumber}
         description={requestDescription}
@@ -401,39 +407,22 @@ export default function RequestDetail() {
 
       <dl className="request-overview">
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
-        <div><dt>{t("Supplier / beneficiary")}</dt><dd>{entityName(supplier, "") || request.rendition?.beneficiarySnapshot?.name || requesterName(request)}</dd></div>
-        <div><dt>{t("Accounting period")}</dt><dd>{request.accountingPeriod || "—"}</dd></div>
+        <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
+        <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
         <div><dt>{t("Current status")}</dt><dd><FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact /></dd></div>
       </dl>
-      {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]}>{t(nextAction[1])}</a></div>}
-      <SectionNavigation className="request-section-nav" aria-label={t("Request sections")}>
-        <a href="#request-section-requirement-and-justification">{t("Overview")}</a>
-        <a href="#request-section-budget-preview">{t("Budget")}</a>
-        <a href="#request-section-documents-and-fiscal-validation">{t("Documents")}</a>
-        <a href="#request-section-financial-control-records">{t("Financial records")}</a>
-        <a href="#request-actions">{t("Actions and history")}</a>
-      </SectionNavigation>
-
-      <div className="workspace-panel status-workspace">
-        <div className="request-status-heading">
-          <div>
-            <span className={`track-pill track-${request.flowType || "A1"}`}>{t(flowTypeLabels[request.flowType] || request.flowType || "A1")}</span>
-            {latestPayable?.paymentPriority === "PRIORITY" && <span className="priority-pill">{t("Priority payment")}</span>}
-          </div>
-          <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
-        </div>
-        <details className="workflow-details"><summary>{t("View workflow")}</summary><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></details>
-      </div>
+      {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1])}</a></div>}
+      <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
+      <details className="workflow-details"><summary>{t("What do these statuses mean?")}</summary><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></details>
+      <nav className="focus-tabs" aria-label={t("Request sections")}>{["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map(tab => <button type="button" key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}>{t(tab)}</button>)}</nav>
 
       <div className="request-detail-layout">
         <div className="request-detail-main">
           <Section title="Requirement and justification" description="Official request identity, responsible area and business need.">
             <DefinitionGrid>
-              <Definition label="Request title">{request.title || request.description || "-"}</Definition>
               <Definition label="Request type">{t(optionLabel(request.requestType, requestTypeLabels))}</Definition>
               <Definition label="Track">{t(flowTypeLabels[request.flowType] || request.flowType)}</Definition>
               <Definition label="Expense nature">{t(optionLabel(request.expenseNature, expenseNatureLabels))}</Definition>
-              <Definition label="Requester">{requesterName(request)}</Definition>
               <Definition label="Area / School">{request.schoolOrDepartment || request.requesterArea || request.requestingArea || "-"}</Definition>
               <Definition label="Issue date">{formatDate(request.issueDate, language)}</Definition>
               <Definition label="Accounting period">{request.accountingPeriod}</Definition>
@@ -515,6 +504,11 @@ export default function RequestDetail() {
             </Section>
           )}
 
+          <Section title="Budget commitment"><DefinitionGrid>              <Definition label="Budget status"><StatusBadge status={request.budgetCommitment?.status || "NO_BUDGET"} /></Definition>
+              <Definition label="Budget amount">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.totalAmount, "PEN", language) : "-"}</Definition>
+              <Definition label="Executed budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.executedAmount, "PEN", language) : "-"}</Definition>
+              <Definition label="Paid budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.paidAmount, "PEN", language) : "-"}</Definition>
+</DefinitionGrid></Section>
           <Section title="Budget preview" description="This is a current read-only calculation; the authoritative commitment remains in the budget ledger.">
             <div className="budget-preview">
               <div className="budget-preview-summary">
@@ -583,8 +577,9 @@ export default function RequestDetail() {
                   : t("No additional configured evidence for this classification.")}</p>
               </div>
             </div>
+            <button type="button" className="text-button" aria-expanded={showAllPhases} onClick={() => setShowAllPhases(value => !value)}>{t(showAllPhases ? "Current phase only" : "All document phases")}</button>
             <div className="document-phase-grid">
-              {documentPhaseOrder.map((phase) => {
+              {documentPhaseOrder.filter(phase => showAllPhases || phase === (documentStatus.currentPhase || "SUBMISSION")).map((phase) => {
                 const phaseStatus = documentStatus.phases?.[phase] || { requirements: [], missing: [], valid: true };
                 return <article key={phase} className={`document-phase-card${documentStatus.currentPhase === phase ? " current" : ""}`}>
                   <div><strong>{t(phase)}</strong><StatusBadge status={phaseStatus.valid ? "COMPLIANT" : "PENDING"} /></div>
@@ -608,9 +603,9 @@ export default function RequestDetail() {
               <FileCheck2 size={19} />
               <div>
                 <strong>{t(request.xmlValidation?.validated ? "XML validation passed" : "XML validation not passed")}</strong>
-                <p>{request.xmlValidation
+                {["Accounting", "Admin"].includes(user.role) && <details><summary>{t("Advanced validation details")}</summary><p>{request.xmlValidation
                   ? ["supplierMatch", "documentNumberMatch", "dateMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
-                  : t("No XML validation result is stored.")}</p>
+                  : t("No XML validation result is stored.")}</p></details>}
                 {request.xmlValidation?.errors?.length > 0 && <p className="text-danger">{request.xmlValidation.errors.join(" ")}</p>}
               </div>
             </div>
@@ -691,13 +686,9 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <FinancialValidationSummary request={request} related={related} />
+          <div hidden={activeTab !== "Documents"}><FinancialValidationSummary request={request} related={related} /></div>
           <Section title="Financial control records" description="Budget, purchase order, CXP, journals, bank batches, payment, and reconciliation remain independently traceable.">
             <DefinitionGrid>
-              <Definition label="Budget status"><StatusBadge status={request.budgetCommitment?.status || "NO_BUDGET"} /></Definition>
-              <Definition label="Budget amount">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.totalAmount, "PEN", language) : "-"}</Definition>
-              <Definition label="Executed budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.executedAmount, "PEN", language) : "-"}</Definition>
-              <Definition label="Paid budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.paidAmount, "PEN", language) : "-"}</Definition>
               <Definition label="Purchase / Service Order">{order?.poNumber || "-"}</Definition>
               {order?.paymentTermsSnapshot && <Definition label="Order payment terms"><PaymentTermsSummary terms={order.paymentTermsSnapshot} amount={order.paymentTermsSnapshot.quotationAmount} currency={order.paymentTermsSnapshot.quotationCurrency || order.currency} /></Definition>}
               <Definition label="PO remaining balance">{order ? formatCurrency(order.remainingAmount, order.currency, language) : "-"}</Definition>
@@ -762,7 +753,9 @@ export default function RequestDetail() {
               </div>
             )}
 
-            {journalLines.length > 0 && (
+          </Section>
+
+          <div hidden={activeTab !== "Accounting"} className="workspace-panel">            {journalLines.length > 0 && (
               <div className="subsection-block">
                 <h4>{t("Journal lines")}</h4>
                 <DataTable
@@ -780,17 +773,16 @@ export default function RequestDetail() {
                 />
               </div>
             )}
-          </Section>
-
+</div>
           {["ENTREGA_RENDIR", "REEMBOLSO_SIN_SUSTENTO"].includes(request.requestType) && (
-            <OfficialRenditionWorkspace request={request} masters={masters} user={user} onReload={load} />
+            <div hidden={!["Documents", "Payment"].includes(activeTab)}><OfficialRenditionWorkspace request={request} masters={masters} user={user} onReload={load} /></div>
           )}
         </div>
 
         <aside className="request-detail-side" id="request-actions">
           {(permissions.modifiable || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
-              <div className="section-heading"><div><h3>{t("Available actions")}</h3><p>{t("The backend revalidates permission, period, status, documents, supplier, fiscal, and budget controls.")}</p></div></div>
+              <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
               {permissions.modifiable && (
                 <div className="action-item">
                   <div><strong>{t("Submit for approval")}</strong><span>{missingDocuments.length ? t("Required documents are incomplete.") : t("Starts the configured approval route.")}</span></div>
@@ -853,12 +845,12 @@ export default function RequestDetail() {
             </div>
           )}
 
-          <div className="workspace-panel timeline-panel">
+          <div hidden={activeTab !== "Approvals"} className="workspace-panel timeline-panel">
             <div className="section-heading"><div><h3>{t("Approval timeline")}</h3><p>{t("Electronic sign-offs, SLA dates, and workflow decisions.")}</p></div></div>
             <ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
           </div>
 
-          <div className="workspace-panel timeline-panel">
+          <div hidden={activeTab !== "History"} className="workspace-panel timeline-panel">
             <div className="section-heading"><div><h3>{t("Immutable audit")}</h3><p>{t("Application audit records are append-only.")}</p></div></div>
             <div className="compact-lines">
               {(related.audit || []).slice().reverse().map((item) => (
@@ -886,6 +878,6 @@ export default function RequestDetail() {
         onClose={() => !processing && setConfirm(null)}
         onConfirm={(comments) => runAction(confirm.type, comments)}
       />
-    </section>
+    </section></DetailTab.Provider>
   );
 }

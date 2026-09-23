@@ -3,7 +3,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
+import { useAuth } from "./context/AuthContext.jsx";
 
+const WorkspaceHub = lazy(() => import("./pages/WorkspaceHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
 const AccountingPeriods = lazy(() => import("./pages/AccountingPeriods.jsx"));
@@ -27,6 +29,14 @@ const AuditViewer = lazy(() => import("./pages/AuditViewer.jsx"));
 const EmployeeReimbursementBanking = lazy(() => import("./pages/EmployeeReimbursementBanking.jsx"));
 const BulkInvoiceUpload = lazy(() => import("./pages/BulkInvoiceUpload.jsx"));
 const InvoiceObservations = lazy(() => import("./pages/InvoiceObservations.jsx"));
+const ExternalManagementPortal = lazy(() => import("./pages/ExternalManagementPortal.jsx"));
+
+const internalRoles = ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Management"];
+
+function RoleHome() {
+  const { user } = useAuth();
+  return user?.role === "ManagementViewer" ? <Navigate to="/management-view" replace /> : <Dashboard />;
+}
 
 function RouteFallback() {
   return <div className="route-loading"><WorkspaceSkeleton /></div>;
@@ -38,15 +48,19 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="requests" element={<RequestsList />} />
+          <Route index element={<RoleHome />} />
+          <Route path="management-view" element={<ProtectedRoute roles={["Admin", "Management", "ManagementViewer"]} />}>
+            <Route index element={<ExternalManagementPortal />} />
+          </Route>
+          <Route path="administration" element={<ProtectedRoute roles={["Admin"]} />}><Route index element={<WorkspaceHub administration />} /></Route>
+          <Route path="requests" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestsList />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
           <Route path="requests/:id/edit" element={<ProtectedRoute roles={["Admin", "Solicitor"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
-          <Route path="requests/:id" element={<RequestDetail />} />
+          <Route path="requests/:id" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestDetail />} /></Route>
           <Route path="approvals" element={<ProtectedRoute roles={["Admin", "Approver", "Management"]} />}>
             <Route index element={<ApprovalInbox />} />
           </Route>
@@ -55,6 +69,7 @@ export default function App() {
           </Route>
           <Route path="accounting" element={<ProtectedRoute roles={["Admin", "Accounting"]} />}>
             <Route index element={<AccountingEntries />} />
+            <Route path="invoices" element={<WorkspaceHub />} />
             <Route path="payables" element={<AccountsPayable />} />
             <Route path="invoice-observations" element={<InvoiceObservations />} />
             <Route path="periods" element={<AccountingPeriods />} />
@@ -62,6 +77,7 @@ export default function App() {
           </Route>
           <Route path="treasury" element={<ProtectedRoute roles={["Admin", "Treasury"]} />}>
             <Route index element={<TreasuryQueue />} />
+            <Route path="history" element={<TreasuryQueue historyOnly />} />
           </Route>
           <Route path="reimbursement-bank" element={<ProtectedRoute roles={["Admin", "Solicitor", "Accounting", "Treasury"]} />}>
             <Route index element={<EmployeeReimbursementBanking />} />

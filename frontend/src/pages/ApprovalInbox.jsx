@@ -125,23 +125,19 @@ export default function ApprovalInbox() {
           onRowClick={(row) => setQuickViewId(row._id)}
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
-            { label: "Approve", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE"), onClick: () => openDecision(row, "approve") },
+
             { label: "Observe", icon: MessageSquareWarning, hidden: !hasAction(row, "OBSERVE"), onClick: () => openDecision(row, "observe") },
             { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") },
             { label: "Reject", icon: XCircle, tone: "danger", hidden: !hasAction(row, "REJECT"), onClick: () => openDecision(row, "reject") }
           ]}
           columns={[
             { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-            { key: "flowType", label: "Track", render: (row) => <span className="flow-chip">{row.flowType || "A1"}</span> },
-            { key: "requestType", label: "Type" },
-            { key: "priority", label: "Priority", render: (row) => <span className={`priority priority-${String(row.priority || "MEDIA").toLowerCase()}`}>{t(row.priority || "MEDIA")}</span> },
-            { key: "approvalStage", label: "Approval level", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
-            { key: "supplier", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name}</strong><span>{row.supplier?.rucDni}</span></div> },
-            { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong><span>{row.solicitor?.area}</span></div> },
-            { key: "approvalDueAt", label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
+            { key: "approvalStage", label: "Current stage", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
+            { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
+            { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
+            { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
-            { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-            { key: "decision", label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve")}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
+            { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve")}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />
       </div>

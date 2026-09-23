@@ -213,10 +213,10 @@ export default function DataTable({
               <span className="sr-only">{t("Search")}</span>
               <input value={activeSearch} onChange={(event) => isRemote ? updateRemote({ search: event.target.value, page: 1 }) : setSearch(event.target.value)} placeholder={t(searchPlaceholder)} />
             </label>
-            {filters.length > 0 && <button type="button" className={`table-filter-toggle${activeFilterCount ? " has-active" : ""}`} aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen((current) => !current)}><ListFilter size={16} /><span>{t("Filters")}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span><ChevronDown size={15} /></button>}
-            <div className={`table-filter-fields${mobileFiltersOpen ? " is-open" : ""}`}>
+            {filters.length > 0 && <button type="button" className={`table-filter-toggle${activeFilterCount ? " has-active" : ""}`} aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen((current) => !current)}><ListFilter size={16} /><span>{t("More filters")}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span><ChevronDown size={15} /></button>}
+            <div className={`table-filter-fields simplified-filters${mobileFiltersOpen ? " is-open" : ""}`}>
               {filters.map((filter) => (
-                <label className="compact-field" key={filter.key}>
+                <label hidden={!mobileFiltersOpen && !/^(status|area|date|period|accountingPeriod)$/.test(filter.key)} className="compact-field" key={filter.key}>
                   <span className="sr-only">{t(filter.label)}</span>
                   <select value={activeFilters[filter.key] || ""} onChange={(event) => isRemote ? updateRemote({ filters: { ...activeFilters, [filter.key]: event.target.value }, page: 1 }) : setFilterValues((current) => ({ ...current, [filter.key]: event.target.value }))}>
                     <option value="">{t(filter.allLabel || `All ${filter.label.toLowerCase()}`)}</option>

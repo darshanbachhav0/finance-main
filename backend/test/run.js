@@ -31,3 +31,4 @@ import "./bbvaFormat.test.js";
 import "./requestApiAlignment.test.js";
 import "./sireVoucherExport.test.js";
 import "./slaMonitoring.test.js";
+import "./managementApi.test.js";
