@@ -1,3 +1,7 @@
+// Rebuilds the local search indexes over an already-downloaded SUNAT Padron dataset only - it
+// never downloads or syncs data itself and fails fast if no dataset exists yet. Reach for this
+// after manually replacing/repairing chunk files, or if the index looks stale/corrupted but the
+// dataset itself is fine. For downloading/refreshing the dataset, use syncSunatPadron.js or padronWorker.js.
 import "dotenv/config";
 import path from "node:path";
 import { getSunatPadronStatus } from "../src/services/sunatPadronService.js";

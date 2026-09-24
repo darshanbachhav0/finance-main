@@ -1,3 +1,7 @@
+// One-shot SUNAT public Padron sync: downloads/refreshes the local dataset once and exits.
+// Reach for this for a manual/on-demand refresh or in a cron-style scheduler that itself
+// handles recurrence. For a long-running process that keeps refreshing on its own, use
+// padronWorker.js instead; for a status check only, use padronStatus.js.
 import "dotenv/config";
 
 import {

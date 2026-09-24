@@ -1,3 +1,7 @@
+// Long-running SUNAT public Padron daemon: takes a lock, refreshes on its own schedule with a
+// heartbeat, and keeps running until SIGTERM/SIGINT (or once, with --once, for a bootstrap run
+// from deploy tooling). Reach for this to run padron sync as a standing service/process manager
+// entry. For a single manual refresh use syncSunatPadron.js instead; for status only, padronStatus.js.
 import "dotenv/config";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -15,7 +19,7 @@ catch (error) {
   const stat = await fs.stat(lock);
   let alive = true;
   if (owner.host === os.hostname() && owner.pid) { try { process.kill(owner.pid, 0); } catch (e) { alive = e.code !== "ESRCH"; } }
-  if (alive || Date.now() - stat.mtimeMs < 60000) { console.log("Padr髇 updater already running."); process.exit(0); }
+  if (alive || Date.now() - stat.mtimeMs < 60000) { console.log("Padr贸n updater already running."); process.exit(0); }
   await fs.unlink(lock);
   lease = await fs.open(lock, "wx");
 }
@@ -41,7 +45,7 @@ try {
         const temp = path.join(directory,"migration-current");
         await fs.cp(path.join(legacy,"current"),temp,{recursive:true,preserveTimestamps:true});
         await fs.rename(temp,path.join(directory,"current"));
-      } catch(error) { if(error.code!=="ENOENT") console.warn("Padr髇 migration:",error.message); }
+      } catch(error) { if(error.code!=="ENOENT") console.warn("Padr贸n migration:",error.message); }
     }
   }
   let next = 0, failures = 0;
@@ -56,11 +60,11 @@ try {
         const tomorrow = new Date();tomorrow.setUTCHours(8,0,0,0);
         if(tomorrow.getTime()<=Date.now())tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
         next=tomorrow.getTime();
-        console.log(`Padr髇 ready; next check ${new Date(next).toISOString()}`);
+        console.log(`Padr贸n ready; next check ${new Date(next).toISOString()}`);
       } catch(error) {
         failures++;
         next=Date.now()+[60000,300000,900000,3600000][Math.min(failures-1,3)];
-        console.error(`Padr髇 update failed: ${error.message}. Retry ${new Date(next).toISOString()}`);
+        console.error(`Padr贸n update failed: ${error.message}. Retry ${new Date(next).toISOString()}`);
         if(process.argv.includes("--once"))process.exitCode=1;
       }
     }

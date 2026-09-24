@@ -33,7 +33,6 @@ const CHUNK_PREFIX_LENGTH = 3;
 const memoryCache = new Map();
 const MAX_MEMORY_CACHE = 5_000;
 
-let refreshTimer = null;
 let inProcessSyncPromise = null;
 let nextLookupRefreshAt = 0;
 
@@ -1022,7 +1021,7 @@ async function buildChunksFromZip({
 async function activateStaging(stagingDir) {
   // Readers retain the generation they opened. Publishing changes only a small pointer.
   const manifest = JSON.parse(await fsp.readFile(path.join(stagingDir, "manifest.json"), "utf8"));
-  if (!manifest.rows || !manifest.chunkFiles?.length) throw new Error("Incomplete Padrón generation");
+  if (!manifest.rows || !manifest.chunkFiles?.length) throw new Error("Incomplete PadrÃ³n generation");
   for (const file of manifest.chunkFiles) {
     if (!(await fsp.stat(path.join(stagingDir, "chunks", `${file}.ruc-index`))).size) throw new Error("Missing RUC index");
   }
@@ -1534,43 +1533,6 @@ export async function getSunatPadronStatus() {
 
     manifest
   };
-}
-
-export function startSunatPadronAutoRefresh() {
-  if (refreshTimer) {
-    return refreshTimer;
-  }
-
-  const intervalMs =
-    Math.max(
-      60 * 60_000,
-
-      (
-        refreshHours() *
-        60 *
-        60_000
-      ) / 4
-    );
-
-  refreshTimer =
-    setInterval(
-      () => {
-        ensureSunatPadron()
-          .catch(
-            (error) => {
-              console.error(
-                "[SUNAT PADRON] Scheduled refresh failed:",
-                error.message
-              );
-            }
-          );
-      },
-      intervalMs
-    );
-
-  refreshTimer.unref?.();
-
-  return refreshTimer;
 }
 
 export const sunatPadronInternals =

@@ -47,7 +47,9 @@ function isPurchaseOrderInvoiceFlow(accountsPayable) {
   return [FLOW_TYPE.A1, FLOW_TYPE.A2].includes(accountsPayable?.flowType);
 }
 
-const BLOCKING_VOUCHER_VALIDATION_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
+// MANUAL_EXCEPTION vouchers are explicitly non-authoritative (see manualSunatOverride) - they
+// must never quietly clear Treasury the same way a real VALID result does.
+const BLOCKING_VOUCHER_VALIDATION_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION"]);
 
 // Authoritative Treasury-side gate: a CXP with any unresolved observation (SunatVoucher.validationStatus
 // for A1/direct registrations, or an OPEN InvoiceObservation for A2 batch invoices) must never be

@@ -36,7 +36,17 @@ const sunatVoucherSchema = new mongoose.Schema(
     xmlChecksum: String,
     validatedAt: Date,
     validatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    provisionedAt: Date
+    provisionedAt: Date,
+    // Populated only when validationStatus === "MANUAL_EXCEPTION": an explicit, audited human
+    // override of automated SUNAT validation. This is never authoritative SUNAT validation and
+    // is never set by the automatic validation path - only by the dedicated manual-override action.
+    manualOverride: {
+      reason: String,
+      evidenceReference: String,
+      overriddenBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      overriddenAt: Date,
+      previousValidationStatus: String
+    }
   },
   { timestamps: true }
 );
