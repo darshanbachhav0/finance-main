@@ -103,6 +103,7 @@ async function validateApprovalControls(request, user) {
     request.xmlValidation = await validateXmlAgainstRequest(xmlAttachment.path, {
       supplier,
       fiscalData: request.fiscalData,
+      currency: request.currency,
       totalNet: request.totalNet,
       totalIGV: request.totalIGV,
       totalAmount: request.totalAmount,
