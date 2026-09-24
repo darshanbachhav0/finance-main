@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { approvalLevels, banks, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 function BankFormatCertificationPanel({ rows, reload }) {
   const { t } = useLanguage();
@@ -88,7 +89,7 @@ function parseJsonArray(value) {
 export default function MasterConfiguration() {
   const { resource = "projects" } = useParams();
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [masters, setMasters] = useState({ costCenters: [], expenseTypes: [] });
   const [error, setError] = useState("");
 
@@ -148,7 +149,7 @@ export default function MasterConfiguration() {
         { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project" }, { name: "assignedAmount", label: "Assigned amount", type: "number", min: 0, step: "0.01", required: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => `PEN ${Number(row.assignedAmount || 0).toFixed(2)}` }, { key: "active", label: "Status" }]
+      columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
     },
     "document-rules": {
       label: "Document Rules", roles: ["Admin", "Accounting"], endpoint: "/document-rules",
@@ -168,7 +169,7 @@ export default function MasterConfiguration() {
       description: "Configure expense, asset, non-deductible, CXP, bank, IGV, advance, and return accounts used by posting services.",
       fields: [
         { name: "code", label: "Code", required: true }, { name: "name", label: "Name", required: true },
-        { name: "purpose", label: "Purpose", type: "select", required: true, options: ["EXPENSE", "ASSET", "NON_DEDUCTIBLE", "ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"] },
+        { name: "purpose", label: "Purpose", type: "select", required: true, options: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"] },
         { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
         { name: "bank", label: "Bank", type: "select", defaultValue: "*", options: ["*", ...banks] }, { name: "currency", label: "Currency", type: "select", defaultValue: "*", options: ["*", ...currencies] },
         { name: "accountNumber", label: "Account number", required: true }, { name: "subAccount", label: "Subaccount" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
@@ -188,7 +189,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "mode", label: "Mode" }, { key: "specificationVersion", label: "Specification version" }, { key: "certified", label: "Certified", render: (row) => row.certified ? t("Yes") : t("No") }, { key: "notes", label: "Notes" }, { key: "active", label: "Status" }],
       renderBeforeTable: ({ rows, reload }) => <BankFormatCertificationPanel rows={rows} reload={reload} />
     }
-  }), [masters, t]);
+  }), [masters, t, language]);
 
   const visibleEntries = Object.entries(configs).filter(([, config]) => config.roles.includes(user.role));
   if (!configs[resource] || !configs[resource].roles.includes(user.role)) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "projects"}`} replace />;

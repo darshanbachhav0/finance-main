@@ -5,9 +5,11 @@ const accountingMappingSchema = new mongoose.Schema(
   {
     code: { type: String, required: true, unique: true, trim: true, uppercase: true },
     name: { type: String, required: true, trim: true },
+    // Expense/asset account classification lives on ExpenseType (the canonical accounting-dimension
+    // master) - this mapping only resolves the GL accounts for postings ExpenseType doesn't cover.
     purpose: {
       type: String,
-      enum: ["EXPENSE", "ASSET", "NON_DEDUCTIBLE", "ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"],
+      enum: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"],
       required: true
     },
     requestType: { type: String, enum: ["*", ...REQUEST_TYPES], default: "*" },
