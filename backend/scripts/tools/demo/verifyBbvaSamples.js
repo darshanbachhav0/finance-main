@@ -1,8 +1,9 @@
+// Manual/local demo utility, not part of the production path.
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
-import {bbvaSample} from "../test/bbvaFixtures.js";
-import {BbvaBankFileAdapter,inspectBbvaFile} from "../src/integrations/banks/BbvaBankFileAdapter.js";
-const output=new URL("../../data/reports/bbva-structure-tests/",import.meta.url);
+import {bbvaSample} from "../../../test/bbvaFixtures.js";
+import {BbvaBankFileAdapter,inspectBbvaFile} from "../../../src/integrations/banks/BbvaBankFileAdapter.js";
+const output=new URL("../../../../data/reports/bbva-structure-tests/",import.meta.url);
 await fs.mkdir(output,{recursive:true});
 const report=[];
 for(const currency of ["PEN","USD"]) {

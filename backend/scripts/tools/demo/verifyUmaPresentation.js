@@ -1,15 +1,16 @@
+// Manual/local demo utility, not part of the production path.
 // Read-only verification of the presentation data and chart API contracts.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
-import app from '../src/app.js';
-import FinancialRequest from '../src/models/FinancialRequest.js';
-import User from '../src/models/User.js';
-import JournalEntry from '../src/models/JournalEntry.js';
-import BudgetAllocation from '../src/models/BudgetAllocation.js';
-import { getFinancialProgress } from '../src/services/financialProgressService.js';
-import { buildSirePreview } from '../src/services/sireService.js';
+import app from '../../../src/app.js';
+import FinancialRequest from '../../../src/models/FinancialRequest.js';
+import User from '../../../src/models/User.js';
+import JournalEntry from '../../../src/models/JournalEntry.js';
+import BudgetAllocation from '../../../src/models/BudgetAllocation.js';
+import { getFinancialProgress } from '../../../src/services/financialProgressService.js';
+import { buildSirePreview } from '../../../src/services/sireService.js';
 
 if(!process.env.MONGODB_URI) throw new Error('Explicit MONGODB_URI required.');
 await mongoose.connect(process.env.MONGODB_URI,{autoIndex:false,autoCreate:false});
@@ -50,6 +51,6 @@ try {
  }
  summary.passed=true; summary.requests=requests.length; summary.partialPaymentScenarios=partial;
  console.log(JSON.stringify(summary,null,2));
- await fs.mkdir(new URL('../../data/reports/uma-presentation/',import.meta.url),{recursive:true});
- await fs.writeFile(new URL('../../data/reports/uma-presentation/verification.json',import.meta.url),JSON.stringify(summary,null,2));
+ await fs.mkdir(new URL('../../../../data/reports/uma-presentation/',import.meta.url),{recursive:true});
+ await fs.writeFile(new URL('../../../../data/reports/uma-presentation/verification.json',import.meta.url),JSON.stringify(summary,null,2));
 } finally {await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();}

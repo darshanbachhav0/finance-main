@@ -1,3 +1,4 @@
+// Manual/local demo utility, not part of the production path.
 // Additive, explicitly labelled presentation fixtures. Never calls external services.
 // Default is dry-run. Existing records, credentials and configuration are never updated.
 import mongoose from 'mongoose';
@@ -5,9 +6,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deriveFinancialProgress } from '../../shared/workflowStatus.mjs';
+import { deriveFinancialProgress } from '../../../../shared/workflowStatus.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const key = 'uma-finance-presentation-v1';
 const apply = process.argv.includes('--apply');
 const expected = process.argv.find(x => x.startsWith('--database='))?.slice(11);
@@ -16,7 +17,7 @@ if (!uri || !expected) throw new Error('Explicit MONGODB_URI and --database=<nam
 if (!['uma_finance_triple_track_fresh', 'uma_finance_presentation_demo'].includes(expected) && !expected.startsWith('erp_presentation_test_')) throw new Error('Presentation seed is restricted to approved local demo/test databases.');
 if (!/^mongodb:\/\/(127\.0\.0\.1|localhost):\d+\//.test(uri)) throw new Error('Local MongoDB only.');
 const models = {};
-for (const name of ['User','CostCenter','ExpenseType','Supplier','FinancialRequest','BudgetAllocation','BudgetCommitment','BudgetException','PurchaseOrder','AccountsPayable','SunatVoucher','JournalEntry','PaymentBatch','Reconciliation','AuditLog','Notification']) models[name] = (await import(`../src/models/${name}.js`)).default;
+for (const name of ['User','CostCenter','ExpenseType','Supplier','FinancialRequest','BudgetAllocation','BudgetCommitment','BudgetException','PurchaseOrder','AccountsPayable','SunatVoucher','JournalEntry','PaymentBatch','Reconciliation','AuditLog','Notification']) models[name] = (await import(`../../../src/models/${name}.js`)).default;
 const id = value => new mongoose.Types.ObjectId(crypto.createHash('sha256').update(`${key}:${value}`).digest('hex').slice(0,24));
 const money = value => Math.round(value * 100) / 100;
 const date = new Date();

@@ -1,3 +1,4 @@
+// Manual/local demo utility, not part of the production path.
 // Render the real, read-only demo dashboards using the production frontend build.
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
@@ -8,15 +9,15 @@ process.env.NODE_ENV='production';
 process.env.JWT_SECRET=crypto.randomBytes(32).toString('hex');
 process.env.CLIENT_URLS='http://127.0.0.1:5398';
 if(!process.env.MONGODB_URI)throw new Error('Explicit MONGODB_URI required.');
-const {default:app}=await import('../src/app.js');
-const {default:User}=await import('../src/models/User.js');
+const {default:app}=await import('../../../src/app.js');
+const {default:User}=await import('../../../src/models/User.js');
 await mongoose.connect(process.env.MONGODB_URI,{autoIndex:false,autoCreate:false});
 const server=app.listen(5398,'127.0.0.1');await new Promise(resolve=>server.on('listening',resolve));
 let browser;
 try {
  const user=await User.findOne({role:'Management',active:true});
  const token=jwt.sign({id:user._id},process.env.JWT_SECRET);
- const output=new URL('../../data/reports/uma-presentation/screenshots/',import.meta.url);
+ const output=new URL('../../../../data/reports/uma-presentation/screenshots/',import.meta.url);
  await fs.mkdir(output,{recursive:true});
  browser=await chromium.launch({headless:true});
  const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
