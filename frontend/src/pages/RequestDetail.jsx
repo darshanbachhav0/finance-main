@@ -208,12 +208,12 @@ export default function RequestDetail() {
     };
   }, [request]);
 
-  const activeApprovalStep = useMemo(() => {
-    const steps = [...(request?.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-    return steps.find((step) => step.required !== false && step.status === "PENDING") || null;
-  }, [request]);
+  const approvalSteps = useMemo(() => [...(request?.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0)), [request]);
+  const activeApprovalStep = useMemo(() => approvalSteps.find((step) => step.required !== false && step.status === "PENDING") || null, [approvalSteps]);
   const isChainApprovalStep = activeApprovalStep?.source === "MANAGER_CHAIN";
-  const canForwardChain = isChainApprovalStep && Boolean(user?.jefe);
+  // Whether forwarding is possible is decided by the request's own frozen route (was a further
+  // level pre-determined at submission time?), never by the current user's live jefe field.
+  const canForwardChain = isChainApprovalStep && approvalSteps.some((step) => step.source === "MANAGER_CHAIN" && step.sequence > activeApprovalStep.sequence);
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements

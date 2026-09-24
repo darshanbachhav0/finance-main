@@ -6,7 +6,73 @@ import Message from "../components/Message.jsx";
 import ResourceManager from "../components/ResourceManager.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useToast } from "../context/ToastContext.jsx";
 import { approvalLevels, banks, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
+
+function BankFormatCertificationPanel({ rows, reload }) {
+  const { t } = useLanguage();
+  const { notify } = useToast();
+  const [busyId, setBusyId] = useState(null);
+  const [reference, setReference] = useState({});
+
+  async function certify(row, certified) {
+    setBusyId(row._id);
+    try {
+      await api.post(`/bank-formats/${row._id}/certify`, { certified, certificationReference: reference[row._id] || "" });
+      notify(certified ? "BBVA format certified." : "BBVA format certification removed.");
+      reload();
+    } catch (err) {
+      notify(err.message, "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!rows.length) return null;
+  return (
+    <details className="workspace-panel" open>
+      <summary>{t("BBVA certification")}</summary>
+      <p>{t("Certification is a separate, audited action from editing the format. Mark a format certified only after Treasury/BBVA formally accepts the generated PEN/USD test files. Files already generated keep the certification state that applied when they were created.")}</p>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>{t("Currency")}</th>
+            <th>{t("Certified")}</th>
+            <th>{t("Certified by")}</th>
+            <th>{t("Certified at")}</th>
+            <th>{t("Reference / comment")}</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row._id}>
+              <td>{row.currency}</td>
+              <td>{row.certified ? t("Yes") : t("No")}</td>
+              <td>{row.certifiedBy?.name || "-"}</td>
+              <td>{row.certifiedAt ? new Date(row.certifiedAt).toLocaleString() : "-"}</td>
+              <td>
+                <input
+                  type="text"
+                  placeholder={t("Required to certify")}
+                  value={reference[row._id] || ""}
+                  onChange={(event) => setReference({ ...reference, [row._id]: event.target.value })}
+                />
+              </td>
+              <td>
+                {row.certified ? (
+                  <button type="button" className="secondary-button" disabled={busyId === row._id} onClick={() => certify(row, false)}>{t("Remove certification")}</button>
+                ) : (
+                  <button type="button" className="primary-button" disabled={busyId === row._id} onClick={() => certify(row, true)}>{t("Certify")}</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
 
 const requestTypeOptions = ["*", ...requestTypes].map((value) => ({ value, label: requestTypeLabels[value] || value }));
 const natureOptions = ["*", ...expenseNatures].map((value) => ({ value, label: expenseNatureLabels[value] || value }));
@@ -59,15 +125,19 @@ export default function MasterConfiguration() {
     },
     "budget-rules": {
       label: "Budget Rules", roles: ["Admin", "Budget"], endpoint: "/budget-rules",
-      description: "Select active or transitional control and the explicit insufficient-budget exception strategy by dimension.",
+      description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
       fields: [
         { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
         { name: "exceptionStrategy", label: "Exception strategy", type: "select", options: ["REJECT", "REQUEST_BUDGET_INCREASE", "EXTRAORDINARY_APPROVAL"], defaultValue: "REJECT" },
         { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
         { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
-        { name: "project", label: "Project", defaultValue: "*" }, { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+        { name: "project", label: "Project", defaultValue: "*" },
+        { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: roles, hint: "Who may APPROVE/REJECT an extraordinary exception for this dimension. Defaults to Management." },
+        { name: "exceptionEscalationAmount", label: "Escalate above amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Optional. Above this requested amount, a different (higher) authority is required instead." },
+        { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: roles, hint: "Required only when an escalation amount is set." },
+        { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "active", label: "Status" }]
+      columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "active", label: "Status" }]
     },
     "budget-allocations": {
       label: "Budget Allocations", roles: ["Admin", "Budget"], endpoint: "/budget-allocations",
@@ -107,15 +177,16 @@ export default function MasterConfiguration() {
     },
     "bank-formats": {
       label: "Bank Formats", roles: ["Admin"], endpoint: "/bank-formats",
-      description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format.",
+      description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format. Certification is managed separately below.",
       transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [
         { name: "bank", label: "Bank", type: "select", required: true, options: ["BBVA"] }, { name: "currency", label: "Currency", type: "select", required: true, options: currencies },
         { name: "mode", label: "Mode", type: "select", options: ["FIXED_WIDTH"], defaultValue: "FIXED_WIDTH" }, { name: "specificationVersion", label: "Specification version", required: true, defaultValue: "UMA-BBVA-151-277-v1" },
         { name: "bbva", label: "BBVA confirmed configuration (JSON)", type: "textarea", rows: 14, getValue: (row) => JSON.stringify(row.bbva || {}, null, 2), hint: "Use the documented field configuration. Set confirmed only after Treasury reviews every field." },
-        { name: "certified", label: "Certified", type: "checkbox", defaultValue: false }, { name: "notes", label: "Notes", type: "textarea", defaultValue: "" }, { name: "active", label: "Active", type: "checkbox", defaultValue: false }
+        { name: "notes", label: "Notes", type: "textarea", defaultValue: "" }, { name: "active", label: "Active", type: "checkbox", defaultValue: false }
       ],
-      columns: [{ key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "mode", label: "Mode" }, { key: "specificationVersion", label: "Specification version" }, { key: "certified", label: "Certified", render: (row) => row.certified ? t("Yes") : t("No") }, { key: "notes", label: "Notes" }, { key: "active", label: "Status" }]
+      columns: [{ key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "mode", label: "Mode" }, { key: "specificationVersion", label: "Specification version" }, { key: "certified", label: "Certified", render: (row) => row.certified ? t("Yes") : t("No") }, { key: "notes", label: "Notes" }, { key: "active", label: "Status" }],
+      renderBeforeTable: ({ rows, reload }) => <BankFormatCertificationPanel rows={rows} reload={reload} />
     }
   }), [masters, t]);
 

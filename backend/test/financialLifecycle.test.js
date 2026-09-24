@@ -177,8 +177,12 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     await t.test("7. Director approval", async () => {
       const result = await decideApproval({ id: request._id, action: "APPROVE", comments: "Director approved", user: users.director, req });
       request = result.request;
-      assert.equal(request.status, REQUEST_STATUS.DIRECTOR_APPROVED);
+      // The parent status never takes on an organization-specific label; it
+      // stays PENDIENTE_APROBACION until the whole route is complete, while
+      // the Director's decision is recorded in approvalHistory/route snapshot.
+      assert.equal(request.status, REQUEST_STATUS.PENDING_APPROVAL);
       assert.equal(request.approvalStage, "VICE_RECTOR");
+      assert.ok(request.approvalHistory.some((event) => event.action === "AREA_DIRECTOR_APPROVED"));
     });
 
     await t.test("8. Vice Rector approval and transitional budget commitment", async () => {

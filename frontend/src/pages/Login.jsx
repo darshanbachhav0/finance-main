@@ -18,7 +18,8 @@ const demos = DEMO_LOGIN_ENABLED ? [
   { key: "accounting", role: "Accounting", dni: "10000005", password: "UMA-Demo-2026!" },
   { key: "treasury", role: "Treasury", dni: "10000006", password: "UMA-Demo-2026!" },
   { key: "budget", role: "Budget", dni: "10000007", password: "UMA-Demo-2026!" },
-  { key: "management", role: "Management", dni: "10000008", password: "UMA-Demo-2026!" }
+  { key: "management", role: "Management", dni: "10000008", password: "UMA-Demo-2026!" },
+  { key: "procurement", role: "Procurement", dni: "10000013", password: "UMA-Demo-2026!" }
 ] : [];
 
 export default function Login() {

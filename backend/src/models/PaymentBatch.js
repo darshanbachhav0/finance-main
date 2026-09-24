@@ -54,6 +54,16 @@ const paymentBatchSchema = new mongoose.Schema(
     paymentCount: Number,
     formatSnapshot: mongoose.Schema.Types.Mixed,
     specificationVersion: { type: String, default: "DEMO-1" },
+    // Immutable snapshot of the BankFormatConfiguration's certification state at the moment this
+    // file was generated. A later certification decision on the configuration must never change
+    // what an already-generated batch reports as its certification state.
+    certificationSnapshot: {
+      certified: { type: Boolean, default: false },
+      certifiedAt: { type: Date, default: null },
+      certifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      certificationReference: { type: String, default: "" },
+      specificationVersion: String
+    },
     priority: { type: String, enum: ["NORMAL", "PRIORITY", "MIXED"], default: "NORMAL", index: true },
     status: { type: String, enum: ["GENERATED", "PARTIALLY_CONFIRMED", "CONFIRMED", "REJECTED", "REPROGRAMMED", "CANCELLED"], default: "GENERATED", index: true },
     generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

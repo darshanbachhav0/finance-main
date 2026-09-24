@@ -47,14 +47,15 @@ test("analytics provide real drilldowns and an exact tabular fallback", () => {
   assert.doesNotMatch(reports, /mock data/i);
 });
 
-test("shared login exposes all eight UMA demo roles and fills their credentials", () => {
+test("shared login exposes all nine UMA demo roles and fills their DNI-based credentials", () => {
   const login = source("../src/pages/Login.jsx");
-  for (const key of ["admin", "solicitor", "director", "vice", "accounting", "treasury", "budget", "management"]) {
+  for (const key of ["admin", "solicitor", "director", "vice", "accounting", "treasury", "budget", "management", "procurement"]) {
     assert.match(login, new RegExp(`key: "${key}"`));
   }
-  assert.match(login, /setEmail\(account\.email\)/);
+  assert.match(login, /setDni\(account\.dni\)/);
   assert.match(login, /setPassword\(account\.password\)/);
   assert.doesNotMatch(login, /import\.meta\.env\.DEV\s*&&/);
+  assert.match(login, /VITE_ENABLE_DEMO_LOGIN/, "demo credentials must stay behind an explicit build flag, never on by default");
 });
 
 for (const item of tests) {

@@ -6,6 +6,7 @@ import ExchangeRate from "../models/ExchangeRate.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBankAccount.js";
@@ -84,6 +85,9 @@ async function buildTasks(user) {
   if ([ROLES.ADMIN, ROLES.BUDGET].includes(user.role)) {
     items.push({ key: "budgetExceptions", label: "Budget exceptions pending", count: await BudgetException.countDocuments({ status: "PENDING" }), path: "/budget", tone: "red" });
   }
+  if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role)) {
+    items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: await FinancialRequest.countDocuments({ flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null }), path: "/requests", tone: "amber" });
+  }
   return { items, total: items.reduce((sum, item) => sum + Number(item.count || 0), 0), counters: Object.fromEntries(items.map((item) => [item.key, item.count])) };
 }
 
@@ -157,7 +161,7 @@ async function roleDetails(user, common) {
   if (user.role === ROLES.MANAGEMENT) {
     const [overview, pendingCommitments] = await Promise.all([
       budgetOverview({ period }),
-      FinancialRequest.countDocuments({ status: { $in: [REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED] } })
+      FinancialRequest.countDocuments({ status: { $in: [REQUEST_STATUS.APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED] } })
     ]);
     const typeTotals = new Map(common.byType.map((item) => [item._id, item.amount || 0]));
     const totalSpend = common.byType.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -206,6 +210,22 @@ async function roleDetails(user, common) {
     );
     data.queue = queue.slice(0, 8);
     data.recentFiles = recentFiles;
+  }
+
+  if (user.role === ROLES.PROCUREMENT) {
+    const [awaitingOrder, openOrders, recentOrders, invoicedAgainstOrders] = await Promise.all([
+      FinancialRequest.countDocuments({ flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null }),
+      PurchaseOrder.countDocuments({ status: { $in: ["ISSUED", "PARTIALLY_LIQUIDATED"] } }),
+      PurchaseOrder.find().populate("supplier", "name legalName").sort({ issueDate: -1 }).limit(6),
+      AccountsPayable.countDocuments({ purchaseOrder: { $ne: null }, status: { $ne: AP_STATUS.CANCELLED } })
+    ]);
+    metrics.push(
+      { key: "awaitingOrder", label: "Approved, awaiting PO", value: awaitingOrder, tone: "amber" },
+      { key: "openOrders", label: "Open Purchase Orders", value: openOrders, tone: "navy" },
+      { key: "invoicedAgainstOrders", label: "Invoices received against POs", value: invoicedAgainstOrders, tone: "teal" },
+      { key: "supplierWarnings", label: "Supplier validations", value: await Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }), tone: "amber" }
+    );
+    data.recentOrders = recentOrders;
   }
 
   if (user.role === ROLES.BUDGET) {

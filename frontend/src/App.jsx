@@ -29,9 +29,10 @@ const AuditViewer = lazy(() => import("./pages/AuditViewer.jsx"));
 const EmployeeReimbursementBanking = lazy(() => import("./pages/EmployeeReimbursementBanking.jsx"));
 const BulkInvoiceUpload = lazy(() => import("./pages/BulkInvoiceUpload.jsx"));
 const InvoiceObservations = lazy(() => import("./pages/InvoiceObservations.jsx"));
+const MyTeam = lazy(() => import("./pages/MyTeam.jsx"));
 const ExternalManagementPortal = lazy(() => import("./pages/ExternalManagementPortal.jsx"));
 
-const internalRoles = ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Management"];
+const internalRoles = ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"];
 
 function RoleHome() {
   const { user } = useAuth();
@@ -54,6 +55,7 @@ export default function App() {
           </Route>
           <Route path="administration" element={<ProtectedRoute roles={["Admin"]} />}><Route index element={<WorkspaceHub administration />} /></Route>
           <Route path="requests" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestsList />} /></Route>
+          <Route path="my-team" element={<ProtectedRoute roles={[...internalRoles, "ManagementViewer"]} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
@@ -85,10 +87,10 @@ export default function App() {
           <Route path="budget" element={<ProtectedRoute roles={["Admin", "Approver", "Accounting", "Budget", "Management"]} />}>
             <Route index element={<BudgetControl />} />
           </Route>
-          <Route path="reports" element={<ProtectedRoute roles={["Admin", "Approver", "Accounting", "Treasury", "Budget", "Management"]} />}>
+          <Route path="reports" element={<ProtectedRoute roles={["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"]} />}>
             <Route index element={<ManagementReports />} />
           </Route>
-          <Route path="suppliers" element={<ProtectedRoute roles={["Admin", "Accounting", "Treasury", "Solicitor"]} />}>
+          <Route path="suppliers" element={<ProtectedRoute roles={["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"]} />}>
             <Route index element={<Suppliers />} />
           </Route>
           <Route path="cost-centers" element={<ProtectedRoute roles={["Admin", "Accounting"]} />}>

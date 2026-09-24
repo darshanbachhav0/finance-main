@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { asyncHandler } from "./asyncHandler.js";
+import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { hasPermission } from "../utils/permissions.js";
@@ -14,7 +15,7 @@ export const protect = asyncHandler(async (req, _res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev_secret_change_me");
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.id).select("-passwordHash");
 
     if (!user || !user.active) {

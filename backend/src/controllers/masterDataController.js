@@ -15,25 +15,29 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { resolveExchangeRateSnapshot } from "../services/exchangeRateService.js";
 import { closeAccountingPeriod, createAccountingPeriod, reopenAccountingPeriod } from "../services/periodAdministrationService.js";
+import { certifyBankFormatConfiguration } from "../services/treasuryService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { assertLegacyAllocationChange } from "../services/budgetPlanService.js";
 
-async function verifyExchangeRatePayload(payload) {
+export async function verifyExchangeRatePayload(payload) {
   if (!Number.isFinite(Number(payload.rate)) || Number(payload.rate) <= 0) throw new AppError(422, "A positive selling rate is required.");
   const date = new Date(payload.date);
   if (Number.isNaN(date.getTime())) throw new AppError(422, "A valid exchange-rate date is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   payload.date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   payload.period = payload.date.toISOString().slice(0, 7);
+  payload.retrievedAt = new Date();
   if (payload.providerMode === "SUNAT") {
     const verified = await fetchSunatSellingRate(payload.date.toISOString().slice(0, 10));
     if (verified.date !== payload.date.toISOString().slice(0, 10) || Number(payload.rate) !== verified.rate) throw new AppError(422, "Rate/date disagree with authoritative SUNAT evidence.");
     payload.source = payload.sourceLabel = verified.source;
     payload.authoritative = true;
+    payload.sourceUrl = verified.sourceUrl;
   } else {
     payload.providerMode = payload.providerMode === "BCRP_FALLBACK" ? "BCRP_FALLBACK" : "MANUAL";
     payload.authoritative = false;
+    payload.sourceUrl = undefined;
   }
 }
 
@@ -158,7 +162,7 @@ export const approvalRules = resourceController({
 export const budgetRules = resourceController({
   Model: BudgetRule,
   label: "BudgetRule",
-  fields: ["name", "mode", "exceptionStrategy", "costCenter", "expenseType", "project", "active", "effectiveFrom", "effectiveTo"],
+  fields: ["name", "mode", "exceptionStrategy", "costCenter", "expenseType", "project", "exceptionApproverRole", "exceptionEscalationAmount", "exceptionEscalationApproverRole", "active", "effectiveFrom", "effectiveTo"],
   searchFields: ["name", "project"],
   sortFields: ["name", "mode", "active", "createdAt"],
   populate: ["costCenter", "expenseType"]
@@ -191,14 +195,29 @@ export const accountingMappings = resourceController({
   defaultSort: { code: 1 }
 });
 
-export const bankFormats = resourceController({
-  Model: BankFormatConfiguration,
-  label: "BankFormatConfiguration",
-    fields: ["bank", "currency", "mode", "specificationVersion", "certified", "notes", "active", "bbva"],
-  searchFields: ["bank", "specificationVersion", "notes"],
-  sortFields: ["bank", "currency", "mode", "active"],
-  defaultSort: { bank: 1, currency: 1 }
-});
+export const bankFormats = {
+  ...resourceController({
+    Model: BankFormatConfiguration,
+    label: "BankFormatConfiguration",
+    // "certified" is intentionally excluded here: it can only change through the dedicated
+    // certify action below, never through a routine field edit.
+    fields: ["bank", "currency", "mode", "specificationVersion", "notes", "active", "bbva"],
+    searchFields: ["bank", "specificationVersion", "notes"],
+    sortFields: ["bank", "currency", "mode", "active"],
+    defaultSort: { bank: 1, currency: 1 },
+    populate: [{ path: "certifiedBy", select: "name email role" }]
+  }),
+  certify: asyncHandler(async (req, res) => {
+    const data = await certifyBankFormatConfiguration({
+      id: req.params.id,
+      certified: req.body.certified,
+      certificationReference: req.body.certificationReference || req.body.comments,
+      user: req.user,
+      req
+    });
+    res.json({ data });
+  })
+};
 
 export const financeConfigurations = resourceController({
   Model: FinanceConfiguration,

@@ -59,13 +59,9 @@ It does not authenticate to SUNAT, upload an official file, receive a submission
 
 ## Bank Files
 
-The common adapter contract is in `backend/src/integrations/banks/BankFileAdapter.js`; bank-specific adapters are under the same folder. Active format configuration is stored in `BankFormatConfiguration` and seeded as:
+BBVA is the only production source/payment bank. `backend/src/integrations/banks/BbvaBankFileAdapter.js` is the sole active adapter (fixed-width, 151-byte header, 277-byte detail, no delimiter, count/amount reconciliation, PEN/USD kept in separate files); `backend/src/integrations/banks/index.js` rejects any other bank at the service boundary. There is no BCP/Interbank/Scotiabank source-bank generator in the codebase — a supplier's own beneficiary account may still be at another bank (a destination-bank/CCI concern), but no other bank can generate an outbound payment file. Active format configuration is stored per bank+currency in `BankFormatConfiguration`, defaulting to `certified: false` until Treasury/BBVA formally accepts a generated PEN/USD sample file through the dedicated certify action (`POST /bank-formats/:id/certify`); certification never affects a file already generated — each `PaymentBatch`/`GeneratedFile` snapshots the certification state that applied at the moment it was created.
 
-- Mode: `DEMO`
-- Specification version: `UMA-DEMO-1`
-- Certified: `false`
-
-`BANK_FILE_MODE` defaults to `DEMO`. The system persists the batch number, bank, currency, payment date, AP items, bank-account snapshots, total, physical file path, SHA-256 checksum, generator, timestamp, and status.
+The system persists the batch number, bank, currency, payment date, AP items, bank-account snapshots, total, physical file path, SHA-256 checksum, generator, timestamp, certification snapshot, and status.
 
 Generating or downloading a TXT never confirms payment. Actual confirmation is a separate, idempotent Treasury action that settles Accounts Payable, creates the balanced payment journal, updates budget figures, and moves the request to `PAGADO`.
 

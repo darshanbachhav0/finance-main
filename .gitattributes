@@ -1,0 +1,6 @@
+# Byte-exact fixed-width BBVA payment-file fixtures used for "byte for byte" reproduction
+# tests. These must never have line endings rewritten by git on checkout/checkin (e.g. by a
+# developer machine with core.autocrlf=true), or the golden-file tests break without any
+# actual code or data change.
+data/BBVAPROVSOLES31082026.txt -text
+data/BBVAPROVDOLARES31082026.txt -text

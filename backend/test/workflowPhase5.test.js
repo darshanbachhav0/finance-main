@@ -67,6 +67,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       solicitor: await User.create({ name: "Phase 5 Requester", email: "phase5.requester@uma.edu.pe", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id }),
       approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.APPROVER, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR" }),
       budget: await User.create({ name: "Phase 5 Budget", email: "phase5.budget@uma.edu.pe", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
+      procurement: await User.create({ name: "Phase 5 Procurement", email: "phase5.procurement@uma.edu.pe", passwordHash: "unused", role: ROLES.PROCUREMENT, area: "Procurement" }),
       treasury: await User.create({ name: "Phase 5 Treasury", email: "phase5.treasury@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
       accounting: await User.create({ name: "Phase 5 Accounting", email: "phase5.accounting@uma.edu.pe", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" })
     };
@@ -199,9 +200,10 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(await BudgetCommitment.countDocuments({ request: request._id }), before);
     });
 
-    await t.test("Solicitor cannot issue an order and Budget creates it only from approved request data", async () => {
+    await t.test("Solicitor cannot issue an order and Budget cannot either; only Procurement creates it from approved request data", async () => {
       await assert.rejects(() => issueProcurementOrder({ requestId: readyRequest._id, user: users.solicitor, req }), (error) => error.code === ERROR_CODES.FORBIDDEN);
-      const order = await issueProcurementOrder({ requestId: readyRequest._id, user: users.budget, req });
+      await assert.rejects(() => issueProcurementOrder({ requestId: readyRequest._id, user: users.budget, req }), (error) => error.code === ERROR_CODES.FORBIDDEN);
+      const order = await issueProcurementOrder({ requestId: readyRequest._id, user: users.procurement, req });
       assert.match(order.poNumber, /^OC-2026-\d{5,7}$/);
       assert.equal(order.orderKind, "PURCHASE");
       assert.equal(String(order.supplier), String(mainSupplier._id));
@@ -211,7 +213,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(order.lines[0].itemDescription, readyRequest.lines[0].itemDescription);
 
       const serviceRequest = await procurementRequest({ expenseNature: EXPENSE_NATURE.SERVICES });
-      const serviceOrder = await issueProcurementOrder({ requestId: serviceRequest._id, user: users.budget, req });
+      const serviceOrder = await issueProcurementOrder({ requestId: serviceRequest._id, user: users.procurement, req });
       assert.equal(serviceOrder.orderKind, "SERVICE");
     });
 
@@ -222,7 +224,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       await request.save();
       const reloaded = await FinancialRequest.findById(request._id);
       assert.equal(reloaded.quotations[0].balancePercentage, 70);
-      const order = await issueProcurementOrder({ requestId: request._id, user: users.budget, req });
+      const order = await issueProcurementOrder({ requestId: request._id, user: users.procurement, req });
       const savedOrder = await PurchaseOrder.findById(order._id);
       assert.equal(savedOrder.paymentTermsSnapshot.paymentCondition, "ADVANCE_AND_BALANCE");
       assert.equal(savedOrder.paymentTermsSnapshot.advancePercentage, 30);
@@ -235,13 +237,13 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       const currentRequest = await FinancialRequest.findById(request._id);
       currentRequest.quotations[0].advancePercentage = 50;
       await currentRequest.save();
-      const repeated = await issueProcurementOrder({ requestId: request._id, user: users.budget, req });
+      const repeated = await issueProcurementOrder({ requestId: request._id, user: users.procurement, req });
       assert.equal(repeated.paymentTermsSnapshot.advancePercentage, 30);
 
       const legacy = await procurementRequest();
       legacy.quotations[0].paymentConditions = "Original signed agreement";
       await legacy.save();
-      const legacyOrder = await issueProcurementOrder({ requestId: legacy._id, user: users.budget, req });
+      const legacyOrder = await issueProcurementOrder({ requestId: legacy._id, user: users.procurement, req });
       assert.equal(legacyOrder.paymentTermsSnapshot.paymentConditions, "Original signed agreement");
     });
 
@@ -253,7 +255,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
         const reloaded = await FinancialRequest.findById(request._id);
         assert.equal(reloaded.quotations[0].advancePercentage, advancePercentage);
         assert.equal(reloaded.quotations[0].balancePercentage, balancePercentage);
-        const order = await issueProcurementOrder({ requestId: request._id, user: users.budget, req });
+        const order = await issueProcurementOrder({ requestId: request._id, user: users.procurement, req });
         const savedOrder = await PurchaseOrder.findById(order._id);
         assert.equal(savedOrder.paymentTermsSnapshot.paymentCondition, paymentCondition);
         assert.equal(savedOrder.paymentTermsSnapshot.advancePercentage, advancePercentage);
@@ -269,7 +271,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       const invoiceRequest = await procurementRequest();
       Object.assign(invoiceRequest.quotations[0], { paymentCondition: "CREDIT", creditDays: 15, creditStart: "INVOICE" });
       await invoiceRequest.save();
-      const order = await generatePurchaseOrder(invoiceRequest, users.budget, req);
+      const order = await generatePurchaseOrder(invoiceRequest, users.procurement, req);
       Object.assign(invoiceRequest.quotations[0], { paymentCondition: "100%_ADVANCE" });
       await invoiceRequest.save();
       const voucher = { ruc: mainSupplier.rucDni, series: "F099", number: "001", issueDate: "2026-09-01", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
@@ -286,15 +288,15 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     });
 
     await t.test("repeated and concurrent order creation remains idempotent", async () => {
-      const repeated = await issueProcurementOrder({ requestId: readyRequest._id, user: users.budget, req });
+      const repeated = await issueProcurementOrder({ requestId: readyRequest._id, user: users.procurement, req });
       assert.equal(await PurchaseOrder.countDocuments({ request: readyRequest._id }), 1);
       assert.equal(String(repeated._id), String((await PurchaseOrder.findOne({ request: readyRequest._id }))._id));
 
       const concurrentRequest = await procurementRequest();
       const [firstDoc, secondDoc] = await Promise.all([FinancialRequest.findById(concurrentRequest._id), FinancialRequest.findById(concurrentRequest._id)]);
       const [first, second] = await Promise.all([
-        generatePurchaseOrder(firstDoc, users.budget, req),
-        generatePurchaseOrder(secondDoc, users.budget, req)
+        generatePurchaseOrder(firstDoc, users.procurement, req),
+        generatePurchaseOrder(secondDoc, users.procurement, req)
       ]);
       assert.equal(String(first._id), String(second._id));
       assert.equal(await PurchaseOrder.countDocuments({ request: concurrentRequest._id }), 1);
@@ -305,7 +307,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
         const request = await procurementRequest({ requestType, expenseNature: EXPENSE_NATURE.REIMBURSEMENT_LIQUIDATION });
         const readiness = await evaluateProcurementReadiness(request);
         assert.equal(readiness.applicable, false);
-        await assert.rejects(() => issueProcurementOrder({ requestId: request._id, user: users.budget, req }), (error) => error.code === ERROR_CODES.PROCUREMENT_NOT_APPLICABLE);
+        await assert.rejects(() => issueProcurementOrder({ requestId: request._id, user: users.procurement, req }), (error) => error.code === ERROR_CODES.PROCUREMENT_NOT_APPLICABLE);
       }
     });
 
@@ -447,9 +449,11 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     });
 
     await t.test("Phase 5 role permissions preserve segregation of duties", () => {
-      assert.equal(hasPermission(users.budget, PERMISSIONS.PROCUREMENT_ORDER_CREATE), true);
+      assert.equal(hasPermission(users.procurement, PERMISSIONS.PROCUREMENT_ORDER_CREATE), true);
+      assert.equal(hasPermission(users.budget, PERMISSIONS.PROCUREMENT_ORDER_CREATE), false, "Budget commits funds but no longer issues Purchase Orders");
       assert.equal(hasPermission(users.solicitor, PERMISSIONS.PROCUREMENT_ORDER_CREATE), false);
       assert.equal(hasPermission(users.budget, PERMISSIONS.SUPPLIER_HOMOLOGATE), false);
+      assert.equal(hasPermission(users.procurement, PERMISSIONS.BUDGET_MANAGE), false, "Procurement issues Purchase Orders but cannot commit budget");
       assert.equal(hasPermission(users.treasury, PERMISSIONS.SUPPLIER_HOMOLOGATE), false);
       assert.equal(hasPermission(users.treasury, PERMISSIONS.TREASURY_FILE), true);
       assert.equal(hasPermission(users.accounting, PERMISSIONS.PAYMENT_CONFIRM), false);

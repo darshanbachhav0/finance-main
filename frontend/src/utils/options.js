@@ -90,7 +90,7 @@ export const expenseNatures = [
 export const requestPriorities = ["BAJA", "MEDIA", "ALTA"];
 export const approvalLevels = ["AREA_DIRECTOR", "VICE_RECTOR", "RECTORATE", "GENERAL_MANAGEMENT"];
 export const banks = ["BCP", "BBVA", "INTERBANK", "SCOTIABANK"];
-export const roles = ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Management", "ManagementViewer"];
+export const roles = ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"];
 
 export const requestTypeLabels = {
   OPEX: "OPEX",

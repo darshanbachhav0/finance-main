@@ -2,11 +2,12 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
+import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
 import { ROLES } from "../utils/constants.js";
 
 function signToken(user) {
-  return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || "dev_secret_change_me", {
+  return jwt.sign({ id: user._id, role: user.role }, getJwtSecret(), {
     expiresIn: process.env.JWT_EXPIRES_IN || "8h"
   });
 }
