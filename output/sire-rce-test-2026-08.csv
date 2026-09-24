@@ -1,2 +1,0 @@
-supplierRuc,supplierName,documentType,series,number,invoiceDate,fiscalPeriod,accountingDate,currency,subtotal,igv,total,exchangeRate,requestReference,cxpReference
-20600000001,PROVEEDOR FISCAL UMA SAC,FACTURA,F001,00012345,2026-08-15,2026-08,2026-08-18,USD,1000,180,1180,3.812,SOL-2026-00123,68cc1234567890abcdef1234
