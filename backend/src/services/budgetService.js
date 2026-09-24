@@ -179,7 +179,7 @@ export async function reserveBudget(request, userId, { session, additionalAmount
     // available funds; Phase 2 (ACTIVE) blocks below. A linked annual/monthly BudgetPlan always
     // means the dimension is actively managed, regardless of the Cost Center's own default mode.
     const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
-    const exceptionStrategy = rule.exceptionStrategy === "EXTRAORDINARY_APPROVAL" ? "EXTRAORDINARY_APPROVAL" : "REQUEST_BUDGET_INCREASE";
+    const exceptionStrategy = ["EXTRAORDINARY_APPROVAL", "REJECT"].includes(rule.exceptionStrategy) ? rule.exceptionStrategy : "REQUEST_BUDGET_INCREASE";
     const limits = budgetLimits(allocation, request.accountingPeriod, line.amount);
     const sourceKey = String(allocation?._id || center._id);
     const demand = demands.get(sourceKey) || 0;
@@ -190,6 +190,17 @@ export async function reserveBudget(request, userId, { session, additionalAmount
     demands.set(sourceKey, addMoney(demand, line.amount));
     let budgetException = null;
     let exceptionApproved = false;
+    if (mode === "ACTIVE" && available < line.amount && exceptionStrategy === "REJECT") {
+      // REJECT means exactly that: no BudgetException is prepared, there is no extraordinary
+      // path to retry into. The caller (approvalService.commitApprovedRequestBudget) rejects
+      // the request outright on this signal.
+      throw new AppError(
+        409,
+        `Budget rejected: this dimension's rule rejects requests exceeding available funds (available PEN ${available.toFixed(2)}, required PEN ${line.amount.toFixed(2)}).`,
+        { available, required: line.amount, exceptionStrategy, costCenter: center.code, hardReject: true, ...limits },
+        ERROR_CODES.INSUFFICIENT_BUDGET
+      );
+    }
     if (mode === "ACTIVE" && available < line.amount) {
       const key = dimensionKey(line, request.project) + (additionalAmount > 0 ? `|FX:${addMoney(existing.totalAmount, additionalAmount)}` : "");
       budgetException = await BudgetException.findOne({ request: request._id, dimensionKey: key });

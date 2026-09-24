@@ -133,9 +133,9 @@ export default function MasterConfiguration() {
         { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
         { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project", defaultValue: "*" },
-        { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: roles, hint: "Who may APPROVE/REJECT an extraordinary exception for this dimension. Defaults to Management." },
+        { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: ["Management"], hint: "Only Management/Rectorate authority may decide a budget exception - Admin cannot approve on Management's behalf." },
         { name: "exceptionEscalationAmount", label: "Escalate above amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Optional. Above this requested amount, a different (higher) authority is required instead." },
-        { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: roles, hint: "Required only when an escalation amount is set." },
+        { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: ["Management"], hint: "Required only when an escalation amount is set. Same Management-only restriction applies." },
         { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "active", label: "Status" }]
