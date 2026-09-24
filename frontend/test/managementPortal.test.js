@@ -6,10 +6,14 @@ const app = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 const portal = fs.readFileSync(new URL("../src/pages/ExternalManagementPortal.jsx", import.meta.url), "utf8");
 const layout = fs.readFileSync(new URL("../src/layouts/AppLayout.jsx", import.meta.url), "utf8");
 
-assert.deepEqual(roleNavigation.ManagementViewer, [["Management Portal", "/management-view"]]);
+// ManagementViewer is read-only, not confined to the external portal alone - it also has
+// real internal read-only dashboards/reports/audit history, never a mutation surface.
+assert.deepEqual(roleNavigation.ManagementViewer, [["Management Portal", "/management-view"], ["Reports", "/reports"], ["Audit", "/audit"]]);
 assert.equal(canAccessNavigation("ManagementViewer", "/management-view"), true);
-for (const path of ["/requests", "/approvals", "/budget", "/accounting", "/treasury", "/reports", "/administration", "/audit"]) {
-  assert.equal(canAccessNavigation("ManagementViewer", path), false, `${path} is outside the viewer portal`);
+assert.equal(canAccessNavigation("ManagementViewer", "/reports"), true);
+assert.equal(canAccessNavigation("ManagementViewer", "/audit"), true);
+for (const path of ["/requests", "/approvals", "/budget", "/accounting", "/treasury", "/administration"]) {
+  assert.equal(canAccessNavigation("ManagementViewer", path), false, `${path} is outside the read-only viewer scope`);
 }
 assert.match(app, /user\?\.role === "ManagementViewer"/);
 assert.match(app, /roles=\{\["Admin", "Management", "ManagementViewer"\]\}/);
