@@ -29,14 +29,14 @@ export const navigationAccess = Object.freeze({
   "/budget": ["Admin", "Approver", "Accounting", "Budget", "Management"],
   "/accounting/periods": ["Admin", "Accounting"],
   "/accounting/sire": ["Admin", "Accounting"],
-  "/reports": ["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
+  "/reports": ["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"],
   "/suppliers": ["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"],
   "/cost-centers": ["Admin", "Accounting"],
   "/expense-types": ["Admin", "Accounting"],
   "/exchange-rates": ["Admin", "Accounting"],
   "/configuration/projects": ["Admin", "Accounting", "Budget"],
   "/users": ["Admin"],
-  "/audit": ["Admin", "Accounting"]
+  "/audit": ["Admin", "Accounting", "ManagementViewer"]
 });
 
 export function canAccessNavigation(role, path, user) {
@@ -65,6 +65,6 @@ export const roleNavigation = {
   Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["SIRE", "/accounting/sire"]],
   Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"]],
   Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
-  ManagementViewer: [["Management Portal", "/management-view"]],
+  ManagementViewer: [["Management Portal", "/management-view"], ["Reports", "/reports"], ["Audit", "/audit"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
 };
