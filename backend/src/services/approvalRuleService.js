@@ -193,8 +193,23 @@ export async function initializeApprovalRoute(request) {
     return request.approvalRouteSnapshot;
   }
 
+  // No manager-chain identity exists for this requester (jefe not set in the organizational
+  // roster). That is a master-data gap, not grounds to silently fall back to the generic
+  // hardcoded default route - proceed only when a specifically configured ApprovalRule exists
+  // for this exact area/type/flow/amount dimension (a real, deliberate exception), or when the
+  // flow itself always defines its own default (Track B's expedited path already does, inside
+  // resolveApprovalRoute). Otherwise this is a configuration error the requester cannot resolve.
+  const configuredRules = await resolveApprovalRoute(request, { configuredOnly: true });
+  if (!configuredRules.length) {
+    throw new AppError(
+      422,
+      "This requester has no assigned supervisor in the organizational roster, and no approval rule is configured for this request's area, type, and flow. Fix the organizational roster (assign a supervisor) or configure an approval rule before this request can be submitted.",
+      { area: request.requesterArea || request.requestingArea, requestType: request.requestType, flowType: request.flowType },
+      ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED
+    );
+  }
   request.approvalRoutingMode = APPROVAL_ROUTING_MODE.RULE_BASED;
-  const rules = await resolveApprovalRoute(request);
+  const rules = configuredRules;
   const startedAt = new Date();
   request.approvalRouteSnapshot = rules.map((rule, index) => ({
     rule: rule.rule?._id || rule.rule || rule._id,

@@ -12,6 +12,7 @@ import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetRule from "../models/BudgetRule.js";
 import CostCenter from "../models/CostCenter.js";
 import Counter from "../models/Counter.js";
+import DirectPaymentEligibilityRule from "../models/DirectPaymentEligibilityRule.js";
 import DocumentRule from "../models/DocumentRule.js";
 import ExchangeRate from "../models/ExchangeRate.js";
 import ExpenseType from "../models/ExpenseType.js";
@@ -682,6 +683,20 @@ async function seedPeriodsAndRates(admin) {
     createdBy: admin._id,
     updatedBy: admin._id
   });
+  await upsert(FinanceConfiguration, {
+    key: FINANCE_CONFIGURATION_KEYS.SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS,
+    effectiveFrom: new Date(Date.UTC(2026, 0, 1))
+  }, {
+    numericValue: 12,
+    currency: "PEN",
+    behavior: "INFORMATION",
+    effectiveTo: null,
+    active: true,
+    description: "Meses de vigencia de la homologación de un proveedor antes de requerir re-homologación.",
+    source: "Configuración Finanzas - Homologación de Proveedores",
+    createdBy: admin._id,
+    updatedBy: admin._id
+  });
   await upsert(AccountingPeriod, { period: closedPeriod }, {
     status: "CLOSED",
     openedAt: previousMonthDate,
@@ -773,6 +788,16 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
     sequence: 2,
     slaHours: 4,
     active: true
+  });
+  // Track B (direct payment) is only available where Finance has configured it as an
+  // exception - a modest starter threshold demonstrating the feature, adjustable by Admin.
+  await upsert(DirectPaymentEligibilityRule, { name: "Excepción estándar de pago directo" }, {
+    area: "*",
+    expenseNature: "*",
+    maxAmount: 5000,
+    active: true,
+    effectiveFrom: new Date(Date.UTC(2026, 0, 1)),
+    notes: "Umbral inicial de demostración; ajustar según la política real de Finanzas."
   });
 
   const documentRules = [

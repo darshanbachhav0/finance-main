@@ -7,6 +7,7 @@ import {
   budgetAllocations,
   budgetRules,
   costCenters,
+  directPaymentEligibilityRules,
   documentRules,
   exchangeRates,
   expenseTypes,
@@ -47,6 +48,9 @@ bindCrud(budgetAllocationRouter, budgetAllocations, [ROLES.ADMIN, ROLES.BUDGET])
 
 export const documentRuleRouter = Router();
 bindCrud(documentRuleRouter, documentRules, [ROLES.ADMIN, ROLES.ACCOUNTING]);
+
+export const directPaymentEligibilityRuleRouter = Router();
+bindCrud(directPaymentEligibilityRuleRouter, directPaymentEligibilityRules, [ROLES.ADMIN]);
 
 export const accountingMappingRouter = Router();
 bindCrud(accountingMappingRouter, accountingMappings, [ROLES.ADMIN, ROLES.ACCOUNTING]);

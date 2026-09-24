@@ -16,6 +16,7 @@ import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.
 import SunatVoucher from "../models/SunatVoucher.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
+import DirectPaymentEligibilityRule from "../models/DirectPaymentEligibilityRule.js";
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { initializeApprovalRoute } from "./approvalRuleService.js";
@@ -472,8 +473,39 @@ function normalizeTrackFields(request) {
   }
 }
 
+// Track B legitimately shortens the normal A1 path; it must never be a free choice that skips
+// A1's quotation/procurement controls. Only proceed when Finance/Admin has configured a matching
+// eligibility rule for this area/expense-nature/amount - no rule means no exception, so the
+// requester must use Track A1 instead. Enforced at submission (not draft save) so the wizard
+// doesn't block a requester before they've entered the fields the rule is matched against.
+async function assertTrackEligible(request) {
+  if (request.flowType !== FLOW_TYPE.B) return;
+  const amount = Number(request.totalPENEquivalent ?? request.penEquivalent ?? request.totalAmount ?? 0);
+  const area = request.requesterArea || request.requestingArea || "General";
+  const now = request.issueDate ? new Date(request.issueDate) : new Date();
+  const rules = await DirectPaymentEligibilityRule.find({
+    active: true,
+    $and: [
+      { $or: [{ area: "*" }, { area }] },
+      { $or: [{ expenseNature: "*" }, { expenseNature: request.expenseNature }] },
+      { $or: [{ effectiveFrom: { $exists: false } }, { effectiveFrom: null }, { effectiveFrom: { $lte: now } }] },
+      { $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: now } }] }
+    ]
+  }).sort({ area: -1, expenseNature: -1 });
+  const eligible = rules.some((rule) => !(rule.maxAmount >= 0) || amount <= rule.maxAmount);
+  if (!eligible) {
+    throw new AppError(
+      422,
+      "Track B (direct payment) is not configured as an exception for this area, expense nature, and amount. Submit through Track A1 (standard procurement), or ask Finance/Admin to configure a Track B eligibility rule if this truly qualifies for direct payment.",
+      { area, expenseNature: request.expenseNature, amount },
+      ERROR_CODES.VALIDATION_ERROR
+    );
+  }
+}
+
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
+  if (validateSubmission) await assertTrackEligible(request);
   const officialRequest = isOfficialCapexOpexRequest(request);
   assertRequestLines(request.lines);
   await validateAccountingDimensions({
