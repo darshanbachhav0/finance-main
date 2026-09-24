@@ -538,7 +538,7 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
         "rendition.dueAt": { $lt: new Date() },
         "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }
       }).select("requestNumber rendition.dueAt");
-      if (overdue) throw new AppError(409, "A new advance is blocked because the employee has a rendition overdue by more than the allowed 10-day period.", { overdueRequest: overdue.requestNumber, dueAt: overdue.rendition?.dueAt }, ERROR_CODES.OVERDUE_RENDITION);
+      if (overdue) throw new AppError(409, "A new advance is blocked because the employee has a rendition overdue past its configured deadline.", { overdueRequest: overdue.requestNumber, dueAt: overdue.rendition?.dueAt }, ERROR_CODES.OVERDUE_RENDITION);
     } else if (request.flowType === FLOW_TYPE.A1) {
       if (officialRequest) assertOfficialRequestFields(request);
       assertSupplierEligibleForRequestReview(supplier);

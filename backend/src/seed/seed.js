@@ -668,6 +668,20 @@ async function seedPeriodsAndRates(admin) {
     createdBy: admin._id,
     updatedBy: admin._id
   });
+  await upsert(FinanceConfiguration, {
+    key: FINANCE_CONFIGURATION_KEYS.RENDITION_OVERDUE_DAYS,
+    effectiveFrom: new Date(Date.UTC(2026, 0, 1))
+  }, {
+    numericValue: 10,
+    currency: "PEN",
+    behavior: "INFORMATION",
+    effectiveTo: null,
+    active: true,
+    description: "Días calendario permitidos para rendir un anticipo (Track C) antes de bloquear nuevos anticipos al colaborador.",
+    source: "Configuración Finanzas - Rendición de Gastos",
+    createdBy: admin._id,
+    updatedBy: admin._id
+  });
   await upsert(AccountingPeriod, { period: closedPeriod }, {
     status: "CLOSED",
     openedAt: previousMonthDate,

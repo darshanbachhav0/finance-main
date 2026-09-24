@@ -208,6 +208,7 @@ export default function AccountsPayable() {
                 "OPEN",
                 "SCHEDULED",
                 "PAYMENT_FILE_CREATED",
+                "PARTIALLY_PAID",
                 "PAYMENT_BOUNCED",
                 "PAID",
                 "CANCELLED"

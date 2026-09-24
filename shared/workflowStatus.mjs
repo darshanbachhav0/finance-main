@@ -24,15 +24,18 @@ export function renditionPending(request) {
 export function deriveFinancialProgress(request, payables = [], reconciliations = [], purchaseOrder = null, vouchers = []) {
   const active = payables.filter(ap => ap.status !== "CANCELLED");
   const confirmations = request.payment?.confirmations || [];
-  const counts = { total: active.length, accounted: 0, scheduled: 0, fileGenerated: 0, paid: 0, reconciled: 0 };
-  const cents = { total: 0, paid: 0, reconciled: 0 };
+  const counts = { total: active.length, accounted: 0, scheduled: 0, fileGenerated: 0, paid: 0, partiallyPaid: 0, reconciled: 0 };
+  const cents = { total: 0, paid: 0, paidToDate: 0, reconciled: 0 };
   const children = active.map(ap => {
-    const confirmation = confirmations.find(item => id(item.accountsPayable) === id(ap))
-      || (active.length === 1 ? request.payment : null);
-    const confirmedAmount = confirmation?.amount ?? confirmation?.confirmedAmount;
-    const paid = ap.status === "PAID" && Boolean(posted(ap.paymentJournal) && ap.paidDate && confirmation?.confirmedAt
-      && confirmation?.operationNumber && confirmation?.paidAt
-      && amount(confirmedAmount) === amount(ap.originalAmount) && amount(ap.outstandingAmount) === 0);
+    // Multiple confirmations can now target the same AP (partial payments), so sum every
+    // confirmation for this child instead of trusting a single match.
+    const apConfirmations = confirmations.filter(item => id(item.accountsPayable) === id(ap));
+    const relevant = apConfirmations.length ? apConfirmations : (active.length === 1 && request.payment?.confirmedAmount ? [request.payment] : []);
+    const confirmedCents = relevant.reduce((sum, item) => sum + amount(item?.amount ?? item?.confirmedAmount), 0);
+    const hasCompleteRecord = relevant.length > 0 && relevant.every(item => item?.confirmedAt && item?.operationNumber && item?.paidAt);
+    const paid = ap.status === "PAID" && Boolean(posted(ap.paymentJournal) && ap.paidDate && hasCompleteRecord
+      && confirmedCents === amount(ap.originalAmount) && amount(ap.outstandingAmount) === 0);
+    const partiallyPaid = !paid && (ap.status === "PARTIALLY_PAID" || confirmedCents > 0);
     const reconciled = paid && reconciliations.some(record => {
       const covered = new Set([record.accountsPayable, ...(record.accountsPayables || [])].filter(Boolean).map(id));
       const coveredTotal = payables.filter(child => covered.has(id(child))).reduce((total, child) => total + amount(child.originalAmount), 0);
@@ -40,15 +43,15 @@ export function deriveFinancialProgress(request, payables = [], reconciliations 
         && amount(record.paidAmount) === coveredTotal && amount(record.statementAmount) === coveredTotal;
     });
     const batch = ap.paymentBatch;
-    const fileGenerated = paid || Boolean(["PAYMENT_FILE_CREATED", "PAID"].includes(ap.status)
+    const fileGenerated = paid || Boolean(["PAYMENT_FILE_CREATED", "PAID", "PARTIALLY_PAID"].includes(ap.status)
       && batch?.checksum && batch?.generatedAt && batch.items?.some(item => id(item.accountsPayable) === id(ap) && !["CANCELLED", "REPROGRAMMED", "REJECTED"].includes(item.status)));
     const scheduled = fileGenerated || Boolean(ap.status === "SCHEDULED" && ap.bankAccountSnapshot?.bank
       && (ap.scheduledFor || ap.history?.some(item => item.status === "SCHEDULED")));
     const accounted = posted(ap.provisionJournal);
     counts.accounted += Number(accounted); counts.scheduled += Number(scheduled);
-    counts.fileGenerated += Number(fileGenerated); counts.paid += Number(paid); counts.reconciled += Number(reconciled);
-    cents.total += amount(ap.originalAmount); if (paid) cents.paid += amount(ap.originalAmount); if (reconciled) cents.reconciled += amount(ap.originalAmount);
-    return { id: id(ap), accounted, scheduled, fileGenerated, paid, reconciled };
+    counts.fileGenerated += Number(fileGenerated); counts.paid += Number(paid); counts.partiallyPaid += Number(partiallyPaid); counts.reconciled += Number(reconciled);
+    cents.total += amount(ap.originalAmount); if (paid) cents.paid += amount(ap.originalAmount); cents.paidToDate += confirmedCents; if (reconciled) cents.reconciled += amount(ap.originalAmount);
+    return { id: id(ap), accounted, scheduled, fileGenerated, paid, partiallyPaid, reconciled, outstandingAmount: ap.outstandingAmount };
   });
   const unaccountedVouchers = vouchers.filter(v => !v.accountsPayable && !v.supersededBy).length;
   const orderOpen = Boolean(purchaseOrder && Number(purchaseOrder.remainingAmount || 0) > 0);
@@ -58,11 +61,12 @@ export function deriveFinancialProgress(request, payables = [], reconciliations 
     if (counts.scheduled === counts.total) status = "PROGRAMADO";
     if (counts.fileGenerated === counts.total) status = "TXT_GENERADO";
     // Payment progress reflects existing obligations; an open PO separately blocks final closure.
+    // A child only counts toward PAGADO once it is fully (not partially) settled.
     if (counts.paid === counts.total) status = "PAGADO";
     if (counts.reconciled === counts.total) status = "CONCILIADO";
   }
   return { status, counts, amounts: Object.fromEntries(Object.entries(cents).map(([key, value]) => [key, value / 100])),
     currency: request.currency, orderOpen, unaccountedVouchers, children,
     renditionStatus: renditionPending(request) ? "RENDICION_PENDIENTE" : request.rendition?.status,
-    partialPayment: counts.paid > 0 && counts.paid < counts.total };
+    partialPayment: (counts.paid > 0 && counts.paid < counts.total) || counts.partiallyPaid > 0 };
 }
