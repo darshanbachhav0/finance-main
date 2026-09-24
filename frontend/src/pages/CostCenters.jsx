@@ -1,5 +1,7 @@
 import ResourceManager from "../components/ResourceManager.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import { useLanguage } from "../context/LanguageContext.jsx";
+import { formatCurrency } from "../utils/formatters.js";
 
 const numberPayload = (form) => ({
   ...form,
@@ -7,6 +9,7 @@ const numberPayload = (form) => ({
 });
 
 export default function CostCenters() {
+  const { language } = useLanguage();
   return (
     <ResourceManager
       title="Cost Centers"
@@ -29,11 +32,11 @@ export default function CostCenters() {
         { key: "name", label: "Name" },
         { key: "area", label: "Area" },
         { key: "organizationalUnit", label: "Organizational unit", render: (row) => <div className="primary-cell"><strong>{row.organizationalUnitCode || "-"}</strong><span>{row.organizationalUnit || "-"}</span></div> },
-        { key: "annualBudget", label: "Budget", render: (row) => Number(row.annualBudget || 0).toFixed(2) },
-        { key: "committedAmount", label: "Committed", render: (row) => Number(row.committedAmount || 0).toFixed(2) },
-        { key: "executedAmount", label: "Executed", render: (row) => Number(row.executedAmount || 0).toFixed(2) },
-        { key: "paidAmount", label: "Paid", render: (row) => Number(row.paidAmount || 0).toFixed(2) },
-        { key: "availableAmount", label: "Available", render: (row) => Number(row.availableAmount || 0).toFixed(2) },
+        { key: "annualBudget", label: "Budget", render: (row) => formatCurrency(row.annualBudget || 0, "PEN", language) },
+        { key: "committedAmount", label: "Committed", render: (row) => formatCurrency(row.committedAmount || 0, "PEN", language) },
+        { key: "executedAmount", label: "Executed", render: (row) => formatCurrency(row.executedAmount || 0, "PEN", language) },
+        { key: "paidAmount", label: "Paid", render: (row) => formatCurrency(row.paidAmount || 0, "PEN", language) },
+        { key: "availableAmount", label: "Available", render: (row) => formatCurrency(row.availableAmount || 0, "PEN", language) },
         { key: "importProvenance", label: "Source", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.importProvenance?.source || "Manual"}</strong><span>{row.sourceRows?.length ? `${row.sourceRows.length} source row${row.sourceRows.length === 1 ? "" : "s"}` : "No imported row"}</span></div> },
         { key: "active", label: "Status", render: (row) => <StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} /> }
       ]}

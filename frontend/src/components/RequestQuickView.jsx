@@ -7,9 +7,10 @@ import RequestStageIndicator from "./RequestStageIndicator.jsx";
 import Drawer from "./Drawer.jsx";
 import Message from "./Message.jsx";
 import FinancialProgressSummary from "./FinancialProgressSummary.jsx";
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function RequestQuickView({ requestId, onClose }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [request, setRequest] = useState(null);
   const [financialProgress, setFinancialProgress] = useState(null);
   const [error, setError] = useState("");
@@ -48,7 +49,7 @@ export default function RequestQuickView({ requestId, onClose }) {
           <div className="quick-view-summary">
             <h3>{request.title || request.description}</h3>
             <span>{t("Requester")}: {request.requester?.name || request.solicitor?.name || "—"}</span>
-            <strong>{request.currency} {Number(request.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+            <strong>{formatCurrency(request.totalAmount || 0, request.currency, language)}</strong>
             <FinancialProgressSummary request={request} financialProgress={financialProgress} compact />
             <RequestStageIndicator request={request} financialProgress={financialProgress} />
           </div>

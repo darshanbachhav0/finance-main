@@ -34,19 +34,17 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
+import { formatCurrency } from "../utils/formatters.js";
 const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 
-const money = (currency, value) => `${currency || "PEN"} ${Number(value || 0).toLocaleString(undefined, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-})}`;
 const amountOf = (row) => Number(row.accountsPayable?.outstandingAmount ?? row.outstandingAmount ?? row.totalAmount ?? 0);
 const requestIdOf = (row) => row.requestId || row.request?._id || row._id;
 const payableIdOf = (row) => row.accountsPayable?._id || row._id;
 
 export default function TreasuryQueue({ historyOnly = false }) {
   const [paymentView, setPaymentView] = useState("prepare");
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const money = (currencyCode, value) => formatCurrency(value, currencyCode || "PEN", language);
   const { notify } = useToast();
   const [selected, setSelected] = useState([]);
   const [accountSelections, setAccountSelections] = useState({});

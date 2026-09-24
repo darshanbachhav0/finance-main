@@ -11,12 +11,12 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import { formatCurrency } from "../utils/formatters.js";
 
-const money = (currency, value) => `${currency || "PEN"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const finalStatuses = new Set(["COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAILED"]);
 
 export default function BulkInvoiceUpload() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { notify } = useToast();
   const [orders, setOrders] = useState([]);
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
@@ -92,9 +92,9 @@ export default function BulkInvoiceUpload() {
       <div className="workspace-panel batch-upload-workspace">
         <div className="document-requirement required"><FileArchive size={22} /><div><strong>{t("Independent batch processing")}</strong><p>{t("SUNAT, duplicate identity, and remaining PO ceiling are checked per invoice. Invalid invoices are isolated instead of stopping the entire batch.")}</p></div></div>
         <DraftPanel busy={submitting} draft={draft} onDiscard={() => { setFile(null); setPurchaseOrderId(""); draft.separateCopy(); }}><form className="form-grid two-column-form" onSubmit={upload}>
-          <label className="field"><span>{t("Purchase Order")} *</span><select required disabled={loadingOrders || submitting} value={purchaseOrderId} onChange={(event) => setPurchaseOrderId(event.target.value)}><option value="">{t("Select Purchase Order")}</option>{orders.map((order) => <option value={order._id} key={order._id}>{order.poNumber} · {order.request?.requestNumber || ""} · {money(order.currency, order.remainingAmount)}</option>)}</select></label>
+          <label className="field"><span>{t("Purchase Order")} *</span><select required disabled={loadingOrders || submitting} value={purchaseOrderId} onChange={(event) => setPurchaseOrderId(event.target.value)}><option value="">{t("Select Purchase Order")}</option>{orders.map((order) => <option value={order._id} key={order._id}>{order.poNumber} · {order.request?.requestNumber || ""} · {formatCurrency(order.remainingAmount, order.currency || "PEN", language)}</option>)}</select></label>
           <label className="field"><span>{t("Batch file")} * {file?.name}</span><input required={!file} type="file" accept=".zip,.xlsx" disabled={submitting} onChange={(event) => setFile(event.target.files?.[0] || null)} /><small>{t("ZIP: same-name XML + PDF pairs. Excel: one row per voucher.")}</small></label>
-          {selectedOrder && <div className="form-span-two payment-destination-summary"><strong>{selectedOrder.poNumber} · {money(selectedOrder.currency, selectedOrder.remainingAmount)} {t("remaining")}</strong><span>{selectedOrder.supplier?.legalName || selectedOrder.supplier?.name || ""}</span><small>{selectedOrder.request?.requestNumber}</small></div>}
+          {selectedOrder && <div className="form-span-two payment-destination-summary"><strong>{selectedOrder.poNumber} · {formatCurrency(selectedOrder.remainingAmount, selectedOrder.currency || "PEN", language)} {t("remaining")}</strong><span>{selectedOrder.supplier?.legalName || selectedOrder.supplier?.name || ""}</span><small>{selectedOrder.request?.requestNumber}</small></div>}
           <div className="form-span-two"><button className="primary-button" type="submit" disabled={submitting || !file || !purchaseOrderId}><UploadCloud size={16} /><span>{t(submitting ? "Uploading..." : "Process batch")}</span></button></div>
         </form></DraftPanel>
       </div>

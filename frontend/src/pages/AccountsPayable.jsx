@@ -33,22 +33,7 @@ import {
   flowTypes
 } from "../utils/options.js";
 
-const money = (
-  currency,
-  value
-) =>
-  `${currency || "PEN"} ${Number(
-    value || 0
-  ).toLocaleString(
-    undefined,
-    {
-      minimumFractionDigits:
-        2,
-
-      maximumFractionDigits:
-        2
-    }
-  )}`;
+import { formatCurrency } from "../utils/formatters.js";
 
 const dateText = (
   value
@@ -61,9 +46,12 @@ const dateText = (
 
 export default function AccountsPayable() {
   const {
-    t
+    t,
+    language
   } =
     useLanguage();
+
+  const money = (currency, value) => formatCurrency(value, currency || "PEN", language);
 
   const [
     selected,

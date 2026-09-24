@@ -10,9 +10,10 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import { formatCurrency, formatNumber } from "../utils/formatters.js";
 
 export default function SireExport() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { notify } = useToast();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [records, setRecords] = useState([]);
@@ -81,7 +82,7 @@ export default function SireExport() {
         <StatCard label="Eligible vouchers" value={summary.eligible || 0} tone="green" />
         <StatCard label="Excluded vouchers" value={summary.excluded || 0} tone={summary.excluded ? "red" : "green"} />
         <StatCard label="Manual review" value={summary.manualReview || 0} tone={summary.manualReview ? "amber" : "green"} />
-        <StatCard label="Purchase total" value={total.toLocaleString(undefined, { minimumFractionDigits: 2 })} tone="teal" />
+        <StatCard label="Purchase total" value={formatNumber(total, language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tone="teal" />
       </div>
 
       {warnings.length > 0 && (
@@ -106,9 +107,9 @@ export default function SireExport() {
           { key: "accountingDate", label: "Accounting date" },
           { key: "fiscalValidationStatus", label: "Fiscal validation", render: (row) => <StatusBadge status={row.fiscalValidationStatus} /> },
           { key: "exportStatus", label: "Export status", render: (row) => <StatusBadge status={row.exportStatus} /> },
-          { key: "subtotal", label: "Subtotal", align: "right", render: (row) => row.subtotal == null ? "-" : Number(row.subtotal).toFixed(2) },
-          { key: "igv", label: "IGV", align: "right", render: (row) => row.igv == null ? "-" : Number(row.igv).toFixed(2) },
-          { key: "total", label: "Total", align: "right", render: (row) => row.total == null ? "-" : <strong>{Number(row.total).toFixed(2)}</strong> },
+          { key: "subtotal", label: "Subtotal", align: "right", render: (row) => row.subtotal == null ? "-" : formatCurrency(row.subtotal, row.currency, language) },
+          { key: "igv", label: "IGV", align: "right", render: (row) => row.igv == null ? "-" : formatCurrency(row.igv, row.currency, language) },
+          { key: "total", label: "Total", align: "right", render: (row) => row.total == null ? "-" : <strong>{formatCurrency(row.total, row.currency, language)}</strong> },
           { key: "currency", label: "Currency" },
           { key: "exchangeRate", label: "Exchange rate", align: "right", render: (row) => row.currency === "USD" ? Number(row.exchangeRate || 0).toFixed(4) : "-" }
         ]} />

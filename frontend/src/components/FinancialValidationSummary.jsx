@@ -1,10 +1,11 @@
 import { useAuth } from "../context/AuthContext.jsx";
 import { exchangeRateDescription } from "../utils/financialEvidence.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { formatCurrency } from "../utils/formatters.js";
 
 
 function AdvancedFinancialValidation({ request, related }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const check = (result, supplier = false) => result ? `${result.valid && (supplier || (result.voucherVerified !== false && !result.publicDataset)) ? t("Validated") : t("Not verified")} · ${result.source || "—"} · ${result.status || result.condition || "—"}${supplier ? "" : result.voucherVerified === false ? " · Invoice verification required" : ""}` : t("Not verified");
   return <div className="subsection-block">
     <h4>{t("Financial validation")}</h4>
@@ -12,7 +13,7 @@ function AdvancedFinancialValidation({ request, related }) {
       <div><dt>{t("Exchange rate evidence")}</dt><dd>{exchangeRateDescription(request.exchangeRateEvidence, request.exchangeRateSource, request.exchangeRate, request.exchangeRateDate)}</dd></div>
       <div><dt>{t("Supplier / RUC validation")}</dt><dd>{request.fiscalValidation?.taxpayer ? check(request.fiscalValidation.taxpayer, true) : request.supplier?.taxpayerStatus || t("Not verified")}</dd></div>
       <div><dt>{t("Invoice validation")}</dt><dd>{check(request.fiscalValidation?.fiscal)}</dd></div>
-      <div><dt>{t("Budget availability")}</dt><dd>{related.budgetPreview?.totalAvailable == null ? "—" : `PEN ${Number(related.budgetPreview.totalAvailable).toFixed(2)}`}</dd></div>
+      <div><dt>{t("Budget availability")}</dt><dd>{related.budgetPreview?.totalAvailable == null ? "—" : formatCurrency(related.budgetPreview.totalAvailable, "PEN", language)}</dd></div>
     </dl>
     {(related.sunatVouchers || []).map(voucher => <div key={voucher._id} className="subsection-block">
       <strong>{voucher.seriesNumber}</strong>
