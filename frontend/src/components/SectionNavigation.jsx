@@ -25,7 +25,6 @@ export default function SectionNavigation({ children, className, ...props }) {
     history.replaceState(null, "", href);
   }
   return <nav {...props} className={`responsive-section-nav ${className || ""}`}>
-    <label className="section-selector"><span>{t("Section")}</span><select value={active} onChange={event => navigate(event.target.value)}><option value="">{t("Go to section")}</option>{links.map(link => <option key={link.props.href} value={link.props.href}>{link.props.children}</option>)}</select></label>
-    <div className="section-links">{links.map(link => <a key={link.props.href} href={link.props.href} aria-current={active === link.props.href ? "location" : undefined} onClick={event => { event.preventDefault(); navigate(link.props.href); }}>{link.props.children}</a>)}</div>
+    <div className="section-links" aria-label={t("Section")}>{links.map(link => <a key={link.props.href} href={link.props.href} aria-current={active === link.props.href ? "location" : undefined} onClick={event => { event.preventDefault(); navigate(link.props.href); }}>{link.props.children}</a>)}</div>
   </nav>;
 }

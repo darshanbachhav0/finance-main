@@ -1823,6 +1823,19 @@ Object.assign(spanishDictionary, { "SUNAT administration": "Administración SUNA
 Object.assign(spanishDictionary, { "Current phase only": "Solo etapa actual", "All document phases": "Todas las etapas documentales" });
 Object.assign(spanishDictionary, { "Expense category for these items": "Categoría de gasto para estos ítems", "Search expense category...": "Buscar categoría de gasto...", "Choose the expense category for these items.": "Seleccione la categoría de gasto de estos ítems.", "Request month": "Mes de la solicitud", "Hide optional documents": "Ocultar documentos opcionales", "Additional documents": "Documentos adicionales" });
 const LanguageContext = createContext(null);
+Object.assign(spanishDictionary, {
+  "Please complete or correct:": "Completa o corrige lo siguiente:",
+  "Check this field.": "Revisa este campo.",
+  "required": "requeridos", "uploaded": "cargados",
+  "Could not connect to the server. Check your connection and try again.": "No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
+  "The server could not complete this action. Try again; if it continues, contact Administration.": "El servidor no pudo completar esta acción. Inténtalo de nuevo; si continúa, contacta con Administración.",
+  "The action could not be completed. Check the information and try again.": "No se pudo completar la acción. Revisa la información e inténtalo de nuevo."
+});
+export function translateMessage(text, language = "en") {
+  if (text === undefined || text === null) return "";
+  const display = umaCopy[text] || text;
+  return language === "en" ? display : umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
+}
 
 export function LanguageProvider({ children }) {
   const [language, setLanguage] = useState(() => localStorage.getItem("erp_language") || "en");
@@ -1842,10 +1855,7 @@ export function LanguageProvider({ children }) {
   }
 
   function t(text) {
-    if (text === undefined || text === null) return "";
-    const display = umaCopy[text] || text;
-    if (language === "en") return display;
-    return umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
+    return translateMessage(text, language);
   }
 
   const value = useMemo(() => ({ language, setLanguage: changeLanguage, toggleLanguage, t }), [language]);

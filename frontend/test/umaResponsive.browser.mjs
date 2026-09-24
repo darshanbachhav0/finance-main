@@ -117,12 +117,28 @@ try {
     console.log(`Checked ${paths.length} pages at ${width}px`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("http://127.0.0.1:5190/requests/new");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  const validationMessage = page.locator(".message-error").first();
+  await validationMessage.waitFor();
+  assert.match(await validationMessage.innerText(), /Please complete or correct:/);
+  assert.match(await validationMessage.innerText(), /Item 1/);
+  assert.doesNotMatch(await validationMessage.innerText(), /Review the highlighted fields/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.goto("http://127.0.0.1:5190/requests");
   await page.getByRole("button", { name: "Open navigation" }).click();
   assert.equal(await page.locator(".sidebar").getAttribute("inert"), null);
   await page.keyboard.press("Escape");
   assert.equal(await page.locator(".sidebar").getAttribute("inert"), "");
   assert.equal(await page.locator(".data-table").first().evaluate((node) => node.classList.contains("mobile-cards")), true, "Small screens use cards without horizontal table navigation");
+  assert.equal(await page.locator('.table-filter-fields select:visible').count(), 1, 'Only the main filter is visible by default');
+  await page.getByRole('button', {name: 'More filters', exact: true}).first().click();
+  assert.ok(await page.locator('.table-filter-fields select:visible').count() > 1, 'Secondary filters remain accessible');
+  await page.getByRole('button', {name: 'More filters', exact: true}).first().click();
+  assert.equal(await page.locator('.table-filter-fields select:visible').count(), 1);
+  await page.getByRole('group', {name: 'Rows per page', exact: true}).getByRole('button', {name:'25',exact:true}).click();
+  assert.equal(await page.getByRole('group', {name: 'Rows per page', exact: true}).getByRole('button', {name:'25',exact:true}).getAttribute('aria-pressed'), 'true');
   await page.locator(".table-search input").first().fill("no-such-record");
   await page.getByText("No matching results", { exact: true }).waitFor();
   await page.locator(".empty-state").getByRole("button", { name: "Clear filters" }).click();

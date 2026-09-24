@@ -1,4 +1,6 @@
 import axios from "axios";
+import { apiErrorMessage } from "../utils/validationMessages.js";
+import { translateMessage } from "../context/LanguageContext.jsx";
 
 function defaultApiUrl() {
   if (import.meta.env.PROD) return "/api";
@@ -24,7 +26,7 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const message = error.response?.data?.message || error.message || "Unexpected API error.";
+    const message = apiErrorMessage(error, text => translateMessage(text, localStorage.getItem("erp_language") || "en"));
     const details = error.response?.data?.details;
     const code = error.response?.data?.code || "API_ERROR";
     return Promise.reject({ message, code, details, status: error.response?.status });

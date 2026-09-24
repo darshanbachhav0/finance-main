@@ -7,7 +7,7 @@ export default function PageHeader({ title, description, actions }) {
     <div className="page-header">
       <div>
         <h1>{t(title)}</h1>
-        {description && <details className="page-help"><summary>{t("About this page")}</summary><p>{t(description)}</p></details>}
+        {description && <p className="page-description">{t(description)}</p>}
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </div>

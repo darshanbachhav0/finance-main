@@ -1,4 +1,5 @@
 import MotionSurface from "../components/MotionSurface.jsx";
+import { validationSummary } from "../utils/validationMessages.js";
 import MotionList from "../components/MotionList.jsx";
 import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
@@ -516,7 +517,9 @@ export default function RequestCreate() {
     const nextErrors = validationForStep(step, false);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      notify("Review the highlighted fields before continuing.", "error");
+      const summary = validationSummary(nextErrors, t);
+      setError(summary);
+      notify(summary, "error", { duration: 12000 });
       validationFocusRef.current = window.requestAnimationFrame(() => {
         const error = window.document.querySelector(".field-error-text");
         error?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -524,6 +527,7 @@ export default function RequestCreate() {
       });
       return;
     }
+    setError("");
     setCompletedSteps((current) => [...new Set([...current, step])]);
     setStep((current) => Math.min(3, current + 1));
     setMaxStep((current) => Math.max(current, step + 1));
@@ -537,7 +541,9 @@ export default function RequestCreate() {
     if (firstInvalid >= 0) {
       setErrors(validations[firstInvalid]);
       setStep(firstInvalid);
-      notify("Review the highlighted fields before continuing.", "error");
+      const summary = validationSummary(Object.assign({}, ...validations), t);
+      setError(summary);
+      notify(summary, "error", { duration: 12000 });
       return;
     }
     setSaving(true);
@@ -579,9 +585,7 @@ export default function RequestCreate() {
       notify(sendForApproval ? "Request submitted for approval." : isEditing ? "Draft request updated." : "Draft request created.");
       navigate(`/requests/${response.data.data._id}`);
     } catch (err) {
-      const detailErrors = err.details?.errors || err.details?.missing || [];
-      const details = detailErrors.map((item) => t(item.code || item.label || "Validation error")).join(" ");
-      setError(`${err.message}${details ? ` ${details}` : ""}`);
+      setError(err.message);
       notify(err.message, "error");
     } finally {
       setSaving(false);

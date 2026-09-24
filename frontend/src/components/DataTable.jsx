@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  FilterX,
   ListFilter,
   Search
 } from "lucide-react";
@@ -125,6 +124,7 @@ export default function DataTable({
   const allVisibleSelected = selectableVisible.length > 0 && selectableVisible.every((row) => selectedIds.includes(row[rowKey]));
   const hasFilters = Boolean(activeSearch) || Object.values(activeFilters).some(Boolean);
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
+  const primaryFilterKey = filters.find(filter => filter.key === "status")?.key || filters[0]?.key;
 
   function updateRemote(patch) {
     remote.onQueryChange({ ...remote.query, ...patch });
@@ -213,11 +213,11 @@ export default function DataTable({
               <span className="sr-only">{t("Search")}</span>
               <input value={activeSearch} onChange={(event) => isRemote ? updateRemote({ search: event.target.value, page: 1 }) : setSearch(event.target.value)} placeholder={t(searchPlaceholder)} />
             </label>
-            {filters.length > 0 && <button type="button" className={`table-filter-toggle${activeFilterCount ? " has-active" : ""}`} aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen((current) => !current)}><ListFilter size={16} /><span>{t("More filters")}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span><ChevronDown size={15} /></button>}
+            {filters.length > 1 && <button type="button" className={`table-filter-toggle${activeFilterCount ? " has-active" : ""}`} aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen((current) => !current)}><ListFilter size={16} /><span>{t("More filters")}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span><ChevronDown size={15} /></button>}
             <div className={`table-filter-fields simplified-filters${mobileFiltersOpen ? " is-open" : ""}`}>
               {filters.map((filter) => (
-                <label hidden={!mobileFiltersOpen && !/^(status|area|date|period|accountingPeriod)$/.test(filter.key)} className="compact-field" key={filter.key}>
-                  <span className="sr-only">{t(filter.label)}</span>
+                <label hidden={!mobileFiltersOpen && filter.key !== primaryFilterKey} className="compact-field" key={filter.key}>
+                  <span>{t(filter.label)}</span>
                   <select value={activeFilters[filter.key] || ""} onChange={(event) => isRemote ? updateRemote({ filters: { ...activeFilters, [filter.key]: event.target.value }, page: 1 }) : setFilterValues((current) => ({ ...current, [filter.key]: event.target.value }))}>
                     <option value="">{t(filter.allLabel || `All ${filter.label.toLowerCase()}`)}</option>
                     {filter.options.map((option) => (
@@ -226,12 +226,6 @@ export default function DataTable({
                   </select>
                 </label>
               ))}
-              {hasFilters && (
-                <button type="button" className="text-button" onClick={clearFilters}>
-                  <FilterX size={15} />
-                  <span>{t("Clear filters")}</span>
-                </button>
-              )}
             </div>
           </div>
           <div className="table-toolbar-actions">
@@ -343,12 +337,10 @@ export default function DataTable({
 
       {controls && (processed.length > 0 || (isRemote && (remote.pagination?.total || 0) > 0)) && (
         <div className="table-pagination">
-          <label className="page-size">
+          <div className="page-size" role="group" aria-label={t("Rows per page")}>
             <span>{t("Rows per page")}</span>
-            <select value={activePageSize} onChange={(event) => isRemote ? updateRemote({ pageSize: Number(event.target.value), page: 1 }) : setPageSize(Number(event.target.value))}>
-              {[10, 25, 50].map((size) => <option key={size} value={size}>{size}</option>)}
-            </select>
-          </label>
+            {[...new Set([10, 25, 50, activePageSize])].sort((a,b) => a-b).map(size => <button key={size} type="button" aria-pressed={activePageSize === size} onClick={() => isRemote ? updateRemote({pageSize:size,page:1}) : setPageSize(size)}>{size}</button>)}
+          </div>
           <span>{t("Page {page} of {pages}").replace("{page}", safePage).replace("{pages}", pageCount)}</span>
           <div className="pagination-buttons">
             <button type="button" className="icon-button" disabled={safePage <= 1} onClick={() => isRemote ? updateRemote({ page: Math.max(1, safePage - 1) }) : setPage((current) => Math.max(1, current - 1))} aria-label={t("Previous page")}><ChevronLeft size={17} /></button>

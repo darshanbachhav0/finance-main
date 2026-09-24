@@ -81,6 +81,32 @@ th[aria-sort="ascending"] .sort-button svg, th[aria-sort="descending"] .sort-but
   100% { transform: translateX(100%); }
 }
 
+/* Readable shared workspaces: fewer competing controls and generous text spacing. */
+.page-header .page-description { max-width: 72ch; margin-bottom: 0; color: var(--gray-600); }
+.nav-item, .primary-button, .secondary-button, .danger-button, .text-button { font-size: 14px; }
+.field > span, .compact-field > span { font-size: 13px; line-height: 1.5; color: var(--gray-700); }
+.table-toolbar-primary { align-items: flex-end; gap: 12px; }
+.table-filter-fields.simplified-filters { align-items: flex-end; gap: 12px; }
+.table-filter-fields .compact-field { display: grid; gap: 5px; min-width: 140px; }
+.table-search { min-height: 44px; }
+.data-table.density-comfortable td { padding-block: 16px; font-size: 14px; line-height: 1.55; }
+.data-table th { font-size: 13px; line-height: 1.5; }
+.data-table .align-right { font-variant-numeric: tabular-nums; }
+.page-size { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.page-size > button { min-width: 40px; min-height: 40px; border: 1px solid var(--gray-200); border-radius: 8px; background: var(--surface-panel); color: var(--gray-700); font: inherit; cursor: pointer; }
+.page-size > button[aria-pressed="true"] { border-color: var(--uma-primary); color: var(--uma-primary); background: var(--uma-soft); font-weight: 700; }
+.section-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--gray-200); background: var(--surface-panel); text-decoration: none; font-size: 14px; }
+.section-links a[aria-current] { border-color: var(--uma-primary); background: var(--uma-soft); }
+@media (max-width: 640px) {
+  .page-header { gap: 12px; }
+  .table-filter-fields.simplified-filters { width: 100%; }
+  .table-filter-fields .compact-field { flex: 1 1 180px; }
+  .table-filter-fields select { width: 100%; }
+  .page-size > button { min-height: 44px; min-width: 44px; }
+  .section-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-links a { overflow-wrap: anywhere; }
+}
+
 /* Stat values count in with a touch more motion than the base metric-in. */
 .stat-card > strong { animation: metric-in 260ms var(--ease-out-expo) both; }
 

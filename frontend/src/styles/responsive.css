@@ -25,7 +25,6 @@ summary:focus-visible { outline: 2px solid var(--uma-primary); outline-offset: 3
 .work-draft-status p { font-size: 12px; max-width: 50ch; }
 .page-help p { max-width: 65ch; font-size: 13px; }
 .section-links { display: flex; flex-wrap: wrap; gap: 8px; }
-.section-selector { display: none; }
 .responsive-section-nav { overflow: visible; flex-wrap: wrap; }
 .section-links a[aria-current] { color: var(--uma-primary); font-weight: 700; }
 .workflow-details summary { padding: 12px 0; }
@@ -54,9 +53,8 @@ summary:focus-visible { outline: 2px solid var(--uma-primary); outline-offset: 3
  .quotation-comparison table { min-width: 0; width: 100%; }
 }
 @media (max-width: 900px) {
- .section-selector { display: grid; gap: 6px; width: 100%; font-size: 13px; }
- .section-selector select { width: 100%; min-height: 44px; background: var(--surface-panel); color: var(--gray-800); border: 1px solid var(--gray-300); border-radius: 8px; padding: 8px; }
- .section-links { display: none; }
+ .section-links { display: flex; flex-wrap: wrap; width: 100%; }
+ .section-links a { min-height: 44px; padding: 10px 12px; }
  .budget-month-table, .quotation-comparison { overflow: visible; }
  .budget-month-table table, .budget-month-table tbody, .quotation-comparison table, .quotation-comparison tbody { display: block; width: 100%; min-width: 0; white-space: normal; }
  .budget-month-table thead, .quotation-comparison thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -91,6 +89,8 @@ summary:focus-visible { outline: 2px solid var(--uma-primary); outline-offset: 3
 @media (max-width: 640px) {
  .repeatable-line.accounting-rendition-line { grid-template-columns: minmax(0, 1fr); }
 }
-.mobile-cards tbody td:has(> .row-details)::before { content: none; }
-.mobile-cards tbody td:has(> .row-details) { display: block; }
+@container (max-width: 1050px) {
+ .mobile-cards tbody td:has(> .row-details)::before { content: none; }
+ .mobile-cards tbody td:has(> .row-details) { display: block; }
+}
 .quotation-comparison td[data-label] > small { grid-column: 2; }

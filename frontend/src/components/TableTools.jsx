@@ -45,13 +45,13 @@ export default function TableTools({ storageKey, query, onApplyView, density, on
 
   return (
     <div className="table-preferences" aria-label={t("Table preferences")}>
-      <label className="saved-view-select">
+      {savedViews.length > 0 && <label className="saved-view-select">
         <span className="sr-only">{t("Saved views")}</span>
         <select value={activeView} onChange={(event) => applyView(event.target.value)} aria-label={t("Saved views")}>
           <option value="">{t("Saved views")}</option>
           {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
         </select>
-      </label>
+      </label>}
       <button type="button" className="icon-button table-tool-button" onClick={() => setSaveOpen(true)} title={t("Save current view")} aria-label={t("Save current view")}>
         <BookmarkPlus size={16} />
       </button>

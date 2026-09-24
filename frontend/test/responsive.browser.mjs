@@ -19,14 +19,14 @@ try {
   await page.setViewportSize({width,height:1000});
   await page.goto("http://127.0.0.1:5198/test/responsive.fixture.html");
   await page.locator("tbody tr").first().waitFor();
-  await page.getByText("SUNAT Padrón · Ready",{exact:true}).click();
+  await page.getByText("SUNAT PadrÃ³n Â· Ready",{exact:true}).click();
   await page.getByText("2026-09-15",{exact:true}).waitFor();
   await page.locator(".row-details summary").click();
   await page.getByRole("button",{name:"Edit contact",exact:true}).click();
   assert.equal(await page.evaluate(()=>document.body.dataset.edited),"yes");
   const overflow=await page.evaluate(()=>({document:document.documentElement.scrollWidth>innerWidth+1, regions:[...document.querySelectorAll(".table-scroll,.quotation-comparison")].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.className)}));
   assert.deepEqual(overflow,{document:false,regions:[]},`Overflow at ${width}: ${JSON.stringify(overflow)}`);
-  if(width<=900){await page.locator(".section-selector select").selectOption("#quotes");assert.equal(await page.evaluate(()=>location.hash),"#quotes");}
+  if(width<=900){await page.locator('.section-links a[href="#quotes"]').click();assert.equal(await page.evaluate(()=>location.hash),"#quotes");}
   await page.locator(".compact-options > summary").click();
   await page.getByRole("combobox",{name:"Sort by",exact:true}).selectOption("reference");
   await page.screenshot({path:`${output}/${width}.png`,fullPage:true});
