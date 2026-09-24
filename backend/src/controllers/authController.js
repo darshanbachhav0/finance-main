@@ -7,6 +7,12 @@ import { AppError } from "../utils/AppError.js";
 import { ROLES } from "../utils/constants.js";
 import { recordAudit } from "../services/auditService.js";
 
+export async function sessionUser(user) {
+  // Recompute on session refresh; never trust a client-supplied or stored capability.
+  const hasTeam = Boolean(await User.exists({ jefe: user._id, active: true, _id: { $ne: user._id } }));
+  return { ...user.toJSON(), hasTeam };
+}
+
 function signToken(user) {
   return jwt.sign({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 }, getJwtSecret(), {
     expiresIn: process.env.JWT_EXPIRES_IN || "8h"
@@ -27,7 +33,7 @@ export const login = asyncHandler(async (req, res) => {
     throw new AppError(401, "Invalid credentials.");
   }
 
-  res.json({ token: signToken(user), user });
+  res.json({ token: signToken(user), user: await sessionUser(user) });
 });
 
 export const register = asyncHandler(async (req, res) => {
@@ -48,11 +54,11 @@ export const register = asyncHandler(async (req, res) => {
     role: userCount === 0 ? ROLES.ADMIN : ROLES.SOLICITOR
   });
 
-  res.status(201).json({ token: signToken(user), user });
+  res.status(201).json({ token: signToken(user), user: await sessionUser(user) });
 });
 
 export const me = asyncHandler(async (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: await sessionUser(req.user) });
 });
 
 export const changePassword = asyncHandler(async (req, res) => {
@@ -68,5 +74,5 @@ export const changePassword = asyncHandler(async (req, res) => {
   user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "PASSWORD_CHANGED", user, req, module: "AUTH", newValues: { passwordResetRequired: false, sessionsRevoked: true } });
-  res.json({ token: signToken(user), user });
+  res.json({ token: signToken(user), user: await sessionUser(user) });
 });

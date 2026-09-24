@@ -39,25 +39,32 @@ export const navigationAccess = Object.freeze({
   "/audit": ["Admin", "Accounting"]
 });
 
-export function canAccessNavigation(role, path) {
+export function canAccessNavigation(role, path, user) {
+  if (path === "/my-team" && user?.hasTeam !== true) return false;
   return Boolean(role && navigationAccess[path]?.includes(role));
 }
 
-export function visibleNavigationPaths(role) {
+export function visibleNavigationPaths(role, user) {
   return Object.entries(navigationAccess)
-    .filter(([, roles]) => roles.includes(role))
+    .filter(([path]) => canAccessNavigation(role, path, user))
     .map(([path]) => path);
 }
 
 // Primary navigation is deliberately smaller than the set of permitted routes.
+export function navigationForUser(user) {
+  const items = [...(roleNavigation[user?.role] || [])];
+  if (user?.hasTeam === true && !items.some(([, path]) => path === "/my-team")) items.push(["My Team", "/my-team"]);
+  return items.filter(([, path]) => canAccessNavigation(user?.role, path, user));
+}
+
 export const roleNavigation = {
-  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["My Team", "/my-team"], ["Approvals", "/approvals"]],
-  Approver: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"], ["My Team", "/my-team"]],
+  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["Approvals", "/approvals"]],
+  Approver: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
   Budget: [["Dashboard", "/"], ["Budget Control", "/budget"], ["Requests", "/requests"]],
   Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],
   Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["SIRE", "/accounting/sire"]],
   Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"]],
-  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"], ["My Team", "/my-team"]],
+  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
   ManagementViewer: [["Management Portal", "/management-view"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
 };

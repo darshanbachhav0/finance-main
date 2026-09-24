@@ -6,6 +6,7 @@ import FinancialRequest from "../src/models/FinancialRequest.js";
 import Supplier from "../src/models/Supplier.js";
 import User from "../src/models/User.js";
 import { listMyTeam } from "../src/controllers/userController.js";
+import { sessionUser } from "../src/controllers/authController.js";
 import { listRequestsPage, teamMemberIds } from "../src/services/requestService.js";
 import { EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 
@@ -74,8 +75,23 @@ test("My Team: hierarchy traversal, scoped request listing and the roster endpoi
       assert.equal(resA.body.data[0].requestCounts.active, 1);
 
       const resOutsider = mockRes();
-      await listMyTeam({ user: outsider }, resOutsider);
-      assert.equal(resOutsider.body.data.length, 0);
+      let denied;
+      await listMyTeam({ user: outsider }, resOutsider, error => { denied = error; });
+      assert.equal(denied.statusCode, 403);
+      assert.equal(resOutsider.body, undefined);
+    });
+    await t.test("session capability follows active reports, regardless of role, without exposing passwords", async () => {
+      assert.equal((await sessionUser(supervisorA)).hasTeam, true);
+      assert.equal((await sessionUser(director)).hasTeam, true);
+      assert.equal((await sessionUser(outsider)).hasTeam, false);
+      assert.equal((await sessionUser(director)).passwordHash, undefined);
+      await User.updateOne({_id:reportA1._id},{$set:{active:false}});
+      assert.equal((await sessionUser(supervisorA)).hasTeam, false);
+      await User.updateOne({_id:reportA1._id},{$set:{active:true,jefe:outsider._id}});
+      assert.equal((await sessionUser(supervisorA)).hasTeam, false);
+      assert.equal((await sessionUser(outsider)).hasTeam, true);
+      await User.updateOne({_id:supervisorA._id},{$set:{role:ROLES.ADMIN}});
+      assert.equal((await sessionUser(await User.findById(supervisorA._id))).hasTeam, false);
     });
   } finally {
     await mongoose.connection.dropDatabase();

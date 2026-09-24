@@ -1,4 +1,5 @@
 import "./menuNavigation.test.js";
+import "./myTeamAccess.test.js";
 import "./validationMessages.test.js";
 import "./dashboardLinks.test.js";
 import "./financialContracts.test.js";

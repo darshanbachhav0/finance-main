@@ -102,6 +102,14 @@ try {
   await page.getByRole("alert").waitFor();
   assert.equal(await page.locator(".stat-card-link").count(), 3, "Failed refresh preserves last successful data");
   await page.unroute("**/api/dashboard/summary", refreshRoute);
+  user.hasTeam = false;
+  await page.goto("http://127.0.0.1:5190/my-team");
+  await page.waitForURL("http://127.0.0.1:5190/");
+  assert.equal(await page.locator('.sidebar a[href="/my-team"]').count(), 0);
+  user.hasTeam = true;
+  await page.goto("http://127.0.0.1:5190/my-team");
+  await page.getByRole('heading', {name:'My Team', exact:true}).waitFor();
+  assert.equal(await page.locator('.sidebar a[href="/my-team"]').count(), 1);
   const paths = ["/my-team", "/administration", "/accounting/invoices", "/treasury/history", "/configuration/bank-formats", "/", "/management-view", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
@@ -194,7 +202,7 @@ try {
   await page.locator("#treasury-history").waitFor({ state: "visible" });
   assert.equal(await page.locator("#treasury-history").isVisible(), true);
   assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
-  for (const [role, expected, approvalLevel] of [["Solicitor", 5], ["Approver", 4, "AREA_DIRECTOR"], ["Approver", 4, "VICE_RECTOR"], ["Budget", 3], ["Accounting", 5], ["Treasury", 3], ["Management", 5], ["Procurement", 4], ["Admin", 2]]) {
+  for (const [role, expected, approvalLevel] of [["Solicitor", 5], ["Approver", 4, "AREA_DIRECTOR"], ["Approver", 4, "VICE_RECTOR"], ["Budget", 4], ["Accounting", 6], ["Treasury", 4], ["Management", 5], ["Procurement", 5], ["Admin", 3]]) {
     user.role = role; user.approvalLevel = approvalLevel;
     await page.goto("http://127.0.0.1:5190/");
     await page.waitForLoadState("networkidle");

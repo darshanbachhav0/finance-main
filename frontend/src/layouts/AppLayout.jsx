@@ -39,7 +39,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
-import { canAccessNavigation, roleNavigation } from "../utils/navigationAccess.js";
+import { canAccessNavigation, navigationForUser } from "../utils/navigationAccess.js";
 
 const groups = [
   {
@@ -140,7 +140,7 @@ export default function AppLayout() {
   const sidebarRef = useRef(null);
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
-  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: (roleNavigation[user.role] || []).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || { icon: Settings2 }), label, path })).filter(item => canAccessNavigation(user.role, item.path)) }], [user.role]);
+  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: navigationForUser(user).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || { icon: Settings2 }), label, path })).filter(item => canAccessNavigation(user.role, item.path, user)) }], [user.role, user.hasTeam]);
   const commandPages = useMemo(() => visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))), [visibleGroups]);
 
   const pageTitle = routeTitles.find(([pattern]) => pattern.test(location.pathname))?.[1] || "Financial Control";

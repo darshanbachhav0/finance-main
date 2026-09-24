@@ -28,13 +28,13 @@ export async function validateSupervisor(userId, supervisorId) {
   }
 }
 
-// Any authenticated user may see their own direct reports (not gated to
-// Admin) — this is what powers "My Team" for a jefe at any level.
+// Availability follows active direct reports, rather than a fixed role.
 export const listMyTeam = asyncHandler(async (req, res) => {
-  const reports = await User.find({ jefe: req.user._id, active: true })
+  const reports = await User.find({ jefe: req.user._id, active: true, _id: { $ne: req.user._id } })
     .select("name area jobTitle role organizationalUnit costCenter")
     .populate("costCenter", "code name")
     .sort({ name: 1 });
+  if (!reports.length) throw new AppError(403, "My Team is available only to users with active team members.", undefined, ERROR_CODES.FORBIDDEN);
   const reportIds = reports.map((report) => report._id);
   const counts = reportIds.length ? await FinancialRequest.aggregate([
     { $match: { $or: [{ requester: { $in: reportIds } }, { solicitor: { $in: reportIds } }] } },

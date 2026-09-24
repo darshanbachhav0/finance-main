@@ -55,7 +55,7 @@ export default function App() {
           </Route>
           <Route path="administration" element={<ProtectedRoute roles={["Admin"]} />}><Route index element={<WorkspaceHub administration />} /></Route>
           <Route path="requests" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestsList />} /></Route>
-          <Route path="my-team" element={<ProtectedRoute roles={[...internalRoles, "ManagementViewer"]} />}><Route index element={<MyTeam />} /></Route>
+          <Route path="my-team" element={<ProtectedRoute requiresTeam roles={[...internalRoles, "ManagementViewer"]} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
