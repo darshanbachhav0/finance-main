@@ -16,10 +16,7 @@ function createPassword() {
 
 export const MIGRATION_KEY = "2026-09-org-roster-manager-chain";
 
-// Two nicknamed/reordered "JEFE DIRECTO" references in the source roster do
-// not exactly match the person's "APELLIDOS Y NOMBRES" spelling, but each has
-// exactly one unambiguous candidate in the roster. Resolved automatically and
-// logged under report.fuzzyResolutions rather than left for manual review.
+// Nicknames are suggestions for manual review, never authority to assign a jefe.
 const JEFE_NAME_ALIASES = Object.freeze({
   "PAQUILLO": "PAQUILLO TINCO JIMMY MANUEL",
   "GLADYS MORAN": "MORAN PAREDES GLADYS IVONNE"
@@ -36,10 +33,10 @@ function buildJefeGraph(rows) {
   const byName = new Map(rows.map((row) => [normalizeName(row.fullName), row.dni]));
   const graph = new Map();
   for (const row of rows) {
+    if (row.jefeDni) { graph.set(row.dni, row.jefeDni); continue; }
     if (!row.jefeFullName) { graph.set(row.dni, null); continue; }
     const normalized = normalizeName(row.jefeFullName);
-    const resolvedName = JEFE_NAME_ALIASES[normalized] || normalized;
-    const jefeDni = byName.get(resolvedName) ?? byName.get(normalizeName(resolvedName));
+    const jefeDni = byName.get(normalized);
     graph.set(row.dni, jefeDni || null);
   }
   return graph;
@@ -82,9 +79,20 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
   if (!rosterPath) throw new Error("A --roster=<path.json> file is required.");
   const rows = JSON.parse(await fs.readFile(rosterPath, "utf8"));
   if (!Array.isArray(rows) || !rows.length) throw new Error("Roster file must be a non-empty JSON array.");
+  for (const row of rows) {
+    row.dni = String(row.dni || "").trim();
+    if (row.jefeDni) row.jefeDni = String(row.jefeDni).trim();
+  }
 
   const dnis = new Set(rows.map((row) => row.dni));
   if (dnis.size !== rows.length) throw new Error("Roster contains duplicate DNI values; fix the source file before migrating.");
+
+  if (rows.some(row => !/^\d{8}$/.test(String(row.dni || "")) || !String(row.fullName || "").trim())) throw new Error("Every roster row requires an 8-digit DNI and a name.");
+  const names = rows.map(row => normalizeName(row.fullName));
+  if (new Set(names).size !== names.length) throw new Error("Ambiguous duplicate employee names: provide an authoritative DNI-based supervisor mapping before importing.");
+  const knownNames = new Set(names);
+  const unresolved = rows.filter(row => row.jefeDni ? !dnis.has(row.jefeDni) : row.jefeFullName && !knownNames.has(normalizeName(row.jefeFullName)));
+  if (apply && unresolved.length) throw new Error("Unresolved supervisors remain. Run dry-run and resolve every mapping before apply.");
 
   const graph = buildJefeGraph(rows);
   const cycle = findCycle(graph);
@@ -98,7 +106,7 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
   // index on `users.email` (predating the schema change that made email
   // optional) treats every missing email as the same "null" value, so the
   // second such insert collides. Repair it before inserting anyone.
-  const existingIndexes = await users.indexes();
+  const existingIndexes = await users.indexes().catch(error => { if (error.code === 26) return []; throw error; });
   const legacyEmailIndex = existingIndexes.find((index) => index.name === "email_1" && index.unique && !index.sparse);
   if (legacyEmailIndex) {
     report.indexesRepaired.push({ collection: "users", from: "email_1 (unique, non-sparse)", to: "email_1 (unique, sparse)" });
@@ -137,7 +145,7 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
       { $set: setFields, $setOnInsert: { dni: row.dni, role: "Solicitor", active: true, passwordHash, passwordResetRequired: true, createdAt: new Date() } },
       { upsert: true }
     );
-    const created = insertResult.upsertedId ? insertResult.upsertedId._id : (await users.findOne({ dni: row.dni }, { projection: { _id: 1 } }))._id;
+    const created = insertResult.upsertedId ? insertResult.upsertedId : (await users.findOne({ dni: row.dni }, { projection: { _id: 1 } }))._id;
     dniToObjectId.set(row.dni, created);
     issuedCredentials.push({ dni: row.dni, name: row.fullName, password: initialPassword });
     await manifest.updateOne({ migration: MIGRATION_KEY, dni: row.dni }, { $set: { state: "APPLIED", appliedAt: new Date() } }, { upsert: true });
@@ -148,15 +156,15 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
   // already validated to exist in the roster and the offline graph is cycle-free)
   // without requiring a real ObjectId.
   for (const row of rows) {
-    if (!row.jefeFullName) continue; // the single root of the org chart
+    if (!row.jefeFullName && !row.jefeDni) continue; // a root of the org chart
     const normalized = normalizeName(row.jefeFullName);
     const resolvedName = JEFE_NAME_ALIASES[normalized] || normalized;
     if (JEFE_NAME_ALIASES[normalized]) {
       report.fuzzyResolutions.push({ jefeNameAsWritten: row.jefeFullName, resolvedTo: JEFE_NAME_ALIASES[normalized], resolvedDni: byName.get(resolvedName) });
     }
-    const jefeDni = byName.get(resolvedName);
+    const jefeDni = row.jefeDni ? (dnis.has(row.jefeDni) ? row.jefeDni : null) : byName.get(normalized);
     if (!jefeDni) {
-      report.manualReview.push({ dni: row.dni, name: row.fullName, reason: `Could not resolve "${row.jefeFullName}" to anyone in the roster.` });
+      report.manualReview.push({ dni: row.dni, name: row.fullName, reason: `Confirm supervisor "${row.jefeDni || row.jefeFullName}" with an explicit jefeDni in the roster.` });
       continue;
     }
     if (!apply) continue; // dry-run: resolution already proven possible by the graph/name checks above
@@ -176,9 +184,8 @@ export async function migrateOrgRoster(db, { apply = false, rosterPath } = {}) {
       "",
       "Each person logs in with their DNI, not email. Distribute each line only",
       "to that person, over a secure channel, then delete this file. Every account",
-      "has passwordResetRequired set, but changing the password is not yet",
-      "enforced by the app on first login — treat these as sensitive until that",
-      "is built, and rotate any password you suspect was seen by the wrong person.",
+      "must change the initial password before accessing financial operations.",
+      "Rotate any password you suspect was seen by the wrong person.",
       ""
     ];
     for (const credential of issuedCredentials) {

@@ -1,5 +1,5 @@
 export const REQUEST_LIFECYCLE = Object.freeze([
-  "BORRADOR", "PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR",
+  "BORRADOR", "PENDIENTE_APROBACION", "APROBADO",
   "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "CERRADO"
 ]);
 export const LEGACY_WORKFLOW_STATUSES = Object.freeze({
@@ -50,7 +50,7 @@ export function deriveFinancialProgress(request, payables = [], reconciliations 
     cents.total += amount(ap.originalAmount); if (paid) cents.paid += amount(ap.originalAmount); if (reconciled) cents.reconciled += amount(ap.originalAmount);
     return { id: id(ap), accounted, scheduled, fileGenerated, paid, reconciled };
   });
-  const unaccountedVouchers = vouchers.filter(v => !v.accountsPayable).length;
+  const unaccountedVouchers = vouchers.filter(v => !v.accountsPayable && !v.supersededBy).length;
   const orderOpen = Boolean(purchaseOrder && Number(purchaseOrder.remainingAmount || 0) > 0);
   let status = null;
   if (counts.total && counts.accounted === counts.total && !unaccountedVouchers) {

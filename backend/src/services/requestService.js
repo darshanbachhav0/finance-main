@@ -28,7 +28,7 @@ import {
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, resolveNotification } from "./notificationService.js";
+import { notifyRoles, notifyApprovalStep, resolveNotification } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
@@ -570,18 +570,7 @@ async function submitPreparedRequest(request, { user, req, comments }) {
     nextApprovalStage: request.approvalStage,
     dueAt: request.approvalDueAt
   });
-  await notifyRoles({
-    roles: ["Approver", "Management"],
-    approvalLevel: request.approvalStage,
-    areas: request.approvalStage === "AREA_DIRECTOR" ? [request.requesterArea || request.requestingArea] : undefined,
-    eventKey: `request:${request._id}:approval:${request.approvalStage}`,
-    type: "APPROVAL_PENDING",
-    title: "Approval pending",
-    message: `${request.requestNumber} is waiting for ${request.approvalStage} approval.`,
-    path: `/approvals?request=${request._id}`,
-    entityType: "FinancialRequest",
-    entityId: request._id
-  });
+  await notifyApprovalStep(request);
   return request;
 }
 

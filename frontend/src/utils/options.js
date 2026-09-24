@@ -47,8 +47,7 @@ export const flowTypeLabels = {
 export const requestStatuses = [
   "BORRADOR",
   "PENDIENTE_APROBACION",
-  "APROBADO_DIRECTOR",
-  "APROBADO_VICERRECTOR",
+  "APROBADO",
   "COMPROMISO_PRESUPUESTAL",
   "CONTABILIZADO",
   "PROGRAMADO",

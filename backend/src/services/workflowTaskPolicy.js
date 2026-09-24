@@ -48,7 +48,7 @@ export function taskBlueprints(type, record, related = {}) {
     if (record.status === "BORRADOR") return [];
     const step = [...(record.approvalRouteSnapshot || [])].sort((a,b) => a.sequence-b.sequence).find((s) => s.required !== false && s.status === "PENDING");
     if (approvedStates.includes(record.status) && step) add(`approval-${step.approvalLevel}-${new Date(step.startedAt || record.createdAt).getTime()}`, step.approvalLevel, "Review request approval", [step.role || "Approver"], { module: "Approvals", approval: true, step, waitingSince: step.startedAt || record.createdAt, dueAt: step.dueAt || record.approvalDueAt });
-    else if (["APROBADO_VICERRECTOR", "APROBADO_DIRECTOR"].includes(record.status)) add("budget-commit", "Budget", "Review and commit budget", ["Budget", "Admin"]);
+    else if (["APROBADO", "APROBADO_VICERRECTOR", "APROBADO_DIRECTOR"].includes(record.status)) add("budget-commit", "Budget", "Review and commit budget", ["Budget", "Admin"]);
     if (record.status === "OBSERVADO_PRESUPUESTO") add("budget-adjustment", "Budget", "Review budget availability", ["Budget", "Admin"]);
     else if (["OBSERVADO", "DEVUELTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(record.status)) correction("request-correction", "Requests");
     const rendition = record.rendition || {};
@@ -57,7 +57,7 @@ export function taskBlueprints(type, record, related = {}) {
       if (rendition.status !== "VALIDATED") add("rendition-submit", "Submitter", "Submit or correct rendition", [], { directUser: owner, module: "Renditions", dueAt: rendition.dueDate });
     }
     if (record.status === "COMPROMISO_PRESUPUESTAL" && !["REEMBOLSO_SIN_SUSTENTO"].includes(record.requestType)) {
-      if (["A1", "A2"].includes(record.flowType) && !record.purchaseOrder) add("purchase-order", "Budget", "Issue approved purchase order", ["Budget", "Admin"]);
+      if (["A1", "A2"].includes(record.flowType) && !record.purchaseOrder) add("purchase-order", "Procurement", "Issue approved purchase order", ["Procurement", "Admin"]);
       else add("accounting-process", "Accounting", record.flowType === "A2" ? "Register batch invoices" : "Process accounting documents", FINANCE);
     }
     if (canonicalRequestStatus(record.status) === "PAGADO") add("reconcile", "Treasury", "Reconcile payment", ["Treasury", "Admin"], { module: "Payments" });
@@ -71,6 +71,7 @@ export function eligibleForTask(task, user, record) {
   if (task.directUser) return idOf(user) === idOf(task.directUser);
   if (task.approval) {
     if (idOf(user) === task.owner) return false;
+    if (task.step.approverUser) return idOf(user) === idOf(task.step.approverUser) || user.role === "Admin";
     if (user.role === "Admin") return true;
     if (!task.roles.includes(user.role) || !canApproveStage(record, user)) return false;
     if (task.step.approvalLevel === "AREA_DIRECTOR") {

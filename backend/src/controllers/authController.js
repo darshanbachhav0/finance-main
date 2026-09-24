@@ -5,16 +5,17 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
 import { ROLES } from "../utils/constants.js";
+import { recordAudit } from "../services/auditService.js";
 
 function signToken(user) {
-  return jwt.sign({ id: user._id, role: user.role }, getJwtSecret(), {
+  return jwt.sign({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 }, getJwtSecret(), {
     expiresIn: process.env.JWT_EXPIRES_IN || "8h"
   });
 }
 
 export const login = asyncHandler(async (req, res) => {
   const { dni, email, password } = req.body;
-  if (!password || (!dni && !email)) throw new AppError(400, "DNI and password are required.");
+  if (typeof password !== "string" || !password || (!dni && !email)) throw new AppError(400, "DNI and password are required.");
 
   // DNI is the login identifier going forward. The email fallback exists only
   // for one transition release so already-issued frontend builds keep working;
@@ -52,4 +53,20 @@ export const register = asyncHandler(async (req, res) => {
 
 export const me = asyncHandler(async (req, res) => {
   res.json({ user: req.user });
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (typeof currentPassword !== "string" || typeof newPassword !== "string" || newPassword.length < 10 || newPassword.length > 72) {
+    throw new AppError(422, "Use a password between 10 and 72 characters and provide your current password.");
+  }
+  const user = await User.findById(req.user._id);
+  if (!user || !(await user.comparePassword(currentPassword))) throw new AppError(401, "The current password is incorrect.");
+  if (currentPassword === newPassword) throw new AppError(422, "Choose a different password.");
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.passwordResetRequired = false;
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  await user.save();
+  await recordAudit({ entityType: "User", entity: user, action: "PASSWORD_CHANGED", user, req, module: "AUTH", newValues: { passwordResetRequired: false, sessionsRevoked: true } });
+  res.json({ token: signToken(user), user });
 });

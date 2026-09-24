@@ -41,3 +41,4 @@ import "./myTeam.test.js";
 import "./approvalCanonicalCompletion.test.js";
 import "./budgetExceptionRouting.test.js";
 import "./exchangeRateEvidence.test.js";
+import "./productionControls.test.js";

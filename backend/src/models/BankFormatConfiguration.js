@@ -20,4 +20,14 @@ const bankFormatConfigurationSchema = new mongoose.Schema(
 
 bankFormatConfigurationSchema.index({ bank: 1, currency: 1 }, { unique: true });
 
+bankFormatConfigurationSchema.pre("save", function invalidateChangedCertification(next) {
+  if (!this.isNew && ["bank", "currency", "mode", "specificationVersion", "bbva"].some(field => this.isModified(field))) {
+    this.certified = false;
+    this.certifiedAt = null;
+    this.certifiedBy = null;
+    this.certificationReference = "";
+  }
+  next();
+});
+
 export default mongoose.model("BankFormatConfiguration", bankFormatConfigurationSchema);

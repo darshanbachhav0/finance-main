@@ -8,6 +8,7 @@ export default function ProtectedRoute({ roles }) {
 
   if (loading) return <div className="page-loader">{t("Loading session...")}</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.passwordResetRequired) return <Navigate to="/login" replace />;
   if (roles?.length && !roles.includes(user.role)) return <Navigate to="/" replace />;
 
   return <Outlet />;

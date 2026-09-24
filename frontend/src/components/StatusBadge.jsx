@@ -14,6 +14,7 @@ const classes = {
   PAGO_REBOTADO: "badge badge-red",
   PAGADO_CERRADO: "badge badge-dark",
   DEVUELTO: "badge badge-amber",
+  APROBADO: "badge badge-blue",
   APROBADO_DIRECTOR: "badge badge-blue",
   APROBADO_VICERRECTOR: "badge badge-blue",
   COMPROMISO_PRESUPUESTAL: "badge badge-amber",

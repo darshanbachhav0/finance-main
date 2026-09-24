@@ -19,7 +19,7 @@ export const navigationAccess = Object.freeze({
   "/administration": ["Admin"],
   "/treasury/history": ["Admin", "Treasury"],
   "/accounting/invoices": ["Admin", "Accounting"],
-  "/approvals": ["Admin", "Approver", "Management"],
+  "/approvals": authenticatedRoles.filter(role => role !== "ManagementViewer"),
   "/batch-invoices": ["Admin", "Solicitor", "Accounting"],
   "/accounting": ["Admin", "Accounting"],
   "/accounting/payables": ["Admin", "Accounting"],
@@ -51,7 +51,7 @@ export function visibleNavigationPaths(role) {
 
 // Primary navigation is deliberately smaller than the set of permitted routes.
 export const roleNavigation = {
-  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["My Team", "/my-team"]],
+  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["My Team", "/my-team"], ["Approvals", "/approvals"]],
   Approver: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"], ["My Team", "/my-team"]],
   Budget: [["Dashboard", "/"], ["Budget Control", "/budget"], ["Requests", "/requests"]],
   Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],

@@ -1,4 +1,6 @@
-import { preflightDirectPayment, provisionDirectPayment } from "../src/services/directPaymentService.js";
+import EmployeeReimbursementBankAccount from "../src/models/EmployeeReimbursementBankAccount.js";
+import { submitRendition, reviewRendition } from "../src/services/renditionService.js";
+import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "../src/services/directPaymentService.js";
 import { fiscalFixture, invoiceXml, invoiceZip } from "./fiscalFixtures.js";
 import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
 import { reserveBudget, deferBudget } from "../src/services/budgetService.js";
@@ -7,6 +9,8 @@ import test from "node:test";
 import mongoose from "mongoose";
 import { migrateWorkflowStatuses } from "../scripts/migrateWorkflowStatusesV2.js";
 import PurchaseOrder from "../src/models/PurchaseOrder.js";
+import SunatVoucher from "../src/models/SunatVoucher.js";
+import { closeAccountingPeriod } from "../src/services/periodAdministrationService.js";
 import MassUploadBatch from "../src/models/MassUploadBatch.js";
 import { registerA1Invoice } from "../src/services/invoiceRegistrationService.js";
 import { createMassUploadBatch, processMassUploadBatch, retryInvoiceObservation } from "../src/services/batchInvoiceService.js";
@@ -52,13 +56,15 @@ test("canonical status compatibility and partial child evidence", () => {
 
 test("workflow status actions preserve financial evidence", { timeout: 120000 }, async t => {
   const database = "erp_workflow_status_" + process.pid + "_" + Date.now();
-  await mongoose.connect("mongodb://127.0.0.1:27017/" + database);
+  const port = Number(process.env.TEST_MONGODB_PORT || 27017);
+  assert.ok(Number.isInteger(port) && port > 0 && port <= 65535);
+  await mongoose.connect(`mongodb://127.0.0.1:${port}/${database}`);
     const files = [];
   try {
     await Promise.all([FinancialRequest.init(), AccountsPayable.init(), Reconciliation.init(), JournalEntry.init()]);
     await installBbvaTestConfiguration();
     await AccountingMapping.create({code:"STATUS-BBVA-BANK",name:"BBVA source",purpose:"BANK",bank:"BBVA",currency:"PEN",accountNumber:"104102",active:true});
-    const owner = await User.create({ name: "Workflow owner", email: "status.owner@test.local", passwordHash: "unused", role: "Solicitor", area: "Operations" });
+    const owner = await User.create({ name: "Workflow owner", dni: "12345678", employeeCode: "UMA-EMP-1", email: "status.owner@test.local", passwordHash: "unused", role: "Solicitor", area: "Operations" });
     const admin = await User.create({ name: "Workflow admin", email: "status.admin@test.local", passwordHash: "unused", role: "Admin", area: "Finance" });
     const treasury = await User.create({ name: "Workflow treasury", email: "status.treasury@test.local", passwordHash: "unused", role: "Treasury", area: "Finance" });
     const center = await CostCenter.create({ code: "STATUS-CC", name: "Status tests", area: "Operations", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
@@ -67,7 +73,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000000001", cci: "00219100000000000001", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: admin._id });
     await AccountingPeriod.create({ period: "2026-08", status: "OPEN" });
     await AccountingPeriod.create({ period: "2026-07", status: "CLOSED", policy: { blockPosting: false, blockUpdate: false } });
-    for (const [purpose, accountNumber] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101"], ["ADVANCE_TRANSIT", "141301"]]) await AccountingMapping.create({ code: "STATUS-" + purpose, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: purpose === "BANK" ? "BCP" : "*", currency: "*", accountNumber, active: true });
+    for (const [purpose, accountNumber] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) await AccountingMapping.create({ code: "STATUS-" + purpose, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: purpose === "BANK" ? "BCP" : "*", currency: "*", accountNumber, active: true });
     const req = { headers: {}, ip: "127.0.0.1" };
     let sequence = 0;
     const makeRequest = overrides => FinancialRequest.create({ issueDate: "2026-08-10", accountingPeriod: "2026-08", flowType: "A1", requestType: "OPEX", expenseNature: "MAINTENANCE", supplier: supplier._id, solicitor: owner._id, requester: owner._id, requesterArea: "Operations", currency: "PEN", description: "Workflow regression", status: "COMPROMISO_PRESUPUESTAL", approvalStage: "COMPLETE", approvalRouteSnapshot: [{ approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, required: true, status: "APPROVED" }], lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }], ...overrides });
@@ -79,7 +85,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await syncFinancialProgress({ request, user: admin, req });
       return ap;
     }
-    async function batch(payables) {
+    async function makeBatch(payables) {
       const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: "2026-08-15", user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       return result;
@@ -131,7 +137,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 300, igvAmount: 54, totalAmount: 354 }] });
       const children = [];
       for (let n = 0; n < 3; n++) children.push(await payable(request, n === 2 ? "A2" : "A1"));
-      await batch(children);
+      await makeBatch(children);
       assert.equal((await FinancialRequest.findById(request._id)).status, "TXT_GENERADO");
       await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }));
       await confirm(children[0]);
@@ -161,11 +167,12 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       assert.ok(await AuditLog.exists({ requestId: request._id, action: "CLOSED" }));
     });
     await t.test("Track C payment remains PAGADO while rendition is pending", async () => {
-      const request = await makeRequest({ flowType: "C", requestType: "ENTREGA_RENDIR" });
-      const ap = await payable(request);
-      // Seed a generated instruction for the already tested common confirmation path.
-      ap.status = "PAYMENT_FILE_CREATED"; ap.bankAccountSnapshot = { bank: "BCP" }; await ap.save();
-      request.status = "TXT_GENERADO"; await request.save();
+      owner.costCenter = center._id; await owner.save();
+      await EmployeeReimbursementBankAccount.create({ user: owner._id, bank: "BCP", currency: "PEN", accountHolderName: owner.name, accountNumber: "191000000001", cci: "00219100000000000001", verificationStatus: "VERIFIED", preferred: true, active: true, verifiedBy: admin._id });
+      const request = await makeRequest({ flowType: "C", requestType: "ENTREGA_RENDIR", supplier: undefined, requesterCostCenter: center._id, status: "APROBADO" });
+      const { accountsPayable: ap } = await provisionTrackCAdvance({ request, user: admin, req });
+      assert.equal(ap.supplierIdentifierSnapshot, owner.dni, "DNI, not employee code, identifies the bank beneficiary");
+      await makeBatch([ap]);
       await confirm(ap);
       let loaded = await FinancialRequest.findById(request._id);
       assert.equal(loaded.status, "PAGADO");
@@ -181,7 +188,17 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       loaded = await FinancialRequest.findById(request._id);
       assert.equal(loaded.status, "CONCILIADO");
       await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), /rendered/);
-      loaded.rendition.status = "VALIDATED"; loaded.rendition.balanceOutstanding = 0; await loaded.save();
+      loaded.attachments.push({ kind: "RENDITION", originalName: "rendition.pdf", filename: "rendition.pdf", url: "/test/rendition.pdf", mimetype: "application/pdf", size: 10 });
+      await loaded.save();
+      await submitRendition({ requestId: request._id, user: owner, req, files: {}, payload: {
+        lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 0, totalAmount: 100 }],
+        mobilityLines: [{ date: "2026-08-15", origin: "UMA", destination: "Campus", servicePurpose: "Institutional work", amount: 100 }],
+        unsupportedExpenseLines: [], amountReturned: 18, beneficiaryAcknowledged: true
+      } });
+      await reviewRendition({ requestId: request._id, action: "APPROVE", comments: "Evidence checked", user: admin, req });
+      assert.ok(await JournalEntry.exists({ request: request._id, entryType: "RENDITION" }));
+      const commitment = await mongoose.model("BudgetCommitment").findOne({ request: request._id });
+      assert.equal(commitment.executedAmount, 100);
       assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
     });
     await t.test("migration dry-run preserves evidence; apply is additive and idempotent", async () => {
@@ -247,6 +264,10 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       assert.equal(result.accountsPayable.originalAmount, 118);
       assert.equal(result.request?.status || request.status, "CONTABILIZADO");
       assert.equal(result.accountsPayable.exchangeRateEvidence.source, "PEN");
+      await makeBatch([result.accountsPayable]);
+      await confirm(result.accountsPayable);
+      await reconcile(result.accountsPayable);
+      assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
     });
 
     await t.test("A1 first/additional and A2 worker validate actual invoice files before posting", async () => {
@@ -280,9 +301,19 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         const correction = await upload("corrected.xml", invoiceXml(voucher("004")), "application/xml");
         await assert.rejects(() => retryInvoiceObservation({ observationId: observation._id, user: admin, req, files: { xml: [correction] } }), error => error.code === "XML_AMOUNT_MISMATCH");
         assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 3);
-        await retryInvoiceObservation({ observationId: observation._id, user: admin, req, acceptXmlValues: true });
+        const corrected = await retryInvoiceObservation({ observationId: observation._id, user: admin, req, acceptXmlValues: true });
+        const original = await SunatVoucher.findById(observation.voucher);
+        assert.equal(String(original.supersededBy), String(corrected.voucher._id));
+        assert.ok(original.observationDetail);
         assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 4);
         assert.ok(await AuditLog.exists({ requestId: request._id, action: "XML_VALUES_CORRECTED" }));
+        const aps = await AccountsPayable.find({ request: request._id });
+        await makeBatch(aps);
+        await confirm(aps[0]);
+        assert.equal((await FinancialRequest.findById(request._id)).status, "TXT_GENERADO");
+        for (const ap of aps.slice(1)) await confirm(ap);
+        for (const ap of aps) await reconcile(ap);
+        assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
       } finally {
         assert.equal(path.dirname(directory), path.resolve(uploadRoot, "requests"));
         assert.match(path.basename(directory), /^[a-f0-9]{24}$/);
@@ -290,6 +321,23 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       }
     });
 
+    await t.test("payment confirmation uses the bank execution period and cannot invent a future payment", async () => {
+      const request = await makeRequest();
+      const ap = await payable(request);
+      await makeBatch([ap]);
+      const payload = { operationNumber: "ACTUAL-BANK-EXECUTION", confirmedAmount: 118 };
+      await assert.rejects(() => confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { ...payload, paidAt: "2099-01-01" }, user: treasury, req }));
+      await assert.rejects(() => confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { ...payload, paidAt: "2026-07-15" }, user: treasury, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
+      await AccountingPeriod.updateOne({ period: "2026-09" }, { $setOnInsert: { period: "2026-09", status: "OPEN" } }, { upsert: true });
+      await confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { ...payload, paidAt: "2026-09-01" }, user: treasury, req });
+      const paid = await AccountsPayable.findById(ap._id).populate("paymentJournal");
+      assert.equal(paid.paymentJournal.period, "2026-09");
+    });
+    await t.test("Admin cannot force a period closed over outstanding financial blockers", async () => {
+      const period = await AccountingPeriod.findOne({ period: "2026-08" });
+      await assert.rejects(() => closeAccountingPeriod({ id: period._id, comments: "Attempt close", force: true, overrideReason: "Emergency", user: admin, req }), /Forced period closure/);
+      assert.equal((await AccountingPeriod.findById(period._id)).status, "OPEN");
+    });
     await t.test("closed periods stop A1 entry and queued A2 workers before processing evidence", async () => {
       const request = await makeRequest({ accountingPeriod: "2026-07" });
       await assert.rejects(() => registerA1Invoice({ requestId: request._id, files: {}, user: admin, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");

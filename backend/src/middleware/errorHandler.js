@@ -11,6 +11,19 @@ export function errorHandler(error, _req, res, _next) {
   let message = error.message || "Internal server error";
   let details = error.details;
 
+  if (error.name === "CastError") {
+    statusCode = 422;
+    code = ERROR_CODES.VALIDATION_ERROR;
+    message = "An identifier or field value is invalid.";
+    details = { field: error.path };
+  }
+  if (error.name === "VersionError") {
+    statusCode = 409;
+    code = ERROR_CODES.CONFLICT;
+    message = "This record changed while you were working. Refresh before trying again.";
+    details = undefined;
+  }
+
   if (error.code === 11000) {
     statusCode = 409;
     code = Object.keys(error.keyPattern || {}).some((key) => key.includes("fiscalData") || key.includes("voucher"))

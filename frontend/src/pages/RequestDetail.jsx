@@ -213,7 +213,7 @@ export default function RequestDetail() {
   const isChainApprovalStep = activeApprovalStep?.source === "MANAGER_CHAIN";
   // Whether forwarding is possible is decided by the request's own frozen route (was a further
   // level pre-determined at submission time?), never by the current user's live jefe field.
-  const canForwardChain = isChainApprovalStep && approvalSteps.some((step) => step.source === "MANAGER_CHAIN" && step.sequence > activeApprovalStep.sequence);
+  const canForwardChain = isChainApprovalStep && approvalSteps.some((step) => step.required !== false && step.status !== "APPROVED" && step.sequence > activeApprovalStep.sequence);
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
@@ -813,7 +813,7 @@ export default function RequestDetail() {
                 <div className="action-buttons">
                   {permissions.canApprove && isChainApprovalStep && (
                     <>
-                      <button type="button" className="primary-button approve-button" onClick={() => decision("approve", false)}><CheckCircle2 size={16} /><span>{t("Approve and finalize")}</span></button>
+                      {!canForwardChain && <button type="button" className="primary-button approve-button" onClick={() => decision("approve", false)}><CheckCircle2 size={16} /><span>{t("Approve and finalize")}</span></button>}
                       {canForwardChain && <button type="button" className="secondary-button" onClick={() => decision("approve", true)}><CheckCircle2 size={16} /><span>{t("Approve and forward")}</span></button>}
                     </>
                   )}

@@ -82,7 +82,7 @@ export function allowedRequestActions(request, user, context = {}) {
       && canTransition(status, REQUEST_STATUS.VOIDED)) actions.add(REQUEST_ACTION.CANCEL);
 
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) && context.closureReady === true) actions.add(REQUEST_ACTION.CLOSE);
-  if ([ROLES.ADMIN, ROLES.BUDGET].includes(user.role) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED].includes(status)) actions.add(REQUEST_ACTION.COMMIT_BUDGET);
+  if ([ROLES.ADMIN, ROLES.BUDGET].includes(user.role) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(status) && !activeApprovalStep(request)) actions.add(REQUEST_ACTION.COMMIT_BUDGET);
   if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role) && context.procurementReady === true) actions.add(REQUEST_ACTION.ISSUE_ORDER);
   if (request.flowType === "A1" && request.purchaseOrder && invoiceStatuses.has(status)
       && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (user.role === ROLES.SOLICITOR && owner))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);

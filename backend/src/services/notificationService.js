@@ -1,5 +1,20 @@
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import { activeApprovalStep } from "./approvalRuleService.js";
+
+export async function notifyApprovalStep(request) {
+  const step = activeApprovalStep(request);
+  if (!step) return;
+  const message = {
+    eventKey: `request:${request._id}:approval:${step.approvalLevel}`,
+    type: "APPROVAL_PENDING", title: "Approval pending",
+    message: `${request.requestNumber} is waiting for ${step.approvalLevel} approval.`,
+    path: `/approvals?request=${request._id}`, entityType: "FinancialRequest", entityId: request._id
+  };
+  if (step.approverUser) return notifyUser({ ...message, userId: step.approverUser?._id || step.approverUser });
+  return notifyRoles({ ...message, roles: [step.role], approvalLevel: step.approvalLevel,
+    areas: step.approvalLevel === "AREA_DIRECTOR" ? [request.requesterArea || request.requestingArea] : undefined });
+}
 
 export async function notifyUser({ userId, eventKey, type, title, message, path, entityType, entityId }) {
   if (!userId) return null;

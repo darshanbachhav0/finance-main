@@ -4,6 +4,13 @@ import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
+  "Direct supervisor": "Jefe inmediato",
+  "Job title": "Cargo",
+  "New password": "Nueva contraseña",
+  "Change password": "Cambiar contraseña",
+  "Change your initial password to continue.": "Cambia tu contraseña inicial para continuar.",
+  "Approve and forward": "Aprobar y derivar",
+  "Approve and finalize": "Aprobar y finalizar",
   "Management Portal": "Portal de Gerencia",
   "Shared Management View": "Vista compartida de Gerencia",
   ManagementViewer: "Visor de Gerencia",
@@ -638,6 +645,7 @@ const additionalSpanish = {
   VICE_RECTOR: "VICERRECTOR",
   COMPLETE: "COMPLETADO",
   APROBADO_DIRECTOR: "APROBADO DIRECTOR",
+  APROBADO: "APROBADO",
   APROBADO_VICERRECTOR: "APROBADO VICERRECTOR",
   COMPROMISO_PRESUPUESTAL: "COMPROMISO PRESUPUESTAL",
   CONTABILIZADO: "CONTABILIZADO",

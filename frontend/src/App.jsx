@@ -63,7 +63,7 @@ export default function App() {
             <Route index element={<RequestCreate />} />
           </Route>
           <Route path="requests/:id" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestDetail />} /></Route>
-          <Route path="approvals" element={<ProtectedRoute roles={["Admin", "Approver", "Management"]} />}>
+          <Route path="approvals" element={<ProtectedRoute roles={internalRoles} />}>
             <Route index element={<ApprovalInbox />} />
           </Route>
           <Route path="batch-invoices" element={<ProtectedRoute roles={["Admin", "Solicitor", "Accounting"]} />}>

@@ -255,7 +255,8 @@ export async function provisionTrackCAdvance({ request, user, req, session }) {
   await assertPostingAllowed(request, { user, req });
   if (request.flowType !== FLOW_TYPE.C) throw new AppError(422, "Advance provisioning is only available for Track C.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
   if (![REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status)) throw new AppError(409, "Track C can be provisioned only after all approvals are complete or after a budget observation is resolved.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  const requester = request.requester?._id ? request.requester : await User.findById(request.requester || request.solicitor).session(session || null);
+  const requester = await User.findById(request.requester?._id || request.requester || request.solicitor).session(session || null);
+  if (!requester?.active || !/^\d{8}$/.test(requester.dni || "")) throw new AppError(422, "An active employee with a valid DNI is required for an advance payment.");
   const bank = await getVerifiedEmployeeReimbursementBankAccount({ userId: requester._id, currency: request.currency, session });
   if (!bank) throw new AppError(422, "Track C requires a verified employee bank account before the advance can be released.", undefined, ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED);
 
@@ -281,7 +282,7 @@ export async function provisionTrackCAdvance({ request, user, req, session }) {
   const commitment = await reserveBudget(request, user._id, { session });
   request.budgetCommitment = commitment._id;
   const voucher = {
-    ruc: requester.employeeCode || String(requester._id),
+    ruc: requester.dni,
     voucherType: "ANTICIPO",
     series: "UMA",
     number: request.requestNumber,

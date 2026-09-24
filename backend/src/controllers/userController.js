@@ -5,7 +5,7 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
+import { ERROR_CODES, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH } from "../utils/constants.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
@@ -13,6 +13,19 @@ const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitl
 
 function editablePayload(body) {
   return Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+}
+
+export async function validateSupervisor(userId, supervisorId) {
+  if (!supervisorId) return;
+  const visited = new Set([String(userId)]);
+  let next = supervisorId;
+  for (let depth = 0; next; depth++) {
+    if (depth >= MAX_APPROVAL_CHAIN_DEPTH || visited.has(String(next))) throw new AppError(422, "Supervisor assignment creates a cycle or exceeds the hierarchy depth.");
+    visited.add(String(next));
+    const manager = await User.findById(next).select("jefe active role").lean();
+    if (!manager || manager.active === false || manager.role === "ManagementViewer") throw new AppError(422, "Choose an active, internal supervisor.");
+    next = manager.jefe;
+  }
 }
 
 // Any authenticated user may see their own direct reports (not gated to
@@ -46,7 +59,7 @@ export const listUsers = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination({ ...req.query, pageSize: req.query.pageSize || 100 });
   const sort = parseSort(req.query, ["name", "email", "role", "area", "active", "createdAt"], { name: 1 });
   const [data, total] = await Promise.all([
-    User.find(query).populate("costCenter authorizedCostCenters").sort(sort).skip(skip).limit(pageSize),
+    User.find(query).populate("costCenter authorizedCostCenters").populate("jefe", "name jobTitle").sort(sort).skip(skip).limit(pageSize),
     User.countDocuments(query)
   ]);
   res.json(paginatedPayload(data, total, page, pageSize));
@@ -57,12 +70,14 @@ export const createUser = asyncHandler(async (req, res) => {
   if (!name || !dni || !password || !role) throw new AppError(400, "Name, DNI, password, and role are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (String(password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
   const normalizedDni = String(dni).trim();
+  if (!/^\d{8}$/.test(normalizedDni)) throw new AppError(422, "DNI must contain 8 digits.");
+  await validateSupervisor(null, req.body.jefe);
   if (await User.exists({ dni: normalizedDni })) throw new AppError(409, "A user with this DNI already exists.", undefined, ERROR_CODES.CONFLICT);
   if (email) {
     const normalizedEmail = String(email).trim().toLowerCase();
     if (await User.exists({ email: normalizedEmail })) throw new AppError(409, "A user with this email already exists.", undefined, ERROR_CODES.CONFLICT);
   }
-  const user = await User.create({ ...editablePayload(req.body), dni: normalizedDni, email: email ? String(email).trim().toLowerCase() : undefined, passwordHash: await bcrypt.hash(password, 12) });
+  const user = await User.create({ ...editablePayload(req.body), dni: normalizedDni, email: email ? String(email).trim().toLowerCase() : undefined, passwordResetRequired: true, passwordHash: await bcrypt.hash(password, 12) });
   await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, dni: user.dni, role: user.role, area: user.area, active: user.active } });
   res.status(201).json({ data: user });
 });
@@ -71,15 +86,19 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id) && req.body.active === false) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel };
+  if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
+  if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
+  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe };
   Object.assign(user, editablePayload(req.body));
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
   if (req.body.password) {
     if (String(req.body.password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
     user.passwordHash = await bcrypt.hash(req.body.password, 12);
+    user.passwordResetRequired = true;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
   }
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, passwordChanged: Boolean(req.body.password) } });
+  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, passwordChanged: Boolean(req.body.password) } });
   res.json({ data: user });
 });
 

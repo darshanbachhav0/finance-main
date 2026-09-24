@@ -17,9 +17,7 @@ import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance 
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
-import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
-import { generatePurchaseOrder } from "./purchaseOrderService.js";
-import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
+import { notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
 import { assertSupplierUsable } from "./supplierService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { requestListPopulate, requestListSelect, requestPopulate } from "./requestService.js";
@@ -240,25 +238,18 @@ export async function commitApprovedRequestBudget({ request, user, req }) {
   const result = await runFinancialOperation(async (session) => {
     const commitment = await reserveBudget(request, user._id, { session });
     request.budgetCommitment = commitment._id;
-    if (request.flowType === FLOW_TYPE.A1) {
-      const procurement = await evaluateProcurementReadiness(request, { session, commitment });
-      if (procurement.applicable) {
-        const purchaseOrder = await generatePurchaseOrder(request, user, req, { session, commitment });
-        request.purchaseOrder = purchaseOrder._id;
-      }
-    }
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed and budget commitment recorded.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, session });
     if (request.flowType === FLOW_TYPE.B) await provisionDirectPayment({ request, user, req, session, preflight: directPaymentPreflight });
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);
   await notifyRoles({
-    roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.ACCOUNTING],
-    eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "accounting"}`,
-    type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "ACCOUNTING_PROCESSING",
-    title: request.flowType === FLOW_TYPE.B ? "Priority payment ready" : "Accounting processing required",
-    message: request.flowType === FLOW_TYPE.B ? `${request.requestNumber} was auto-provisioned and is ready for priority Treasury payment.` : `${request.requestNumber} is budget committed and its PO is ready for invoice matching.`,
-    path: request.flowType === FLOW_TYPE.B ? "/treasury" : "/accounting",
+    roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.PROCUREMENT],
+    eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,
+    type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "PROCUREMENT_ORDER",
+    title: request.flowType === FLOW_TYPE.B ? "Priority payment ready" : "Purchase order required",
+    message: request.flowType === FLOW_TYPE.B ? `${request.requestNumber} was auto-provisioned and is ready for priority Treasury payment.` : `${request.requestNumber} is budget committed and ready for Procurement to issue the order.`,
+    path: request.flowType === FLOW_TYPE.B ? "/treasury" : `/requests/${request._id}`,
     entityType: "FinancialRequest",
     entityId: request._id
   });
@@ -398,7 +389,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
 
   let budgetWarning;
   let fiscalObservation = false;
-  const requiresBudgetHandoff = routeResult.complete && user.role === ROLES.MANAGEMENT;
+  const requiresBudgetHandoff = routeResult.complete && (user.role === ROLES.MANAGEMENT || request.approvalRoutingMode === APPROVAL_ROUTING_MODE.MANAGER_CHAIN);
   if (routeResult.complete && !requiresBudgetHandoff) {
     try {
       await commitApprovedRequestBudget({ request, user, req });
@@ -424,17 +415,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   }
   await resolveNotification(`request:${request._id}:approval:${step.approvalLevel}`);
   if (activeApprovalStep(request)) {
-    await notifyRoles({
-      roles: [activeApprovalStep(request).role],
-      approvalLevel: activeApprovalStep(request).approvalLevel,
-      eventKey: `request:${request._id}:approval:${activeApprovalStep(request).approvalLevel}`,
-      type: "APPROVAL_PENDING",
-      title: "Approval pending",
-      message: `${request.requestNumber} is waiting for ${activeApprovalStep(request).approvalLevel} approval.`,
-      path: `/approvals?request=${request._id}`,
-      entityType: "FinancialRequest",
-      entityId: request._id
-    });
+    await notifyApprovalStep(request);
   } else if (budgetWarning) {
     await notifyRoles({
       roles: [ROLES.BUDGET, ROLES.ADMIN],
@@ -458,19 +439,8 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       eventKey: `request:${request._id}:budget-commitment`,
       type: "BUDGET_COMMITMENT",
       title: "Budget commitment required",
-      message: `${request.requestNumber} completed Rectorate approval and is ready for budget commitment.`,
+      message: `${request.requestNumber} completed its approval route and is ready for budget commitment.`,
       path: "/budget",
-      entityType: "FinancialRequest",
-      entityId: request._id
-    });
-  } else {
-    await notifyRoles({
-      roles: [ROLES.ACCOUNTING],
-      eventKey: `request:${request._id}:accounting`,
-      type: "ACCOUNTING_PROCESSING",
-      title: "Accounting processing required",
-      message: `${request.requestNumber} is budget committed and ready for fiscal processing.`,
-      path: "/accounting",
       entityType: "FinancialRequest",
       entityId: request._id
     });

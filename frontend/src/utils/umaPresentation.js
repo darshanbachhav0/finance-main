@@ -23,7 +23,7 @@ export const umaCopy = {
   "Payment destination snapshot": "Recorded payment destination",
   "PENDING_VALIDATION": "Pending validation", "BORRADOR": "Draft", "EN_VALIDACION": "Under review",
   "ENVIADO": "Submitted", "PENDIENTE_APROBACION": "Pending approval", "OBSERVADO": "Needs correction",
-  "DEVUELTO": "Returned", "RECHAZADO": "Rejected", "APROBADO_DIRECTOR": "Director approved",
+  "DEVUELTO": "Returned", "RECHAZADO": "Rejected", "APROBADO": "Approved", "APROBADO_DIRECTOR": "Director approved",
   "APROBADO_VICERRECTOR": "Vice Rector approved", "COMPROMISO_PRESUPUESTAL": "Budget committed",
   "CONTABILIZADO": "Posted", "PROVISIONADO_CXP": "Accounts payable recorded", "PROGRAMADO": "Scheduled",
   "TXT_GENERADO": "Bank file generated", "PAGADO": "Paid", "CONCILIADO": "Reconciled",

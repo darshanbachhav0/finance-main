@@ -22,7 +22,8 @@ export function approvalSlaCycle(request) {
 }
 
 export async function checkApprovalSlas({ now = new Date(), config = slaConfiguration() } = {}) {
-  const users = await User.find({ active: true, role: { $in: ["Approver", "Management", "Admin"] } }).lean();
+  const assigned = await FinancialRequest.distinct("approvalRouteSnapshot.approverUser", { status: { $in: ACTIVE_STATUSES } });
+  const users = await User.find({ active: true, $or: [{ role: { $in: ["Approver", "Management", "Admin"] } }, { _id: { $in: assigned } }] }).lean();
   const liveEvents = new Map();
   const summary = { checked: 0, delivered: 0, escalations: 0 };
   // Stream requests so the scan does not load the whole approval queue into memory.

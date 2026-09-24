@@ -7,7 +7,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem("erp_user");
-    return raw ? JSON.parse(raw) : null;
+    try { return raw ? JSON.parse(raw) : null; } catch { return null; }
   });
   const [loading, setLoading] = useState(Boolean(localStorage.getItem("erp_token")));
 
@@ -36,6 +36,13 @@ export function AuthProvider({ children }) {
     setUser(response.data.user);
   }
 
+  async function changePassword(currentPassword, newPassword) {
+    const response = await api.post("/auth/change-password", { currentPassword, newPassword });
+    localStorage.setItem("erp_token", response.data.token);
+    localStorage.setItem("erp_user", JSON.stringify(response.data.user));
+    setUser(response.data.user);
+  }
+
   async function logout() {
     const saved = await flushAllDrafts();
     if (!saved && !window.confirm("Some changes have not reached your account. Stay signed in to retry. Sign out anyway?")) return;
@@ -45,7 +52,7 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
-  const value = useMemo(() => ({ user, loading, login, logout, isAuthenticated: Boolean(user) }), [user, loading]);
+  const value = useMemo(() => ({ user, loading, login, logout, changePassword, isAuthenticated: Boolean(user) }), [user, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

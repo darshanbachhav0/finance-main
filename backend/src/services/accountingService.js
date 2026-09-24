@@ -6,6 +6,8 @@ import { validateVoucherWithSunat, createSunatVoucher, findDuplicateVoucher } fr
 import AccountsPayable from "../models/AccountsPayable.js";
 import { resolvePayablePaymentTerms, resolvePayableDueDate } from "./payablePaymentTermsService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
+import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
 import JournalEntry from "../models/JournalEntry.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { requireAccountingMapping } from "./accountingMappingService.js";
@@ -143,7 +145,8 @@ async function provisionJournalLines(request) {
   return lines;
 }
 
-async function createJournal({ request, accountsPayable, entryType, sourceTransaction, lines, userId, originalAmount, currency, exchangeRate, penEquivalent, session }) {
+async function createJournal({ request, accountsPayable, entryType, sourceTransaction, lines, userId, originalAmount, currency, exchangeRate, penEquivalent, period, session }) {
+  if (period) await guardAccountingPeriod({ period, action: "POST", user: { _id: userId }, module: "ACCOUNTING", requestId: request._id });
   await assertPostingAllowed(request, { user: { _id: userId } });
   if (["PROVISION", "ADVANCE", "RENDITION"].includes(entryType)) await assertBudgetBeforePosting(request, { session, userId });
   const identity = accountsPayable?._id
@@ -171,7 +174,7 @@ async function createJournal({ request, accountsPayable, entryType, sourceTransa
   const [journal] = await JournalEntry.create([{
     request: request._id,
     accountsPayable: accountsPayable?._id,
-    period: request.fiscalData?.fiscalPeriod || request.accountingPeriod,
+    period: period || request.fiscalData?.fiscalPeriod || request.accountingPeriod,
     entryType,
     sourceTransaction,
     currency: currency || request.currency,
@@ -278,7 +281,7 @@ export async function createProvisionJournalForVoucher(request, accountsPayable,
   });
 }
 
-export async function createPaymentJournal(request, accountsPayable, userId, { bank, session } = {}) {
+export async function createPaymentJournal(request, accountsPayable, userId, { bank, paymentDate, session } = {}) {
   const [payable, bankMapping] = await Promise.all([
     requireAccountingMapping("ACCOUNTS_PAYABLE", request),
     requireAccountingMapping("BANK", request, { bank, currency: request.currency })
@@ -290,6 +293,7 @@ export async function createPaymentJournal(request, accountsPayable, userId, { b
     request,
     accountsPayable,
     entryType: "PAYMENT",
+    period: paymentDate ? new Date(paymentDate).toISOString().slice(0, 7) : undefined,
     sourceTransaction: `PAYMENT:${request.payment?.operationNumber || request.requestNumber}:${accountsPayable?._id || ""}`,
     lines: [
       debitLine({ accountNumber: payable.accountNumber, subAccount: payable.subAccount, description: `Settle CXP ${request.requestNumber}`, amount }),
@@ -550,6 +554,11 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   if (duplicate) {
     throw new AppError(409, "The supplier voucher is already registered.", { accountsPayable: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
   }
+  const purchaseOrder = request.flowType === FLOW_TYPE.A1 ? await PurchaseOrder.findOne({ request: request._id }) : null;
+  if (request.flowType === FLOW_TYPE.A1) {
+    if (!purchaseOrder) throw new AppError(409, "Procurement must issue the approved order before A1 accounting.");
+    await assertPurchaseOrderInvoiceFits(purchaseOrder._id, request.totalAmount, { currency: request.currency });
+  }
   await applyExchangeRate(request);
   await assertBudgetBeforePosting(request, { userId: user._id, amount: multiplyMoney(request.totalAmount, request.exchangeRate) });
   if (request.flowType !== FLOW_TYPE.C) {
@@ -575,6 +584,8 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     if (!accountsPayable) {
       [accountsPayable] = await AccountsPayable.create([{
         request: request._id,
+        flowType: request.flowType,
+        purchaseOrder: purchaseOrder?._id,
         supplier: request.supplier._id,
         supplierIdentifierSnapshot: fiscal.supplierIdentifierNormalized,
         voucher: {
@@ -595,6 +606,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
         status: AP_STATUS.OPEN,
         history: [{ status: AP_STATUS.OPEN, by: user._id, comments: "CXP created after fiscal validation." }]
       }], session ? { session } : undefined);
+      if (purchaseOrder) await consumePurchaseOrderBalance(purchaseOrder._id, request.totalAmount, { session });
     }
     if (request.flowType !== FLOW_TYPE.C) {
       const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };

@@ -1,3 +1,4 @@
+import { issueProcurementOrder } from "../src/services/purchaseOrderService.js";
 import { fiscalFixture } from "./fiscalFixtures.js";
 import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
 import { inspectBbvaFile } from "../src/integrations/banks/BbvaBankFileAdapter.js";
@@ -47,7 +48,9 @@ const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1"
 test("production financial controls cover the canonical lifecycle", { timeout: 120000 }, async (t) => {
   const databaseName = `erp_financial_lifecycle_${process.pid}_${Date.now()}`;
   const cleanupPaths = [];
-  await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
+  const port = Number(process.env.TEST_MONGODB_PORT || 27017);
+  assert.ok(Number.isInteger(port) && port > 0 && port <= 65535);
+  await mongoose.connect(`mongodb://127.0.0.1:${port}/${databaseName}`);
   try {
     await Promise.all([
       FinancialRequest.init(),
@@ -190,6 +193,11 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       request = result.request;
       assert.equal(request.status, REQUEST_STATUS.BUDGET_COMMITTED);
       assert.ok(request.budgetCommitment);
+      assert.equal(await PurchaseOrder.countDocuments({ request: request._id }), 0, "Budget does not issue Procurement orders");
+      await assert.rejects(issueProcurementOrder({ requestId: request._id, user: users.budget, req }), error => error.statusCode === 403);
+      const order = await issueProcurementOrder({ requestId: request._id, user: users.admin, req });
+      assert.equal(order.status, "ISSUED");
+      request = await FinancialRequest.findById(request._id);
     });
 
     await t.test("9. SLA overdue calculation", () => {

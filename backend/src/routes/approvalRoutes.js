@@ -9,7 +9,7 @@ const router = Router();
 // org roster) are ordinary employees with no special role — who can actually
 // act on a given request is enforced downstream by identity (assertApprovalActor
 // / isActiveChainApprover), not by this role gate.
-router.use(protect, authorize(ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT, ROLES.SOLICITOR));
+router.use(protect, authorize(...Object.values(ROLES).filter(role => role !== ROLES.MANAGEMENT_VIEWER)));
 router.get("/inbox", getApprovalInbox);
 router.post("/:id/approve", approveRequest);
 router.post("/:id/observe", observeRequest);

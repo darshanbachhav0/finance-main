@@ -7,9 +7,22 @@ import { approvalLevels, roles } from "../utils/options.js";
 
 export default function AdminUsers() {
   const [costCenters, setCostCenters] = useState([]);
+  const [supervisors, setSupervisors] = useState([]);
   const [error, setError] = useState("");
   useEffect(() => {
     api.get("/cost-centers", { params: { pageSize: 100 } }).then((response) => setCostCenters(response.data.data || [])).catch((err) => setError(err.message));
+    let mounted = true;
+    (async () => {
+      const users = [];
+      for (let page = 1; ; page++) {
+        const response = await api.get("/users", { params: { page, pageSize: 100, active: true } });
+        const rows = response.data.data || [];
+        users.push(...rows);
+        if (rows.length < 100) break;
+      }
+      if (mounted) setSupervisors(users);
+    })().catch(err => mounted && setError(err.message));
+    return () => { mounted = false; };
   }, []);
   const centerOptions = costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}${item.organizationalUnitCode ? ` · ${item.organizationalUnitCode}` : ""}` }));
 
@@ -20,12 +33,15 @@ export default function AdminUsers() {
       description="Manage development and institutional users, profiles, approval scope, Cost Center authorization, and active status."
       endpoint="/users"
       deleteMode="deactivate"
-      duplicateFields={["email"]}
+      duplicateFields={["dni"]}
       fields={[
         { name: "name", label: "Name", required: true },
         { name: "dni", label: "Employee DNI", placeholder: "8 digits", validate: (value) => value && !/^\d{8}$/.test(String(value)) ? "Enter an 8-digit DNI." : "" },
         { name: "employeeCode", label: "Employee code" },
-        { name: "email", label: "Email", type: "email", required: true },
+        { name: "email", label: "Email", type: "email" },
+        { name: "jefe", label: "Direct supervisor", type: "select", options: supervisors.map(user => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}` })), getValue: row => row.jefe?._id || row.jefe || "" },
+        { name: "jobTitle", label: "Job title" },
+        { name: "organizationalUnit", label: "Organizational unit" },
         { name: "password", label: "Password", type: "password", requiredOnCreate: true, hint: "At least 10 characters; required only when creating a user." },
         { name: "role", label: "Role", type: "select", required: true, options: roles },
         { name: "approvalLevel", label: "Approval level", type: "select", defaultValue: "AREA_DIRECTOR", options: approvalLevels, hint: "Used for Approver and configured Management approval profiles." },
@@ -46,6 +62,7 @@ export default function AdminUsers() {
       transformSubmit={(form) => {
         const payload = {
           ...form,
+          jefe: form.jefe || null,
           approvalAreas: String(form.approvalAreas || "").split(",").map((item) => item.trim()).filter(Boolean),
           permissions: String(form.permissions || "").split(",").map((item) => item.trim()).filter(Boolean)
         };

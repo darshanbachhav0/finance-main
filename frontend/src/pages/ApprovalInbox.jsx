@@ -36,6 +36,7 @@ export default function ApprovalInbox() {
     const steps = [...(row.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
     return steps.find((step) => step.required !== false && step.status === "PENDING") || null;
   }
+  const canForward = row => (row.approvalRouteSnapshot || []).some(step => step.sequence > activeStepOf(row)?.sequence && step.required !== false && step.status !== "APPROVED");
   const isChainRow = (row) => activeStepOf(row)?.source === "MANAGER_CHAIN";
 
   async function decide(comments) {
@@ -149,7 +150,8 @@ export default function ApprovalInbox() {
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
 
-            { label: "Approve and forward", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE") || !isChainRow(row), onClick: () => openDecision(row, "approve", true) },
+            { label: "Approve", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE") || (isChainRow(row) && canForward(row)), onClick: () => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
+            { label: "Approve and forward", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE") || !isChainRow(row) || !canForward(row), onClick: () => openDecision(row, "approve", true) },
             { label: "Observe", icon: MessageSquareWarning, hidden: !hasAction(row, "OBSERVE"), onClick: () => openDecision(row, "observe") },
             { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") },
             { label: "Reject", icon: XCircle, tone: "danger", hidden: !hasAction(row, "REJECT"), onClick: () => openDecision(row, "reject") }

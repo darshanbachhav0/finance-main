@@ -18,7 +18,7 @@ import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/inde
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { markBudgetPaidAmount } from "./budgetService.js";
-import { guardAccountingPeriod } from "./periodService.js";
+import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
 import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import {
   listEligibleSupplierPaymentAccounts,
@@ -148,9 +148,12 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
       accountsPayable,
       bankAccount: destination.account,
       requestNumber: request.requestNumber,
-      supplierIdentifier: request.supplier?.normalizedIdentifier || request.supplier?.rucDni || employee?.employeeCode || accountsPayable.supplierIdentifierSnapshot,
+      supplierIdentifier: accountsPayable.supplierIdentifierSnapshot || request.supplier?.normalizedIdentifier || request.supplier?.rucDni || employee?.employeeCode,
       supplierName: request.supplier?.legalName || request.supplier?.name || employee?.name || "UMA collaborator",
       amount: accountsPayable.outstandingAmount,
+      // Advances have no fiscal invoice number. Retain the unique year and
+      // request sequence within BBVA's 12-byte reference field.
+      paymentReference: accountsPayable.flowType === FLOW_TYPE.C ? request.requestNumber.replace(/^(SOL|REQ)-/, "") : undefined,
       currency,
       bankAccountSnapshot: destination.snapshot,
       priority: accountsPayable.paymentPriority || "NORMAL"
@@ -555,6 +558,10 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
     throw new AppError(409, "Payment can only be confirmed after bank-file generation.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (Number.isNaN(new Date(payload.paidAt).getTime())) throw new AppError(422, "A valid actual payment date is required.");
+  if (new Date(payload.paidAt).getTime() > Date.now()) throw new AppError(422, "A future payment cannot be confirmed as executed.");
+  if (!Number.isFinite(Number(payload.confirmedAmount)) || Number(payload.confirmedAmount) <= 0) throw new AppError(422, "A positive confirmed amount is required.");
+  await assertNoBlockingObservation(accountsPayable, { requestNumber: request.requestNumber });
+  await guardAccountingPeriod({ period: periodFromDate(payload.paidAt), action: "POST", user, req, module: "TREASURY", entityId: request._id, requestId: request._id });
   const confirmedAmount = roundMoney(payload.confirmedAmount);
   if (!moneyEquals(confirmedAmount, accountsPayable.outstandingAmount)) {
     throw new AppError(422, "Confirmed amount must equal the outstanding CXP amount.", { confirmedAmount, outstandingAmount: accountsPayable.outstandingAmount }, ERROR_CODES.VALIDATION_ERROR);
@@ -565,6 +572,7 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   const result = await runFinancialOperation(async (session) => {
     appendPaymentConfirmation(request, accountsPayable, payload, user, confirmedAmount);
     const paymentJournal = await createPaymentJournal(request, accountsPayable, user._id, {
+      paymentDate: payload.paidAt,
       bank: sourceBatch?.bank || request.bankFile?.bank || accountsPayable.bankAccountSnapshot?.bank,
       session
     });
@@ -947,6 +955,8 @@ export async function getEligiblePayablePaymentDestinations({ accountsPayableId,
 // field editor so certification is always a deliberate, audited administrative/Finance decision,
 // distinct from a routine configuration edit (see masterDataController.js).
 export async function certifyBankFormatConfiguration({ id, certified, certificationReference, user, req }) {
+  if (![ROLES.ADMIN, ROLES.TREASURY].includes(user?.role)) throw new AppError(403, "Only authorized bank configuration administrators may certify the format.");
+  if (typeof certified !== "boolean") throw new AppError(422, "Certification must be a boolean.");
   const configuration = await BankFormatConfiguration.findById(id);
   if (!configuration) throw new AppError(404, "BankFormatConfiguration not found.", { id }, ERROR_CODES.NOT_FOUND);
   const isCertified = Boolean(certified);
@@ -954,6 +964,7 @@ export async function certifyBankFormatConfiguration({ id, certified, certificat
   if (isCertified && !reference) {
     throw new AppError(422, "A certification reference/comment is required when marking a format certified.", { field: "certificationReference" }, ERROR_CODES.VALIDATION_ERROR);
   }
+  if (isCertified) getBankFileAdapter(configuration.bank, { ...configuration.toObject(), certified: true });
   const oldValues = configuration.toObject();
   configuration.certified = isCertified;
   configuration.certifiedAt = isCertified ? new Date() : null;

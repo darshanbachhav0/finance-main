@@ -4,7 +4,7 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import { getConsolidation } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { ERROR_CODES } from "../utils/constants.js";
 import { moneyEquals } from "../utils/money.js";
 
 const terminalStatuses = terminalStatusValues;
@@ -28,7 +28,7 @@ export async function createAccountingPeriod({ payload, user, req }) {
   return record;
 }
 
-export async function closeAccountingPeriod({ id, comments, force, overrideReason, user, req }) {
+export async function closeAccountingPeriod({ id, comments, force, user, req }) {
   const period = await AccountingPeriod.findById(id);
   if (!period) throw new AppError(404, "Accounting period not found.", { id }, ERROR_CODES.NOT_FOUND);
   if (period.status === "CLOSED") return period;
@@ -44,7 +44,8 @@ export async function closeAccountingPeriod({ id, comments, force, overrideReaso
   };
   const hasBlockers = openTransactions > 0 || !moneyEquals(consolidation.summary.difference, 0) || !consolidation.summary.balanced;
   const override = force === true || force === "true";
-  if (hasBlockers && (!override || user.role !== ROLES.ADMIN || !String(overrideReason || "").trim())) {
+  if (override) throw new AppError(403, "Forced period closure is disabled. Resolve financial blockers before closing the period.");
+  if (hasBlockers) {
     throw new AppError(409, "The period cannot be closed until open transactions and accounting differences are resolved.", blockers, ERROR_CODES.VALIDATION_ERROR);
   }
   const now = new Date();
@@ -53,18 +54,18 @@ export async function closeAccountingPeriod({ id, comments, force, overrideReaso
   period.closingDate = now;
   period.closedBy = user._id;
   period.comments = comments;
-  period.history.push({ action: "CLOSED", at: now, by: user._id, comments: override ? `${comments} Override: ${overrideReason}` : comments, override });
+  period.history.push({ action: "CLOSED", at: now, by: user._id, comments, override: false });
   await period.save();
   await recordAudit({
     entityType: "AccountingPeriod",
     entity: period,
-    action: override ? "CLOSED_WITH_ADMIN_OVERRIDE" : "CLOSED",
+    action: "CLOSED",
     user,
     req,
     module: "ACCOUNTING_PERIOD",
     comments,
     oldValues: { status: "OPEN" },
-    newValues: { status: "CLOSED", blockers, override, overrideReason }
+    newValues: { status: "CLOSED", blockers, override: false }
   });
   return period;
 }

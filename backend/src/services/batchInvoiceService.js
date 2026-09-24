@@ -541,6 +541,19 @@ async function provisionCandidate({ request, purchaseOrder, batch, item, candida
         await accountsPayable.save({ session });
       }
       await request.save({ session });
+      if (item?.voucher && String(item.voucher) !== String(storedVoucher._id)) {
+        const original = await SunatVoucher.findOne({ _id: item.voucher, request: request._id, accountsPayable: null, supersededBy: null }).session(session || null);
+        if (original) {
+          original.supersededBy = storedVoucher._id;
+          original.supersededAt = new Date();
+          original.supersededByUser = user._id;
+          await original.save({ session });
+          await recordAudit({ entityType: "SunatVoucher", entity: original, requestId: request._id,
+            action: "SUPERSEDED_BY_CORRECTED_XML", user, module: "BATCH_INVOICES", session,
+            newValues: { supersededBy: storedVoucher._id },
+            comments: "Original invoice evidence retained; corrected XML was validated and provisioned." });
+        }
+      }
       return { storedVoucher, accountsPayable };
     });
     return result;

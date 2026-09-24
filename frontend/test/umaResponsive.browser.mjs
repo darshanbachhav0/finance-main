@@ -42,6 +42,11 @@ try {
     const url = new URL(route.request().url()), path = url.pathname.slice(4);
     let body = paginate([]);
     if (path === "/auth/me") body = { user };
+    else if (path === "/auth/change-password") {
+      assert.equal(route.request().postDataJSON().newPassword, "NewSecurePassword!123");
+      user.passwordResetRequired = false;
+      body = { user, token: "changed-test-token" };
+    }
     else if (path === "/notifications") body = { data: [], unreadCount: 0 };
     else if (path === "/dashboard/tasks") body = { items: [{ key: "approval", path: "/approvals", label: "Pending approval", count: 3, tone: "amber" }], total: 3, counters: { approval: 3 } };
     else if (path === "/dashboard/summary") body = { role: "Admin", lastUpdated: "2026-09-07T15:00:00Z", metrics: [{ key: "requests", label: "Requests", value: 24, tone: "navy" }, { key: "pending", label: "Pending approval", value: 3, tone: "amber" }, { key: "budget", label: "Available budget", value: 136000, format: "currency", tone: "green" }], warnings: [{ key: "approval", label: "Pending approval", count: 3, path: "/approvals" }], byStatus: [{ _id: "BORRADOR", count: 8 }, { _id: "PENDIENTE_APROBACION", count: 3 }, { _id: "PAGADO", count: 13 }], recentRequests: requests, byType: [], budget: { totals: {}, allocations: [] } };
@@ -97,7 +102,7 @@ try {
   await page.getByRole("alert").waitFor();
   assert.equal(await page.locator(".stat-card-link").count(), 3, "Failed refresh preserves last successful data");
   await page.unroute("**/api/dashboard/summary", refreshRoute);
-  const paths = ["/administration", "/accounting/invoices", "/treasury/history", "/configuration/bank-formats", "/", "/management-view", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
+  const paths = ["/my-team", "/administration", "/accounting/invoices", "/treasury/history", "/configuration/bank-formats", "/", "/management-view", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
     for (const path of paths) {
@@ -173,13 +178,21 @@ try {
   await page.locator("#treasury-history").waitFor({ state: "visible" });
   assert.equal(await page.locator("#treasury-history").isVisible(), true);
   assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
-  for (const [role, expected, approvalLevel] of [["Solicitor", 3], ["Approver", 3, "AREA_DIRECTOR"], ["Approver", 3, "VICE_RECTOR"], ["Budget", 3], ["Accounting", 5], ["Treasury", 3], ["Management", 4], ["Admin", 2]]) {
+  for (const [role, expected, approvalLevel] of [["Solicitor", 5], ["Approver", 4, "AREA_DIRECTOR"], ["Approver", 4, "VICE_RECTOR"], ["Budget", 3], ["Accounting", 5], ["Treasury", 3], ["Management", 5], ["Procurement", 4], ["Admin", 2]]) {
     user.role = role; user.approvalLevel = approvalLevel;
     await page.goto("http://127.0.0.1:5190/");
     await page.waitForLoadState("networkidle");
     assert.equal(await page.locator(".sidebar nav a").count(), expected, `${role} primary navigation`);
   }
 
+  user.passwordResetRequired = true;
+  await page.goto("http://127.0.0.1:5190/requests");
+  await page.getByRole("button", { name: "Change password", exact: true }).waitFor();
+  await page.getByLabel("Password", { exact: true }).fill("InitialSecurePassword!123");
+  await page.getByLabel("New password", { exact: true }).fill("NewSecurePassword!123");
+  await page.getByRole("button", { name: "Change password", exact: true }).click();
+  await page.locator(".sidebar").waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem("erp_token")), "changed-test-token");
   await writeFile(`${output}/results.json`, JSON.stringify({ results, failures, runtimeErrors }, null, 2));
   assert.deepEqual(runtimeErrors, []);
   assert.deepEqual(failures, []);

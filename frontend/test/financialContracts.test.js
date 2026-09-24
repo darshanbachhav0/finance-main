@@ -17,7 +17,7 @@ function test(name, callback) {
 test("canonical request statuses contain the complete lifecycle", () => {
   for (const status of [
     "BORRADOR", "PENDIENTE_APROBACION",
-    "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL",
+    "APROBADO", "COMPROMISO_PRESUPUESTAL",
     "CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO",
     "CERRADO", "OBSERVADO", "DEVUELTO", "RECHAZADO", "ANULADO"
   ]) assert.ok(requestStatuses.includes(status), `Missing status ${status}`);

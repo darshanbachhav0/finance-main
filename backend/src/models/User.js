@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     passwordResetRequired: { type: Boolean, default: false },
+    tokenVersion: { type: Number, default: 0 },
     jefe: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     jobTitle: { type: String, trim: true },
     organizationalUnit: { type: String, trim: true },

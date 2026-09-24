@@ -1,5 +1,6 @@
 import "dotenv/config";
 import mongoose from "mongoose";
+import { pathToFileURL } from "node:url";
 import { connectDB } from "../src/config/db.js";
 
 const apply = process.argv.includes("--apply");
@@ -38,9 +39,8 @@ function ruleDocument([code, flowType, phase, requestType, expenseNature, requir
   };
 }
 
-async function main() {
-  await connectDB();
-  const rules = mongoose.connection.db.collection("documentrules");
+export async function migrateDocumentPhases(db, { apply = false } = {}) {
+  const rules = db.collection("documentrules");
   const report = {
     mode: apply ? "APPLY" : "DRY_RUN",
     legacyRulesToDeactivate: await rules.countDocuments({ code: { $in: legacyCodes }, active: true }),
@@ -55,21 +55,23 @@ async function main() {
     await rules.updateMany({ code: { $nin: legacyCodes }, phase: { $exists: false } }, { $set: { phase: "SUBMISSION", updatedAt: new Date() } });
     for (const source of canonicalRules) {
       const document = ruleDocument(source);
-      await rules.updateOne({ code: document.code }, { $set: document, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+      // Seed missing policy only; rerunning a migration must not overwrite UMA's approved configuration.
+      await rules.updateOne({ code: document.code }, { $setOnInsert: { ...document, createdAt: new Date() } }, { upsert: true });
     }
-    await mongoose.connection.db.collection("approvalrules").updateOne(
+    await db.collection("approvalrules").updateOne(
       { name: "Vicerrectorado - Vía B" },
-      { $set: { approvalLevel: "VICE_RECTOR", role: "Approver", area: "*", amountFrom: 0, requestType: "*", flowType: "B", required: true, sequence: 2, slaHours: 4, active: true, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      { $setOnInsert: { approvalLevel: "VICE_RECTOR", role: "Approver", area: "*", amountFrom: 0, requestType: "*", flowType: "B", required: true, sequence: 2, slaHours: 4, active: true, updatedAt: new Date(), createdAt: new Date() } },
       { upsert: true }
     );
     await rules.createIndex({ active: 1, phase: 1, flowType: 1, requestType: 1, expenseNature: 1 });
   }
-  console.log(JSON.stringify(report, null, 2));
-  await mongoose.disconnect();
+  return report;
 }
 
-main().catch(async error => {
-  console.error(error);
-  await mongoose.disconnect().catch(() => undefined);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await connectDB();
+    console.log(JSON.stringify(await migrateDocumentPhases(mongoose.connection.db, { apply }), null, 2));
+  } catch (error) { console.error(error); process.exitCode = 1; }
+  finally { await mongoose.disconnect(); }
+}

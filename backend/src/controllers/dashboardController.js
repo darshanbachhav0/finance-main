@@ -28,11 +28,15 @@ function ownerScope(user) {
 function approvalScope(user) {
   const query = { status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalStage: { $ne: "COMPLETE" } };
   if (user.role !== ROLES.ADMIN) {
-    query.approvalStage = user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR;
-    if (query.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
-      const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
-      if (!areas.includes("*")) query.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
-    }
+    const chain = { approvalRouteSnapshot: { $elemMatch: { approverUser: user._id, status: "PENDING", source: "MANAGER_CHAIN" } } };
+    if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+      const legacy = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
+      if (legacy.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
+        const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
+        if (!areas.includes("*")) legacy.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
+      }
+      query.$or = [chain, legacy];
+    } else Object.assign(query, chain);
   }
   return query;
 }
@@ -48,7 +52,7 @@ async function missingExchangeRateDates() {
 
 async function buildTasks(user) {
   const items = [];
-  if ([ROLES.ADMIN, ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+  if (user.role !== ROLES.MANAGEMENT_VIEWER) {
     const query = approvalScope(user);
     const [count, overdue] = await Promise.all([
       FinancialRequest.countDocuments(query),

@@ -73,9 +73,7 @@ export async function previewBudget(request) {
     const available = limits?.available ?? subtractMoney(subtractMoney(assigned, committed), executed);
     const projectedBalance = subtractMoney(available, requested);
     previewSources.set(sourceKey, { available, requested, projectedBalance });
-    // Read-only planning preview; mirrors the same rule resolution reserveBudget applies below,
-    // so a cost center with no budget assigned yet previews as "TRANSITIONAL"/informational
-    // instead of a false "insufficient funds" shortfall.
+    // Preview and posting use the same explicit control mode, including zero budgets.
     const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
     lines.push({
       ...line,
@@ -119,7 +117,7 @@ async function resolveRule(line, center, requestDate) {
     ]
   }).sort({ costCenter: -1, expenseType: -1, project: -1 }).limit(1);
   return rules[0] || {
-    mode: center.budgetMode === "ACTIVE" && Number(center.annualBudget || 0) > 0 ? "ACTIVE" : "TRANSITIONAL",
+    mode: center.budgetMode === "ACTIVE" ? "ACTIVE" : "TRANSITIONAL",
     exceptionStrategy: "REJECT"
   };
 }

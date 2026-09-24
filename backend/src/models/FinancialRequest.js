@@ -202,7 +202,7 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
     sequence: Number,
     slaHours: Number,
     required: Boolean,
-    status: { type: String, enum: ["PENDING", "APPROVED", "OBSERVED", "RETURNED", "REJECTED", "SKIPPED"], default: "PENDING" },
+    status: { type: String, enum: ["PENDING", "NOT_REACHED", "APPROVED", "OBSERVED", "RETURNED", "REJECTED", "SKIPPED"], default: "PENDING" },
     startedAt: Date,
     dueAt: Date,
     completedAt: Date,
@@ -210,7 +210,7 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
     approverUser: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approverSnapshot: {
       name: String,
-      dni: String,
+      dni: { type: String, select: false },
       jobTitle: String
     },
     source: { type: String, enum: Object.values(APPROVAL_ROUTING_MODE), default: APPROVAL_ROUTING_MODE.RULE_BASED }

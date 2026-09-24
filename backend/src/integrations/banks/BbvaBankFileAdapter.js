@@ -37,6 +37,7 @@ export function inspectBbvaFile(buffer) {
 }
 export class BbvaBankFileAdapter {
   constructor(configuration) {
+    if (process.env.NODE_ENV === "production" && configuration?.certified !== true) fail("production generation requires certification for this BBVA currency and format version.");
     if (!configuration?.active || configuration.mode !== "FIXED_WIDTH" || configuration?.bbva?.confirmed !== true || !configuration.specificationVersion || configuration.specificationVersion.includes("DEMO")) fail("Treasury-confirmed BBVA configuration and format version are required.");
     this.config = configuration.bbva;
     this.currency = configuration.currency;

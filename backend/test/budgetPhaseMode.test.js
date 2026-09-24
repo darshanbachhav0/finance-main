@@ -13,6 +13,7 @@ import {
   markBudgetPaidAmount,
   releaseBudget
 } from "../src/services/budgetService.js";
+import { previewBudget } from "../src/services/budgetService.js";
 import { BUDGET_STATUS } from "../src/utils/constants.js";
 
 test("Budget Phase 1 (TRANSITIONAL) is genuinely informational and Phase 2 (ACTIVE) genuinely blocks", async (t) => {
@@ -54,6 +55,14 @@ test("Budget Phase 1 (TRANSITIONAL) is genuinely informational and Phase 2 (ACTI
       assert.equal((await BudgetCommitment.findOne({ request: cancelled._id })).status, BUDGET_STATUS.RELEASED, "cancellation/rollback still transitions cleanly");
     });
 
+    await t.test("an explicitly ACTIVE zero budget cannot silently become informational", async () => {
+      const center = await CostCenter.create({ code: "ZERO-ACTIVE", name: "Zero active budget", area: "Finance", annualBudget: 0, budgetMode: "ACTIVE", active: true });
+      const request = make(center, 10);
+      assert.equal((await previewBudget(request)).status, "INSUFFICIENT");
+      await assert.rejects(reserveBudget(request, budget._id), error => error.code === "INSUFFICIENT_BUDGET");
+      assert.ok(await BudgetException.exists({ request: request._id }));
+      assert.equal(await BudgetCommitment.countDocuments({ request: request._id }), 0);
+    });
     await t.test("Phase 2: the same over-budget amount is blocked and a within-budget amount commits real funds", async () => {
       const center = await CostCenter.create({ code: "PHASE2-CC", name: "Phase 2", area: "Finance", annualBudget: 100, budgetMode: "ACTIVE", active: true });
       const overBudget = make(center, 500);

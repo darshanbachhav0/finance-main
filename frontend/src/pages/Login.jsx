@@ -23,7 +23,7 @@ const demos = DEMO_LOGIN_ENABLED ? [
 ] : [];
 
 export default function Login() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, changePassword, user, isAuthenticated } = useAuth();
   const { t } = useLanguage();
   const [selectedDemo, setSelectedDemo] = useState("");
   const [dni, setDni] = useState("");
@@ -32,14 +32,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  const [newPassword, setNewPassword] = useState("");
+  const resetRequired = isAuthenticated && user?.passwordResetRequired;
+  if (isAuthenticated && !resetRequired) return <Navigate to="/" replace />;
 
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
     setError("");
     try {
-      await login(dni, password);
+      if (resetRequired) await changePassword(password, newPassword);
+      else await login(dni, password);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -72,7 +75,7 @@ export default function Login() {
         </div>
         <form className="login-form" onSubmit={submit}>
           <div className="login-form-heading"><LockKeyhole size={24} /><div><h1>{t("Welcome to UMA")}</h1><p>{t("Sign in with your university account.")}</p></div></div>
-          {DEMO_LOGIN_ENABLED && (
+          {DEMO_LOGIN_ENABLED && !resetRequired && (
             <>
               <fieldset className="login-role-access" disabled={loading}>
                 <legend><UsersRound size={16} />{t("Demo role access")}</legend>
@@ -93,9 +96,10 @@ export default function Login() {
             </>
           )}
           <Message type="error">{error}</Message>
-          <label className="field"><span>{t("DNI")}</span><input type="text" inputMode="numeric" pattern="[0-9]{6,8}" autoComplete="username" value={dni} onChange={(event) => setDni(event.target.value)} required autoFocus={!DEMO_LOGIN_ENABLED} /></label>
+          {!resetRequired && <label className="field"><span>{t("DNI")}</span><input type="text" inputMode="numeric" pattern="[0-9]{6,8}" autoComplete="username" value={dni} onChange={(event) => setDni(event.target.value)} required autoFocus={!DEMO_LOGIN_ENABLED} /></label>}
           <label className="field"><span>{t("Password")}</span><div className="password-control"><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /><button type="button" className="icon-button quiet" aria-label={t(showPassword ? "Hide password" : "Show password")} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
-          <button className="primary-button login-submit" type="submit" disabled={loading}><LogIn size={17} /><span>{t(loading ? "Signing in..." : "Sign in")}</span></button>
+          {resetRequired && <><Message>{t("Change your initial password to continue.")}</Message><label className="field"><span>{t("New password")}</span><input type="password" autoComplete="new-password" minLength={10} maxLength={72} value={newPassword} onChange={event => setNewPassword(event.target.value)} required /></label></>}
+          <button className="primary-button login-submit" type="submit" disabled={loading}><LogIn size={17} /><span>{t(loading ? "Saving..." : resetRequired ? "Change password" : "Sign in")}</span></button>
         </form>
       </section>
     </main>
