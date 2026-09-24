@@ -1844,7 +1844,7 @@ export function translateMessage(text, language = "en") {
 }
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => localStorage.getItem("erp_language") || "en");
+  const [language, setLanguage] = useState(() => localStorage.getItem("erp_language") || "es");
 
   useEffect(() => {
     document.documentElement.lang = language;

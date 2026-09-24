@@ -23,7 +23,8 @@ const descriptions = {
   Accounting: "Period readiness, accounting entries, exchange rates, and pending closures.",
   Treasury: "Payable workload, currency totals, bank readiness, and generated files.",
   Budget: "Assigned, available, committed, executed, and paid budget with low-balance controls.",
-  Management: "Institutional CAPEX/OPEX, budget availability, spending, and pending commitments."
+  Management: "Institutional CAPEX/OPEX, budget availability, spending, and pending commitments.",
+  Procurement: "Approved requests awaiting a Purchase Order, open orders, and invoices registered against them."
 };
 
 const metricIcons = {
@@ -80,7 +81,8 @@ export default function Dashboard() {
     Accounting: ["Keep the accounts up to date", "Review pending entries, documents and accounting observations.", "/accounting", "Open Accounting"],
     Treasury: ["A clear view of upcoming payments", "Review payment destinations, scheduled items and bank confirmations.", "/treasury", "Open Treasury"],
     Budget: ["Plan the year. Follow each month.", "Review annual availability, monthly allocations and budget exceptions.", "/budget", "Open Budget Control"],
-    Management: ["See the institution’s financial position", "Explore spending, budget availability and work awaiting completion.", "/reports", "Open reports"]
+    Management: ["See the institution’s financial position", "Explore spending, budget availability and work awaiting completion.", "/reports", "Open reports"],
+    Procurement: ["Keep approved requests moving to a Purchase Order", "Review requests awaiting an order, open orders, and invoices registered against them.", "/requests", "Review requests"]
   }[summary?.role];
 
   return (
