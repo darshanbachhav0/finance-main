@@ -136,6 +136,20 @@ export default function MasterConfiguration() {
       ],
       columns: [{ key: "name", label: "Name" }, { key: "area", label: "Area" }, { key: "expenseNature", label: "Expense nature" }, { key: "maxAmount", label: "Max amount", render: (row) => row.maxAmount >= 0 ? formatCurrency(row.maxAmount, "PEN", language) : "No limit" }, { key: "active", label: "Status" }]
     },
+    "finance-configurations": {
+      label: "Finance Configurations", roles: ["Admin", "Accounting"], endpoint: "/finance-configurations",
+      description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",
+      fields: [
+        { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS"] },
+        { name: "numericValue", label: "Value", type: "number", min: 0, step: "0.01", required: true },
+        { name: "currency", label: "Currency", type: "select", defaultValue: "PEN", options: currencies },
+        { name: "behavior", label: "Behavior", type: "select", defaultValue: "INFORMATION", options: ["INFORMATION", "WARNING", "FLAG", "BLOCK"], hint: "How exceeding this value is treated where it's checked - not every key enforces every behavior." },
+        { name: "effectiveFrom", label: "Effective from", type: "date", required: true }, { name: "effectiveTo", label: "Effective to", type: "date" },
+        { name: "description", label: "Description", type: "textarea" }, { name: "source", label: "Source / reference" },
+        { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+      ],
+      columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? new Date(row.effectiveFrom).toLocaleDateString() : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString() : "Open" }, { key: "active", label: "Status" }]
+    },
     "budget-rules": {
       label: "Budget Rules", roles: ["Admin", "Budget"], endpoint: "/budget-rules",
       description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
