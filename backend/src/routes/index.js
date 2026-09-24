@@ -38,7 +38,7 @@ import { ROLES } from "../utils/constants.js";
 const router = Router();
 router.use("/auth", authRoutes);
 router.use("/management/v1", externalManagementRoutes);
-router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.MANAGEMENT));
+router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.MANAGEMENT_VIEWER));
 
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);

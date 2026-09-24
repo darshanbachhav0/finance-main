@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import fs from "fs/promises";
 import path from "path";
@@ -51,7 +52,9 @@ const currentDate = now.toISOString().slice(0, 10);
 const currentPeriod = currentDate.slice(0, 7);
 const previousMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
 const closedPeriod = previousMonthDate.toISOString().slice(0, 7);
-const demoPassword = "UMA-Demo-2026!";
+// Non-production only (guarded below): read from env so no credential is hardcoded in source.
+// If unset, a random password is generated per run and printed in the seed summary notice.
+const demoPassword = process.env.SEED_DEMO_PASSWORD || crypto.randomBytes(9).toString("base64url");
 const manualUsdRate = 3.75;
 const fakeReq = {
   headers: { "user-agent": "UMA development seed" },
@@ -1674,6 +1677,7 @@ async function printSummary(users) {
       users.management.email
     ],
     password: demoPassword,
+    passwordSource: process.env.SEED_DEMO_PASSWORD ? "SEED_DEMO_PASSWORD env var" : "generated for this run only",
     notice: "Development-only fictional data. SUNAT and bank files remain manual/demo integrations."
   }, null, 2));
 }
