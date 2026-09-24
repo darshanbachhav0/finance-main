@@ -3,10 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 const source = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
-test("Track C enforces a ten-day deadline and blocks new overdue advances", () => {
+test("Track C enforces a configurable rendition deadline (10-day default) and blocks new overdue advances", () => {
   const treasury = source("../src/services/treasuryService.js");
   const requests = source("../src/services/requestService.js");
-  assert.match(treasury, /10 \* 24 \* 60 \* 60 \* 1000/);
+  const constants = source("../src/utils/constants.js");
+  assert.match(treasury, /renditionDueDate/);
+  assert.match(constants, /RENDITION_OVERDUE_DAYS/);
+  assert.match(constants, /DEFAULT_RENDITION_OVERDUE_DAYS\s*=\s*10/);
   assert.match(requests, /rendition\.dueAt/);
   assert.match(requests, /OVERDUE_RENDITION/);
 });

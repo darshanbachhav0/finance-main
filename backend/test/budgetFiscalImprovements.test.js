@@ -79,16 +79,16 @@ test("budget commitment, exceptions, separation of duties and cancellation histo
       await assert.rejects(() => assertBudgetBeforePosting(make(100)), /commitment/);
       await assert.rejects(() => assertBudgetBeforePosting(request, { amount: 101 }), /remaining/);
     });
-    await t.test("insufficiency always creates an auditable exception, even default REJECT configuration", async () => {
+    await t.test("insufficiency under the default REJECT configuration hard-rejects with no exception", async () => {
+      // No BudgetRule is configured for this dimension, so resolveRule's own default
+      // (REJECT) applies. REJECT means exactly that - no BudgetException is prepared,
+      // there is no extraordinary-approval path to retry into.
       const shortage = make(150);
-      await assert.rejects(() => reserveBudget(shortage, budget._id), e => e.code === "INSUFFICIENT_BUDGET");
-      const exception = await BudgetException.findOne({ request: shortage._id });
-      assert.ok(exception); assert.equal(exception.history[0].action, "CREATED");
-      await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "No", budget, {}), e => e.statusCode === 403);
-      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Recommend funding", budget, {});
-      await recordBudgetExceptionDecision(exception._id, "APPROVED", "Increase required", management, {});
-      await assert.rejects(() => reserveBudget(shortage, budget._id), e => e.code === "INSUFFICIENT_BUDGET");
-      assert.equal((await BudgetException.findById(exception._id)).history.length, 3);
+      await assert.rejects(
+        () => reserveBudget(shortage, budget._id),
+        e => e.code === "INSUFFICIENT_BUDGET" && e.details?.hardReject === true
+      );
+      assert.equal(await BudgetException.findOne({ request: shortage._id }), null);
     });
     await t.test("extraordinary management approval enables overrun; self approval and repeated decisions are blocked", async () => {
       await BudgetRule.create({ code: "FISCAL-EX", name: "Extraordinary", costCenter: center._id, mode: "ACTIVE", exceptionStrategy: "EXTRAORDINARY_APPROVAL", active: true });

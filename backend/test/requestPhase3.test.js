@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import mongoose from "mongoose";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
+import ApprovalRule from "../src/models/ApprovalRule.js";
 import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import CostCenter from "../src/models/CostCenter.js";
 import DocumentRule from "../src/models/DocumentRule.js";
@@ -53,6 +54,9 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       authorizedCostCenters: [secondCenter._id]
     });
     await AccountingPeriod.create({ period: "2026-08", status: "OPEN", openedAt: new Date(), openedBy: solicitor._id });
+    // No manager-chain identity is set up for this fixture (no jefe), so the approval
+    // engine now requires a specifically configured route for this dimension.
+    await ApprovalRule.create({ name: "Phase 3 wildcard route", approvalLevel: "AREA_DIRECTOR", role: ROLES.APPROVER, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 1, slaHours: 24, active: true });
     const suppliers = await Supplier.create([
       { rucDni: "20611111111", legalName: "Homologated Phase 3 SAC", name: "Homologated Phase 3 SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-8101" },
       { rucDni: "20622222222", legalName: "Pending Phase 3 SAC", name: "Pending Phase 3 SAC", homologationStatus: "PENDING_VALIDATION", status: "PENDING_VALIDATION", active: false },

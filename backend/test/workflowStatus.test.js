@@ -50,7 +50,7 @@ test("canonical status compatibility and partial child evidence", () => {
   assert.equal(result.status, "TXT_GENERADO");
   assert.equal(result.counts.paid, 1);
   assert.equal(result.partialPayment, true);
-  assert.deepEqual(result.amounts, { total: 354, paid: 118, reconciled: 0 });
+  assert.deepEqual(result.amounts, { total: 354, paid: 118, paidToDate: 118, reconciled: 0 });
   assert.equal(deriveFinancialProgress({ payment: {} }, [{ ...children[0], status: "PAID" }]).status, "TXT_GENERADO");
 });
 
