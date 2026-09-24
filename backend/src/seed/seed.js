@@ -867,13 +867,19 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
         accountNumber,
         active: true
       });
-      await upsert(BankFormatConfiguration, { bank, currency }, {
-        mode: "DEMO",
-        specificationVersion: "UMA-DEMO-2026-1",
-        certified: false,
-        notes: "DEMO / NO CERTIFICADO. Requiere el layout oficial aprobado por UMA y el banco.",
-        active: true
-      });
+      // Only BBVA can actually generate an outbound payment file (assertBbvaSource) - a
+      // BankFormatConfiguration for any other bank would never be usable, so the schema
+      // itself only allows BBVA here. UMA's own cash/bank GL account at each bank is still
+      // recorded above via AccountingMapping regardless of this restriction.
+      if (bank === "BBVA") {
+        await upsert(BankFormatConfiguration, { bank, currency }, {
+          mode: "DEMO",
+          specificationVersion: "UMA-DEMO-2026-1",
+          certified: false,
+          notes: "DEMO / NO CERTIFICADO. Requiere el layout oficial aprobado por UMA y el banco.",
+          active: true
+        });
+      }
     }
   }
 
