@@ -26,7 +26,7 @@ test("supplier readiness exposes pending, observed, rejected, inactive, and PRV 
   assert.match(detail, /procurementReadiness\.issues/);
 });
 
-test("Purchase or Service Order action is status-aware and restricted to Admin or Budget in the UI", () => {
+test("Purchase or Service Order action is status-aware and its role restriction is decided by the backend, not hardcoded in the UI", () => {
   const detail = source("../src/pages/RequestDetail.jsx");
   assert.match(detail, /readyForOrderCreation/);
   assert.match(detail, /actions\.has\("ISSUE_ORDER"\)/);

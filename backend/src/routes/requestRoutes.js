@@ -41,7 +41,7 @@ router.route("/").get(listRequests).post(authorize(...REQUEST_CREATOR_ROLES), up
 router.get("/:id/document-requirements", getRequestDocumentStatus);
 router.route("/:id").get(getRequest).put(uploadFields, updateRequest).delete(deleteRequest);
 router.get("/:id/procurement-readiness", getProcurementReadiness);
-router.post("/:id/procurement-order", authorize(ROLES.ADMIN, ROLES.BUDGET), createProcurementOrder);
+router.post("/:id/procurement-order", authorize(ROLES.ADMIN, ROLES.PROCUREMENT), createProcurementOrder);
 router.post("/:id/submit", submitRequest);
 router.post("/:id/invoice", authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.ACCOUNTING), uploadFields, registerInvoice);
 router.post("/:id/rendition", authorize(ROLES.ADMIN, ROLES.SOLICITOR), uploadFields, uploadRendition);

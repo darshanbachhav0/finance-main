@@ -585,9 +585,28 @@ async function submitPreparedRequest(request, { user, req, comments }) {
   return request;
 }
 
+// Every direct and indirect report of a manager, walked from the jefe graph
+// (not a fixed role/area pool), so "My Team" reflects the real hierarchy.
+export async function teamMemberIds(managerId) {
+  const ids = new Set();
+  let frontier = [managerId];
+  while (frontier.length) {
+    const reports = await User.find({ jefe: { $in: frontier } }).select("_id").lean();
+    const next = reports.map((report) => String(report._id)).filter((id) => !ids.has(id));
+    next.forEach((id) => ids.add(id));
+    frontier = next;
+  }
+  return [...ids];
+}
+
 export async function listRequestsPage(queryParams, user) {
   const query = {};
-  Object.assign(query, requestVisibilityFilter(user));
+  if (queryParams.teamScope && user.role !== ROLES.ADMIN) {
+    const teamIds = await teamMemberIds(user._id);
+    query.$and = [...(query.$and || []), { $or: teamIds.length ? [{ requester: { $in: teamIds } }, { solicitor: { $in: teamIds } }] : [{ _id: null }] }];
+  } else {
+    Object.assign(query, requestVisibilityFilter(user));
+  }
   if (queryParams.status === "RENDICION_PENDIENTE") { query.flowType = "C"; query["rendition.status"] = { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }; query.status = { $nin: terminalStatusValues }; }
   else if (queryParams.status) query.status = { $in: statusAliases(canonicalRequestStatus(queryParams.status)) };
   applyRenditionStatusFilter(query, queryParams.renditionStatus);

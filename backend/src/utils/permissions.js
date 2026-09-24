@@ -2,7 +2,7 @@ import { isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
 import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
-export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR];
+export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
 
 export function permissionsFor(userOrRole) {

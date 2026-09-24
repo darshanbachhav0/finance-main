@@ -6,12 +6,14 @@ import path from "path";
 import AccountsPayable from "../models/AccountsPayable.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import GeneratedFile from "../models/GeneratedFile.js";
+import InvoiceObservation from "../models/InvoiceObservation.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import BankFormatConfiguration from "../models/BankFormatConfiguration.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import Reconciliation from "../models/Reconciliation.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
+import SunatVoucher from "../models/SunatVoucher.js";
 import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/index.js";
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
@@ -36,6 +38,25 @@ const bankFilesDir = path.join(generatedRoot, "bank-files");
 
 function isPurchaseOrderInvoiceFlow(accountsPayable) {
   return [FLOW_TYPE.A1, FLOW_TYPE.A2].includes(accountsPayable?.flowType);
+}
+
+const BLOCKING_VOUCHER_VALIDATION_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
+
+// Authoritative Treasury-side gate: a CXP with any unresolved observation (SunatVoucher.validationStatus
+// for A1/direct registrations, or an OPEN InvoiceObservation for A2 batch invoices) must never be
+// schedulable or included in a BBVA batch, regardless of the parent request's own status.
+export async function assertNoBlockingObservation(accountsPayable, { requestNumber } = {}) {
+  const label = requestNumber ? `${requestNumber}: ` : "";
+  if (accountsPayable.sunatVoucher) {
+    const voucher = await SunatVoucher.findById(accountsPayable.sunatVoucher).select("validationStatus observationDetail").lean();
+    if (voucher && BLOCKING_VOUCHER_VALIDATION_STATUSES.has(voucher.validationStatus)) {
+      throw new AppError(409, `${label}this CXP has an unresolved ${voucher.validationStatus} observation and cannot be scheduled until it is resolved.`, { accountsPayableId: accountsPayable._id, validationStatus: voucher.validationStatus, detail: voucher.observationDetail }, ERROR_CODES.PAYABLE_BLOCKING_OBSERVATION);
+    }
+  }
+  const openObservation = await InvoiceObservation.findOne({ accountsPayable: accountsPayable._id, resolutionStatus: "OPEN" }).select("status errorDetail").lean();
+  if (openObservation) {
+    throw new AppError(409, `${label}this CXP has an unresolved ${openObservation.status} observation and cannot be scheduled until it is resolved.`, { accountsPayableId: accountsPayable._id, validationStatus: openObservation.status, detail: openObservation.errorDetail }, ERROR_CODES.PAYABLE_BLOCKING_OBSERVATION);
+  }
 }
 
 function appendPaymentConfirmation(request, accountsPayable, payload, user, confirmedAmount) {
@@ -118,6 +139,7 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
     if (!accountsPayable || !accountsPayable.provisionJournal || ![AP_STATUS.OPEN, AP_STATUS.SCHEDULED].includes(accountsPayable.status) || accountsPayable.paymentBatch) {
       throw new AppError(409, `${request.requestNumber} CXP is not available for a new payment batch.`, { status: accountsPayable?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     }
+    await assertNoBlockingObservation(accountsPayable, { requestNumber: request.requestNumber });
     if (accountsPayable.currency !== currency) throw new AppError(422, `${request.requestNumber} CXP uses ${accountsPayable.currency}; one batch can contain only ${currency}.`, undefined, ERROR_CODES.VALIDATION_ERROR);
     const destination = await resolvePaymentDestination({ request, accountsPayable, currency, selectedAccountId: selectedAccountId(accountSelections, request._id, accountsPayable._id) });
     const employee = accountsPayable.beneficiarySnapshot;
@@ -364,6 +386,17 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
   assertBbvaSource(normalizedBank);
   const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
   const adapter = getBankFileAdapter(normalizedBank, configuration);
+  // Snapshot the certification state that applied AT GENERATION TIME. This is copied onto the
+  // batch/file below and must never be re-derived from the live configuration later — certifying
+  // (or decertifying) the configuration afterwards must not retroactively change what an
+  // already-generated file reports.
+  const certificationSnapshot = {
+    certified: configuration.certified === true,
+    certifiedAt: configuration.certifiedAt || null,
+    certifiedBy: configuration.certifiedBy || null,
+    certificationReference: configuration.certificationReference || "",
+    specificationVersion: configuration.specificationVersion
+  };
   const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
   adapter.validateBatch(items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot })));
   const batchNumber = await nextPaymentBatchNumber(paymentDate);
@@ -419,6 +452,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         formatSnapshot: configuration.bbva,
         adapterMode: adapter.mode,
         specificationVersion: adapter.specificationVersion,
+        certificationSnapshot,
         status: "GENERATED",
         generatedBy: user._id,
         generatedAt: new Date()
@@ -463,7 +497,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
           paymentDate,
           adapterMode: adapter.mode,
           specificationVersion: adapter.specificationVersion,
-          certified: false,
+          certificationSnapshot,
           paymentConfirmed: false,
           paymentEntriesCreated: false,
           notice: "BBVA fixed-width payment instruction. Payment requires separate bank confirmation."
@@ -907,4 +941,35 @@ export async function getEligiblePayablePaymentDestinations({ accountsPayableId,
   }
   const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier?._id, currency: currency || accountsPayable.currency });
   return { sourceType: "SUPPLIER", locked: false, selected: accounts[0] || null, accounts };
+}
+
+// The only way BankFormatConfiguration.certified may change. Kept out of the generic master-data
+// field editor so certification is always a deliberate, audited administrative/Finance decision,
+// distinct from a routine configuration edit (see masterDataController.js).
+export async function certifyBankFormatConfiguration({ id, certified, certificationReference, user, req }) {
+  const configuration = await BankFormatConfiguration.findById(id);
+  if (!configuration) throw new AppError(404, "BankFormatConfiguration not found.", { id }, ERROR_CODES.NOT_FOUND);
+  const isCertified = Boolean(certified);
+  const reference = String(certificationReference || "").trim();
+  if (isCertified && !reference) {
+    throw new AppError(422, "A certification reference/comment is required when marking a format certified.", { field: "certificationReference" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const oldValues = configuration.toObject();
+  configuration.certified = isCertified;
+  configuration.certifiedAt = isCertified ? new Date() : null;
+  configuration.certifiedBy = isCertified ? user._id : null;
+  configuration.certificationReference = isCertified ? reference : "";
+  await configuration.save();
+  await recordAudit({
+    entityType: "BankFormatConfiguration",
+    entity: configuration,
+    action: isCertified ? "BBVA_FORMAT_CERTIFIED" : "BBVA_FORMAT_DECERTIFIED",
+    user,
+    req,
+    module: "TREASURY",
+    comments: reference,
+    oldValues,
+    newValues: configuration.toObject()
+  });
+  return configuration;
 }

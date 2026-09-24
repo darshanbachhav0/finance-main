@@ -9,6 +9,9 @@ const bankFormatConfigurationSchema = new mongoose.Schema(
     bbva: { type: mongoose.Schema.Types.Mixed },
     specificationVersion: { type: String, required: true, default: "UMA-DEMO-1" },
     certified: { type: Boolean, default: false },
+    certifiedAt: { type: Date, default: null },
+    certifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    certificationReference: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "DEMO / NOT CERTIFIED" },
     active: { type: Boolean, default: true }
   },

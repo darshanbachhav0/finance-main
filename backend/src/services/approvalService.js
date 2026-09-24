@@ -5,7 +5,7 @@ import { recordAudit, workflowEvent } from "./auditService.js";
 import {
   activeApprovalStep,
   advanceApprovalRoute,
-  appendNextChainStep,
+  activateNextChainStep,
   finalizeChainApproval,
   initializeApprovalRoute,
   slaStatus,
@@ -330,7 +330,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   const routeResult = await runFinancialOperation(async (session) => {
     if (isChainStep) {
       const route = forward
-        ? await appendNextChainStep(request, step, user)
+        ? activateNextChainStep(request, step, user)
         : finalizeChainApproval(request, step, user);
       if (!forward) {
         await transitionRequest({
@@ -355,32 +355,37 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     }
 
     const route = advanceApprovalRoute(request, user._id);
-    const targetStatus = step.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR
-      ? REQUEST_STATUS.DIRECTOR_APPROVED
-      : step.approvalLevel === APPROVAL_STAGES.VICE_RECTOR
-        ? REQUEST_STATUS.VICE_RECTOR_APPROVED
-        : null;
 
-    if (targetStatus) {
+    // Intermediate approval levels never change the parent status — the frozen
+    // route/approval history is the record of who approved what, at which
+    // level. The parent only ever moves once, straight from PENDIENTE_APROBACION
+    // to the canonical APROBADO, when every required step is done — regardless
+    // of which specific approval level happened to be last. This also fixes a
+    // real defect the old level-specific branching had: a configured route
+    // whose final step was any level other than Area Director/Vice Rector
+    // (e.g. Rectorate, General Management) could never reach a valid approved
+    // state at all.
+    if (route.complete) {
       await transitionRequest({
         request,
-        targetStatus,
+        targetStatus: REQUEST_STATUS.APPROVED,
         user,
         req,
         action: `${step.approvalLevel}_APPROVED`,
         comments: comments || `Approved at ${step.approvalLevel}.`,
         approvalStage: step.approvalLevel,
-        nextApprovalStage: route.next?.approvalLevel || APPROVAL_STAGES.COMPLETE,
-        dueAt: route.next?.dueAt || null,
+        nextApprovalStage: APPROVAL_STAGES.COMPLETE,
+        dueAt: null,
         eventDueAt: step.dueAt,
         adminOverrideReason,
+        skipRoleCheck: true,
         session
       });
     } else {
       await appendApprovalWithoutStatusTransition({ request, step, routeResult: route, user, req, comments, adminOverrideReason, session });
     }
 
-    if (route.complete && ![REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED].includes(request.status)) {
+    if (route.complete && request.status !== REQUEST_STATUS.APPROVED) {
       throw new AppError(
         409,
         "The configured approval route did not finish in an approved lifecycle state.",

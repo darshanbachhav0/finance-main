@@ -85,30 +85,53 @@ function approverSnapshotOf(user) {
 }
 
 // The manager chain is resolved by identity, not by role/area membership: a
-// request's next approver is always the requester's actual jefe. Requesters
-// without a jefe (not yet imported from the org roster, or admin-created
-// accounts) fall back to the legacy rule-based route untouched.
-export async function resolveManagerChainStart(request) {
+// request's approval path is always the requester's real organizational chain
+// (jefe, jefe's jefe, and so on). Requesters without a jefe (not yet imported
+// from the org roster, or admin-created accounts) fall back to the legacy
+// rule-based route untouched.
+//
+// The FULL chain, up to the organizational root (or MAX_APPROVAL_CHAIN_DEPTH,
+// or the point a cycle would revisit an approver already in the chain — a
+// data-entry error in the org roster, not a normal outcome), is resolved and
+// snapshotted once, at submission time. Only the first step starts PENDING
+// (actionable now); every further level is snapshotted as NOT_REACHED — its
+// identity is already frozen, but it only becomes an active, actionable step
+// if an approver actually forwards to it. This is what makes the route stable
+// against later organizational changes: escalation, if it happens, always
+// resolves to the manager who was in place at submission time, never to
+// whoever holds that position later.
+export async function resolveManagerChain(request) {
   const requesterId = request.requester || request.solicitor;
   if (!requesterId) return null;
-  const requester = await User.findById(requesterId).select("jefe name dni jobTitle").lean();
-  if (!requester?.jefe) return null;
-  const jefe = await User.findById(requester.jefe).select("name dni jobTitle active").lean();
-  if (!jefe || jefe.active === false) return null;
+  const chain = [];
+  const visited = new Set();
+  let currentUserId = requesterId;
+  for (let level = 0; level < MAX_APPROVAL_CHAIN_DEPTH; level += 1) {
+    const currentUser = await User.findById(currentUserId).select("jefe").lean();
+    if (!currentUser?.jefe) break;
+    const jefeId = String(currentUser.jefe);
+    if (visited.has(jefeId)) break;
+    const jefe = await User.findById(jefeId).select("name dni jobTitle active jefe").lean();
+    if (!jefe || jefe.active === false) break;
+    visited.add(jefeId);
+    chain.push(jefe);
+    currentUserId = jefe._id;
+  }
+  if (!chain.length) return null;
   const startedAt = new Date();
-  return [{
+  return chain.map((jefe, index) => ({
     approverUser: jefe._id,
     approverSnapshot: approverSnapshotOf(jefe),
     approvalLevel: chainStepLabel(jefe),
     role: ROLES.SOLICITOR,
-    sequence: 1,
+    sequence: index + 1,
     slaHours: DEFAULT_APPROVAL_SLA_HOURS,
     required: true,
-    status: "PENDING",
-    startedAt,
-    dueAt: dueDate(DEFAULT_APPROVAL_SLA_HOURS, startedAt),
+    status: index === 0 ? "PENDING" : "NOT_REACHED",
+    startedAt: index === 0 ? startedAt : undefined,
+    dueAt: index === 0 ? dueDate(DEFAULT_APPROVAL_SLA_HOURS, startedAt) : undefined,
     source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN
-  }];
+  }));
 }
 
 export async function initializeApprovalRoute(request) {
@@ -117,7 +140,11 @@ export async function initializeApprovalRoute(request) {
     // Resubmission after a return/observation re-reviews the whole historical
     // route from its first step, exactly as the rule-based path always has —
     // every step's rule/approverUser/source is preserved, only its run state
-    // (status/timestamps) resets.
+    // (status/timestamps) resets. For a manager chain, "reset" means: step 1
+    // becomes actionable again, and every other pre-determined level goes
+    // back to NOT_REACHED (its frozen identity is kept, but any progress a
+    // previous submission made escalating into it is cleared).
+    const isChain = (existing[0]?.source || APPROVAL_ROUTING_MODE.RULE_BASED) === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
     request.approvalRoutingMode ||= existing[0]?.source || APPROVAL_ROUTING_MODE.RULE_BASED;
     const startedAt = new Date();
     request.approvalRouteSnapshot = existing.map((step, index) => ({
@@ -127,7 +154,7 @@ export async function initializeApprovalRoute(request) {
       sequence: step.sequence,
       slaHours: step.slaHours,
       required: step.required !== false,
-      status: step.required === false ? "SKIPPED" : "PENDING",
+      status: index === 0 ? (step.required === false ? "SKIPPED" : "PENDING") : (isChain ? "NOT_REACHED" : (step.required === false ? "SKIPPED" : "PENDING")),
       startedAt: index === 0 && step.required !== false ? startedAt : undefined,
       dueAt: index === 0 && step.required !== false ? dueDate(step.slaHours, startedAt) : undefined,
       completedAt: undefined,
@@ -142,10 +169,10 @@ export async function initializeApprovalRoute(request) {
     return request.approvalRouteSnapshot;
   }
 
-  const chainStart = await resolveManagerChainStart(request);
-  if (chainStart) {
+  const chain = await resolveManagerChain(request);
+  if (chain) {
     request.approvalRoutingMode = APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
-    request.approvalRouteSnapshot = chainStart;
+    request.approvalRouteSnapshot = chain;
     const first = activeApprovalStep(request);
     request.approvalStage = first?.approvalLevel || APPROVAL_STAGES.COMPLETE;
     request.approvalDueAt = first?.dueAt || null;
@@ -201,26 +228,16 @@ export function advanceApprovalRoute(request, userId) {
   return { current, next, complete: !next };
 }
 
-// Unlike the rule-based route (precomputed in full at submission time), the
-// manager chain is built one decision at a time: each jefe explicitly chooses
-// to forward to their own jefe or to finalize here. This mirrors how a real
-// chain of command actually decides escalation, rather than assuming every
-// request must climb to the top of the org.
-export async function appendNextChainStep(request, currentStep, decidingUser) {
-  const decidingJefeId = decidingUser?.jefe;
-  if (!decidingJefeId) {
-    throw new AppError(422, "This approver has no manager to forward to; the decision must be final.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  }
-  const jefe = await User.findById(decidingJefeId).select("name dni jobTitle active").lean();
-  if (!jefe || jefe.active === false) {
-    throw new AppError(422, "This approver's manager account is not available; the decision must be final.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  }
-  const route = request.approvalRouteSnapshot || [];
-  if (route.some((step) => step.approverUser && String(step.approverUser) === String(jefe._id))) {
-    throw new AppError(409, "This approval chain would revisit an approver already in the route.", undefined, ERROR_CODES.CONFLICT);
-  }
-  if (route.length >= MAX_APPROVAL_CHAIN_DEPTH) {
-    throw new AppError(409, "This approval chain has exceeded the maximum allowed depth.", { maxDepth: MAX_APPROVAL_CHAIN_DEPTH }, ERROR_CODES.CONFLICT);
+// The full chain was already resolved and frozen at submission time
+// (resolveManagerChain). Forwarding never looks up a manager live — it only
+// activates the next pre-determined, already-snapshotted level. This is what
+// keeps an in-flight escalation immune to organizational changes that happen
+// after submission.
+export function activateNextChainStep(request, currentStep, decidingUser) {
+  const route = [...(request.approvalRouteSnapshot || [])].sort((a, b) => a.sequence - b.sequence);
+  const nextStep = route.find((step) => step.sequence > currentStep.sequence && step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN);
+  if (!nextStep) {
+    throw new AppError(422, "There is no further manager in this request's pre-determined approval chain; the decision must be final.", undefined, ERROR_CODES.VALIDATION_ERROR);
   }
 
   const completedAt = new Date();
@@ -228,29 +245,28 @@ export async function appendNextChainStep(request, currentStep, decidingUser) {
   currentStep.completedAt = completedAt;
   currentStep.completedBy = decidingUser._id;
 
-  const nextStep = {
-    approverUser: jefe._id,
-    approverSnapshot: approverSnapshotOf(jefe),
-    approvalLevel: chainStepLabel(jefe),
-    role: ROLES.SOLICITOR,
-    sequence: (currentStep.sequence || route.length) + 1,
-    slaHours: DEFAULT_APPROVAL_SLA_HOURS,
-    required: true,
-    status: "PENDING",
-    startedAt: completedAt,
-    dueAt: dueDate(DEFAULT_APPROVAL_SLA_HOURS, completedAt),
-    source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN
-  };
-  request.approvalRouteSnapshot.push(nextStep);
+  nextStep.status = "PENDING";
+  nextStep.startedAt = completedAt;
+  nextStep.dueAt = dueDate(nextStep.slaHours, completedAt);
   request.approvalStage = nextStep.approvalLevel;
   request.approvalDueAt = nextStep.dueAt;
   return { complete: false, next: nextStep };
 }
 
 export function finalizeChainApproval(request, currentStep, decidingUser) {
+  const completedAt = new Date();
   currentStep.status = "APPROVED";
-  currentStep.completedAt = new Date();
+  currentStep.completedAt = completedAt;
   currentStep.completedBy = decidingUser._id;
+  // Any further pre-determined level was never needed for this decision —
+  // record that explicitly rather than leaving it dangling as NOT_REACHED,
+  // so the full original chain and exactly where it stopped stay auditable.
+  for (const step of request.approvalRouteSnapshot || []) {
+    if (step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN && step.sequence > currentStep.sequence && step.status === "NOT_REACHED") {
+      step.status = "SKIPPED";
+      step.completedAt = completedAt;
+    }
+  }
   request.approvalStage = APPROVAL_STAGES.COMPLETE;
   request.approvalDueAt = null;
   return { complete: true };

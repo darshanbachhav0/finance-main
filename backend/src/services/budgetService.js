@@ -73,11 +73,9 @@ export async function previewBudget(request) {
     const available = limits?.available ?? subtractMoney(subtractMoney(assigned, committed), executed);
     const projectedBalance = subtractMoney(available, requested);
     previewSources.set(sourceKey, { available, requested, projectedBalance });
-    // This is a read-only planning preview (unlike reserveBudget's real
-    // commitment below, which always enforces available funds by design) —
-    // it should reflect the resolved rule so a cost center with no budget
-    // assigned yet previews as "TRANSITIONAL"/informational instead of a
-    // false "insufficient funds" shortfall.
+    // Read-only planning preview; mirrors the same rule resolution reserveBudget applies below,
+    // so a cost center with no budget assigned yet previews as "TRANSITIONAL"/informational
+    // instead of a false "insufficient funds" shortfall.
     const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
     lines.push({
       ...line,
@@ -179,7 +177,10 @@ export async function reserveBudget(request, userId, { session, additionalAmount
       resolveRule(line, center, request.issueDate),
       findAllocation(request.accountingPeriod, line, session)
     ]);
-    const mode = "ACTIVE"; // New commitments always enforce available funds.
+    // Phase 1 (TRANSITIONAL) records this line's commitment informationally without enforcing
+    // available funds; Phase 2 (ACTIVE) blocks below. A linked annual/monthly BudgetPlan always
+    // means the dimension is actively managed, regardless of the Cost Center's own default mode.
+    const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
     const exceptionStrategy = rule.exceptionStrategy === "EXTRAORDINARY_APPROVAL" ? "EXTRAORDINARY_APPROVAL" : "REQUEST_BUDGET_INCREASE";
     const limits = budgetLimits(allocation, request.accountingPeriod, line.amount);
     const sourceKey = String(allocation?._id || center._id);
@@ -296,8 +297,10 @@ export async function reserveBudget(request, userId, { session, additionalAmount
 
 export async function assertBudgetBeforePosting(request, { session, amount, userId, allowFxTopUp = false, exchangeRateEvidence } = {}) {
   let commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  // NO_BUDGET is retried once in case a real allocation/rule now applies; if it still resolves to
+  // NO_BUDGET, that is Phase 1 (TRANSITIONAL) working as designed — informational, not a blocker.
   if (commitment?.status === BUDGET_STATUS.NO_BUDGET && userId) commitment = await reserveBudget(request, userId, { session });
-  if (!commitment || [BUDGET_STATUS.RELEASED, BUDGET_STATUS.NO_BUDGET].includes(commitment.status) || (commitment.status === BUDGET_STATUS.DEFERRED && request.flowType !== "C")) {
+  if (!commitment || commitment.status === BUDGET_STATUS.RELEASED || (commitment.status === BUDGET_STATUS.DEFERRED && request.flowType !== "C")) {
     throw new AppError(409, "A valid budget commitment is required before accounting.", { request: request._id }, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
   if (amount !== undefined && commitment.status !== BUDGET_STATUS.DEFERRED) {

@@ -101,7 +101,8 @@ export default function ExchangeRates() {
         { key: "rate", label: "Rate", render: (row) => Number(row.rate).toFixed(4) },
         { key: "sourceLabel", label: "Source", render: (row) => row.sourceLabel || row.source },
         { key: "providerMode", label: "Mode" },
-        { key: "authoritative", label: "Official / authoritative", render: (row) => <div className="primary-cell"><StatusBadge status={row.authoritative && row.providerMode === "SUNAT" ? "VERIFIED" : "NOT_VERIFIED"} /><span>{row.authoritative && row.providerMode === "SUNAT" ? t("Official SUNAT") : t("Reference — not authoritative")}</span></div> }
+        { key: "authoritative", label: "Official / authoritative", render: (row) => <div className="primary-cell"><StatusBadge status={row.authoritative && row.providerMode === "SUNAT" ? "VERIFIED" : "NOT_VERIFIED"} /><span>{row.authoritative && row.providerMode === "SUNAT" ? t("Official SUNAT") : t("Reference — not authoritative")}</span></div> },
+        { key: "retrievedAt", label: "Retrieved", render: (row) => row.retrievedAt ? new Date(row.retrievedAt).toLocaleString() : "-" }
       ]}
     />
   );

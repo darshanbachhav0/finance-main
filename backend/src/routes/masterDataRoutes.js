@@ -53,6 +53,7 @@ bindCrud(accountingMappingRouter, accountingMappings, [ROLES.ADMIN, ROLES.ACCOUN
 
 export const bankFormatRouter = Router();
 bindCrud(bankFormatRouter, bankFormats, [ROLES.ADMIN]);
+bankFormatRouter.post("/:id/certify", protect, authorize(ROLES.ADMIN), bankFormats.certify);
 
 export const financeConfigurationRouter = Router();
 financeConfigurationRouter.get("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.BUDGET), financeConfigurations.list);

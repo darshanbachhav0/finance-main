@@ -203,6 +203,32 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       assert.equal(await Reconciliation.countDocuments(), reconciliationCount);
       assert.equal((await migrateWorkflowStatuses(mongoose.connection.db, { apply: true })).changes.length, 0);
     });
+    await t.test("migration promotes a legacy Director/Vice-Rector label to APROBADO only once its own route is fully approved", async () => {
+      const fullyApproved = await makeRequest({
+        status: "APROBADO_VICERRECTOR",
+        approvalStage: "COMPLETE",
+        approvalRouteSnapshot: [
+          { approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, required: true, status: "APPROVED" },
+          { approvalLevel: "VICE_RECTOR", role: "Approver", sequence: 2, required: true, status: "APPROVED" }
+        ]
+      });
+      const stillPending = await makeRequest({
+        status: "APROBADO_DIRECTOR",
+        approvalStage: "VICE_RECTOR",
+        approvalRouteSnapshot: [
+          { approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, required: true, status: "APPROVED" },
+          { approvalLevel: "VICE_RECTOR", role: "Approver", sequence: 2, required: true, status: "PENDING" }
+        ]
+      });
+      const dry = await migrateWorkflowStatuses(mongoose.connection.db);
+      assert.ok(dry.changes.some(change => change.request === String(fullyApproved._id) && change.to === "APROBADO"));
+      assert.ok(!dry.changes.some(change => change.request === String(stillPending._id)), "a request still waiting on a further level is left alone, not guessed complete");
+      assert.ok(dry.manualReview.some(item => item.request === String(stillPending._id)));
+      await migrateWorkflowStatuses(mongoose.connection.db, { apply: true });
+      assert.equal((await FinancialRequest.collection.findOne({ _id: fullyApproved._id })).status, "APROBADO");
+      assert.equal((await FinancialRequest.collection.findOne({ _id: fullyApproved._id })).legacyWorkflowStatus, "APROBADO_VICERRECTOR");
+      assert.equal((await FinancialRequest.collection.findOne({ _id: stillPending._id })).status, "APROBADO_DIRECTOR", "unchanged: still legitimately mid-route");
+    });
     await t.test("Track B rechecks XML values and provisions only a verified individual invoice", async () => {
       const request = await makeRequest({ flowType: "B" });
       const voucher = { ruc: supplier.rucDni, series: "FB01", number: "001", issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };

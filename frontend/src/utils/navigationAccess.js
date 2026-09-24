@@ -5,6 +5,7 @@ export const authenticatedRoles = [
   "Accounting",
   "Treasury",
   "Budget",
+  "Procurement",
   "Management",
   "ManagementViewer"
 ];
@@ -12,7 +13,8 @@ export const authenticatedRoles = [
 export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
   "/management-view": ["Admin", "Management", "ManagementViewer"],
-  "/requests": ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Management"],
+  "/requests": ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
+  "/my-team": authenticatedRoles,
   "/requests/new": ["Admin", "Solicitor"],
   "/administration": ["Admin"],
   "/treasury/history": ["Admin", "Treasury"],
@@ -27,8 +29,8 @@ export const navigationAccess = Object.freeze({
   "/budget": ["Admin", "Approver", "Accounting", "Budget", "Management"],
   "/accounting/periods": ["Admin", "Accounting"],
   "/accounting/sire": ["Admin", "Accounting"],
-  "/reports": ["Admin", "Approver", "Accounting", "Treasury", "Budget", "Management"],
-  "/suppliers": ["Admin", "Accounting", "Treasury", "Solicitor"],
+  "/reports": ["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
+  "/suppliers": ["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"],
   "/cost-centers": ["Admin", "Accounting"],
   "/expense-types": ["Admin", "Accounting"],
   "/exchange-rates": ["Admin", "Accounting"],
@@ -49,12 +51,13 @@ export function visibleNavigationPaths(role) {
 
 // Primary navigation is deliberately smaller than the set of permitted routes.
 export const roleNavigation = {
-  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"]],
-  Approver: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
+  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["My Team", "/my-team"]],
+  Approver: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"], ["My Team", "/my-team"]],
   Budget: [["Dashboard", "/"], ["Budget Control", "/budget"], ["Requests", "/requests"]],
+  Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],
   Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["SIRE", "/accounting/sire"]],
   Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"]],
-  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
+  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"], ["My Team", "/my-team"]],
   ManagementViewer: [["Management Portal", "/management-view"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
 };

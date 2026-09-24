@@ -5,6 +5,17 @@ import { canonicalRequestStatus, deriveFinancialProgress, isTerminalRequest } fr
 
 export const MIGRATION_KEY = "2026-09-workflow-status-v2";
 const financialStatuses = ["PROVISIONADO_CXP", "CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "RENDICION_PENDIENTE"];
+// Organization-specific approval-level labels are no longer written as parent
+// statuses (the approval route/history already records who approved what,
+// at which level). A request already resting at one of these labels is
+// promoted to the canonical APROBADO only once every required approval step
+// in its own frozen route snapshot is APPROVED — i.e. only once it was
+// already fully approved, never for a request genuinely still awaiting a
+// further level under the old behavior.
+const legacyApprovedLabels = ["APROBADO_DIRECTOR", "APROBADO_VICERRECTOR"];
+function routeFullyApproved(request) {
+  return (request.approvalRouteSnapshot || []).every((step) => step.required === false || step.status === "APPROVED");
+}
 
 // Only workflow metadata and indexes change. Original journals, confirmations,
 // reconciliation documents, attachments and approval/audit history remain untouched.
@@ -34,6 +45,10 @@ export async function migrateWorkflowStatuses(db, { apply = false } = {}) {
   for await (const request of db.collection("financialrequests").find({})) {
     report.scanned++;
     let target = canonicalRequestStatus(request.status);
+    if (legacyApprovedLabels.includes(request.status)) {
+      if (routeFullyApproved(request)) target = "APROBADO";
+      else report.manualReview.push({ request: String(request._id), requestNumber: request.requestNumber, status: request.status, reason: "Approval route is not yet fully approved; left at its current legacy label rather than guessing completion." });
+    }
     const legacyRenditionObservation = (request.flowType === "C" || request.requestType === "ENTREGA_RENDIR") && request.status === "OBSERVADO_PRESUPUESTO" && request.payment?.confirmedAt;
     if (!isTerminalRequest(request.status) && (financialStatuses.includes(request.status) || legacyRenditionObservation)) {
       const payables = await db.collection("accountspayables").find({ request: request._id }).toArray();

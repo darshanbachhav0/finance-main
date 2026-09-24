@@ -1,11 +1,19 @@
 import mongoose from "mongoose";
-import { BUDGET_EXCEPTION_STRATEGIES, BUDGET_MODES } from "../utils/constants.js";
+import { BUDGET_EXCEPTION_STRATEGIES, BUDGET_MODES, ROLES } from "../utils/constants.js";
 
 const budgetRuleSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     mode: { type: String, enum: BUDGET_MODES, default: "TRANSITIONAL" },
     exceptionStrategy: { type: String, enum: BUDGET_EXCEPTION_STRATEGIES, default: "REJECT" },
+    // Who may authorize an EXTRAORDINARY_APPROVAL exception for this dimension.
+    // Defaults to "Management" so every existing/unconfigured rule keeps the
+    // exact authority behavior already in production.
+    exceptionApproverRole: { type: String, enum: Object.values(ROLES), default: ROLES.MANAGEMENT },
+    // Optional graduated authority: above this PEN amount, a different
+    // (presumably higher) role is required instead of exceptionApproverRole.
+    exceptionEscalationAmount: { type: Number, min: 0 },
+    exceptionEscalationApproverRole: { type: String, enum: Object.values(ROLES) },
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter" },
     expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType" },
     project: { type: String, trim: true, default: "*" },

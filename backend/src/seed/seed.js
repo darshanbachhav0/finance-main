@@ -151,6 +151,15 @@ async function seedUsers(costCenters) {
       approvalAreas: ["*"]
     },
     {
+      key: "procurement",
+      name: "Abastecimiento UMA (Demo)",
+      email: "demo.abastecimiento@uma.edu.pe",
+      dni: "10000013",
+      role: ROLES.PROCUREMENT,
+      area: AREAS.FINANCE,
+      approvalAreas: ["*"]
+    },
+    {
       key: "accounting",
       name: "Contabilidad UMA (Demo)",
       email: "demo.contabilidad@uma.edu.pe",
@@ -1089,7 +1098,7 @@ async function moveToAccounting(request, users, sequence, accountNumber) {
     REQUEST_STATUS.RECONCILED,
     REQUEST_STATUS.CLOSED
   ].includes(current.status)) return current;
-  const routeComplete = current.status === REQUEST_STATUS.VICE_RECTOR_APPROVED
+  const routeComplete = [REQUEST_STATUS.APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED].includes(current.status)
     && !(current.approvalRouteSnapshot || []).some((step) => step.required !== false && step.status === "PENDING");
   if (routeComplete) {
     await commitApprovedRequestBudget({

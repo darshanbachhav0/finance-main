@@ -65,10 +65,13 @@ test("budget commitment, exceptions, separation of duties and cancellation histo
     await Promise.all([BudgetCommitment.init(), BudgetException.init()]);
     const budget = await User.create({ name: "Budget", email: "budget@fiscal.test", role: "Budget", passwordHash: "unused" });
     const management = await User.create({ name: "Management", email: "management@fiscal.test", role: "Management", passwordHash: "unused" });
-    const center = await CostCenter.create({ code: "FISCAL-CC", name: "Fiscal", area: "Finance", annualBudget: 200, budgetMode: "TRANSITIONAL", active: true });
+    // Phase 2 / ACTIVE Cost Center: this whole test exercises budget-enforcement (blocking)
+    // behavior. Phase 1 / TRANSITIONAL informational (non-blocking) behavior is covered
+    // separately in budgetPhaseMode.test.js.
+    const center = await CostCenter.create({ code: "FISCAL-CC", name: "Fiscal", area: "Finance", annualBudget: 200, budgetMode: "ACTIVE", active: true });
     const make = amount => ({ _id: new mongoose.Types.ObjectId(), requestNumber: `R-${new mongoose.Types.ObjectId()}`, accountingPeriod: "2026-09", issueDate: "2026-09-14", lines: [{ costCenter: center._id, expenseType: new mongoose.Types.ObjectId(), totalAmount: amount }] });
     const request = make(100);
-    await t.test("sufficient budget reserves and reduces availability, including legacy transitional configuration", async () => {
+    await t.test("sufficient budget reserves and reduces availability under Phase 2 enforcement", async () => {
       const commitment = await reserveBudget(request, budget._id);
       assert.equal(commitment.status, "COMMITTED");
       assert.equal((await CostCenter.findById(center._id)).committedAmount, 100);

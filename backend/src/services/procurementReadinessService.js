@@ -36,6 +36,9 @@ const serviceNatures = new Set([
 ]);
 
 const approvalCompleteStatuses = new Set([
+  REQUEST_STATUS.APPROVED,
+  // Legacy in-flight requests may still rest at the old per-level label once
+  // their route was fully approved under the previous behavior.
   REQUEST_STATUS.VICE_RECTOR_APPROVED,
   REQUEST_STATUS.BUDGET_COMMITTED,
   REQUEST_STATUS.ACCOUNTED,

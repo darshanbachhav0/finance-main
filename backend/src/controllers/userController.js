@@ -1,16 +1,39 @@
 import bcrypt from "bcrypt";
+import FinancialRequest from "../models/FinancialRequest.js";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES } from "../utils/constants.js";
+import { ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
+
+const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
 const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
 
 function editablePayload(body) {
   return Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
 }
+
+// Any authenticated user may see their own direct reports (not gated to
+// Admin) — this is what powers "My Team" for a jefe at any level.
+export const listMyTeam = asyncHandler(async (req, res) => {
+  const reports = await User.find({ jefe: req.user._id, active: true })
+    .select("name area jobTitle role organizationalUnit costCenter")
+    .populate("costCenter", "code name")
+    .sort({ name: 1 });
+  const reportIds = reports.map((report) => report._id);
+  const counts = reportIds.length ? await FinancialRequest.aggregate([
+    { $match: { $or: [{ requester: { $in: reportIds } }, { solicitor: { $in: reportIds } }] } },
+    { $group: { _id: { $ifNull: ["$requester", "$solicitor"] }, total: { $sum: 1 }, active: { $sum: { $cond: [{ $in: ["$status", terminalStatuses] }, 0, 1] } } } }
+  ]) : [];
+  const countsById = new Map(counts.map((row) => [String(row._id), row]));
+  const data = reports.map((report) => ({
+    ...report.toObject(),
+    requestCounts: countsById.get(String(report._id)) || { total: 0, active: 0 }
+  }));
+  res.json({ data });
+});
 
 export const listUsers = asyncHandler(async (req, res) => {
   const query = {};
