@@ -475,7 +475,19 @@ const financialRequestSchema = new mongoose.Schema(
         settledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" }
       }],
-      status: { type: String, enum: ["NOT_REQUIRED", "PENDING", "SUBMITTED", "OBSERVED", "VALIDATED"], default: "NOT_REQUIRED" },
+      status: { type: String, enum: ["NOT_REQUIRED", "PENDING", "SUBMITTED", "OBSERVED", "VALIDATED", "REJECTED"], default: "NOT_REQUIRED" },
+      recovery: {
+        status: { type: String, enum: ["NOT_APPLICABLE", "PENDING", "RECOVERED"], default: "NOT_APPLICABLE" },
+        outstandingAmount: { type: Number, default: 0, min: 0 },
+        settlements: [{
+          method: { type: String, enum: ["REIMBURSEMENT", "PAYROLL_DEDUCTION"] },
+          amount: { type: Number, min: 0 },
+          reference: { type: String, trim: true },
+          settledAt: Date,
+          settledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" }
+        }]
+      },
       lines: { type: [lineSchema], default: [] },
       documentIds: [{ type: mongoose.Schema.Types.ObjectId }],
       submittedAt: Date,

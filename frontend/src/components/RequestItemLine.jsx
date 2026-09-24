@@ -1,12 +1,12 @@
 import { Trash2 } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { formatNumber } from "../utils/formatters.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 const units = ["UNIT", "SERVICE", "HOUR", "DAY", "MONTH", "SET", "BOX", "KG", "LITER", "METER"];
 
 export default function RequestItemLine({ line, index, currency, errors = {}, onChange, onRemove, canRemove }) {
   const { t, language } = useLanguage();
-  const amount = value => `${currency} ${formatNumber(value, language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const amount = value => formatCurrency(value, currency, language);
   const errorFor = field => errors[`lines.${index}.${field}`];
   const errorText = field => errorFor(field) && <small className="field-error-text">{t(errorFor(field))}</small>;
   return <div className="official-line request-item-card" data-motion-key={line.clientId}>

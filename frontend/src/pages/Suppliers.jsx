@@ -1,6 +1,7 @@
 import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import {
+  AlertTriangle,
   Building2,
   Edit3,
   Eye,
@@ -301,6 +302,17 @@ export default function Suppliers() {
                       .legalName ||
                     row
                       .name
+                  }
+                  {
+                    row.similarNameWarning?.possibleDuplicateOf && (
+                      <AlertTriangle
+                        size={13}
+                        className="text-warning"
+                        style={{ marginLeft: 6, verticalAlign: "middle" }}
+                        title={t("Possible duplicate supplier name - review before homologating")}
+                        aria-label={t("Possible duplicate supplier name - review before homologating")}
+                      />
+                    )
                   }
                 </strong>
 

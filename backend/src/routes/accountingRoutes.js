@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  cancelPayable,
   consolidationPreview,
   exportConsolidation,
   listAccountingExports,
@@ -16,6 +17,7 @@ const router = Router();
 router.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
 router.get("/entries", listEntries);
 router.get("/accounts-payable", listAccountsPayable);
+router.post("/accounts-payable/:id/cancel", cancelPayable);
 router.get("/pending", listPendingAccounting);
 router.post("/requests/:id/process", processPayable);
 router.get("/consolidation", consolidationPreview);

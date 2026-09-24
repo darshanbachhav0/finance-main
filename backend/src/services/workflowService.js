@@ -40,7 +40,7 @@ const transitionGraph = Object.freeze({
   CONCILIADO: ["CERRADO"],
   CERRADO: [], RECHAZADO: [], ANULADO: [],
   ...Object.fromEntries([...observationStates, "DEVUELTO"].map(status => [status,
-    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "APROBADO", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "ANULADO"]]))
+    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "APROBADO", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "RECHAZADO", "ANULADO"]]))
 });
 
 const roleTargets = Object.freeze({
@@ -133,7 +133,9 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
   if (targetStatus === REQUEST_STATUS.BANK_FILE_GENERATED && !request.paymentBatch && request.flowType !== FLOW_TYPE.A2) throw new AppError(422, "A persisted payment batch is required before TXT_GENERADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.PAID && (!request.payment?.confirmedAt || !request.payment?.operationNumber) && request.flowType !== FLOW_TYPE.A2) throw new AppError(422, "Actual Treasury payment confirmation is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.RECONCILED && !request.reconciliation) throw new AppError(422, "A reconciliation record is required before CONCILIADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  if (targetStatus === REQUEST_STATUS.CLOSED && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && request.rendition?.status !== "VALIDATED") throw new AppError(422, "A validated rendition is required before closure.", undefined, ERROR_CODES.RENDITION_REQUIRED);
+  const renditionResolved = request.rendition?.status === "VALIDATED"
+    || (request.rendition?.status === "REJECTED" && request.rendition?.recovery?.status === "RECOVERED");
+  if (targetStatus === REQUEST_STATUS.CLOSED && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && !renditionResolved) throw new AppError(422, "A validated rendition, or full recovery of a rejected rendition's advance, is required before closure.", undefined, ERROR_CODES.RENDITION_REQUIRED);
   if (targetStatus === REQUEST_STATUS.CLOSED && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Non-deductible rendition balances must be reimbursed or assigned to payroll before closure.", { nonDeductibleOutstanding: request.rendition?.nonDeductibleOutstanding }, ERROR_CODES.RENDITION_REQUIRED);
 }
 

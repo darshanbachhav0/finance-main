@@ -5,14 +5,13 @@ import CostCenter from "../models/CostCenter.js";
 import ExpenseType from "../models/ExpenseType.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
-import { commitApprovedRequestBudget } from "../services/approvalService.js";
-import { budgetOverview } from "../services/budgetOverviewService.js";
+import { commitApprovedRequestBudget, resolveBudgetCommitmentFailure } from "../services/approvalService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import { publicRequestPayload } from "../services/requestService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
-import { budgetAllocationRows, budgetPeriodFilter } from "../services/budgetReportingService.js";
+import { budgetAllocationRows, budgetOverview, budgetPeriodFilter } from "../services/budgetReportingService.js";
 import { adjustBudgetPlan, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
 
 export const getBudgetOverview = asyncHandler(async (req, res) => {
@@ -102,6 +101,11 @@ export const decideBudgetException = asyncHandler(async (req, res) => {
 export const commitRequestBudget = asyncHandler(async (req, res) => {
   const request = await FinancialRequest.findById(req.params.id).select("+attachments.path").populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
-  await commitApprovedRequestBudget({ request, user: req.user, req });
-  res.json({ data: publicRequestPayload(request) });
+  let budgetWarning;
+  try {
+    await commitApprovedRequestBudget({ request, user: req.user, req });
+  } catch (error) {
+    budgetWarning = await resolveBudgetCommitmentFailure({ request, error, user: req.user, req });
+  }
+  res.json({ data: publicRequestPayload(request), budgetWarning });
 });

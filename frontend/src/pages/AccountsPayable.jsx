@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Ban,
   Boxes,
   Eye,
   RefreshCw
@@ -14,6 +15,7 @@ import {
   Link
 } from "react-router-dom";
 
+import api from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
@@ -33,22 +35,7 @@ import {
   flowTypes
 } from "../utils/options.js";
 
-const money = (
-  currency,
-  value
-) =>
-  `${currency || "PEN"} ${Number(
-    value || 0
-  ).toLocaleString(
-    undefined,
-    {
-      minimumFractionDigits:
-        2,
-
-      maximumFractionDigits:
-        2
-    }
-  )}`;
+import { formatCurrency } from "../utils/formatters.js";
 
 const dateText = (
   value
@@ -61,9 +48,19 @@ const dateText = (
 
 export default function AccountsPayable() {
   const {
-    t
+    t,
+    language
   } =
     useLanguage();
+
+  const money = (currency, value) => formatCurrency(value, currency || "PEN", language);
+
+  const cancelPayable = async (row) => {
+    const reason = window.prompt(t("Reason for cancelling this unpaid CXP (required):"));
+    if (!reason || !reason.trim()) return;
+    await api.post(`/accounting/accounts-payable/${row._id}/cancel`, { reason: reason.trim() });
+    payableTable.reload();
+  };
 
   const [
     selected,
@@ -220,6 +217,7 @@ export default function AccountsPayable() {
                 "OPEN",
                 "SCHEDULED",
                 "PAYMENT_FILE_CREATED",
+                "PARTIALLY_PAID",
                 "PAYMENT_BOUNCED",
                 "PAID",
                 "CANCELLED"
@@ -288,7 +286,12 @@ export default function AccountsPayable() {
                   setSelected(
                     row
                   )
-            }
+            },
+            ...(["OPEN", "SCHEDULED"].includes(row.status) ? [{
+              label: "Cancel unpaid CXP",
+              icon: Ban,
+              onClick: () => cancelPayable(row)
+            }] : [])
           ]}
           columns={[
             {

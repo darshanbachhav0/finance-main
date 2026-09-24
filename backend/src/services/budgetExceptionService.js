@@ -12,6 +12,16 @@ import { recordAudit } from "./auditService.js";
 // with an optional amount-based escalation to a higher authority. A
 // dimension with no configured rule keeps the original "Management decides"
 // behavior exactly, so this is purely additive.
+// Only Management/Rectorate authority may ever decide a budget exception - the schema enum
+// already enforces this on new/edited BudgetRule documents, but this guards against any rule
+// persisted before that constraint existed, so a corrupted value can never make an exception
+// undecidable (or worse, resolvable by an unintended role). Admin can repair the underlying
+// BudgetRule via the audited master-data endpoint; Admin never becomes the approver itself.
+const ALLOWED_EXCEPTION_APPROVER_ROLES = [ROLES.MANAGEMENT];
+function safeApproverRole(role) {
+  return ALLOWED_EXCEPTION_APPROVER_ROLES.includes(role) ? role : ROLES.MANAGEMENT;
+}
+
 export async function resolveExceptionApproverRole(exception) {
   const rules = await BudgetRule.find({
     active: true,
@@ -23,9 +33,9 @@ export async function resolveExceptionApproverRole(exception) {
   }).sort({ costCenter: -1, expenseType: -1, project: -1 }).limit(1);
   const rule = rules[0];
   if (rule?.exceptionEscalationApproverRole && rule.exceptionEscalationAmount !== undefined && Number(exception.requestedAmount) > Number(rule.exceptionEscalationAmount)) {
-    return rule.exceptionEscalationApproverRole;
+    return safeApproverRole(rule.exceptionEscalationApproverRole);
   }
-  return rule?.exceptionApproverRole || ROLES.MANAGEMENT;
+  return safeApproverRole(rule?.exceptionApproverRole || ROLES.MANAGEMENT);
 }
 
 export function assertExceptionDecisionAllowed(exception, request, user, action, approverRole = ROLES.MANAGEMENT) {

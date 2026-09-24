@@ -13,9 +13,10 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function ApprovalInbox() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { notify } = useToast();
   const [quickViewId, setQuickViewId] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -116,7 +117,7 @@ export default function ApprovalInbox() {
       details: [
         { label: "Request", value: row.requestNumber },
         { label: "Supplier", value: row.supplier?.name },
-        { label: "Amount", value: `${row.currency} ${Number(row.totalAmount || 0).toFixed(2)}` },
+        { label: "Amount", value: formatCurrency(row.totalAmount || 0, row.currency, language) },
         { label: "Approval level", value: row.approvalStage },
         { label: "Track", value: row.flowType || "A1" },
         { label: "Result", value: definition.result }
@@ -133,7 +134,7 @@ export default function ApprovalInbox() {
       <Message type="error">{actionError || approvalTable.error}</Message>
       <div className="stats-grid compact-stats">
         <StatCard label="Pending approval" value={summary.total} tone="amber" />
-        <StatCard label="PEN equivalent waiting" value={`PEN ${summary.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone="teal" />
+        <StatCard label="PEN equivalent waiting" value={formatCurrency(summary.amount, "PEN", language)} tone="teal" />
         <StatCard label="Oldest request age" value={summary.oldest} suffix="days" tone="navy" />
       </div>
       <div className="workspace-panel">
@@ -162,7 +163,7 @@ export default function ApprovalInbox() {
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
             { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
-            { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
+            { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />

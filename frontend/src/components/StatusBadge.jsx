@@ -59,6 +59,7 @@ const classes = {
   NON_COMPLIANT: "badge badge-red",
   SCHEDULED: "badge badge-blue",
   PAYMENT_FILE_CREATED: "badge badge-indigo",
+  PARTIALLY_PAID: "badge badge-amber",
   CANCELLED: "badge badge-red",
   VALIDATED: "badge badge-green",
   VALID: "badge badge-green",

@@ -9,6 +9,10 @@ const reimbursementTypes = new Set([
 ]);
 
 export function isEligibleSupplierPaymentAccount(account, { bank, currency } = {}) {
+  // Fix 3: DETRACTION accounts are intentionally excluded from outbound payment selection. There is no
+  // complete detraccion (SUNAT withholding-to-Banco de la Nacion) payment workflow implemented yet, so
+  // only CURRENT accounts are ever eligible destinations. Existing DETRACTION records are preserved for
+  // read-only/legacy purposes; this exclusion should be revisited once a real detraccion flow ships.
   if (!account?.active || account.accountType !== "CURRENT") return false;
   if (bank && account.bank !== bank) return false;
   if (currency && account.currency !== currency) return false;

@@ -103,6 +103,7 @@ async function validateApprovalControls(request, user) {
     request.xmlValidation = await validateXmlAgainstRequest(xmlAttachment.path, {
       supplier,
       fiscalData: request.fiscalData,
+      currency: request.currency,
       totalNet: request.totalNet,
       totalIGV: request.totalIGV,
       totalAmount: request.totalAmount,
@@ -200,6 +201,43 @@ async function appendApprovalWithoutStatusTransition({ request, step, routeResul
     newValues: { approvalStage: routeResult.next?.approvalLevel || APPROVAL_STAGES.COMPLETE },
     session
   });
+}
+
+// Shared by decideApproval's automatic handoff and the Budget team's manual
+// commit-retry endpoint, so a hard REJECT-strategy budget gate always
+// resolves the request the same way regardless of who/what triggered the
+// commit attempt.
+export async function resolveBudgetCommitmentFailure({ request, error, user, req }) {
+  if (![ERROR_CODES.INSUFFICIENT_BUDGET, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, ERROR_CODES.SUPPLIER_REJECTED, ERROR_CODES.SUPPLIER_INACTIVE].includes(error.code)) throw error;
+  const hardReject = error.code === ERROR_CODES.INSUFFICIENT_BUDGET && error.details?.hardReject;
+  if (hardReject) {
+    request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, observedAt: new Date(), observedBy: user._id };
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.REJECTED, user, req, action: "REJECTED", comments: `Budget gate rejection: ${error.message}`, skipControls: true, skipRoleCheck: true });
+    await notifyUser({
+      userId: request.requester?._id || request.requester || request.solicitor,
+      eventKey: `request:${request._id}:budget-rejected:${Date.now()}`,
+      type: "BUDGET_REJECTED",
+      title: "Request rejected at the budget gate",
+      message: `${request.requestNumber}: ${error.message}`,
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  } else if (error.code === ERROR_CODES.INSUFFICIENT_BUDGET && request.status !== REQUEST_STATUS.OBSERVED_BUDGET) {
+    request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, observedAt: new Date(), observedBy: user._id };
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.OBSERVED_BUDGET, user, req, action: "BUDGET_OBSERVED", comments: error.message, skipControls: true });
+  }
+  await recordAudit({
+    entityType: "FinancialRequest",
+    entity: request,
+    action: hardReject ? "BUDGET_COMMITMENT_REJECTED" : "BUDGET_COMMITMENT_PENDING",
+    user,
+    req,
+    module: "BUDGET",
+    message: error.message,
+    newValues: error.details
+  });
+  return { code: error.code, message: error.message, details: error.details, hardReject };
 }
 
 export async function commitApprovedRequestBudget({ request, user, req }) {
@@ -395,27 +433,14 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       await commitApprovedRequestBudget({ request, user, req });
       fiscalObservation = request.status === REQUEST_STATUS.OBSERVED_SUNAT;
     } catch (error) {
-      if (![ERROR_CODES.INSUFFICIENT_BUDGET, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, ERROR_CODES.SUPPLIER_REJECTED, ERROR_CODES.SUPPLIER_INACTIVE].includes(error.code)) throw error;
-      budgetWarning = { code: error.code, message: error.message, details: error.details };
-      if (error.code === ERROR_CODES.INSUFFICIENT_BUDGET && request.status !== REQUEST_STATUS.OBSERVED_BUDGET) {
-        request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, observedAt: new Date(), observedBy: user._id };
-        await transitionRequest({ request, targetStatus: REQUEST_STATUS.OBSERVED_BUDGET, user, req, action: "BUDGET_OBSERVED", comments: error.message, skipControls: true });
-      }
-      await recordAudit({
-        entityType: "FinancialRequest",
-        entity: request,
-        action: "BUDGET_COMMITMENT_PENDING",
-        user,
-        req,
-        module: "BUDGET",
-        message: error.message,
-        newValues: error.details
-      });
+      budgetWarning = await resolveBudgetCommitmentFailure({ request, error, user, req });
     }
   }
   await resolveNotification(`request:${request._id}:approval:${step.approvalLevel}`);
   if (activeApprovalStep(request)) {
     await notifyApprovalStep(request);
+  } else if (budgetWarning?.hardReject) {
+    // Terminal - resolveBudgetCommitmentFailure already notified the requester; no Budget task to raise.
   } else if (budgetWarning) {
     await notifyRoles({
       roles: [ROLES.BUDGET, ROLES.ADMIN],

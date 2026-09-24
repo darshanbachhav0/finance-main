@@ -1,5 +1,6 @@
 import SunatVoucher from "../models/SunatVoucher.js";
 import { sunatService } from "./sunatService.js";
+import { recordAudit } from "./auditService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 
@@ -72,4 +73,62 @@ export async function createSunatVoucher({ request, purchaseOrder, batch, suppli
     validatedBy: user?._id || user
   }], session ? { session } : undefined);
   return created;
+}
+
+/**
+ * Records a dedicated, human-triggered manual SUNAT-validation override on a single voucher.
+ *
+ * This is deliberately NOT part of the automatic validation path (see getSunatProvider() in
+ * sunatService.js and ManualSunatProvider): it never runs automatically and never silently
+ * substitutes for authoritative SUNAT validation. It is invoked only via the dedicated
+ * manual-sunat-override action (Admin/Accounting only), requires a mandatory reason and evidence
+ * reference, marks the voucher with the explicit non-authoritative MANUAL_EXCEPTION status
+ * (never VALID), and records the full decision in the audit log via recordAudit().
+ */
+export async function applyManualSunatOverride({ request, voucherId, reason, evidenceReference, user, req, session } = {}) {
+  const reasonText = String(reason || "").trim();
+  const evidenceText = String(evidenceReference || "").trim();
+  if (!reasonText) {
+    throw new AppError(422, "A reason is required to record a manual SUNAT validation override.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (!evidenceText) {
+    throw new AppError(422, "An evidence reference is required to record a manual SUNAT validation override.", undefined, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (!request?._id) {
+    throw new AppError(404, "Financial request not found.", undefined, ERROR_CODES.NOT_FOUND);
+  }
+  const voucher = await SunatVoucher.findOne({ _id: voucherId, request: request._id }).session(session || null);
+  if (!voucher) {
+    throw new AppError(404, "SUNAT voucher was not found for this request.", { voucherId }, ERROR_CODES.NOT_FOUND);
+  }
+  if (voucher.validationStatus === "VALID") {
+    throw new AppError(409, "This voucher already passed automated SUNAT validation; a manual override is not applicable.", { voucherId }, ERROR_CODES.CONFLICT);
+  }
+  const previousValidationStatus = voucher.validationStatus;
+  voucher.validationStatus = "MANUAL_EXCEPTION";
+  voucher.observationDetail = `Manual SUNAT validation exception: ${reasonText}`;
+  voucher.manualOverride = {
+    reason: reasonText,
+    evidenceReference: evidenceText,
+    overriddenBy: user?._id || user,
+    overriddenAt: new Date(),
+    previousValidationStatus
+  };
+  await voucher.save({ session });
+
+  await recordAudit({
+    entityType: "SunatVoucher",
+    entity: voucher,
+    requestId: request._id,
+    action: "MANUAL_SUNAT_OVERRIDE",
+    user,
+    req,
+    module: "ACCOUNTING",
+    comments: reasonText,
+    oldValues: { validationStatus: previousValidationStatus },
+    newValues: { validationStatus: "MANUAL_EXCEPTION", reason: reasonText, evidenceReference: evidenceText },
+    session
+  });
+
+  return voucher;
 }

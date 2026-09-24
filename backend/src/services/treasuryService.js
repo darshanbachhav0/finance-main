@@ -18,6 +18,7 @@ import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/inde
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { markBudgetPaidAmount } from "./budgetService.js";
+import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
 import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import {
@@ -31,8 +32,14 @@ import { cleanupUploadedFiles, generatedRoot, persistUploadedFiles } from "./sto
 import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
-import { AP_STATUS, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
-import { moneyEquals, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
+import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+
+async function renditionDueDate(fromDate) {
+  const configuration = await getEffectiveFinanceConfiguration(FINANCE_CONFIGURATION_KEYS.RENDITION_OVERDUE_DAYS, fromDate);
+  const days = configuration ? Number(configuration.numericValue) : DEFAULT_RENDITION_OVERDUE_DAYS;
+  return new Date(new Date(fromDate).getTime() + days * 24 * 60 * 60 * 1000);
+}
+import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
 
 const bankFilesDir = path.join(generatedRoot, "bank-files");
 
@@ -40,7 +47,9 @@ function isPurchaseOrderInvoiceFlow(accountsPayable) {
   return [FLOW_TYPE.A1, FLOW_TYPE.A2].includes(accountsPayable?.flowType);
 }
 
-const BLOCKING_VOUCHER_VALIDATION_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
+// MANUAL_EXCEPTION vouchers are explicitly non-authoritative (see manualSunatOverride) - they
+// must never quietly clear Treasury the same way a real VALID result does.
+const BLOCKING_VOUCHER_VALIDATION_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION"]);
 
 // Authoritative Treasury-side gate: a CXP with any unresolved observation (SunatVoucher.validationStatus
 // for A1/direct registrations, or an OPEN InvoiceObservation for A2 batch invoices) must never be
@@ -62,12 +71,17 @@ export async function assertNoBlockingObservation(accountsPayable, { requestNumb
 function appendPaymentConfirmation(request, accountsPayable, payload, user, confirmedAmount) {
   request.payment ||= {};
   request.payment.confirmations ||= [];
-  const alreadyStored = request.payment.confirmations.some((item) => String(item.accountsPayable || "") === String(accountsPayable._id));
+  // Partial payments mean the same AP can be confirmed more than once - dedupe on
+  // AP + operation number so a distinct installment is always recorded, while a
+  // literal retry of the exact same bank operation doesn't double-count.
+  const operationNumber = String(payload.operationNumber || "").trim();
+  const alreadyStored = request.payment.confirmations.some((item) =>
+    String(item.accountsPayable || "") === String(accountsPayable._id) && item.operationNumber === operationNumber);
   if (!alreadyStored) {
     request.payment.confirmations.push({
       accountsPayable: accountsPayable._id,
       paymentBatch: accountsPayable.paymentBatch,
-      operationNumber: String(payload.operationNumber || "").trim(),
+      operationNumber,
       paidAt: payload.paidAt,
       amount: confirmedAmount,
       currency: accountsPayable.currency,
@@ -547,7 +561,7 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   if (!operationNumber || !payload.paidAt || payload.confirmedAmount === undefined) {
     throw new AppError(422, "Operation number, actual payment date, and confirmed amount are required.", { required: ["operationNumber", "paidAt", "confirmedAmount"] }, ERROR_CODES.VALIDATION_ERROR);
   }
-  if (!accountsPayable || accountsPayable.status !== AP_STATUS.PAYMENT_FILE_CREATED) {
+  if (!accountsPayable || ![AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status)) {
     throw new AppError(409, "The CXP is not awaiting payment confirmation.", { status: accountsPayable?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   const request = await FinancialRequest.findById(accountsPayable.request).populate("supplier");
@@ -563,8 +577,8 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   await assertNoBlockingObservation(accountsPayable, { requestNumber: request.requestNumber });
   await guardAccountingPeriod({ period: periodFromDate(payload.paidAt), action: "POST", user, req, module: "TREASURY", entityId: request._id, requestId: request._id });
   const confirmedAmount = roundMoney(payload.confirmedAmount);
-  if (!moneyEquals(confirmedAmount, accountsPayable.outstandingAmount)) {
-    throw new AppError(422, "Confirmed amount must equal the outstanding CXP amount.", { confirmedAmount, outstandingAmount: accountsPayable.outstandingAmount }, ERROR_CODES.VALIDATION_ERROR);
+  if (confirmedAmount > accountsPayable.outstandingAmount && !moneyEquals(confirmedAmount, accountsPayable.outstandingAmount)) {
+    throw new AppError(422, "Confirmed amount cannot exceed the outstanding CXP amount.", { confirmedAmount, outstandingAmount: accountsPayable.outstandingAmount }, ERROR_CODES.VALIDATION_ERROR);
   }
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "CONFIRM_PAYMENT", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
 
@@ -576,23 +590,26 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
       bank: sourceBatch?.bank || request.bankFile?.bank || accountsPayable.bankAccountSnapshot?.bank,
       session
     });
-    accountsPayable.status = AP_STATUS.PAID;
-    accountsPayable.outstandingAmount = 0;
-    accountsPayable.paidDate = payload.paidAt;
+    const remainingOutstanding = subtractMoney(accountsPayable.outstandingAmount, confirmedAmount);
+    const fullyPaid = remainingOutstanding <= 0 || moneyEquals(remainingOutstanding, 0);
+    accountsPayable.status = fullyPaid ? AP_STATUS.PAID : AP_STATUS.PARTIALLY_PAID;
+    accountsPayable.outstandingAmount = fullyPaid ? 0 : remainingOutstanding;
+    accountsPayable.paidDate = fullyPaid ? payload.paidAt : accountsPayable.paidDate;
     accountsPayable.paymentJournal = paymentJournal._id;
-    accountsPayable.history.push({ status: AP_STATUS.PAID, by: user._id, comments: `Payment confirmed: ${operationNumber}.` });
+    accountsPayable.history.push({ status: accountsPayable.status, by: user._id, comments: `Payment confirmed: ${operationNumber} (${confirmedAmount.toFixed(2)}${fullyPaid ? "" : `, ${remainingOutstanding.toFixed(2)} remaining`}).` });
 
-    if (accountsPayable.flowType !== FLOW_TYPE.C && !accountsPayable.budgetPaidAt) {
-      await markBudgetPaidAmount(request, user._id, accountsPayable.penEquivalent, {
+    if (accountsPayable.flowType !== FLOW_TYPE.C) {
+      const paidPenEquivalent = roundMoney(multiplyMoney(confirmedAmount, accountsPayable.exchangeRate));
+      await markBudgetPaidAmount(request, user._id, paidPenEquivalent, {
         session,
         comments: `Treasury confirmed CXP ${accountsPayable._id} with operation ${operationNumber}.`
       });
-      accountsPayable.budgetPaidAt = new Date();
+      accountsPayable.budgetPaidAt ||= new Date();
     }
     await accountsPayable.save({ session });
 
     const batch = await PaymentBatch.findById(accountsPayable.paymentBatch).session(session || null);
-    if (batch) {
+    if (batch && fullyPaid) {
       const item = batch.items.find((value) => String(value.accountsPayable) === String(accountsPayable._id));
       if (item) item.status = "CONFIRMED";
       const activeItems = batch.items.filter((value) => value.status !== "CANCELLED");
@@ -606,12 +623,12 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
       await batch.save({ session });
     }
 
-    if (accountsPayable.flowType === FLOW_TYPE.C || request.flowType === FLOW_TYPE.C) {
+    if (fullyPaid && (accountsPayable.flowType === FLOW_TYPE.C || request.flowType === FLOW_TYPE.C)) {
       request.rendition ||= {};
       request.rendition.status = "PENDING";
-      request.rendition.amountAdvanced = confirmedAmount;
-      request.rendition.balanceOutstanding = confirmedAmount;
-      request.rendition.dueAt = new Date(new Date(payload.paidAt).getTime() + 10 * 24 * 60 * 60 * 1000);
+      request.rendition.amountAdvanced = accountsPayable.originalAmount;
+      request.rendition.balanceOutstanding = accountsPayable.originalAmount;
+      request.rendition.dueAt = await renditionDueDate(payload.paidAt);
     }
     await syncFinancialProgress({ request, user, req, session, action: "PAYMENT_CONFIRMED" });
 
@@ -629,7 +646,7 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
     return { request, accountsPayable, paymentJournal, batch };
   });
 
-  if (!(await AccountsPayable.exists({ request: request._id, status: AP_STATUS.PAYMENT_FILE_CREATED }))) await resolveNotification(`request:${request._id}:payment-confirmation`);
+  if (!(await AccountsPayable.exists({ request: request._id, status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } }))) await resolveNotification(`request:${request._id}:payment-confirmation`);
   await resolveNotification(`request:${request._id}:payment-confirmation:${accountsPayable._id}`);
   await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: "Payment ready for reconciliation", message: `${request.requestNumber}: reconcile the confirmed invoice payment.`, path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
   if (request.flowType === FLOW_TYPE.C) {
@@ -647,7 +664,7 @@ export async function confirmTreasuryPayable({ accountsPayableId, payload, user,
 }
 
 export async function confirmTreasuryPayment({ requestId, payload, user, req }) {
-  const accountsPayable = await AccountsPayable.findOne({ request: requestId, status: AP_STATUS.PAYMENT_FILE_CREATED }).sort({ createdAt: 1 });
+  const accountsPayable = await AccountsPayable.findOne({ request: requestId, status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } }).sort({ createdAt: 1 });
   if (!accountsPayable) throw new AppError(404, "No CXP awaiting payment confirmation was found for this request.", { requestId }, ERROR_CODES.NOT_FOUND);
   return confirmPayable({ accountsPayable, payload, user, req });
 }

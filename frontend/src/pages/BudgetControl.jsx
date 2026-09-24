@@ -17,13 +17,13 @@ import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import BudgetPlanWorkspace from "../components/BudgetPlanWorkspace.jsx";
 import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
-
-const money = (value) => value === null || value === undefined ? "—" : `PEN ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function BudgetControl() {
   const [focusView, setFocusView] = useState("Budget");
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const money = (value) => value === null || value === undefined ? "—" : formatCurrency(value, "PEN", language);
   const { notify } = useToast();
   const initialPeriod = new Date().toISOString().slice(0, 4);
   const [view, setView] = useState("ANNUAL");

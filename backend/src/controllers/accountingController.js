@@ -8,7 +8,7 @@ import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Supplier from "../models/Supplier.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { getConsolidation, processAccountsPayable } from "../services/accountingService.js";
+import { cancelAccountsPayable, getConsolidation, processAccountsPayable } from "../services/accountingService.js";
 import { flattenConsolidationRow, persistReportFile, toCsv } from "../services/exportService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { publicRequestPayload, requestPopulate } from "../services/requestService.js";
@@ -48,6 +48,11 @@ export const processPayable = asyncHandler(async (req, res) => {
     accountsPayable: result.accountsPayable,
     journal: result.journal
   });
+});
+
+export const cancelPayable = asyncHandler(async (req, res) => {
+  const result = await cancelAccountsPayable({ accountsPayableId: req.params.id, reason: req.body.reason, user: req.user, req });
+  res.json({ data: result.accountsPayable, journal: result.reversalJournal });
 });
 
 export const listAccountsPayable = asyncHandler(async (req, res) => {

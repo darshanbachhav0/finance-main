@@ -8,9 +8,10 @@ import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function MyTeam() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [team, setTeam] = useState([]);
   const [error, setError] = useState("");
   const [loadingTeam, setLoadingTeam] = useState(true);
@@ -56,7 +57,7 @@ export default function MyTeam() {
             { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-            { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
+            { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "createdAt", label: "Submitted", render: (row) => row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-" }
           ]}
         />

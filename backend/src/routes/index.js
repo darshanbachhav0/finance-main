@@ -7,6 +7,7 @@ import approvalRoutes from "./approvalRoutes.js";
 import authRoutes from "./authRoutes.js";
 import dashboardRoutes from "./dashboardRoutes.js";
 import requestRoutes from "./requestRoutes.js";
+import sunatOverrideRoutes from "./sunatOverrideRoutes.js";
 import sireRoutes from "./sireRoutes.js";
 import supplierRoutes from "./supplierRoutes.js";
 import treasuryRoutes from "./treasuryRoutes.js";
@@ -26,6 +27,7 @@ import {
   budgetAllocationRouter,
   budgetRuleRouter,
   costCenterRouter,
+  directPaymentEligibilityRuleRouter,
   documentRuleRouter,
   exchangeRateRouter,
   expenseTypeRouter,
@@ -38,12 +40,13 @@ import { ROLES } from "../utils/constants.js";
 const router = Router();
 router.use("/auth", authRoutes);
 router.use("/management/v1", externalManagementRoutes);
-router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.MANAGEMENT));
+router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.MANAGEMENT_VIEWER));
 
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/requests", requestRoutes);
+router.use("/requests", sunatOverrideRoutes);
 router.use("/approvals", approvalRoutes);
 router.use("/accounting", accountingRoutes);
 router.use("/audit", auditRoutes);
@@ -63,6 +66,7 @@ router.use("/approval-rules", approvalRuleRouter);
 router.use("/budget-rules", budgetRuleRouter);
 router.use("/budget-allocations", budgetAllocationRouter);
 router.use("/document-rules", documentRuleRouter);
+router.use("/direct-payment-eligibility-rules", directPaymentEligibilityRuleRouter);
 router.use("/accounting-mappings", accountingMappingRouter);
 router.use("/bank-formats", bankFormatRouter);
 router.use("/finance-configurations", financeConfigurationRouter);

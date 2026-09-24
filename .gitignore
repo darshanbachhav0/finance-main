@@ -6,8 +6,10 @@ backend/generated/*
 backend/migration-reports/*.json
 backend/backups/
 backend/data/sunat-padron/
+backend/debug/
 .tmp/
 data/reports/
+output/
 .docx_render/
 documentation/~$*
 erp-financial-request-payment-control-system.zip

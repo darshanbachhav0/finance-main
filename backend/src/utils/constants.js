@@ -38,7 +38,8 @@ export const PERMISSIONS = Object.freeze({
   PROCUREMENT_ORDER_CREATE: "procurement-order:create",
   BATCH_INVOICE_UPLOAD: "batch-invoice:upload",
   BATCH_INVOICE_REVIEW: "batch-invoice:review",
-  PAYMENT_REPROCESS: "payment:reprocess"
+  PAYMENT_REPROCESS: "payment:reprocess",
+  BANK_FORMAT_CERTIFY: "bank-format:certify"
 });
 
 export const ROLE_PERMISSIONS = Object.freeze({
@@ -70,14 +71,17 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.RECONCILE,
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT,
-    PERMISSIONS.PAYMENT_REPROCESS
+    PERMISSIONS.PAYMENT_REPROCESS,
+    PERMISSIONS.BANK_FORMAT_CERTIFY
   ],
   // Budget validates/commits/reserves funds and prepares exceptions; it no longer issues
   // Purchase Orders directly — that is Procurement's ownership (see ROLES.PROCUREMENT).
   [ROLES.BUDGET]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.BUDGET_MANAGE, PERMISSIONS.REPORT_VIEW],
   [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.SUPPLIER_BANK_VIEW, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
   [ROLES.MANAGEMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
-  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]
+  // Strictly read-only: internal dashboards, reports, and audit history, never a mutation
+  // endpoint. Kept deliberately short - do not add a write-capable permission here.
+  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.AUDIT_VIEW]
 });
 
 export const REQUEST_TYPE = Object.freeze({
@@ -238,8 +242,12 @@ export const APPROVAL_SLA_HOURS = Object.freeze({
 });
 
 export const CURRENCY = Object.freeze(["PEN", "USD"]);
-export const BANKS = Object.freeze(["BCP", "BBVA", "INTERBANK", "SCOTIABANK"]);
-export const SUPPLIER_BANKS = Object.freeze([...BANKS, "BANCO_NACION"]);
+// BBVA is the only bank UMA can generate an outbound payment file/format for today - this is a
+// hard capability constraint, not a policy choice, so the schema enum for anything describing a
+// *source*/generator bank must not overstate it. A supplier or employee's *beneficiary* account
+// can sit at any of these banks (via CCI interbank transfer), which is a separate, broader list.
+export const SOURCE_BANKS = Object.freeze(["BBVA"]);
+export const BENEFICIARY_BANKS = Object.freeze(["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"]);
 
 export const SUPPLIER_PERSON_TYPES = Object.freeze(["LEGAL_ENTITY", "NATURAL_PERSON_WITH_BUSINESS"]);
 export const SUPPLIER_HOMOLOGATION_STATUSES = Object.freeze(["PENDING_VALIDATION", "HOMOLOGATED", "OBSERVED", "REJECTED", "INACTIVE"]);
@@ -254,7 +262,10 @@ export const SUPPLIER_DELIVERY_METHODS = Object.freeze(["CENTRAL_WAREHOUSE", "DE
 export const PROCUREMENT_ORDER_KINDS = Object.freeze(["PURCHASE", "SERVICE"]);
 export const PAYMENT_DESTINATION_SOURCES = Object.freeze(["SUPPLIER", "EMPLOYEE_REIMBURSEMENT"]);
 export const BATCH_UPLOAD_STATUSES = Object.freeze(["QUEUED", "PROCESSING", "COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAILED"]);
-export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
+// MANUAL_EXCEPTION is a distinct, explicitly non-authoritative status: a human (Admin/Accounting)
+// recorded and audited override of automated SUNAT validation. It is never equivalent to VALID and
+// must never be produced by the automatic validation path (see ManualSunatProvider / getSunatProvider).
+export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION"]);
 
 export const CAPEX_ASSET_CATEGORIES = Object.freeze(["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]);
 export const OPEX_EXPENSE_FREQUENCIES = Object.freeze(["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);
@@ -264,8 +275,11 @@ export const ACKNOWLEDGMENT_TYPES = Object.freeze(["AUTHENTICATED_ELECTRONIC_SIG
 
 export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   LOCAL_MOBILITY_DAILY_LIMIT: "LOCAL_MOBILITY_DAILY_LIMIT",
-  UNSUPPORTED_EXPENSE_LIMIT: "UNSUPPORTED_EXPENSE_LIMIT"
+  UNSUPPORTED_EXPENSE_LIMIT: "UNSUPPORTED_EXPENSE_LIMIT",
+  RENDITION_OVERDUE_DAYS: "RENDITION_OVERDUE_DAYS",
+  SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS: "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS"
 });
+export const DEFAULT_RENDITION_OVERDUE_DAYS = 10;
 export const FINANCE_CONFIGURATION_BEHAVIORS = Object.freeze(["INFORMATION", "WARNING", "FLAG", "BLOCK"]);
 
 export const BUDGET_MODES = Object.freeze(["TRANSITIONAL", "ACTIVE"]);
@@ -287,12 +301,14 @@ export const AP_STATUS = Object.freeze({
   SCHEDULED: "SCHEDULED",
   PAYMENT_FILE_CREATED: "PAYMENT_FILE_CREATED",
   PAYMENT_BOUNCED: "PAYMENT_BOUNCED",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
   PAID: "PAID",
   CANCELLED: "CANCELLED"
 });
 
 export const ERROR_CODES = Object.freeze({
   VALIDATION_ERROR: "VALIDATION_ERROR",
+  APPROVAL_ROUTE_NOT_CONFIGURED: "APPROVAL_ROUTE_NOT_CONFIGURED",
   MISSING_REQUIRED_DOCUMENT: "MISSING_REQUIRED_DOCUMENT",
   XML_AMOUNT_MISMATCH: "XML_AMOUNT_MISMATCH",
   XML_VALIDATION_FAILED: "XML_VALIDATION_FAILED",

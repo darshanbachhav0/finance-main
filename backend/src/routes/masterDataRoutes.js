@@ -7,14 +7,15 @@ import {
   budgetAllocations,
   budgetRules,
   costCenters,
+  directPaymentEligibilityRules,
   documentRules,
   exchangeRates,
   expenseTypes,
   financeConfigurations,
   projects
 } from "../controllers/masterDataController.js";
-import { authorize, protect } from "../middleware/auth.js";
-import { ROLES } from "../utils/constants.js";
+import { authorize, authorizePermission, protect } from "../middleware/auth.js";
+import { PERMISSIONS, ROLES } from "../utils/constants.js";
 
 function bindCrud(router, controller, writeRoles = [ROLES.ADMIN, ROLES.ACCOUNTING]) {
   router.get("/", protect, controller.list);
@@ -48,12 +49,15 @@ bindCrud(budgetAllocationRouter, budgetAllocations, [ROLES.ADMIN, ROLES.BUDGET])
 export const documentRuleRouter = Router();
 bindCrud(documentRuleRouter, documentRules, [ROLES.ADMIN, ROLES.ACCOUNTING]);
 
+export const directPaymentEligibilityRuleRouter = Router();
+bindCrud(directPaymentEligibilityRuleRouter, directPaymentEligibilityRules, [ROLES.ADMIN]);
+
 export const accountingMappingRouter = Router();
 bindCrud(accountingMappingRouter, accountingMappings, [ROLES.ADMIN, ROLES.ACCOUNTING]);
 
 export const bankFormatRouter = Router();
 bindCrud(bankFormatRouter, bankFormats, [ROLES.ADMIN]);
-bankFormatRouter.post("/:id/certify", protect, authorize(ROLES.ADMIN), bankFormats.certify);
+bankFormatRouter.post("/:id/certify", protect, authorizePermission(PERMISSIONS.BANK_FORMAT_CERTIFY), bankFormats.certify);
 
 export const financeConfigurationRouter = Router();
 financeConfigurationRouter.get("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.BUDGET), financeConfigurations.list);

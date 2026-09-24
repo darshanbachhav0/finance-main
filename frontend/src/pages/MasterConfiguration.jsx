@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { approvalLevels, banks, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 function BankFormatCertificationPanel({ rows, reload }) {
   const { t } = useLanguage();
@@ -88,7 +89,7 @@ function parseJsonArray(value) {
 export default function MasterConfiguration() {
   const { resource = "projects" } = useParams();
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [masters, setMasters] = useState({ costCenters: [], expenseTypes: [] });
   const [error, setError] = useState("");
 
@@ -123,6 +124,32 @@ export default function MasterConfiguration() {
       ],
       columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "flowType", label: "Track" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
     },
+    "direct-payment-eligibility": {
+      label: "Track B Eligibility", roles: ["Admin"], endpoint: "/direct-payment-eligibility-rules",
+      description: "Track B (direct payment) shortens the normal A1 procurement path - it is only available where a matching active rule exists for the request's area, expense nature, and amount. No matching rule means Track B is refused at submission.",
+      fields: [
+        { name: "name", label: "Name", required: true }, { name: "area", label: "Area", defaultValue: "*", required: true },
+        { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
+        { name: "maxAmount", label: "Max amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Leave blank for no amount limit within this area/expense-nature match." },
+        { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" },
+        { name: "notes", label: "Notes", type: "textarea" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+      ],
+      columns: [{ key: "name", label: "Name" }, { key: "area", label: "Area" }, { key: "expenseNature", label: "Expense nature" }, { key: "maxAmount", label: "Max amount", render: (row) => row.maxAmount >= 0 ? formatCurrency(row.maxAmount, "PEN", language) : "No limit" }, { key: "active", label: "Status" }]
+    },
+    "finance-configurations": {
+      label: "Finance Configurations", roles: ["Admin", "Accounting"], endpoint: "/finance-configurations",
+      description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",
+      fields: [
+        { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS"] },
+        { name: "numericValue", label: "Value", type: "number", min: 0, step: "0.01", required: true },
+        { name: "currency", label: "Currency", type: "select", defaultValue: "PEN", options: currencies },
+        { name: "behavior", label: "Behavior", type: "select", defaultValue: "INFORMATION", options: ["INFORMATION", "WARNING", "FLAG", "BLOCK"], hint: "How exceeding this value is treated where it's checked - not every key enforces every behavior." },
+        { name: "effectiveFrom", label: "Effective from", type: "date", required: true }, { name: "effectiveTo", label: "Effective to", type: "date" },
+        { name: "description", label: "Description", type: "textarea" }, { name: "source", label: "Source / reference" },
+        { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+      ],
+      columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? new Date(row.effectiveFrom).toLocaleDateString() : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString() : "Open" }, { key: "active", label: "Status" }]
+    },
     "budget-rules": {
       label: "Budget Rules", roles: ["Admin", "Budget"], endpoint: "/budget-rules",
       description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
@@ -132,9 +159,9 @@ export default function MasterConfiguration() {
         { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
         { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project", defaultValue: "*" },
-        { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: roles, hint: "Who may APPROVE/REJECT an extraordinary exception for this dimension. Defaults to Management." },
+        { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: ["Management"], hint: "Only Management/Rectorate authority may decide a budget exception - Admin cannot approve on Management's behalf." },
         { name: "exceptionEscalationAmount", label: "Escalate above amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Optional. Above this requested amount, a different (higher) authority is required instead." },
-        { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: roles, hint: "Required only when an escalation amount is set." },
+        { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: ["Management"], hint: "Required only when an escalation amount is set. Same Management-only restriction applies." },
         { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "active", label: "Status" }]
@@ -148,7 +175,7 @@ export default function MasterConfiguration() {
         { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project" }, { name: "assignedAmount", label: "Assigned amount", type: "number", min: 0, step: "0.01", required: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => `PEN ${Number(row.assignedAmount || 0).toFixed(2)}` }, { key: "active", label: "Status" }]
+      columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
     },
     "document-rules": {
       label: "Document Rules", roles: ["Admin", "Accounting"], endpoint: "/document-rules",
@@ -168,7 +195,7 @@ export default function MasterConfiguration() {
       description: "Configure expense, asset, non-deductible, CXP, bank, IGV, advance, and return accounts used by posting services.",
       fields: [
         { name: "code", label: "Code", required: true }, { name: "name", label: "Name", required: true },
-        { name: "purpose", label: "Purpose", type: "select", required: true, options: ["EXPENSE", "ASSET", "NON_DEDUCTIBLE", "ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"] },
+        { name: "purpose", label: "Purpose", type: "select", required: true, options: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"] },
         { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
         { name: "bank", label: "Bank", type: "select", defaultValue: "*", options: ["*", ...banks] }, { name: "currency", label: "Currency", type: "select", defaultValue: "*", options: ["*", ...currencies] },
         { name: "accountNumber", label: "Account number", required: true }, { name: "subAccount", label: "Subaccount" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
@@ -176,7 +203,10 @@ export default function MasterConfiguration() {
       columns: [{ key: "code", label: "Code" }, { key: "purpose", label: "Purpose" }, { key: "name", label: "Name" }, { key: "accountNumber", label: "Account" }, { key: "requestType", label: "Request type" }, { key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "active", label: "Status" }]
     },
     "bank-formats": {
-      label: "Bank Formats", roles: ["Admin"], endpoint: "/bank-formats",
+      // Treasury can see this section to use the certification panel below, but only Admin may
+      // create/edit/delete a format's field configuration - certification is a separate, narrower
+      // permission (see BankFormatCertificationPanel), not general configuration access.
+      label: "Bank Formats", roles: ["Admin", "Treasury"], writeRoles: ["Admin"], endpoint: "/bank-formats",
       description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format. Certification is managed separately below.",
       transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [
@@ -188,7 +218,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "mode", label: "Mode" }, { key: "specificationVersion", label: "Specification version" }, { key: "certified", label: "Certified", render: (row) => row.certified ? t("Yes") : t("No") }, { key: "notes", label: "Notes" }, { key: "active", label: "Status" }],
       renderBeforeTable: ({ rows, reload }) => <BankFormatCertificationPanel rows={rows} reload={reload} />
     }
-  }), [masters, t]);
+  }), [masters, t, language]);
 
   const visibleEntries = Object.entries(configs).filter(([, config]) => config.roles.includes(user.role));
   if (!configs[resource] || !configs[resource].roles.includes(user.role)) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "projects"}`} replace />;
@@ -198,6 +228,6 @@ export default function MasterConfiguration() {
     {user.role === "Admin" && <details className="workspace-tools"><summary>{t("SUNAT administration")}</summary><PadronStatus /></details>}
     <Message type="error">{error}</Message>
     <details className="workspace-tools"><summary>{t("Configuration sections")}</summary><nav className="section-tabs" aria-label={t("Configuration sections")}>{visibleEntries.map(([key, item]) => <NavLink key={key} to={`/configuration/${key}`}>{t(item.label)}</NavLink>)}</nav></details>
-    <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" />
+    <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" readOnly={Boolean(config.writeRoles && !config.writeRoles.includes(user.role))} renderBeforeTable={config.renderBeforeTable} />
   </section>;
 }

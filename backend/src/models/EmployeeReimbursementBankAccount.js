@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import {
   BANK_ACCOUNT_VERIFICATION_STATUSES,
-  CURRENCY,
-  SUPPLIER_BANKS
+  BENEFICIARY_BANKS,
+  CURRENCY
 } from "../utils/constants.js";
 import {
   assertValidBankAccountNumber,
@@ -12,7 +12,7 @@ import {
 const employeeReimbursementBankAccountSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    bank: { type: String, enum: SUPPLIER_BANKS, required: true },
+    bank: { type: String, enum: BENEFICIARY_BANKS, required: true },
     currency: { type: String, enum: CURRENCY, required: true, default: "PEN" },
     accountHolderName: { type: String, required: true, trim: true, select: false },
     accountNumber: { type: String, required: true, trim: true, select: false },

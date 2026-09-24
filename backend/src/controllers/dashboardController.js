@@ -14,7 +14,7 @@ import User from "../models/User.js";
 import { slaStatus } from "../services/approvalRuleService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { budgetOverview } from "../services/budgetOverviewService.js";
+import { budgetOverview } from "../services/budgetReportingService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 function currentPeriod() {
@@ -67,7 +67,7 @@ async function buildTasks(user) {
   }
   if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role)) {
     const payable = await AccountsPayable.countDocuments({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED] } });
-    const confirmation = await AccountsPayable.countDocuments({ status: AP_STATUS.PAYMENT_FILE_CREATED });
+    const confirmation = await AccountsPayable.countDocuments({ status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } });
     items.push({ key: "payable", label: "CXP ready for Treasury", count: payable, path: "/treasury", tone: "teal" });
     items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: "/treasury", tone: "amber" });
   }
@@ -199,7 +199,7 @@ async function roleDetails(user, common) {
   }
 
   if (user.role === ROLES.TREASURY) {
-    const queue = await AccountsPayable.find({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED] } }).populate("supplier").populate("request").sort({ dueDate: 1 });
+    const queue = await AccountsPayable.find({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } }).populate("supplier").populate("request").sort({ dueDate: 1 });
     const totals = queue.reduce((result, item) => ({ ...result, [item.currency]: (result[item.currency] || 0) + item.outstandingAmount }), {});
     const supplierIds = queue.map((item) => item.supplier?._id).filter(Boolean);
     const validBankSuppliers = new Set((await SupplierBankAccount.find({ supplier: { $in: supplierIds }, active: true }).select("supplier")).map((item) => String(item.supplier)));

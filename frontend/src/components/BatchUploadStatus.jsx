@@ -1,10 +1,9 @@
 import StatusBadge from "./StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
-
-const money = (currency, value) => `${currency || "PEN"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function BatchUploadStatus({ batch }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   if (!batch) return null;
   return (
     <div className="batch-status-card">
@@ -20,7 +19,7 @@ export default function BatchUploadStatus({ batch }) {
         <div><span>{t("Provisioned")}</span><strong>{batch.processedSuccess || 0}</strong></div>
         <div><span>{t("Observed")}</span><strong>{batch.observed || 0}</strong></div>
         <div><span>{t("Failed")}</span><strong>{batch.failed || 0}</strong></div>
-        {batch.purchaseOrder && <div><span>{t("PO remaining")}</span><strong>{money(batch.purchaseOrder.currency, batch.purchaseOrder.remainingAmount)}</strong></div>}
+        {batch.purchaseOrder && <div><span>{t("PO remaining")}</span><strong>{formatCurrency(batch.purchaseOrder.remainingAmount, batch.purchaseOrder.currency || "PEN", language)}</strong></div>}
       </div>
       {batch.errorMessage && <p className="inline-error">{batch.errorMessage}</p>}
       {batch.items?.length > 0 && (

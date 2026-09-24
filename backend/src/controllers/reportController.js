@@ -10,7 +10,7 @@ import GeneratedFile from "../models/GeneratedFile.js";
 import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { budgetOverview } from "../services/budgetOverviewService.js";
+import { budgetOverview } from "../services/budgetReportingService.js";
 import { persistReportFile, toCsv } from "../services/exportService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
@@ -108,7 +108,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
     delete previousQuery.dateTo;
   }
   const previousMatch = requestMatch(previousQuery, req.user);
-  const openPayableStatuses = [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED];
+  const openPayableStatuses = [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID];
   const budgetFilters = {
     ...(period ? { period } : {}),
     ...(req.query.costCenter && mongoose.isValidObjectId(req.query.costCenter) ? { costCenter: req.query.costCenter } : {}),
@@ -224,7 +224,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
     AccountsPayable.aggregate([...payableRequestPipeline(match, { status: { $in: openPayableStatuses } }), { $count: "count" }]),
     budgetOverview(budgetFilters)
   ]);
-  const overduePayables = await AccountsPayable.countDocuments({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED] }, dueDate: { $lt: now } });
+  const overduePayables = await AccountsPayable.countDocuments({ status: { $in: openPayableStatuses }, dueDate: { $lt: now } });
   const overdueApprovals = await FinancialRequest.countDocuments({ ...match, status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalDueAt: { $lt: now } });
   const exports = await GeneratedFile.find({ kind: "MANAGEMENT_CSV" }).populate("generatedBy", "name role").sort({ createdAt: -1 }).limit(50);
   const [periodRecord, pendingFiscal, pendingRenditions, missingFx, unbalancedJournals, paidAwaitingReconciliation] = await Promise.all([

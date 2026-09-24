@@ -15,10 +15,11 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { expenseNatures, flowTypes, requestPriorities, requestStatuses, requestTypes } from "../utils/options.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function RequestsList() {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { notify } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -127,7 +128,7 @@ export default function RequestsList() {
             { key: "supplier", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
             { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "accountingPeriod", label: "Period" },
-            { key: "totalAmount", label: "Amount", align: "right", render: (row) => <strong>{row.currency} {Number(row.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> },
+            { key: "totalAmount", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> },
             { key: "updatedAt", label: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() }
           ]}

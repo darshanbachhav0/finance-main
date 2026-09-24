@@ -87,7 +87,7 @@ export default function App() {
           <Route path="budget" element={<ProtectedRoute roles={["Admin", "Approver", "Accounting", "Budget", "Management"]} />}>
             <Route index element={<BudgetControl />} />
           </Route>
-          <Route path="reports" element={<ProtectedRoute roles={["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"]} />}>
+          <Route path="reports" element={<ProtectedRoute roles={["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"]} />}>
             <Route index element={<ManagementReports />} />
           </Route>
           <Route path="suppliers" element={<ProtectedRoute roles={["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"]} />}>
@@ -108,7 +108,7 @@ export default function App() {
           <Route path="configuration/:resource" element={<ProtectedRoute roles={["Admin", "Accounting", "Budget"]} />}>
             <Route index element={<MasterConfiguration />} />
           </Route>
-          <Route path="audit" element={<ProtectedRoute roles={["Admin", "Accounting"]} />}>
+          <Route path="audit" element={<ProtectedRoute roles={["Admin", "Accounting", "ManagementViewer"]} />}>
             <Route index element={<AuditViewer />} />
           </Route>
         </Route>

@@ -11,7 +11,9 @@ import mongoose from "mongoose";
 import AccountingMapping from "../src/models/AccountingMapping.js";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
 import AccountsPayable from "../src/models/AccountsPayable.js";
+import ApprovalRule from "../src/models/ApprovalRule.js";
 import AuditLog from "../src/models/AuditLog.js";
+import DirectPaymentEligibilityRule from "../src/models/DirectPaymentEligibilityRule.js";
 import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import BudgetException from "../src/models/BudgetException.js";
 import BudgetRule from "../src/models/BudgetRule.js";
@@ -75,6 +77,16 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
       admin: await User.create({ name: "Admin", email: "admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" })
     };
+    // No manager-chain identity is set up for this fixture (no jefe), so the approval
+    // engine now requires a specifically configured route for this dimension - mirror
+    // the previous hardcoded default (Area Director then Vice Rector) as a real rule.
+    await ApprovalRule.create([
+      { name: "Lifecycle Area Director", approvalLevel: "AREA_DIRECTOR", role: ROLES.APPROVER, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 1, slaHours: 24, active: true },
+      { name: "Lifecycle Vice Rector", approvalLevel: "VICE_RECTOR", role: ROLES.APPROVER, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 2, slaHours: 24, active: true }
+    ]);
+    // Track B is only available where Finance has configured it as an exception -
+    // this fixture exercises Track B directly, so give it a permissive rule.
+    await DirectPaymentEligibilityRule.create({ name: "Lifecycle Track B exception", area: "*", expenseNature: "*", active: true });
     const supplier = await Supplier.create({
       identifierType: "RUC",
       rucDni: "20999999991",

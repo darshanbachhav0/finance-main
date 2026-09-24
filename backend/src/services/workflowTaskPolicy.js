@@ -63,6 +63,7 @@ export function taskBlueprints(type, record, related = {}) {
     if (canonicalRequestStatus(record.status) === "PAGADO") add("reconcile", "Treasury", "Reconcile payment", ["Treasury", "Admin"], { module: "Payments" });
     if (record.status === "CONCILIADO") add("close", "Accounting", "Review and close request", FINANCE);
     if (rendition.nonDeductibleOutstanding > 0) add("rendition-regularization", "Accounting", "Review outstanding rendition balance", FINANCE, { module: "Renditions" });
+    if (rendition.status === "REJECTED" && rendition.recovery?.status === "PENDING") add("rendition-recovery", "Treasury", "Recover rejected rendition advance", ["Accounting", "Treasury", "Admin"], { module: "Renditions" });
   }
   return tasks;
 }

@@ -159,7 +159,22 @@ const supplierSchema = new mongoose.Schema(
     reviewedAt: Date,
     reviewComments: String,
     documents: [supplierDocumentSchema],
-    bankHistory: [bankHistorySchema]
+    bankHistory: [bankHistorySchema],
+    // Advisory-only, non-blocking signal: populated when a proposal's normalized legal name closely
+    // matches another supplier's legal name while the RUC/DNI differs (the hard duplicate key is still
+    // RUC/DNI). It never blocks creation, review or homologation; it only flags the record so Accounting
+    // can manually confirm the two suppliers are not the same entity before homologating.
+    similarNameWarning: {
+      possibleDuplicateOf: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier" },
+      matchedLegalName: { type: String, trim: true, default: "" },
+      similarityScore: { type: Number, min: 0, max: 1 },
+      detectedAt: Date
+    },
+    // Date the current homologation expires (homologation date + the configurable validity period,
+    // FINANCE_CONFIGURATION_KEYS.SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS, default 12 months). Cleared
+    // whenever homologation is reset (material data change, reactivation) and recomputed on the next
+    // successful homologation.
+    homologationValidUntil: Date
   },
   { timestamps: true }
 );

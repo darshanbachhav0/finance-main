@@ -15,10 +15,11 @@ import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function AccountingEntries() {
   const [focusView, setFocusView] = useState("Processing");
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { notify } = useToast();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [preview, setPreview] = useState([]);
@@ -127,8 +128,8 @@ export default function AccountingEntries() {
       <div className="stats-grid">
         <StatCard label="Pending fiscal processing" value={pendingTable.pagination.total} tone="amber" />
         <StatCard label="Entries" value={entriesTable.payload.summary?.journalCount || 0} tone="navy" />
-        <StatCard label="Consolidated PEN" value={`PEN ${consolidated.pen.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone="green" />
-        <StatCard label="Reconciliation difference" value={`PEN ${Number(previewSummary.difference || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "green" : "red"} />
+        <StatCard label="Consolidated PEN" value={formatCurrency(consolidated.pen, "PEN", language)} tone="green" />
+        <StatCard label="Reconciliation difference" value={formatCurrency(previewSummary.difference || 0, "PEN", language)} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "green" : "red"} />
       </div>
 
       <nav className="focus-tabs" aria-label={t("Sections")}>{["Processing", "Entries", "Consolidation", "History"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
@@ -141,7 +142,7 @@ export default function AccountingEntries() {
           { key: "expenseNature", label: "Expense nature" },
           { key: "accountingPeriod", label: "Period" },
           { key: "status", label: "Status", sortable: false, render: (row) => <StatusBadge status={row.status} /> },
-          { key: "totalPENEquivalent", label: "PEN equivalent", align: "right", render: (row) => <strong>PEN {Number(row.totalPENEquivalent ?? row.penEquivalent ?? 0).toFixed(2)}</strong> }
+          { key: "totalPENEquivalent", label: "PEN equivalent", align: "right", render: (row) => <strong>{formatCurrency(row.totalPENEquivalent ?? row.penEquivalent ?? 0, "PEN", language)}</strong> }
         ]} />
       </div>
 
@@ -160,8 +161,8 @@ export default function AccountingEntries() {
             { key: "accountNumber", label: "Account" },
             { key: "costCenter", label: "Cost center", sortable: false, getValue: (row) => row.costCenter?.code, render: (row) => row.costCenter?.code || "-" },
             { key: "description", label: "Description" },
-            { key: "debit", label: "Debit", align: "right", render: (row) => Number(row.debit || 0).toFixed(2) },
-            { key: "credit", label: "Credit", align: "right", render: (row) => Number(row.credit || 0).toFixed(2) },
+            { key: "debit", label: "Debit", align: "right", render: (row) => formatCurrency(row.debit || 0, "PEN", language) },
+            { key: "credit", label: "Credit", align: "right", render: (row) => formatCurrency(row.credit || 0, "PEN", language) },
             { key: "createdAt", label: "Created", render: (row) => new Date(row.createdAt).toLocaleString() }
           ]}
         />
@@ -173,12 +174,12 @@ export default function AccountingEntries() {
           { key: "costCenterCode", label: "CeCo", render: (row) => <div className="primary-cell"><strong>{row.costCenterCode}</strong><span>{row.costCenterName}</span></div> },
           { key: "expenseAccount", label: "Account", render: (row) => <div className="primary-cell"><strong>{row.expenseAccount}</strong><span>{row.expenseTypeName}</span></div> },
           { key: "currency", label: "Currency" },
-          { key: "netAmount", label: "Net", align: "right", render: (row) => Number(row.netAmount || 0).toFixed(2) },
-          { key: "igvAmount", label: "IGV", align: "right", render: (row) => Number(row.igvAmount || 0).toFixed(2) },
-          { key: "totalAmount", label: "Total", align: "right", render: (row) => <strong>{Number(row.totalAmount || 0).toFixed(2)}</strong> },
-          { key: "penEquivalent", label: "PEN equivalent", align: "right", render: (row) => Number(row.penEquivalent || 0).toFixed(2) },
-          { key: "debit", label: "Debit", align: "right", render: (row) => Number(row.debit || 0).toFixed(2) },
-          { key: "credit", label: "Credit", align: "right", render: (row) => Number(row.credit || 0).toFixed(2) },
+          { key: "netAmount", label: "Net", align: "right", render: (row) => formatCurrency(row.netAmount || 0, row.currency || "PEN", language) },
+          { key: "igvAmount", label: "IGV", align: "right", render: (row) => formatCurrency(row.igvAmount || 0, row.currency || "PEN", language) },
+          { key: "totalAmount", label: "Total", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency || "PEN", language)}</strong> },
+          { key: "penEquivalent", label: "PEN equivalent", align: "right", render: (row) => formatCurrency(row.penEquivalent || 0, "PEN", language) },
+          { key: "debit", label: "Debit", align: "right", render: (row) => formatCurrency(row.debit || 0, row.currency || "PEN", language) },
+          { key: "credit", label: "Credit", align: "right", render: (row) => formatCurrency(row.credit || 0, row.currency || "PEN", language) },
           { key: "requestCount", label: "Requests" }
         ]} />
       </div>

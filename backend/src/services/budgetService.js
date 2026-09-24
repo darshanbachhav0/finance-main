@@ -179,7 +179,7 @@ export async function reserveBudget(request, userId, { session, additionalAmount
     // available funds; Phase 2 (ACTIVE) blocks below. A linked annual/monthly BudgetPlan always
     // means the dimension is actively managed, regardless of the Cost Center's own default mode.
     const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
-    const exceptionStrategy = rule.exceptionStrategy === "EXTRAORDINARY_APPROVAL" ? "EXTRAORDINARY_APPROVAL" : "REQUEST_BUDGET_INCREASE";
+    const exceptionStrategy = ["EXTRAORDINARY_APPROVAL", "REJECT"].includes(rule.exceptionStrategy) ? rule.exceptionStrategy : "REQUEST_BUDGET_INCREASE";
     const limits = budgetLimits(allocation, request.accountingPeriod, line.amount);
     const sourceKey = String(allocation?._id || center._id);
     const demand = demands.get(sourceKey) || 0;
@@ -190,6 +190,17 @@ export async function reserveBudget(request, userId, { session, additionalAmount
     demands.set(sourceKey, addMoney(demand, line.amount));
     let budgetException = null;
     let exceptionApproved = false;
+    if (mode === "ACTIVE" && available < line.amount && exceptionStrategy === "REJECT") {
+      // REJECT means exactly that: no BudgetException is prepared, there is no extraordinary
+      // path to retry into. The caller (approvalService.commitApprovedRequestBudget) rejects
+      // the request outright on this signal.
+      throw new AppError(
+        409,
+        `Budget rejected: this dimension's rule rejects requests exceeding available funds (available PEN ${available.toFixed(2)}, required PEN ${line.amount.toFixed(2)}).`,
+        { available, required: line.amount, exceptionStrategy, costCenter: center.code, hardReject: true, ...limits },
+        ERROR_CODES.INSUFFICIENT_BUDGET
+      );
+    }
     if (mode === "ACTIVE" && available < line.amount) {
       const key = dimensionKey(line, request.project) + (additionalAmount > 0 ? `|FX:${addMoney(existing.totalAmount, additionalAmount)}` : "");
       budgetException = await BudgetException.findOne({ request: request._id, dimensionKey: key });
@@ -417,6 +428,43 @@ export async function executeBudget(request, userId, { session, comments } = {})
   if (!commitment) return commitment;
   const remaining = subtractMoney(commitment.totalAmount, currentTrackedAmount(commitment, "executedAmount"));
   return executeBudgetAmount(request, userId, remaining, { session, comments });
+}
+
+// Mirror image of executeBudgetAmount: moves an amount back from executed into committed
+// (the request may still need it for a corrected/replacement provision) rather than
+// releasing it outright. If every AP under the request ends up cancelled, a subsequent
+// releaseBudget/void correctly frees the now-fully-unexecuted committed amount.
+export async function reverseBudgetExecution(request, userId, amount, { session, comments } = {}) {
+  const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  if (!commitment) return commitment;
+  const currentExecuted = currentTrackedAmount(commitment, "executedAmount");
+  const requested = roundMoney(amount);
+  const amountToReverse = Math.min(Math.max(0, requested), Math.max(0, currentExecuted));
+  if (amountToReverse <= 0) return commitment;
+
+  const allocations = allocateAcrossLines(commitment.lines, amountToReverse, (line) => trackedLineAmount(line, "executedAmount"));
+  const appliedUsage = [];
+  try {
+    for (const allocation of allocations) {
+      const line = commitment.lines[allocation.index];
+      line.executedAmount = subtractMoney(trackedLineAmount(line, "executedAmount"), allocation.amount);
+      if (line.mode === "ACTIVE") await changeTrackedUsage(line, { committedAmount: allocation.amount, executedAmount: -allocation.amount }, session, appliedUsage);
+    }
+    const applied = sumMoney(allocations.map((item) => item.amount));
+    commitment.executedAmount = subtractMoney(currentExecuted, applied);
+    commitment.status = deriveCommitmentStatus(commitment);
+    commitment.history.push({
+      status: commitment.status,
+      amount: -applied,
+      by: userId,
+      comments: comments || "Budget execution reversed after an Accounts Payable cancellation."
+    });
+    await commitment.save({ session });
+    return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
+  }
 }
 
 export async function markBudgetPaidAmount(request, userId, amount, { session, comments } = {}) {

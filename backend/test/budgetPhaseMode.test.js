@@ -59,16 +59,18 @@ test("Budget Phase 1 (TRANSITIONAL) is genuinely informational and Phase 2 (ACTI
       const center = await CostCenter.create({ code: "ZERO-ACTIVE", name: "Zero active budget", area: "Finance", annualBudget: 0, budgetMode: "ACTIVE", active: true });
       const request = make(center, 10);
       assert.equal((await previewBudget(request)).status, "INSUFFICIENT");
-      await assert.rejects(reserveBudget(request, budget._id), error => error.code === "INSUFFICIENT_BUDGET");
-      assert.ok(await BudgetException.exists({ request: request._id }));
+      // No BudgetRule is configured, so the default REJECT strategy applies: a hard
+      // rejection with no exception, not a silent pass-through to informational mode.
+      await assert.rejects(reserveBudget(request, budget._id), error => error.code === "INSUFFICIENT_BUDGET" && error.details?.hardReject === true);
+      assert.equal(await BudgetException.exists({ request: request._id }), null);
       assert.equal(await BudgetCommitment.countDocuments({ request: request._id }), 0);
     });
     await t.test("Phase 2: the same over-budget amount is blocked and a within-budget amount commits real funds", async () => {
       const center = await CostCenter.create({ code: "PHASE2-CC", name: "Phase 2", area: "Finance", annualBudget: 100, budgetMode: "ACTIVE", active: true });
       const overBudget = make(center, 500);
-      await assert.rejects(() => reserveBudget(overBudget, budget._id), (error) => error.code === "INSUFFICIENT_BUDGET");
-      const exception = await BudgetException.findOne({ request: overBudget._id });
-      assert.ok(exception, "Phase 2 still raises an auditable exception on insufficient budget");
+      // Default (unconfigured) REJECT strategy: hard rejection, no exception prepared.
+      await assert.rejects(() => reserveBudget(overBudget, budget._id), (error) => error.code === "INSUFFICIENT_BUDGET" && error.details?.hardReject === true);
+      assert.equal(await BudgetException.findOne({ request: overBudget._id }), null, "Phase 2's default REJECT strategy does not raise an exception");
 
       const withinBudget = make(center, 60);
       const commitment = await reserveBudget(withinBudget, budget._id);

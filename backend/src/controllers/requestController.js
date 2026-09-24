@@ -21,6 +21,7 @@ import { registerA1Invoice } from "../services/invoiceRegistrationService.js";
 import {
   getRenditionBankDestination,
   getRenditionPolicy,
+  recoverRejectedRendition,
   reviewRendition,
   settleNonDeductibleRendition,
   submitRendition
@@ -138,6 +139,11 @@ export const rejectRendition = renditionReviewHandler("REJECT");
 
 export const settleRenditionBalance = asyncHandler(async (req, res) => {
   const result = await settleNonDeductibleRendition({ requestId: req.params.id, amount: req.body.amount, method: req.body.method, reference: req.body.reference, user: req.user, req });
+  res.json({ data: publicRequestPayload(result.request, req.user), journal: result.journal });
+});
+
+export const recoverRendition = asyncHandler(async (req, res) => {
+  const result = await recoverRejectedRendition({ requestId: req.params.id, amount: req.body.amount, method: req.body.method, reference: req.body.reference, user: req.user, req });
   res.json({ data: publicRequestPayload(result.request, req.user), journal: result.journal });
 });
 

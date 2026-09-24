@@ -16,6 +16,7 @@ import {
   getRequest,
   listRequests,
   observeRendition,
+  recoverRendition,
   rejectRendition,
   registerInvoice,
   settleRenditionBalance,
@@ -51,6 +52,7 @@ router.post("/:id/rendition/approve", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), 
 router.post("/:id/rendition/validate", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), validateRendition);
 router.post("/:id/rendition/observe", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), observeRendition);
 router.post("/:id/rendition/reject", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), rejectRendition);
+router.post("/:id/rendition/recover", authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), recoverRendition);
 router.post("/:id/rendition/settle-non-deductible", authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), settleRenditionBalance);
 router.post("/:id/close", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), closeRequest);
 router.post("/:id/void", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), voidRequest);

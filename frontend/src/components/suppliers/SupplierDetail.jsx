@@ -89,11 +89,17 @@ export default function SupplierDetail({
   const [taxForm, setTaxForm] = useState({ valid: true, returnedIdentifier: supplier.rucDni || "", returnedLegalName: supplier.legalName || supplier.name || "", comments: "" });
   const [financeReview, setFinanceReview] = useState({ result: supplier.complianceReview?.result || "PENDING", comments: supplier.complianceReview?.comments || "" });
   const permissions = supplier.permissions || {};
-  const riskWarnings = supplier.riskyDeclarations || readiness?.warnings || [];
+  // Fix 1: the possible-duplicate-name signal is shown as its own alert in Legal Identification below
+  // (it needs the matched supplier's name), so it is excluded here to avoid showing it twice.
+  const riskWarnings = (supplier.riskyDeclarations || readiness?.warnings || []).filter((warning) => warning.code !== "POSSIBLE_DUPLICATE_SUPPLIER_NAME");
   const documents = supplier.documents || [];
   const docKinds = new Set(documents.map((item) => item.kind));
   const provider = supplier.sunatProvider || { state: "NOT_CONFIGURED", configured: false };
   const homologationDisabledReason = readiness?.issues?.[0]?.message || "";
+  // Fix 2: homologation is only valid for a configurable period (default 12 months) from when it was granted.
+  const homologationExpired = supplier.homologationStatus === "HOMOLOGATED"
+    && Boolean(supplier.homologationValidUntil)
+    && new Date(supplier.homologationValidUntil).getTime() < Date.now();
 
   const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: setBankForm });
   const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canReview && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
@@ -136,6 +142,11 @@ export default function SupplierDetail({
         <div>
           <span>{t("Homologation Status")}</span>
           <StatusBadge status={supplier.homologationStatus} />
+          {supplier.homologationStatus === "HOMOLOGATED" && supplier.homologationValidUntil && (
+            <small className={homologationExpired ? "text-danger" : undefined}>
+              {t(homologationExpired ? "Expired on" : "Valid until")} {displayDate(supplier.homologationValidUntil, language)}
+            </small>
+          )}
         </div>
         <div>
           <span>{t("Finance Review")}</span>
@@ -153,6 +164,15 @@ export default function SupplierDetail({
       {permissions.canReview && supplier.homologationStatus !== "INACTIVE" && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier checks and homologation readiness." : "Review the outstanding supplier requirements.")}</p></div><a className="secondary-button" href={`#${sectionId("Homologation Readiness")}`}>{t("Review requirements")}</a></div>}
 
       <Section icon={Building2} title="Legal Identification" status={supplier.proposalJustification ? "Registration justification recorded" : "Registration justification missing"}>
+        {supplier.similarNameWarning?.possibleDuplicateOf && (
+          <div className="inline-alert alert-warning">
+            <AlertTriangle size={16} />
+            <div>
+              <strong>{t("Possible duplicate supplier name")}</strong>
+              <span>{t("This legal name closely matches an existing supplier with a different RUC/DNI")}: {supplier.similarNameWarning.matchedLegalName || supplier.similarNameWarning.possibleDuplicateOf?.legalName || supplier.similarNameWarning.possibleDuplicateOf?.name}. {t("This is advisory only and does not block any action - confirm these are not the same entity before homologating.")}</span>
+            </div>
+          </div>
+        )}
         <DetailGrid>
           <Detail label="RUC / identifier" value={supplier.rucDni} />
           <Detail label="Person Type" value={t(supplier.personType || "Not recorded")} />
@@ -195,13 +215,13 @@ export default function SupplierDetail({
           <DraftPanel busy={loading} draft={bankDraft} onDiscard={() => setShowBankForm(false)}><form className="supplier-inline-form" onSubmit={submitBank}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Bank")}</span><select value={bankForm.bank} onChange={(event) => setBankForm((current) => ({ ...current, bank: event.target.value }))}>{["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
-              <label className="field"><span>{t("Account Type")}</span><select value={bankForm.accountType} onChange={(event) => setBankForm((current) => ({ ...current, accountType: event.target.value }))}><option value="CURRENT">{t("CURRENT")}</option><option value="DETRACTION">{t("DETRACTION")}</option></select></label>
+              {/* Fix 3: "Detraction" is intentionally not offered here - there is no complete detraccion payment workflow yet. Existing DETRACTION-typed accounts still display read-only below. */}
+              <label className="field"><span>{t("Account Type")}</span><select value={bankForm.accountType} onChange={(event) => setBankForm((current) => ({ ...current, accountType: event.target.value }))}><option value="CURRENT">{t("CURRENT")}</option></select></label>
               <label className="field"><span>{t("Account Number")}</span><input required inputMode="numeric" value={bankForm.accountNumber} onChange={(event) => setBankForm((current) => ({ ...current, accountNumber: event.target.value }))} /></label>
               <label className="field"><span>{t("CCI (20 digits)")}</span><input required inputMode="numeric" value={bankForm.cci} onChange={(event) => setBankForm((current) => ({ ...current, cci: event.target.value }))} /></label>
               <label className="field"><span>{t("Account Currency")}</span><select value={bankForm.currency} onChange={(event) => setBankForm((current) => ({ ...current, currency: event.target.value }))}><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
               <label className="field"><span>{t("Account Holder Name")}</span><input required value={bankForm.accountHolderName} onChange={(event) => setBankForm((current) => ({ ...current, accountHolderName: event.target.value }))} /></label>
             </div>
-            {bankForm.accountType === "DETRACTION" && <p className="section-note warning-note">{t("Detraction accounts must use Banco de la Nacion. This does not classify the supplier as subject to detraction.")}</p>}
             <div className="inline-form-actions"><button type="button" className="secondary-button" onClick={() => setShowBankForm(false)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Add pending account")}</span></button></div>
           </form></DraftPanel>
         )}

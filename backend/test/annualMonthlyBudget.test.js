@@ -115,7 +115,7 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
     await t.test("annual-only permits any month, blocks annual exhaustion, and preserves reservation month", async () => {
       const first = request("2032-01", 11000);
       await reserveBudget(first, user._id);
-      await assert.rejects(() => reserveBudget(request("2032-12", 2000), user._id), /insufficient budget/);
+      await assert.rejects(() => reserveBudget(request("2032-12", 2000), user._id), /Budget rejected/);
       first.accountingPeriod = "2032-02";
       await executeBudgetAmount(first, user._id, 11000);
       await markBudgetPaidAmount(first, user._id, 11000);
@@ -179,7 +179,7 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
 
     await t.test("zero monthly allocations stay blocked; approved exception remains explicit", async () => {
       const zero = await createBudgetPlan(draft("2034", "ANNUAL_MONTHLY", { distribution: "CUSTOM", months: Array(12).fill(0) }), user, req);
-      await assert.rejects(() => reserveBudget(request("2034-01", 100), user._id), /insufficient budget/);
+      await assert.rejects(() => reserveBudget(request("2034-01", 100), user._id), /Budget rejected/);
       await BudgetRule.create({ name: "Plan exception", mode: "ACTIVE", costCenter: center._id, expenseType: expense._id, exceptionStrategy: "EXTRAORDINARY_APPROVAL" });
       const proposal = request("2034-01", 100);
       await assert.rejects(() => reserveBudget(proposal, user._id), (error) => error.details.monthlyAvailable === 0);

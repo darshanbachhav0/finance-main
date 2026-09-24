@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import fs from "fs/promises";
 import path from "path";
@@ -11,6 +12,7 @@ import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetRule from "../models/BudgetRule.js";
 import CostCenter from "../models/CostCenter.js";
 import Counter from "../models/Counter.js";
+import DirectPaymentEligibilityRule from "../models/DirectPaymentEligibilityRule.js";
 import DocumentRule from "../models/DocumentRule.js";
 import ExchangeRate from "../models/ExchangeRate.js";
 import ExpenseType from "../models/ExpenseType.js";
@@ -51,7 +53,9 @@ const currentDate = now.toISOString().slice(0, 10);
 const currentPeriod = currentDate.slice(0, 7);
 const previousMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
 const closedPeriod = previousMonthDate.toISOString().slice(0, 7);
-const demoPassword = "UMA-Demo-2026!";
+// Non-production only (guarded below): read from env so no credential is hardcoded in source.
+// If unset, a random password is generated per run and printed in the seed summary notice.
+const demoPassword = process.env.SEED_DEMO_PASSWORD || crypto.randomBytes(9).toString("base64url");
 const manualUsdRate = 3.75;
 const fakeReq = {
   headers: { "user-agent": "UMA development seed" },
@@ -665,6 +669,34 @@ async function seedPeriodsAndRates(admin) {
     createdBy: admin._id,
     updatedBy: admin._id
   });
+  await upsert(FinanceConfiguration, {
+    key: FINANCE_CONFIGURATION_KEYS.RENDITION_OVERDUE_DAYS,
+    effectiveFrom: new Date(Date.UTC(2026, 0, 1))
+  }, {
+    numericValue: 10,
+    currency: "PEN",
+    behavior: "INFORMATION",
+    effectiveTo: null,
+    active: true,
+    description: "Días calendario permitidos para rendir un anticipo (Track C) antes de bloquear nuevos anticipos al colaborador.",
+    source: "Configuración Finanzas - Rendición de Gastos",
+    createdBy: admin._id,
+    updatedBy: admin._id
+  });
+  await upsert(FinanceConfiguration, {
+    key: FINANCE_CONFIGURATION_KEYS.SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS,
+    effectiveFrom: new Date(Date.UTC(2026, 0, 1))
+  }, {
+    numericValue: 12,
+    currency: "PEN",
+    behavior: "INFORMATION",
+    effectiveTo: null,
+    active: true,
+    description: "Meses de vigencia de la homologación de un proveedor antes de requerir re-homologación.",
+    source: "Configuración Finanzas - Homologación de Proveedores",
+    createdBy: admin._id,
+    updatedBy: admin._id
+  });
   await upsert(AccountingPeriod, { period: closedPeriod }, {
     status: "CLOSED",
     openedAt: previousMonthDate,
@@ -757,6 +789,16 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
     slaHours: 4,
     active: true
   });
+  // Track B (direct payment) is only available where Finance has configured it as an
+  // exception - a modest starter threshold demonstrating the feature, adjustable by Admin.
+  await upsert(DirectPaymentEligibilityRule, { name: "Excepción estándar de pago directo" }, {
+    area: "*",
+    expenseNature: "*",
+    maxAmount: 5000,
+    active: true,
+    effectiveFrom: new Date(Date.UTC(2026, 0, 1)),
+    notes: "Umbral inicial de demostración; ajustar según la política real de Finanzas."
+  });
 
   const documentRules = [
     ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 3, labelKey: "tres cotizaciones" }]],
@@ -825,13 +867,19 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
         accountNumber,
         active: true
       });
-      await upsert(BankFormatConfiguration, { bank, currency }, {
-        mode: "DEMO",
-        specificationVersion: "UMA-DEMO-2026-1",
-        certified: false,
-        notes: "DEMO / NO CERTIFICADO. Requiere el layout oficial aprobado por UMA y el banco.",
-        active: true
-      });
+      // Only BBVA can actually generate an outbound payment file (assertBbvaSource) - a
+      // BankFormatConfiguration for any other bank would never be usable, so the schema
+      // itself only allows BBVA here. UMA's own cash/bank GL account at each bank is still
+      // recorded above via AccountingMapping regardless of this restriction.
+      if (bank === "BBVA") {
+        await upsert(BankFormatConfiguration, { bank, currency }, {
+          mode: "DEMO",
+          specificationVersion: "UMA-DEMO-2026-1",
+          certified: false,
+          notes: "DEMO / NO CERTIFICADO. Requiere el layout oficial aprobado por UMA y el banco.",
+          active: true
+        });
+      }
     }
   }
 
@@ -945,7 +993,13 @@ async function seedRequest({
   priority = "MEDIA",
   evidence = "SUPPORTING",
   voucherNumber = `FDEM-${number.slice(-5)}`,
-  period = currentPeriod
+  period = currentPeriod,
+  competingSuppliers = [],
+  supplierSelectionReason = "",
+  title = "",
+  detailedDescription = "",
+  businessJustification = "",
+  nonApprovalRisk = ""
 }) {
   const existing = await FinancialRequest.findOne({ developmentScenarioKey: key });
   if (existing) return existing;
@@ -976,6 +1030,11 @@ async function seedRequest({
       legalName: supplier.legalName,
       homologationStatus: supplier.homologationStatus
     },
+    supplierSelectionReason,
+    title,
+    detailedDescription,
+    businessJustification,
+    nonApprovalRisk,
     description,
     lines: [{
       costCenter: costCenter._id,
@@ -990,6 +1049,23 @@ async function seedRequest({
     draftSavedAt: now
   });
   if (evidence !== "NONE") await addEvidenceProfile(request, evidence, supplier, requester, voucherNumber);
+  if (competingSuppliers.length) {
+    // The 3 QUOTATION-kind attachments were just pushed by addEvidenceProfile (in that order) -
+    // build the structured comparison the quotation policy requires, referencing them by id.
+    const quotationAttachments = request.attachments.filter((attachment) => attachment.kind === "QUOTATION");
+    const bidders = [{ supplier, amount: total, recommended: true }, ...competingSuppliers.map((competitor, index) => ({
+      supplier: competitor,
+      amount: Math.round(total * (1.08 + index * 0.04) * 100) / 100,
+      recommended: false
+    }))];
+    request.quotations = bidders.map((bidder, index) => ({
+      supplier: bidder.supplier._id,
+      amount: bidder.amount,
+      currency,
+      attachment: quotationAttachments[index]?._id,
+      recommended: bidder.recommended
+    }));
+  }
   request.approvalHistory.push(workflowEvent({
     action: "CREATED",
     to: REQUEST_STATUS.DRAFT,
@@ -1033,17 +1109,24 @@ async function submitIfDraft(request, users) {
 async function approveNext(request, users) {
   const current = await refresh(request);
   const stage = current.approvalStage;
-  const actor = stage === APPROVAL_STAGES.AREA_DIRECTOR
-    ? users.directorsByArea[current.requesterArea]
-    : stage === APPROVAL_STAGES.VICE_RECTOR
-      ? users.viceRector
-      : users.management;
+  const pendingStep = (current.approvalRouteSnapshot || []).find((step) => step.required !== false && step.status === "PENDING");
+  // A manager-chain step is bound to a specific identity (step.approverUser), not a generic
+  // role/stage label - approvalStage there is a human-readable "Jefe: Name" string, not an
+  // APPROVAL_STAGES value, so it can't be used to infer the actor the way a rule-based step can.
+  const actor = pendingStep?.approverUser
+    ? Object.values(users).find((user) => user?._id && String(user._id) === String(pendingStep.approverUser))
+    : stage === APPROVAL_STAGES.AREA_DIRECTOR
+      ? users.directorsByArea[current.requesterArea]
+      : stage === APPROVAL_STAGES.VICE_RECTOR
+        ? users.viceRector
+        : users.management;
   if (!actor) throw new Error(`No demo approver is configured for ${current.requesterArea} / ${stage}.`);
   try {
     await decideApproval({
       id: current._id,
       action: "APPROVE",
       comments: `Aprobación electrónica DEMO - ${stage}.`,
+      forward: true,
       user: actor,
       req: fakeReq
     });
@@ -1261,14 +1344,20 @@ async function seedScenarios({ users, suppliers, costCenters, expenseTypes }) {
     supplier: suppliers.pharmacy.supplier,
     costCenter: costCenters.pharmacy,
     expenseType: expenseTypes.laboratorySupplies,
-    requestType: REQUEST_TYPE.PAGO_CON_COTIZACION,
+    requestType: REQUEST_TYPE.OPEX,
     expenseNature: EXPENSE_NATURE.GOODS,
     description: "Reactivos para control de calidad en el laboratorio de Farmacia y Bioquímica.",
     net: 20000,
     igv: 3600,
     total: 23600,
     evidence: "GOODS_XML",
-    voucherNumber: "F001-30003"
+    voucherNumber: "F001-30003",
+    competingSuppliers: [suppliers.health.supplier, suppliers.engineering.supplier],
+    supplierSelectionReason: "Mejor precio y plazo de entrega frente a las otras dos cotizaciones recibidas.",
+    title: "Reactivos de control de calidad - Farmacia y Bioquímica",
+    detailedDescription: "Compra de reactivos de control de calidad requeridos para las prácticas del laboratorio de Farmacia y Bioquímica del presente semestre.",
+    businessJustification: "El stock actual de reactivos se agota antes del cierre del semestre y es indispensable para las prácticas acreditadas.",
+    nonApprovalRisk: "Sin la compra, las prácticas de laboratorio quedarían suspendidas, afectando la acreditación del curso."
   });
   scenarios.vicePending = await submitIfDraft(scenarios.vicePending, users.solicitorPharmacy);
   if (scenarios.vicePending.status === REQUEST_STATUS.PENDING_APPROVAL) scenarios.vicePending = await approveNext(scenarios.vicePending, users);
@@ -1319,14 +1408,20 @@ async function seedScenarios({ users, suppliers, costCenters, expenseTypes }) {
     supplier: suppliers.health.supplier,
     costCenter: costCenters.health,
     expenseType: expenseTypes.laboratorySupplies,
-    requestType: REQUEST_TYPE.PAGO_CON_COTIZACION,
+    requestType: REQUEST_TYPE.OPEX,
     expenseNature: EXPENSE_NATURE.GOODS,
     description: "Material descartable para prácticas de Enfermería, provisionado y pendiente de Tesorería.",
     net: 12000,
     igv: 2160,
     total: 14160,
     evidence: "GOODS_XML",
-    voucherNumber: "F001-30006"
+    voucherNumber: "F001-30006",
+    competingSuppliers: [suppliers.pharmacy.supplier, suppliers.services.supplier],
+    supplierSelectionReason: "Mejor precio y plazo de entrega frente a las otras dos cotizaciones recibidas.",
+    title: "Material descartable para prácticas de Enfermería",
+    detailedDescription: "Adquisición de material descartable de uso clínico para las prácticas de la Facultad de Ciencias de la Salud.",
+    businessJustification: "El material actual se encuentra por debajo del nivel mínimo requerido para continuar las prácticas programadas.",
+    nonApprovalRisk: "Sin el material, las prácticas clínicas programadas no podrían realizarse con las condiciones de bioseguridad exigidas."
   });
   scenarios.accounted = await submitIfDraft(scenarios.accounted, users.solicitorHealth);
   scenarios.accounted = await moveToAccounting(scenarios.accounted, users, 30006, expenseTypes.laboratorySupplies.accountNumber);
@@ -1403,14 +1498,20 @@ async function seedScenarios({ users, suppliers, costCenters, expenseTypes }) {
     supplier: suppliers.pharmacy.supplier,
     costCenter: costCenters.pharmacy,
     expenseType: expenseTypes.laboratorySupplies,
-    requestType: REQUEST_TYPE.PAGO_CON_COTIZACION,
+    requestType: REQUEST_TYPE.OPEX,
     expenseNature: EXPENSE_NATURE.GOODS,
     description: "Estándares de referencia farmacéutica pagados por BBVA y pendientes de conciliación.",
     net: 25000,
     igv: 4500,
     total: 29500,
     evidence: "GOODS_XML",
-    voucherNumber: "F001-30010"
+    voucherNumber: "F001-30010",
+    competingSuppliers: [suppliers.health.supplier, suppliers.services.supplier],
+    supplierSelectionReason: "Mejor precio y plazo de entrega frente a las otras dos cotizaciones recibidas.",
+    title: "Estándares de referencia farmacéutica",
+    detailedDescription: "Compra de estándares de referencia certificados para los ensayos de control de calidad de Farmacia y Bioquímica.",
+    businessJustification: "Los estándares vigentes están próximos a vencer y son indispensables para mantener la validez de los ensayos.",
+    nonApprovalRisk: "Sin estándares vigentes, los ensayos de control de calidad no podrían certificarse conforme a la normativa aplicable."
   });
   scenarios.bbvaPaid = await submitIfDraft(scenarios.bbvaPaid, users.solicitorPharmacy);
   scenarios.bbvaPaid = await moveToBankFile(scenarios.bbvaPaid, users, 30010, expenseTypes.laboratorySupplies.accountNumber, "BBVA");
@@ -1423,14 +1524,20 @@ async function seedScenarios({ users, suppliers, costCenters, expenseTypes }) {
     supplier: suppliers.health.supplier,
     costCenter: costCenters.health,
     expenseType: expenseTypes.laboratorySupplies,
-    requestType: REQUEST_TYPE.PAGO_CON_COTIZACION,
+    requestType: REQUEST_TYPE.OPEX,
     expenseNature: EXPENSE_NATURE.GOODS,
     description: "Micropipetas para Laboratorio Clínico: ciclo completo, pago BCP, conciliación y cierre.",
     net: 18000,
     igv: 3240,
     total: 21240,
     evidence: "GOODS_XML",
-    voucherNumber: "F001-30011"
+    voucherNumber: "F001-30011",
+    competingSuppliers: [suppliers.engineering.supplier, suppliers.services.supplier],
+    supplierSelectionReason: "Mejor precio y plazo de entrega frente a las otras dos cotizaciones recibidas.",
+    title: "Micropipetas para Laboratorio Clínico",
+    detailedDescription: "Adquisición de micropipetas de precisión para el Laboratorio Clínico de la Facultad de Ciencias de la Salud.",
+    businessJustification: "Las micropipetas actuales han superado su vida útil y presentan desviaciones fuera del rango de calibración aceptado.",
+    nonApprovalRisk: "Sin el reemplazo, los resultados de laboratorio podrían perder precisión y confiabilidad diagnóstica."
   });
   scenarios.bcpClosed = await submitIfDraft(scenarios.bcpClosed, users.solicitorHealth);
   scenarios.bcpClosed = await moveToBankFile(scenarios.bcpClosed, users, 30011, expenseTypes.laboratorySupplies.accountNumber, "BCP");
@@ -1674,6 +1781,7 @@ async function printSummary(users) {
       users.management.email
     ],
     password: demoPassword,
+    passwordSource: process.env.SEED_DEMO_PASSWORD ? "SEED_DEMO_PASSWORD env var" : "generated for this run only",
     notice: "Development-only fictional data. SUNAT and bank files remain manual/demo integrations."
   }, null, 2));
 }

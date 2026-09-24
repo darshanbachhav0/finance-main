@@ -11,11 +11,10 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-
-const money = (currency, value) => `${currency || "PEN"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatCurrency } from "../utils/formatters.js";
 
 export default function InvoiceObservations() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { notify } = useToast();
   const table = usePaginatedResource("/batch-invoices/observations");
   const [selected, setSelected] = useState(null);
@@ -86,7 +85,7 @@ export default function InvoiceObservations() {
           { key: "purchaseOrder", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
           { key: "rucIssuer", label: "RUC" },
           { key: "seriesNumber", label: "Voucher" },
-          { key: "xmlAmount", label: "Amount", align: "right", render: (row) => money(row.currency, row.xmlAmount) },
+          { key: "xmlAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.xmlAmount, row.currency || "PEN", language) },
           { key: "validationStatus", label: "Status", render: (row) => <StatusBadge status={row.validationStatus || row.status} /> },
           { key: "observationDetail", label: "Observation", sortable: false, render: (row) => row.observationDetail || row.errorDetail || "-" },
           { key: "batch", label: "Batch", sortable: false, render: (row) => row.batch?.batchCode || "-" }

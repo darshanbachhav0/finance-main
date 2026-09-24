@@ -1208,6 +1208,12 @@ const phase2SupplierSpanish = {
   "Account Holder Name": "Titular de la Cuenta",
   "Account holder": "Titular",
   "Detraction accounts must use Banco de la Nacion. This does not classify the supplier as subject to detraction.": "Las cuentas de detracción deben ser del Banco de la Nación. Esto no clasifica al proveedor como sujeto a detracción.",
+  "Possible duplicate supplier name": "Posible proveedor duplicado por nombre",
+  "This legal name closely matches an existing supplier with a different RUC/DNI": "Esta razón social coincide en gran medida con la de un proveedor existente con un RUC/DNI distinto",
+  "This is advisory only and does not block any action - confirm these are not the same entity before homologating.": "Esto es solo informativo y no bloquea ninguna acción - confirme que no se trata de la misma entidad antes de homologar.",
+  "Possible duplicate supplier name - review before homologating": "Posible proveedor duplicado por nombre - revisar antes de homologar",
+  "Valid until": "Válido hasta",
+  "Expired on": "Venció el",
   "Both answers are required before homologation": "Ambas respuestas son obligatorias antes de homologar",
   "Does the company or its partners have State sanctions or relevant proceedings?": "¿La empresa o sus socios tienen sanciones o procesos relevantes con el Estado?",
   "Does the company have a compliance officer or prevention model?": "¿La empresa cuenta con oficial de cumplimiento o modelo de prevención?",
@@ -1838,7 +1844,7 @@ export function translateMessage(text, language = "en") {
 }
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => localStorage.getItem("erp_language") || "en");
+  const [language, setLanguage] = useState(() => localStorage.getItem("erp_language") || "es");
 
   useEffect(() => {
     document.documentElement.lang = language;
