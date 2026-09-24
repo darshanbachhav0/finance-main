@@ -10,7 +10,7 @@ import GeneratedFile from "../models/GeneratedFile.js";
 import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { budgetOverview } from "../services/budgetOverviewService.js";
+import { budgetOverview } from "../services/budgetReportingService.js";
 import { persistReportFile, toCsv } from "../services/exportService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";

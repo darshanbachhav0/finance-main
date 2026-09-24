@@ -14,7 +14,7 @@ import User from "../models/User.js";
 import { slaStatus } from "../services/approvalRuleService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { budgetOverview } from "../services/budgetOverviewService.js";
+import { budgetOverview } from "../services/budgetReportingService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 function currentPeriod() {

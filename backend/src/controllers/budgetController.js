@@ -6,13 +6,12 @@ import ExpenseType from "../models/ExpenseType.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { commitApprovedRequestBudget, resolveBudgetCommitmentFailure } from "../services/approvalService.js";
-import { budgetOverview } from "../services/budgetOverviewService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import { publicRequestPayload } from "../services/requestService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
-import { budgetAllocationRows, budgetPeriodFilter } from "../services/budgetReportingService.js";
+import { budgetAllocationRows, budgetOverview, budgetPeriodFilter } from "../services/budgetReportingService.js";
 import { adjustBudgetPlan, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
 
 export const getBudgetOverview = asyncHandler(async (req, res) => {
