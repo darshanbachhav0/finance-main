@@ -1939,11 +1939,11 @@ export default function SupplierForm({
                     )}
                   </option>
 
-                  <option value="DETRACTION">
-                    {t(
-                      "DETRACTION"
-                    )}
-                  </option>
+                  {/*
+                    Fix 3: "Detraction" is intentionally not selectable here - there is no complete
+                    detraccion payment workflow yet. Existing DETRACTION-typed accounts still display
+                    read-only elsewhere (e.g. the supplier bank account list).
+                  */}
                 </select>
               </label>
 
@@ -2053,18 +2053,6 @@ export default function SupplierForm({
                 />
               </label>
             </div>
-
-            {
-              form
-                .accountType ===
-                "DETRACTION" && (
-                <p className="section-note warning-note">
-                  {t(
-                    "Detraction accounts must use Banco de la Nacion. This does not classify the supplier as subject to detraction."
-                  )}
-                </p>
-              )
-            }
           </Section>
         )
       }

@@ -124,6 +124,10 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
     issues.push(issue(ERROR_CODES.SUPPLIER_REJECTED, "The recommended supplier was rejected.", { supplier: supplier._id }));
   } else if (!supplier.active || supplier.homologationStatus === "INACTIVE" || supplier.status === "INACTIVE") {
     issues.push(issue(ERROR_CODES.SUPPLIER_INACTIVE, "The recommended supplier is inactive.", { supplier: supplier._id }));
+  } else if (supplier.homologationStatus === "HOMOLOGATED" && supplier.homologationValidUntil && new Date(supplier.homologationValidUntil).getTime() < Date.now()) {
+    // Fix 2: homologation carries a configurable validity period (default 12 months); once it lapses the
+    // supplier must be re-homologated before it can be used on a new request/PO, same as never-homologated.
+    issues.push(issue(ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, "Supplier homologation has expired and must be renewed.", { supplier: supplier._id, homologationValidUntil: supplier.homologationValidUntil }));
   } else if (supplier.homologationStatus !== "HOMOLOGATED") {
     issues.push(issue(ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, "The recommended supplier is not homologated.", { supplier: supplier._id }));
   }

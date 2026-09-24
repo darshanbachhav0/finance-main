@@ -7,6 +7,7 @@ import { paginatedPayload, parsePagination, parseSort, escapedRegex } from "./qu
 import { nextSupplierCode } from "./sequenceService.js";
 import { sunatService } from "./sunatService.js";
 import { runFinancialOperation } from "./transactionService.js";
+import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, ROLES } from "../utils/constants.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
@@ -14,6 +15,102 @@ import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccou
 const FINANCE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
 const EDITABLE_PROPOSAL_STATUSES = Object.freeze(["PENDING_VALIDATION", "OBSERVED"]);
 const REQUIRED_DOCUMENT_KINDS = Object.freeze(["RUC_FILE", "BANK_CERTIFICATE", "LEGAL_REP_ID"]);
+
+// NOTE: backend/src/utils/constants.js is locked to a concurrent change in this worktree, so this key
+// cannot yet be registered in FINANCE_CONFIGURATION_KEYS (and backend/src/seed/seed.js cannot yet seed a
+// default FinanceConfiguration document for it). getEffectiveFinanceConfiguration() below still works with
+// this literal key today (Mongoose only enforces the `key` enum on save, not on a query filter) and will
+// start honoring an admin-managed override the moment a FinanceConfiguration document with this key can be
+// created — until then it safely falls back to DEFAULT_SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS below.
+// Follow-up: add SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS to FINANCE_CONFIGURATION_KEYS and seed a default of
+// 12 next to the other FinanceConfiguration seed entries.
+const SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS_KEY = "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS";
+const DEFAULT_SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS = 12;
+
+// Material fiscal/legal fields: changing any of these on an already-homologated supplier invalidates the
+// prior Finance review, so homologation is reset back to PENDING_VALIDATION for a fresh pass.
+const MATERIAL_SUPPLIER_FIELDS = Object.freeze(["rucDni", "legalName", "personType"]);
+
+// Simple, dependency-free similarity threshold for the advisory duplicate-name warning (Fix 1). This is
+// intentionally conservative (near-exact matches only) since it is a manual-review signal, not a block.
+const SIMILAR_NAME_THRESHOLD = 0.88;
+
+function normalizeNameForSimilarity(value) {
+  // NFD-decompose (e.g. "n" + combining tilde), then drop the combining marks (Unicode block
+  // U+0300-U+036F) so accented characters compare equal to their unaccented form.
+  const stripped = Array.from(String(value || "").normalize("NFD"))
+    .filter((char) => {
+      const code = char.codePointAt(0);
+      return code < 0x0300 || code > 0x036f;
+    })
+    .join("");
+  return stripped
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = new Array(n + 1);
+  let curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function nameSimilarity(a, b) {
+  const maxLen = Math.max(a.length, b.length);
+  if (!maxLen) return 1;
+  return 1 - levenshteinDistance(a, b) / maxLen;
+}
+
+async function findSimilarNameSupplier(legalName, { excludeId } = {}) {
+  const normalizedCandidate = normalizeNameForSimilarity(legalName);
+  if (!normalizedCandidate) return null;
+  const query = excludeId ? { _id: { $ne: excludeId } } : {};
+  const others = await Supplier.find(query, { legalName: 1, name: 1, rucDni: 1 }).lean();
+  let best = null;
+  for (const other of others) {
+    const otherName = normalizeNameForSimilarity(other.legalName || other.name);
+    if (!otherName) continue;
+    const score = nameSimilarity(normalizedCandidate, otherName);
+    if (score >= SIMILAR_NAME_THRESHOLD && (!best || score > best.score)) {
+      best = { score, supplier: other };
+    }
+  }
+  if (!best) return null;
+  return {
+    possibleDuplicateOf: best.supplier._id,
+    matchedLegalName: best.supplier.legalName || best.supplier.name,
+    similarityScore: Math.round(best.score * 100) / 100,
+    detectedAt: new Date()
+  };
+}
+
+function addMonthsUtc(date, months) {
+  const result = new Date(date.getTime());
+  result.setUTCMonth(result.getUTCMonth() + months);
+  return result;
+}
+
+async function computeHomologationValidUntil(date = new Date()) {
+  const configuration = await getEffectiveFinanceConfiguration(SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS_KEY, date);
+  const validityMonths = configuration?.numericValue > 0 ? configuration.numericValue : DEFAULT_SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS;
+  return addMonthsUtc(date, validityMonths);
+}
 
 const supplierDocumentKinds = Object.freeze({
   rucFile: "RUC_FILE",
@@ -34,7 +131,9 @@ const protectedSupplierFields = Object.freeze([
   "verifiedBy",
   "verifiedAt",
   "verificationStatus",
-  "ownershipResult"
+  "ownershipResult",
+  "similarNameWarning",
+  "homologationValidUntil"
 ]);
 
 const protectedBankReviewFields = Object.freeze([
@@ -173,10 +272,13 @@ function applyProposalFields(supplier, payload) {
 }
 
 function assertProposalEditable(supplier, user) {
-  if (!EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus)) {
+  // Finance may still correct a homologated supplier's data (e.g. a fiscal update); doing so resets
+  // homologation back to PENDING_VALIDATION (see updateSupplierProposal) so it is re-reviewed.
+  const financeMayCorrectHomologated = FINANCE_ROLES.includes(user?.role) && supplier.homologationStatus === "HOMOLOGATED";
+  if (!EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus) && !financeMayCorrectHomologated) {
     throw new AppError(
       409,
-      "Supplier proposal fields can only be changed while pending validation or observed.",
+      "Supplier proposal fields can only be changed while pending validation, observed, or (for Accounting/Admin) homologated.",
       { homologationStatus: supplier.homologationStatus },
       ERROR_CODES.INVALID_STATUS_TRANSITION
     );
@@ -238,14 +340,18 @@ function serializeSupplierBase(supplier, user) {
 function supplierPermissions(supplier, user) {
   const finance = FINANCE_ROLES.includes(user?.role);
   const editable = EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus);
+  // Finance may correct a homologated supplier's data; the correction resets it to PENDING_VALIDATION.
+  const financeMayCorrectHomologated = finance && supplier.homologationStatus === "HOMOLOGATED";
   const proposerOwns = String(idOf(supplier.proposedBy)) === String(user?._id || "");
   return {
-    canEditProposal: editable && (finance || (user?.role === ROLES.SOLICITOR && proposerOwns)),
+    canEditProposal: (editable || financeMayCorrectHomologated) && (finance || (user?.role === ROLES.SOLICITOR && proposerOwns)),
     canUploadDocuments: editable && (finance || (user?.role === ROLES.SOLICITOR && proposerOwns)),
     canAddBankAccount: finance || (editable && user?.role === ROLES.SOLICITOR && proposerOwns),
     canReview: finance && supplier.homologationStatus !== "HOMOLOGATED",
     canVerifyBanking: finance,
-    canHomologate: finance && supplier.homologationStatus !== "HOMOLOGATED",
+    // Fix 2: an expired homologation must be renewable again even though homologationStatus is still
+    // literally "HOMOLOGATED" until someone acts on it.
+    canHomologate: finance && (supplier.homologationStatus !== "HOMOLOGATED" || isHomologationExpired(supplier)),
     canViewFullBankData: canViewFullBankData(supplier, user)
   };
 }
@@ -412,7 +518,8 @@ export async function getSupplierDetailPayload(supplierId, user) {
     .populate("taxpayerValidation.validatedBy", "name email role")
     .populate("complianceReview.reviewedBy", "name email role")
     .populate("reviewedBy", "name email role")
-    .populate("documents.uploadedBy", "name email role");
+    .populate("documents.uploadedBy", "name email role")
+    .populate("similarNameWarning.possibleDuplicateOf", "legalName name rucDni supplierCode");
   if (!supplier) throw new AppError(404, "Supplier not found.", { supplierId }, ERROR_CODES.NOT_FOUND);
   const [accounts, audit] = await Promise.all([
     SupplierBankAccount.find({ supplier: supplier._id })
@@ -458,6 +565,7 @@ export async function listSuppliersPage(queryParams, user) {
     Supplier.find(query)
       .populate("proposedBy", "name email role")
       .populate("complianceReview.reviewedBy", "name email role")
+      .populate("similarNameWarning.possibleDuplicateOf", "legalName name rucDni supplierCode")
       .sort(sort).skip(skip).limit(pageSize),
     Supplier.countDocuments(query)
   ]);
@@ -519,6 +627,10 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     status: "PENDING_VALIDATION"
   });
   applyProposalFields(supplier, payload);
+  // RUC/DNI is the hard duplicate key (checked above); a similar-but-not-identical legal name under a
+  // different RUC/DNI is only ever an advisory, manual-review signal (Fix 1) - it never blocks creation.
+  const similarNameWarning = await findSimilarNameSupplier(supplier.legalName || supplier.name);
+  if (similarNameWarning) supplier.similarNameWarning = similarNameWarning;
   let persistedFiles = {};
   try {
     persistedFiles = await persistUploadedFiles(files, { domain: "suppliers", entityId: supplier._id });
@@ -538,6 +650,18 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       module: "SUPPLIERS",
       newValues: { identifier, legalName: supplier.legalName, proposalJustification: supplier.proposalJustification }
     });
+    if (similarNameWarning) {
+      await recordAudit({
+        entityType: "Supplier",
+        entity: supplier,
+        action: "POSSIBLE_DUPLICATE_NAME_DETECTED",
+        user,
+        req,
+        module: "SUPPLIERS",
+        comments: "Advisory only - RUC/DNI differs from the matched supplier. Manual review recommended before homologation.",
+        newValues: similarNameWarning
+      });
+    }
     if (uploadedDocuments.length) {
       await recordAudit({
         entityType: "Supplier",
@@ -568,6 +692,7 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
   const oldValues = {
     rucDni: supplier.rucDni,
     legalName: supplier.legalName,
+    personType: supplier.personType,
     homologationStatus: supplier.homologationStatus,
     complianceReview: supplier.complianceReview?.toObject?.() || supplier.complianceReview
   };
@@ -581,6 +706,10 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
     supplier.normalizedIdentifier = identifier;
   }
   applyProposalFields(supplier, payload);
+  // Fix 2: a material fiscal/legal change (RUC/DNI, legal name, person type) on an already-homologated
+  // supplier invalidates the prior Finance review and homologation, so it must be re-reviewed from scratch.
+  const materialFieldsChanged = MATERIAL_SUPPLIER_FIELDS.some((field) => (supplier[field] || "") !== (oldValues[field] || ""));
+  const homologationResetForMaterialChange = oldValues.homologationStatus === "HOMOLOGATED" && materialFieldsChanged;
   let persistedFiles = {};
   try {
     persistedFiles = await persistUploadedFiles(files, { domain: "suppliers", entityId: supplier._id });
@@ -592,17 +721,29 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
       supplier.complianceReview.result = "PENDING";
       supplier.complianceReview.reviewedBy = undefined;
       supplier.complianceReview.reviewedAt = undefined;
+    } else if (homologationResetForMaterialChange) {
+      supplier.homologationStatus = "PENDING_VALIDATION";
+      supplier.status = "PENDING_VALIDATION";
+      supplier.active = false;
+      supplier.homologationValidUntil = undefined;
+      supplier.complianceReview.result = "PENDING";
+      supplier.complianceReview.reviewedBy = undefined;
+      supplier.complianceReview.reviewedAt = undefined;
     }
     await supplier.save();
     await recordAudit({
       entityType: "Supplier",
       entity: supplier,
-      action: oldValues.homologationStatus === "OBSERVED" ? "CORRECTION_SUBMITTED" : "PROPOSAL_UPDATED",
+      action: oldValues.homologationStatus === "OBSERVED"
+        ? "CORRECTION_SUBMITTED"
+        : homologationResetForMaterialChange
+          ? "HOMOLOGATION_RESET_MATERIAL_CHANGE"
+          : "PROPOSAL_UPDATED",
       user,
       req,
       module: "SUPPLIERS",
       oldValues,
-      newValues: { rucDni: supplier.rucDni, legalName: supplier.legalName, homologationStatus: supplier.homologationStatus }
+      newValues: { rucDni: supplier.rucDni, legalName: supplier.legalName, personType: supplier.personType, homologationStatus: supplier.homologationStatus }
     });
     if (uploadedDocuments.length) {
       await recordAudit({
@@ -926,6 +1067,14 @@ export function supplierDeclarationWarnings(supplier) {
       message: "The supplier declared that no compliance/prevention model is available. Finance review is required."
     });
   }
+  if (supplier?.similarNameWarning?.possibleDuplicateOf) {
+    warnings.push({
+      code: "POSSIBLE_DUPLICATE_SUPPLIER_NAME",
+      field: "legalName",
+      source: "Fix 1 - advisory name-similarity check (RUC/DNI is the hard duplicate key)",
+      message: `This legal name closely matches an existing supplier (${supplier.similarNameWarning.matchedLegalName}) with a different RUC/DNI. Confirm these are not the same entity before homologating.`
+    });
+  }
   return warnings;
 }
 
@@ -998,20 +1147,27 @@ export async function assertSupplierCanBeHomologated(supplier) {
 
 export async function getSupplierHomologationReadiness(supplierId) {
   const supplier = await loadSupplier(supplierId);
-  if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active) {
+  if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active && !isHomologationExpired(supplier)) {
     return { valid: true, legacyCompatible: true, issues: [], warnings: supplierDeclarationWarnings(supplier) };
   }
   return evaluateSupplierHomologation(supplier);
 }
 
+function isHomologationExpired(supplier) {
+  return Boolean(supplier?.homologationValidUntil) && new Date(supplier.homologationValidUntil).getTime() < Date.now();
+}
+
 export async function homologateSupplier({ supplierId, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can homologate suppliers.");
   let supplier = await loadSupplier(supplierId);
-  if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active) {
+  if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active && !isHomologationExpired(supplier)) {
     return { supplier, assignedCode: false, readiness: { valid: true, issues: [], warnings: supplierDeclarationWarnings(supplier) } };
   }
   const readiness = await assertSupplierCanBeHomologated(supplier);
-  const oldValues = { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active };
+  const oldValues = { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil };
+  // Fix 2: homologation is only valid for a configurable period (default 12 months) from the date it is
+  // granted or renewed - see computeHomologationValidUntil()/SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS_KEY.
+  const homologationValidUntil = await computeHomologationValidUntil();
   let assignedCode = false;
   if (!supplier.supplierCode) {
     const candidate = await nextSupplierCode();
@@ -1027,6 +1183,7 @@ export async function homologateSupplier({ supplierId, user, req }) {
           homologationStatus: "HOMOLOGATED",
           status: "ACTIVE",
           active: true,
+          homologationValidUntil,
           reviewedBy: user._id,
           reviewedAt: new Date()
         }
@@ -1046,6 +1203,7 @@ export async function homologateSupplier({ supplierId, user, req }) {
     supplier.homologationStatus = "HOMOLOGATED";
     supplier.status = "ACTIVE";
     supplier.active = true;
+    supplier.homologationValidUntil = homologationValidUntil;
     supplier.reviewedBy = user._id;
     supplier.reviewedAt = new Date();
     await supplier.save();
@@ -1069,16 +1227,24 @@ export async function homologateSupplier({ supplierId, user, req }) {
     req,
     module: "SUPPLIERS",
     oldValues,
-    newValues: { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active }
+    newValues: { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil }
   });
   return { supplier, assignedCode, readiness };
 }
 
 export function isSupplierUsable(supplier) {
-  return Boolean(supplier && supplier.active && supplier.homologationStatus === "HOMOLOGATED");
+  return Boolean(supplier && supplier.active && supplier.homologationStatus === "HOMOLOGATED" && !isHomologationExpired(supplier));
 }
 
 export function assertSupplierUsable(supplier) {
+  if (supplier?.active && supplier.homologationStatus === "HOMOLOGATED" && isHomologationExpired(supplier)) {
+    throw new AppError(
+      422,
+      "Supplier homologation has expired and must be renewed before this supplier can be used.",
+      { supplier: supplier._id, homologationValidUntil: supplier.homologationValidUntil, reason: "HOMOLOGATION_EXPIRED" },
+      ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED
+    );
+  }
   if (!isSupplierUsable(supplier)) {
     throw new AppError(422, "An active homologated supplier is required.", { supplier: supplier?._id }, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
   }
@@ -1238,6 +1404,14 @@ export async function updateAndReviewSupplier({ supplierId, payload, files = {},
     await homologateSupplier({ supplierId, user, req });
   } else if (requestedStatus === "INACTIVE") {
     await deactivateSupplier({ supplierId, user, req });
+  } else if (requestedStatus === "PENDING_VALIDATION") {
+    // Fix 2: the only supported transition out of INACTIVE is a full re-homologation pass. Requesting
+    // PENDING_VALIDATION on a currently-inactive supplier reactivates it into that pass; any other current
+    // status is already PENDING_VALIDATION or handled by the branches above, so this is a no-op for them.
+    const current = await loadSupplier(supplierId);
+    if (current.homologationStatus === "INACTIVE") {
+      await reactivateSupplier({ supplierId, user, req });
+    }
   }
   return { supplier: await loadSupplier(supplierId), warnings };
 }
@@ -1248,6 +1422,7 @@ export async function deactivateSupplier({ supplierId, user, req }) {
   supplier.homologationStatus = "INACTIVE";
   supplier.active = false;
   supplier.status = "INACTIVE";
+  supplier.homologationValidUntil = undefined;
   supplier.reviewedBy = user._id;
   supplier.reviewedAt = new Date();
   await supplier.save();
@@ -1267,5 +1442,40 @@ export async function deactivateSupplier({ supplierId, user, req }) {
   }
   await supplier.save();
   await recordAudit({ entityType: "Supplier", entity: supplier, action: "DEACTIVATED", user, req, module: "SUPPLIERS" });
+  return supplier;
+}
+
+// Fix 2: reactivating a previously inactive supplier requires a full re-homologation pass, the same as a
+// material fiscal/legal data change - it does not restore HOMOLOGATED status directly. Bank accounts stay
+// deactivated (unrelated to homologation) and must be reverified/re-added as needed.
+export async function reactivateSupplier({ supplierId, user, req }) {
+  assertFinanceUser(user, "Only Accounting or Admin can reactivate suppliers.");
+  const supplier = await loadSupplier(supplierId);
+  if (supplier.homologationStatus !== "INACTIVE") {
+    throw new AppError(
+      409,
+      "Only an inactive supplier can be reactivated.",
+      { homologationStatus: supplier.homologationStatus },
+      ERROR_CODES.INVALID_STATUS_TRANSITION
+    );
+  }
+  const oldValues = { homologationStatus: supplier.homologationStatus, active: supplier.active };
+  supplier.homologationStatus = "PENDING_VALIDATION";
+  supplier.status = "PENDING_VALIDATION";
+  supplier.active = false;
+  supplier.homologationValidUntil = undefined;
+  supplier.reviewedBy = user._id;
+  supplier.reviewedAt = new Date();
+  await supplier.save();
+  await recordAudit({
+    entityType: "Supplier",
+    entity: supplier,
+    action: "REACTIVATION_REQUIRES_REHOMOLOGATION",
+    user,
+    req,
+    module: "SUPPLIERS",
+    oldValues,
+    newValues: { homologationStatus: supplier.homologationStatus, active: supplier.active }
+  });
   return supplier;
 }
