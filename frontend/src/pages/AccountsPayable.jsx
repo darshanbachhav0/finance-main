@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Ban,
   Boxes,
   Eye,
   RefreshCw
@@ -14,6 +15,7 @@ import {
   Link
 } from "react-router-dom";
 
+import api from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
@@ -52,6 +54,13 @@ export default function AccountsPayable() {
     useLanguage();
 
   const money = (currency, value) => formatCurrency(value, currency || "PEN", language);
+
+  const cancelPayable = async (row) => {
+    const reason = window.prompt(t("Reason for cancelling this unpaid CXP (required):"));
+    if (!reason || !reason.trim()) return;
+    await api.post(`/accounting/accounts-payable/${row._id}/cancel`, { reason: reason.trim() });
+    payableTable.reload();
+  };
 
   const [
     selected,
@@ -277,7 +286,12 @@ export default function AccountsPayable() {
                   setSelected(
                     row
                   )
-            }
+            },
+            ...(["OPEN", "SCHEDULED"].includes(row.status) ? [{
+              label: "Cancel unpaid CXP",
+              icon: Ban,
+              onClick: () => cancelPayable(row)
+            }] : [])
           ]}
           columns={[
             {

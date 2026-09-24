@@ -1,5 +1,5 @@
 import { assertPostingAllowed } from "./financialProgressService.js";
-import { assertBudgetBeforePosting, executeBudgetAmount } from "./budgetService.js";
+import { assertBudgetBeforePosting, executeBudgetAmount, reverseBudgetExecution } from "./budgetService.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import { assertVoucherXmlMatches } from "./xmlValidationService.js";
 import { validateVoucherWithSunat, createSunatVoucher, findDuplicateVoucher } from "./sunatVoucherService.js";
@@ -790,4 +790,78 @@ export async function getConsolidation(period) {
       balanced: moneyEquals(centralizationTotal, journalSummary[0]?.totalCredit || 0)
     }
   };
+}
+
+async function createAccountsPayableCancellationJournal(request, accountsPayable, userId, { session } = {}) {
+  const original = await JournalEntry.findById(accountsPayable.provisionJournal).session(session || null);
+  if (!original) return null;
+  const reversedLines = original.lines.map((line) => ({
+    accountNumber: line.accountNumber,
+    subAccount: line.subAccount,
+    description: `Reversal (CXP cancelled): ${line.description}`,
+    costCenter: line.costCenter,
+    expenseType: line.expenseType,
+    debit: line.credit,
+    credit: line.debit
+  }));
+  return createJournal({
+    request,
+    accountsPayable,
+    entryType: "REVERSAL",
+    sourceTransaction: `AP_CANCELLATION:${accountsPayable._id}`,
+    lines: reversedLines,
+    userId,
+    originalAmount: accountsPayable.originalAmount,
+    currency: accountsPayable.currency,
+    exchangeRate: accountsPayable.exchangeRate,
+    penEquivalent: accountsPayable.penEquivalent,
+    session
+  });
+}
+
+// An unpaid CXP (no payment file generated, no confirmed payment - nothing has left the bank)
+// can be cancelled outright: its provision journal is reversed and the budget it executed is
+// moved back to committed. A partially paid or fully paid obligation must NOT simply disappear
+// through this path - real money has moved, so it needs a refund/credit-note remediation
+// process outside this system's current scope, not an automatic reversal. History is never
+// deleted; cancellation only ever adds a reversing journal entry and a history record.
+export async function cancelAccountsPayable({ accountsPayableId, reason, user, req }) {
+  const trimmedReason = String(reason || "").trim();
+  if (!trimmedReason) throw new AppError(422, "A cancellation reason is required.", { field: "reason" }, ERROR_CODES.VALIDATION_ERROR);
+  const accountsPayable = await AccountsPayable.findById(accountsPayableId);
+  if (!accountsPayable) throw new AppError(404, "Accounts Payable record not found.", { accountsPayableId }, ERROR_CODES.NOT_FOUND);
+  if (![AP_STATUS.OPEN, AP_STATUS.SCHEDULED].includes(accountsPayable.status)) {
+    throw new AppError(
+      409,
+      "Only an unpaid CXP (no payment file generated or payment confirmed) can be cancelled. A partially paid or paid obligation requires a refund/credit-note remediation process, not cancellation.",
+      { status: accountsPayable.status },
+      ERROR_CODES.INVALID_STATUS_TRANSITION
+    );
+  }
+  const request = await FinancialRequest.findById(accountsPayable.request);
+  if (!request) throw new AppError(404, "Financial request not found.", { requestId: accountsPayable.request }, ERROR_CODES.NOT_FOUND);
+  await guardAccountingPeriod({ period: request.accountingPeriod, action: "CANCEL", user, req, module: "ACCOUNTING", entityType: "AccountsPayable", entityId: accountsPayable._id, requestId: request._id });
+
+  const result = await runFinancialOperation(async (session) => {
+    const reversalJournal = await createAccountsPayableCancellationJournal(request, accountsPayable, user._id, { session });
+    if (reversalJournal) await reverseBudgetExecution(request, user._id, accountsPayable.penEquivalent, { session, comments: `Accounts Payable ${accountsPayable._id} cancelled: ${trimmedReason}` });
+    accountsPayable.status = AP_STATUS.CANCELLED;
+    accountsPayable.outstandingAmount = 0;
+    accountsPayable.history.push({ status: AP_STATUS.CANCELLED, by: user._id, comments: trimmedReason });
+    await accountsPayable.save({ session });
+    await recordAudit({
+      entityType: "AccountsPayable",
+      entity: accountsPayable,
+      requestId: request._id,
+      action: "ACCOUNTS_PAYABLE_CANCELLED",
+      user,
+      req,
+      module: "ACCOUNTING",
+      comments: trimmedReason,
+      newValues: { status: AP_STATUS.CANCELLED, reversalJournal: reversalJournal?.entryNumber },
+      session
+    });
+    return { accountsPayable, reversalJournal, request };
+  });
+  return result;
 }

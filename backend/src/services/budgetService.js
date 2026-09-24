@@ -430,6 +430,43 @@ export async function executeBudget(request, userId, { session, comments } = {})
   return executeBudgetAmount(request, userId, remaining, { session, comments });
 }
 
+// Mirror image of executeBudgetAmount: moves an amount back from executed into committed
+// (the request may still need it for a corrected/replacement provision) rather than
+// releasing it outright. If every AP under the request ends up cancelled, a subsequent
+// releaseBudget/void correctly frees the now-fully-unexecuted committed amount.
+export async function reverseBudgetExecution(request, userId, amount, { session, comments } = {}) {
+  const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  if (!commitment) return commitment;
+  const currentExecuted = currentTrackedAmount(commitment, "executedAmount");
+  const requested = roundMoney(amount);
+  const amountToReverse = Math.min(Math.max(0, requested), Math.max(0, currentExecuted));
+  if (amountToReverse <= 0) return commitment;
+
+  const allocations = allocateAcrossLines(commitment.lines, amountToReverse, (line) => trackedLineAmount(line, "executedAmount"));
+  const appliedUsage = [];
+  try {
+    for (const allocation of allocations) {
+      const line = commitment.lines[allocation.index];
+      line.executedAmount = subtractMoney(trackedLineAmount(line, "executedAmount"), allocation.amount);
+      if (line.mode === "ACTIVE") await changeTrackedUsage(line, { committedAmount: allocation.amount, executedAmount: -allocation.amount }, session, appliedUsage);
+    }
+    const applied = sumMoney(allocations.map((item) => item.amount));
+    commitment.executedAmount = subtractMoney(currentExecuted, applied);
+    commitment.status = deriveCommitmentStatus(commitment);
+    commitment.history.push({
+      status: commitment.status,
+      amount: -applied,
+      by: userId,
+      comments: comments || "Budget execution reversed after an Accounts Payable cancellation."
+    });
+    await commitment.save({ session });
+    return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
+  }
+}
+
 export async function markBudgetPaidAmount(request, userId, amount, { session, comments } = {}) {
   let commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
   if (!commitment || [BUDGET_STATUS.CLOSED, BUDGET_STATUS.RELEASED, BUDGET_STATUS.DEFERRED].includes(commitment.status)) return commitment;
