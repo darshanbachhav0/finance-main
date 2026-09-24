@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { BANKS, CURRENCY } from "../utils/constants.js";
+import { SOURCE_BANKS, CURRENCY } from "../utils/constants.js";
 
 const paymentItemSchema = new mongoose.Schema(
   {
@@ -41,7 +41,7 @@ const paymentItemSchema = new mongoose.Schema(
 const paymentBatchSchema = new mongoose.Schema(
   {
     batchNumber: { type: String, required: true, unique: true, immutable: true },
-    bank: { type: String, enum: BANKS, required: true },
+    bank: { type: String, enum: SOURCE_BANKS, required: true },
     currency: { type: String, enum: CURRENCY, required: true },
     paymentDate: { type: Date, required: true },
     items: { type: [paymentItemSchema], required: true },

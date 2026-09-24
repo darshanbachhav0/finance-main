@@ -177,7 +177,10 @@ export default function MasterConfiguration() {
       columns: [{ key: "code", label: "Code" }, { key: "purpose", label: "Purpose" }, { key: "name", label: "Name" }, { key: "accountNumber", label: "Account" }, { key: "requestType", label: "Request type" }, { key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "active", label: "Status" }]
     },
     "bank-formats": {
-      label: "Bank Formats", roles: ["Admin"], endpoint: "/bank-formats",
+      // Treasury can see this section to use the certification panel below, but only Admin may
+      // create/edit/delete a format's field configuration - certification is a separate, narrower
+      // permission (see BankFormatCertificationPanel), not general configuration access.
+      label: "Bank Formats", roles: ["Admin", "Treasury"], writeRoles: ["Admin"], endpoint: "/bank-formats",
       description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format. Certification is managed separately below.",
       transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [
@@ -199,6 +202,6 @@ export default function MasterConfiguration() {
     {user.role === "Admin" && <details className="workspace-tools"><summary>{t("SUNAT administration")}</summary><PadronStatus /></details>}
     <Message type="error">{error}</Message>
     <details className="workspace-tools"><summary>{t("Configuration sections")}</summary><nav className="section-tabs" aria-label={t("Configuration sections")}>{visibleEntries.map(([key, item]) => <NavLink key={key} to={`/configuration/${key}`}>{t(item.label)}</NavLink>)}</nav></details>
-    <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" />
+    <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" readOnly={Boolean(config.writeRoles && !config.writeRoles.includes(user.role))} renderBeforeTable={config.renderBeforeTable} />
   </section>;
 }

@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 import {
   BANK_ACCOUNT_OWNERSHIP_RESULTS,
   BANK_ACCOUNT_VERIFICATION_STATUSES,
+  BENEFICIARY_BANKS,
   CURRENCY,
-  SUPPLIER_ACCOUNT_TYPES,
-  SUPPLIER_BANKS
+  SUPPLIER_ACCOUNT_TYPES
 } from "../utils/constants.js";
 import {
   assertValidBankAccountNumber,
@@ -16,7 +16,7 @@ import {
 const supplierBankAccountSchema = new mongoose.Schema(
   {
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier", required: true },
-    bank: { type: String, enum: SUPPLIER_BANKS, required: true },
+    bank: { type: String, enum: BENEFICIARY_BANKS, required: true },
     currency: { type: String, enum: CURRENCY, required: true, default: "PEN" },
     accountType: { type: String, enum: SUPPLIER_ACCOUNT_TYPES, default: "CURRENT", required: true },
     accountHolderName: { type: String, trim: true, default: "" },

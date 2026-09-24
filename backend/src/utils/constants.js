@@ -38,7 +38,8 @@ export const PERMISSIONS = Object.freeze({
   PROCUREMENT_ORDER_CREATE: "procurement-order:create",
   BATCH_INVOICE_UPLOAD: "batch-invoice:upload",
   BATCH_INVOICE_REVIEW: "batch-invoice:review",
-  PAYMENT_REPROCESS: "payment:reprocess"
+  PAYMENT_REPROCESS: "payment:reprocess",
+  BANK_FORMAT_CERTIFY: "bank-format:certify"
 });
 
 export const ROLE_PERMISSIONS = Object.freeze({
@@ -70,7 +71,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.RECONCILE,
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT,
-    PERMISSIONS.PAYMENT_REPROCESS
+    PERMISSIONS.PAYMENT_REPROCESS,
+    PERMISSIONS.BANK_FORMAT_CERTIFY
   ],
   // Budget validates/commits/reserves funds and prepares exceptions; it no longer issues
   // Purchase Orders directly — that is Procurement's ownership (see ROLES.PROCUREMENT).
@@ -238,8 +240,12 @@ export const APPROVAL_SLA_HOURS = Object.freeze({
 });
 
 export const CURRENCY = Object.freeze(["PEN", "USD"]);
-export const BANKS = Object.freeze(["BCP", "BBVA", "INTERBANK", "SCOTIABANK"]);
-export const SUPPLIER_BANKS = Object.freeze([...BANKS, "BANCO_NACION"]);
+// BBVA is the only bank UMA can generate an outbound payment file/format for today - this is a
+// hard capability constraint, not a policy choice, so the schema enum for anything describing a
+// *source*/generator bank must not overstate it. A supplier or employee's *beneficiary* account
+// can sit at any of these banks (via CCI interbank transfer), which is a separate, broader list.
+export const SOURCE_BANKS = Object.freeze(["BBVA"]);
+export const BENEFICIARY_BANKS = Object.freeze(["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"]);
 
 export const SUPPLIER_PERSON_TYPES = Object.freeze(["LEGAL_ENTITY", "NATURAL_PERSON_WITH_BUSINESS"]);
 export const SUPPLIER_HOMOLOGATION_STATUSES = Object.freeze(["PENDING_VALIDATION", "HOMOLOGATED", "OBSERVED", "REJECTED", "INACTIVE"]);
@@ -254,7 +260,10 @@ export const SUPPLIER_DELIVERY_METHODS = Object.freeze(["CENTRAL_WAREHOUSE", "DE
 export const PROCUREMENT_ORDER_KINDS = Object.freeze(["PURCHASE", "SERVICE"]);
 export const PAYMENT_DESTINATION_SOURCES = Object.freeze(["SUPPLIER", "EMPLOYEE_REIMBURSEMENT"]);
 export const BATCH_UPLOAD_STATUSES = Object.freeze(["QUEUED", "PROCESSING", "COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAILED"]);
-export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
+// MANUAL_EXCEPTION is a distinct, explicitly non-authoritative status: a human (Admin/Accounting)
+// recorded and audited override of automated SUNAT validation. It is never equivalent to VALID and
+// must never be produced by the automatic validation path (see ManualSunatProvider / getSunatProvider).
+export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION"]);
 
 export const CAPEX_ASSET_CATEGORIES = Object.freeze(["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]);
 export const OPEX_EXPENSE_FREQUENCIES = Object.freeze(["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);
