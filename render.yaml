@@ -61,3 +61,43 @@ services:
         value: 24
       - key: SLA_POLL_MS
         value: 60000
+
+  - type: worker
+    name: uma-finance-batch-invoice-worker
+    runtime: node
+    plan: 0.5c-512mb
+    repo: https://github.com/darshanbachhav0/finance-main.git
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm run worker:batch --workspace backend
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: BATCH_INVOICE_POLL_MS
+        value: 5000
+      - key: BATCH_INVOICE_STALE_MINUTES
+        value: 15
+      - key: BATCH_INVOICE_WORKER_CONCURRENCY
+        value: 3
+
+  - type: worker
+    name: uma-finance-padron-worker
+    runtime: node
+    plan: 0.5c-512mb
+    repo: https://github.com/darshanbachhav0/finance-main.git
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm run sunat:padron:worker --workspace backend
+    autoDeployTrigger: commit
+    disk:
+      name: uma-finance-padron-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUNAT_PADRON_DATA_DIR
+        value: /var/data/sunat-padron

@@ -1,3 +1,5 @@
+# Local Windows development only. In production the padron worker runs as the
+# `uma-finance-padron-worker` background service defined in render.yaml.
 param([Parameter(Mandatory=$true)][string]$ProjectDir,[Parameter(Mandatory=$true)][string]$DataDir)
 $ErrorActionPreference = "Stop"
 $projectPath = (Resolve-Path -LiteralPath $ProjectDir).Path
