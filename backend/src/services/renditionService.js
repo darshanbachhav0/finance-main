@@ -273,12 +273,27 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     return request;
   }
   if (normalizedAction === "REJECT") {
+    const isAdvanceTrack = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR;
+    const outstandingAmount = isAdvanceTrack ? roundMoney(request.rendition.amountAdvanced || 0) : 0;
+    request.rendition.status = "REJECTED";
     request.rendition.financeReview = { result: "REJECTED", reviewer: user._id, reviewedAt: new Date(), comments: reviewComments };
     request.rendition.comments = reviewComments;
+    request.rendition.recovery = { status: outstandingAmount > 0 ? "PENDING" : "NOT_APPLICABLE", outstandingAmount, settlements: [] };
+    request.observation = {
+      code: "RENDITION_REJECTED",
+      detail: outstandingAmount > 0
+        ? `Rendition rejected. ${outstandingAmount.toFixed(2)} of the advance must be recovered from the beneficiary (reimbursement or payroll deduction) before this request can close.`
+        : "Rendition rejected. No payment has been disbursed for this request yet; it should be voided if the beneficiary cannot correct and resubmit.",
+      observedAt: new Date(),
+      observedBy: user._id
+    };
     request.approvalHistory.push(workflowEvent({ action: "RENDITION_REJECTED", from: request.status, to: request.status, user, req, comments: reviewComments, request }));
     await request.save();
-    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_REJECTED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "REJECTED" } });
+    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_REJECTED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "REJECTED", renditionStatus: "REJECTED", recoveryOutstanding: outstandingAmount } });
     await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-rejected:${Date.now()}`, type: "RENDITION_REJECTED", title: "Rendition rejected", message: `${request.requestNumber}: ${reviewComments}`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    if (outstandingAmount > 0) {
+      await notifyRoles({ roles: [ROLES.ACCOUNTING, ROLES.TREASURY], eventKey: `request:${request._id}:rendition-recovery`, type: "RENDITION_RECOVERY_REQUIRED", title: "Advance recovery required", message: `${request.requestNumber}: rendition rejected, ${outstandingAmount.toFixed(2)} must be recovered from the beneficiary.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    }
     await request.populate(requestPopulate);
     return request;
   }
@@ -380,6 +395,39 @@ export async function settleNonDeductibleRendition({ requestId, amount, method, 
   });
   await resolveNotification(`request:${request._id}:non-deductible`);
   await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:non-deductible-settled:${Date.now()}`, type: "RENDITION_SETTLEMENT", title: "Rendition balance updated", message: `${request.requestNumber}: ${settlementAmount.toFixed(2)} regularized; ${result.request.rendition.nonDeductibleOutstanding.toFixed(2)} remains.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+  return result;
+}
+
+export async function recoverRejectedRendition({ requestId, amount, method, reference, user, req }) {
+  const request = await FinancialRequest.findById(requestId).select("+attachments.path");
+  if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
+  if (request.rendition?.status !== "REJECTED" || request.rendition?.recovery?.status !== "PENDING") {
+    throw new AppError(409, "Only a rejected rendition with a pending recovery balance can record a recovery.", { status: request.status, renditionStatus: request.rendition?.status, recoveryStatus: request.rendition?.recovery?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  const settlementMethod = String(method || "").toUpperCase();
+  if (!["REIMBURSEMENT", "PAYROLL_DEDUCTION"].includes(settlementMethod)) throw new AppError(422, "Recovery method must be REIMBURSEMENT or PAYROLL_DEDUCTION.", { method }, ERROR_CODES.VALIDATION_ERROR);
+  const settlementReference = String(reference || "").trim();
+  if (!settlementReference) throw new AppError(422, "A reimbursement receipt or payroll reference is required.", { field: "reference" }, ERROR_CODES.VALIDATION_ERROR);
+  const settlementAmount = roundMoney(amount);
+  const outstanding = roundMoney(request.rendition?.recovery?.outstandingAmount || 0);
+  if (!(settlementAmount > 0) || settlementAmount > outstanding) throw new AppError(422, "Recovery amount must be greater than zero and cannot exceed the outstanding advance.", { settlementAmount, outstanding }, ERROR_CODES.VALIDATION_ERROR);
+  const accountsPayable = await AccountsPayable.findOne({ request: request._id }).sort({ createdAt: 1 });
+  if (!accountsPayable) throw new AppError(404, "Advance Accounts Payable record not found.", { requestId }, ERROR_CODES.NOT_FOUND);
+
+  const result = await runFinancialOperation(async (session) => {
+    const journal = await createRenditionSettlementJournal(request, accountsPayable, { amount: settlementAmount, method: settlementMethod, reference: settlementReference }, user._id, { session });
+    request.rendition.recovery.outstandingAmount = roundMoney(outstanding - settlementAmount);
+    request.rendition.recovery.settlements.push({ method: settlementMethod, amount: settlementAmount, reference: settlementReference, settledAt: new Date(), settledBy: user._id, journal: journal._id });
+    if (request.rendition.recovery.outstandingAmount <= 0) {
+      request.rendition.recovery.status = "RECOVERED";
+      request.observation = {};
+    }
+    await request.save({ session });
+    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_RECOVERY_SETTLED", user, req, module: "RENDITION", newValues: { method: settlementMethod, amount: settlementAmount, reference: settlementReference, remaining: request.rendition.recovery.outstandingAmount, journal: journal.entryNumber }, session });
+    await request.populate(requestPopulate);
+    return { request, journal };
+  });
+  await notifyUser({ userId: requestOwnerId(result.request), eventKey: `request:${request._id}:rendition-recovery-settled:${Date.now()}`, type: "RENDITION_RECOVERY_SETTLED", title: "Rendition recovery recorded", message: `${request.requestNumber}: ${settlementAmount.toFixed(2)} recovered; ${result.request.rendition.recovery.outstandingAmount.toFixed(2)} remains.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   return result;
 }
 
