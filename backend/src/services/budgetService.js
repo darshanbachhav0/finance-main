@@ -73,7 +73,12 @@ export async function previewBudget(request) {
     const available = limits?.available ?? subtractMoney(subtractMoney(assigned, committed), executed);
     const projectedBalance = subtractMoney(available, requested);
     previewSources.set(sourceKey, { available, requested, projectedBalance });
-    const mode = "ACTIVE"; // New commitments always enforce available funds.
+    // This is a read-only planning preview (unlike reserveBudget's real
+    // commitment below, which always enforces available funds by design) —
+    // it should reflect the resolved rule so a cost center with no budget
+    // assigned yet previews as "TRANSITIONAL"/informational instead of a
+    // false "insufficient funds" shortfall.
+    const mode = isBudgetPlan(allocation) ? "ACTIVE" : rule.mode || "TRANSITIONAL";
     lines.push({
       ...line,
       mode,
