@@ -27,6 +27,47 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
     const adjust = (plan, action, amount, extra = {}) => adjustBudgetPlan(plan._id, { operationId: `adjustment-${++serial}`, action, amount, revision: plan.__v, reason: "Approved adjustment", ...extra }, user, req);
     let monthly, yearly;
 
+    await t.test("Admin All-expenses allocations fund preview and commitment for a specific request account", async () => {
+      const pooled = await CostCenter.create({ code: "30007-POOL", name: "General allocation", area: "Finance", budgetMode: "ACTIVE", active: true });
+      const allocation = await BudgetAllocation.create({ period: "2043-09", costCenter: pooled._id, assignedAmount: 20000 });
+      const draftRequest = request("2043-09", 8000, { lines: [{ costCenter: pooled._id, expenseType: expense._id, totalAmount: 8000 }] });
+      const preview = await previewBudget(draftRequest);
+      assert.equal(preview.lines[0].available, 20000);
+      assert.equal(preview.lines[0].projectedBalance, 12000);
+      const commitment = await reserveBudget(draftRequest, user._id);
+      assert.equal(String(commitment.lines[0].allocation), String(allocation._id));
+      assert.equal((await BudgetAllocation.findById(allocation._id)).committedAmount, 8000);
+      await releaseBudget(draftRequest, user._id, "Regression cleanup");
+      assert.equal((await BudgetAllocation.findById(allocation._id)).committedAmount, 0);
+    });
+
+    await t.test("a specific zero allocation cannot borrow from the general pool", async () => {
+      const pooled = await CostCenter.findOne({ code: "30007-POOL" });
+      const specific = await BudgetAllocation.create({ period: "2043-09", costCenter: pooled._id, expenseType: expense._id, assignedAmount: 0 });
+      const draftRequest = request("2043-09", 8000, { lines: [{ costCenter: pooled._id, expenseType: expense._id, totalAmount: 8000 }] });
+      const preview = await previewBudget(draftRequest);
+      assert.equal(String(preview.lines[0].allocation), String(specific._id));
+      assert.equal(preview.status, "INSUFFICIENT");
+      await assert.rejects(reserveBudget(draftRequest, user._id), error => error.code === "INSUFFICIENT_BUDGET");
+      assert.equal((await previewBudget({ ...draftRequest, accountingPeriod: "2044-09" })).lines[0].available, 0);
+    });
+
+    await t.test("general annual pools share usage across request accounts without borrowing from other projects", async () => {
+      const pooled = await CostCenter.create({ code: "SHARED-POOL", name: "Shared allocation", area: "Finance", budgetMode: "ACTIVE", active: true });
+      await BudgetAllocation.create({ period: "2045", costCenter: pooled._id, assignedAmount: 10000 });
+      await BudgetAllocation.create({ period: "2045", costCenter: pooled._id, project: "OTHER", assignedAmount: 90000 });
+      const draftRequest = request("2045-09", 8000, { project: "REQUEST-PROJECT", lines: [
+        { costCenter: pooled._id, expenseType: expense._id, totalAmount: 5000 },
+        { costCenter: pooled._id, expenseType: new mongoose.Types.ObjectId(), totalAmount: 3000 }
+      ] });
+      const preview = await previewBudget(draftRequest);
+      assert.equal(preview.totalAvailable, 10000);
+      assert.equal(preview.projectedBalance, 2000);
+      await reserveBudget(draftRequest, user._id);
+      assert.equal((await BudgetAllocation.findOne({ costCenter: pooled._id, project: "" })).committedAmount, 8000);
+      assert.equal((await BudgetAllocation.findOne({ costCenter: pooled._id, project: "OTHER" })).committedAmount, 0);
+    });
+
     await t.test("exact distribution, custom reserve, explicit mode, and input restrictions", async () => {
       assert.equal(distributeAnnualBudget("100.01").reduce((sum, n) => sum + Math.round(n * 100), 0), 10001);
       monthly = await createBudgetPlan(draft("2031"), user, req);

@@ -8,11 +8,29 @@ export const isBudgetPlan = (allocation) => ["ANNUAL_ONLY", "ANNUAL_MONTHLY"].in
 export const budgetAvailable = (allocation) => subtractMoney(subtractMoney(allocation?.assignedAmount || 0, allocation?.committedAmount || 0), allocation?.executedAmount || 0);
 
 export async function findBudgetAllocation(period, line, session) {
-  const dimension = { costCenter: line.costCenter, expenseType: line.expenseType, project: line.project || "", active: true };
-  const annual = await BudgetAllocation.findOne({ ...dimension, period: String(period).slice(0, 4) }).session(session || null);
-  // A linked plan is authoritative for all twelve months, including zero allocations.
-  if (isBudgetPlan(annual)) return annual;
-  return await BudgetAllocation.findOne({ ...dimension, period }).session(session || null) || annual;
+  // Admin's optional expense account means "All", not an unusable dimension.
+  // Prefer specific funds; only fall back to explicitly general pools, never to
+  // another expense account, project or year. An exhausted specific pool wins.
+  const scopes = [
+    [line.expenseType, line.project || ""],
+    [null, line.project || ""],
+    [line.expenseType, ""],
+    [null, ""]
+  ];
+  const seen = new Set();
+  for (const [expenseType, project] of scopes) {
+    const key = `${expenseType || ""}|${project}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const dimension = { costCenter: line.costCenter, expenseType: expenseType || null,
+      project: project || { $in: ["", null] }, active: true };
+    const annual = await BudgetAllocation.findOne({ ...dimension, period: String(period).slice(0, 4) }).session(session || null);
+    // A linked plan is authoritative for all twelve months, including zero allocations.
+    if (isBudgetPlan(annual)) return annual;
+    const allocation = await BudgetAllocation.findOne({ ...dimension, period }).session(session || null) || annual;
+    if (allocation) return allocation;
+  }
+  return null;
 }
 
 export function budgetLimits(allocation, period, amount = 0) {
