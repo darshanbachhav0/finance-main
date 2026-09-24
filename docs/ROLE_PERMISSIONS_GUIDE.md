@@ -1,8 +1,12 @@
 # UMA Finance Role Permissions Guide
 
-Detailed access and workflow reference for the eight operational profiles
+Detailed access and workflow reference for the ten operational profiles
 
-**Version date 10 September 2026**
+**Version date 24 September 2026**
+
+## Changelog
+
+This revision adds two profiles that did not exist when the guide was last reviewed: **Procurement** (issues Purchase/Service Orders after Track A1 budget commitment) and **ManagementViewer** (strictly read-only: external portal, internal Reports, and audit history). It also corrects five items against `constants.js`/route code: order issuance is Procurement's action, not Budget's; Treasury can now certify a BBVA bank-file format alongside Admin (`BANK_FORMAT_CERTIFY`); only BBVA is a valid outbound payment-file source, while BCP/Interbank/Scotiabank/Banco de la Nación remain beneficiary-only banks; Track B now requires a configured eligibility rule and is no longer a free choice; a new `PARTIALLY_PAID` accounts-payable status exists; and only Management may decide a budget exception — Admin can never approve one directly, only repair the underlying configuration.
 
 This guide explains what each profile can view, create, change, approve, and execute in the UMA finance platform. It also identifies the conditions that can block an otherwise permitted action. Use it for onboarding, assigning accounts, reviewing responsibilities, and diagnosing access issues.
 
@@ -10,7 +14,7 @@ The platform separates requesting, authorization, budget control, accounting, an
 
 **Scope.** The guide describes the current project implementation and its default permissions. Administrators can change user assignments, extra permissions, approval rules, budgets, and policies. Seeded examples in this guide are configuration examples, not a statement of the current production database settings.
 
-## The eight operational profiles
+## The ten operational profiles
 
 | Profile | Stored role | Approval level or purpose |
 | --- | --- | --- |
@@ -20,10 +24,14 @@ The platform separates requesting, authorization, budget control, accounting, an
 | Vice Rector or Vicerrectorado | Approver | VICE_RECTOR |
 | Accounting or Contabilidad | Accounting | Supplier review, fiscal processing and renditions |
 | Treasury or Tesorería | Treasury | Scheduling, bank files, payment and reconciliation |
-| Budget or Presupuesto | Budget | Budgets, exceptions and procurement orders |
+| Budget or Presupuesto | Budget | Validates, commits and reserves funds; prepares exceptions |
+| Procurement or Abastecimiento | Procurement | Issues Purchase/Service Orders after budget commitment |
 | Management or Gerencia and Rectorado | Management | Usually RECTORATE; GENERAL_MANAGEMENT can be configured |
+| Management Viewer | ManagementViewer | Read-only institutional portal, reports and audit history |
 
-There are **eight operational profiles and seven stored role names**. Director and Vice Rector share Approver permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
+There are **ten operational profiles and nine stored role names**. Director and Vice Rector share Approver permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
+
+ManagementViewer is the platform's only strictly read-only profile: every permission it holds is a view/report/audit token, and it never appears in an `authorize()`/`authorizePermission()` check on a POST, PUT, PATCH or DELETE route.
 
 **Reading the guide.** Start with the two capability matrices, then the common access rules and your role section. Later sections explain approval routes, annual/monthly budget limits, data visibility, exceptions, practical scenarios, and the technical permission catalog.
 
@@ -33,7 +41,7 @@ SOURCES S01 S02 S03 S04
 
 ## Capability matrix for financial work
 
-ADM Administrator; REQ Requester; DIR Director; VR Vice Rector; ACC Accounting; TRE Treasury; BUD Budget; MGT Management.
+ADM Administrator; REQ Requester; DIR Director; VR Vice Rector; ACC Accounting; TRE Treasury; BUD Budget; MGT Management. Procurement (PRO) and ManagementViewer (MGV) are shown in their own table immediately below, to keep this matrix's columns aligned with the source layout.
 
 **Y** permitted subject to workflow checks; **O** own records only; **S** assigned approval stage only; **R** read only; **-** no default action access. These describe manual actions. Automated downstream processing is explained later.
 
@@ -49,9 +57,9 @@ ADM Administrator; REQ Requester; DIR Director; VR Vice Rector; ACC Accounting; 
 | Approve observe return or reject | Y | - | S | S | - | - | - | S |
 | Use budget overview and plans | Y | - | R | R | R | - | Y | R |
 | Create or adjust annual/monthly plans | Y | - | - | - | - | - | Y | - |
-| Decide budget exceptions | Y | - | - | - | - | - | Y | - |
+| Decide budget exceptions | - | - | - | - | - | - | - | Y |
 | Manually commit an approved budget | Y | - | - | - | - | - | Y | - |
-| Manually issue Purchase or Service Order | Y | - | - | - | - | - | Y | - |
+| Manually issue Purchase or Service Order | Y | - | - | - | - | - | - | - |
 | Upload an A1 invoice and conformity | Y | O | - | - | Y | - | - | - |
 | Upload invoice batches against an order | Y | O | - | - | Y | - | - | - |
 | Resolve batch invoice observations | Y | - | - | - | Y | - | - | - |
@@ -66,7 +74,38 @@ ADM Administrator; REQ Requester; DIR Director; VR Vice Rector; ACC Accounting; 
 | Use the explicit request close action | Y | - | - | - | Y | - | - | - |
 | Void an eligible request with a reason | Y | - | - | - | Y | - | - | - |
 
-**Scope notes.** Approver and Management request lists/details exclude drafts but are not restricted to the requester's area. Director approval decisions are area-restricted. Accounting, Treasury, and Budget can view drafts. Requester edits/deletions have additional status restrictions. Treasury settlement can lead to automatic closure even though the explicit Close endpoint is reserved to Admin and Accounting.
+**Procurement (PRO) and ManagementViewer (MGV)**, for the same capability rows in the same order:
+
+| Capability | PRO | MGV |
+| --- | --- | --- |
+| Create a financial request | - | - |
+| View own request details | R | - |
+| Browse other users' requests | R | - |
+| Open another user's draft | R | - |
+| Edit a request | - | - |
+| Delete a draft or rejected request | - | - |
+| Submit or resubmit a request | - | - |
+| Approve observe return or reject | - | - |
+| Use budget overview and plans | - | - |
+| Create or adjust annual/monthly plans | - | - |
+| Decide budget exceptions | - | - |
+| Manually commit an approved budget | - | - |
+| Manually issue Purchase or Service Order | Y | - |
+| Upload an A1 invoice and conformity | - | - |
+| Upload invoice batches against an order | - | - |
+| Resolve batch invoice observations | - | - |
+| Process Accounting and Accounts Payable | - | - |
+| Submit an expense rendition | - | - |
+| Review or validate a rendition | - | - |
+| Settle validated non-deductible balance | - | - |
+| Schedule or generate bank payment files | - | - |
+| Confirm payments or record a bounce | - | - |
+| Reprogram a bounced payment | - | - |
+| Reconcile a payment | - | - |
+| Use the explicit request close action | - | - |
+| Void an eligible request with a reason | - | - |
+
+**Scope notes.** Approver and Management request lists/details exclude drafts but are not restricted to the requester's area. Director approval decisions are area-restricted. Accounting, Treasury, Budget and Procurement can view drafts (all four hold request:view-all without the Approver/Management draft exclusion). Requester edits/deletions have additional status restrictions. Treasury settlement can lead to automatic closure even though the explicit Close endpoint is reserved to Admin and Accounting. ManagementViewer has no row of manual action in this matrix at all: it lacks request:view-all, so it cannot open Requests, and its access is confined to reporting/audit, covered in the next matrix and its own role section. Only Management may approve or reject a budget exception; Budget and Admin may prepare one or mark it reviewed, but neither can decide it — Admin can only repair the underlying approver-role configuration through the audited master-data screen, never approve the exception directly. Budget no longer holds "Manually issue Purchase or Service Order" — Procurement does (Y in the table above), alongside Admin; see the Procurement and Budget role sections.
 
 SOURCES S02 S03 S05 S06 S07 S08 S09 S10 S11 S12
 
@@ -94,6 +133,7 @@ Use the same profile abbreviations as the preceding matrix. **P** means propose 
 | Maintain finance control settings | Y | - | - | - | Y | - | R | - |
 | Configure approval rules | Y | - | - | - | - | - | - | - |
 | Configure bank file formats | Y | - | - | - | - | - | - | - |
+| Certify a bank file format | Y | - | - | - | - | Y | - | - |
 | Open close or reopen accounting periods | Y | - | - | - | Y | - | - | - |
 | View and export management reports | Y | - | R | R | R | R | R | R |
 | Export accounting consolidation or SIRE | Y | - | - | - | Y | - | - | - |
@@ -101,9 +141,39 @@ Use the same profile abbreviations as the preceding matrix. **P** means propose 
 | Use global audit log | Y | - | - | - | R | - | - | - |
 | Create update deactivate user accounts | Y | - | - | - | - | - | - | - |
 
-**Important differences.** Reading a supplier does not authorize verifying its bank account. Downloading an already generated bank file does not authorize generating, scheduling, or confirming payments. Budget's configuration menu does not grant project-master write access; project writes remain Admin/Accounting.
+**Procurement (PRO) and ManagementViewer (MGV)**, for the same capability rows in the same order:
+
+| Capability | PRO | MGV |
+| --- | --- | --- |
+| Open Supplier Master | R | - |
+| Create a supplier proposal | - | - |
+| Correct an eligible supplier proposal | - | - |
+| Add supplier bank account facts | - | - |
+| Verify banking or set preferred account | - | - |
+| Validate review or homologate supplier | - | - |
+| Update or remove supplier master record | - | - |
+| Manage employee reimbursement profiles | - | - |
+| Review employee reimbursement banking | - | - |
+| Read employee banking profiles | - | - |
+| Maintain CECO expense types projects FX | - | - |
+| Maintain budget rules and allocations | - | - |
+| Maintain document rules/account mappings | - | - |
+| Maintain finance control settings | - | - |
+| Configure approval rules | - | - |
+| Configure bank file formats | - | - |
+| Certify a bank file format | - | - |
+| Open close or reopen accounting periods | - | - |
+| View and export management reports | R | R |
+| Export accounting consolidation or SIRE | - | - |
+| Download existing generated bank file | - | - |
+| Use global audit log | - | R |
+| Create update deactivate user accounts | - | - |
+
+**Important differences.** Reading a supplier does not authorize verifying its bank account. Downloading an already generated bank file does not authorize generating, scheduling, or confirming payments. Budget's configuration menu does not grant project-master write access; project writes remain Admin/Accounting. Bank-format certification is a narrow, additional exception to Admin-only configuration: Treasury holds `bank-format:certify` and can certify or decertify an existing bank-file format, but creating, editing, deactivating or reactivating that configuration record remains Admin-only. Only BBVA is a supported source/generator format (`SOURCE_BANKS`); BCP, Interbank, Scotiabank and Banco de la Nación (`BENEFICIARY_BANKS`) can be a supplier's or employee's beneficiary bank for a CCI transfer, but none of them is a format UMA can generate an outbound payment file through. Procurement's Supplier Master access mirrors Treasury's: read-only, for confirming an eligible homologated supplier before issuing an order, never a proposal, verification or homologation action.
 
 Supplier proposals are correctable only while pending validation or observed. A Requester must also be the proposer. Supplier bank entry does not permit changing verification, ownership-review, active/preferred, or Finance decision fields. Employee profile preference/deactivation follows the separate owner permissions shown above.
+
+Procurement and ManagementViewer can both call the management-report summary and CSV-export endpoints directly (reportRoutes.js admits every profile except Requester), but the generated-file category list behind the generic stored-file download route still excludes both of them (it remains Admin, Approver, Accounting, Treasury, Budget and Management) — so neither role can re-download a report file from the export-history list after the fact; a fresh call to the export endpoint is required instead.
 
 SOURCES S03 S09 S10 S13 S14 S15 S16
 
@@ -117,7 +187,7 @@ Protected APIs require a valid sign-in token and an active user record. The serv
 
 ### Role gates and extra permissions
 
-Most module routes explicitly allow particular stored roles. Some routes, especially batch invoices and global audit, check named permissions. A user's effective named permissions are the union of the role defaults and their additional permissions. Extra permissions add capabilities; they do not remove role defaults.
+Most module routes explicitly allow particular stored roles. Some routes, especially batch invoices, global audit, bank-format certification and the management-report/portal group, check named permissions instead of a role list — that is how Treasury gained bank-format certification and ManagementViewer gained audit/report access without a broader role grant. A user's effective named permissions are the union of the role defaults and their additional permissions. Extra permissions add capabilities; they do not remove role defaults.
 
 An extra permission does not bypass a route that explicitly requires another role, a record-ownership check, or a workflow condition. Sidebar visibility also follows role-based navigation rules. Consequently, adding a permission does not necessarily create a working menu or authorize an entire module.
 
@@ -135,7 +205,7 @@ Closed-period blocking is action-specific and controlled by period policy. Defau
 
 ### Reading is not editing
 
-All profiles have Dashboard and Requests navigation. Request Detail can include related accounting, budget, payment and audit information without granting edit access to those modules. The common dashboard and some reference-data APIs have broader scope than the dedicated request list. See the visibility limitations section before treating a hidden menu as a confidentiality boundary.
+All profiles except ManagementViewer have Requests navigation. ManagementViewer's own navigation is limited to the Management Portal, Reports and Audit, matching its strictly read-only scope; it lacks request:view-all and is neither a requester nor an approver, so the request-visibility filter returns nothing for it even if it reached that screen. Request Detail can include related accounting, budget, payment and audit information without granting edit access to those modules. The common dashboard and some reference-data APIs have broader scope than the dedicated request list. See the visibility limitations section before treating a hidden menu as a confidentiality boundary.
 
 SOURCES S01 S02 S03 S05 S17 S18 S19
 
@@ -143,7 +213,7 @@ SOURCES S01 S02 S03 S05 S17 S18 S19
 
 ## Administrator
 
-**Stored role Admin.** The administrator configures the platform, manages identities, and performs permitted operational actions across finance modules. The default catalog grants all 27 named permissions.
+**Stored role Admin.** The administrator configures the platform, manages identities, and performs permitted operational actions across finance modules. The default catalog grants all 29 named permissions.
 
 ### What the administrator can view
 
@@ -152,7 +222,7 @@ All requests, including other users' drafts; supplier and banking information; b
 ### What the administrator can do
 
 - Create, edit and submit requests, register invoices, upload batches, manage renditions, and execute authorized approval decisions.
-- Maintain annual/monthly plans, allocations and budget rules; resolve budget exceptions; commit approved budgets and issue eligible procurement orders.
+- Maintain annual/monthly plans, allocations and budget rules; commit approved budgets; and issue eligible procurement orders (the same order-issuance action Procurement holds). Admin can prepare a budget exception or mark it reviewed, and can repair a broken exception-approver configuration, but cannot approve or reject the exception itself — see Limitations.
 - Review and homologate suppliers, verify banking, process Accounting, control periods, generate exports, schedule and confirm payments, reconcile, and handle bounced payments.
 - Create, update or deactivate users; assign the role, approval level, approval areas, primary/authorized CECOs, and additional permissions.
 - Maintain approval rules, bank formats, document rules, accounting mappings, projects, expense types and exchange rates.
@@ -162,6 +232,8 @@ All requests, including other users' drafts; supplier and banking information; b
 Admin does not have unlimited status transitions. Request deletion is restricted to draft or rejected records. Approved/completed documents cannot be deleted through that action. Closed-period policies, approval completeness, required evidence, supplier readiness and payment-account eligibility continue to apply.
 
 Admin can act across approval levels and areas. If the Admin is also the requester, approval requires an explicit, non-empty admin override reason. The exception is part of the recorded approval; it is not blanket self-approval permission.
+
+Admin cannot approve or reject a budget exception. Only Management may decide one; the service layer enforces this even for Admin, so Admin's role in that workflow is limited to preparing the exception, marking it reviewed, or repairing the underlying approver-role configuration through the audited master-data screen — never approving it directly.
 
 The account-management API blocks deactivating the currently signed-in account. User removal deactivates the account; it does not erase its historical actions. Passwords are replaced through the administrative flow, not displayed as existing plaintext values.
 
@@ -185,7 +257,7 @@ The dedicated Budget and Management Reports modules are unavailable. Authorized 
 
 ### What the requester can do
 
-- Create A1 procurement requests, Track B direct-payment requests, and Track C advances/renditions supported by the form; enter items, quotations and required supporting documents.
+- Create A1 procurement requests, Track B direct-payment requests, and Track C advances/renditions supported by the form; enter items, quotations and required supporting documents. Track B is not a free choice: submission is only accepted when an active Track B eligibility rule (matching area, expense nature and PEN-equivalent amount, configured by Admin) covers the request; otherwise the requester must use Track A1 instead.
 - Edit and resubmit owned draft, rejected, returned, observed, budget-observed, SUNAT-observed, amount-exceeded-observed, or batch-observed requests. Delete only owned draft or rejected requests.
 - Propose a supplier; correct a proposal they created while pending validation or observed; add bank facts and supporting documents for that eligible proposal.
 - Register an owned A1 invoice after the PO/budget stage, with XML, PDF and conformity evidence. Upload batches against an eligible owned order and follow progress.
@@ -322,9 +394,9 @@ Treasury does not have the dedicated Budget, Accounting, SIRE, global audit or c
 
 ### What Treasury can do
 
-- Schedule eligible requests or individual payables using the selected bank, currency, payment date and eligible account.
-- Generate supported bank files; inspect existing files and payment batches.
-- Confirm a request/payable payment, record a bank rejection, and reprogram a bounced payable after required replacement evidence.
+- Schedule eligible requests or individual payables using the selected bank, currency, payment date and eligible account. Only BBVA is a supported source/generator bank format (SOURCE_BANKS); the other supported banks (BCP, Interbank, Scotiabank, Banco de la Nación) are beneficiary-only destinations reached by CCI transfer, never a format Treasury generates a file through.
+- Generate supported bank files; inspect existing files and payment batches. Certify or decertify an existing bank-file format (bank-format:certify) — a narrow exception shared with Admin; creating, editing or deactivating the format configuration itself remains Admin-only.
+- Confirm a request/payable payment in full or in part — a partial confirmation moves the CXP to PARTIALLY_PAID rather than PAID and remains open for a further confirmation — record a bank rejection, and reprogram a bounced payable after required replacement evidence.
 - Reconcile the recorded payment with bank evidence/reference.
 - Read eligible employee reimbursement destinations and settle validated non-deductible rendition balances using the supported reimbursement/payroll-deduction methods.
 
@@ -348,37 +420,68 @@ SOURCES S05 S11 S13 S14 S16 S22 S24
 
 ## Budget
 
-**Stored role Budget.** Budget manages financial availability, annual/monthly planning, exceptions, and the manual procurement handoff after approvals.
+**Stored role Budget.** Budget manages financial availability, annual/monthly planning, and commits an approved request's budget. It no longer issues the Purchase or Service Order itself; that action, and the underlying route permission, belong to Procurement (see the comment above `ROLES.PROCUREMENT` in `constants.js`). Budget's part of a budget exception ends at preparing or reviewing it — only Management may approve or reject one.
 
 ### What Budget can view
 
 All requests, including drafts; budget overview, annual and monthly plan detail, allocations, commitments and exceptions; management reports; and the configuration workspace available to Budget. Request Detail includes procurement readiness, quotations, order terms and related financial information.
 
-Budget does not have Supplier Master, full employee banking, Accounting, Treasury, user administration or global audit access.
+Budget does not have Supplier Master, full employee banking, Accounting, Treasury, user administration or global audit access. It also does not have the Purchase/Service Order issuance action — that belongs to Procurement and Admin.
 
 ### What Budget can do
 
 - Create annual budget plans, set the permitted monthly structure/control mode, and post supported adjustments with reasons and an audit trail.
-- Maintain budget rules and allocations; review insufficient-budget cases and decide supported exception outcomes.
-- Commit the approved request's budget after all required approvals are complete, or after a budget observation has been resolved.
-- Manually issue the Purchase or Service Order when procurement readiness passes, including a Management-approved request awaiting Budget handoff.
+- Maintain budget rules and allocations; review insufficient-budget cases and prepare or mark reviewed a supported exception outcome. Budget cannot itself approve or reject the exception — only Management may decide it.
+- Commit the approved request's budget after all required approvals are complete, or after a budget observation has been resolved. This commitment is what makes the request eligible for Procurement to issue the order next; Budget's own involvement ends here.
 - Read project reference data and Finance configurations available to Budget.
 
 ### Limitations
 
-Budget cannot approve requests, edit request item/quotation facts, create or verify suppliers, register invoices, process Accounting, control accounting periods, pay or reconcile, or maintain user accounts.
+Budget cannot approve requests, edit request item/quotation facts, create or verify suppliers, register invoices, **issue a Purchase or Service Order**, decide (approve/reject) a budget exception, process Accounting, control accounting periods, pay or reconcile, or maintain user accounts. This guide previously described order issuance as a Budget action, which was accurate before Procurement existed as a distinct stored role; `procurement-order:create` has since moved to Procurement's permission set, and Budget's own set no longer includes it.
 
-The configuration menu does not grant project create/update/delete authority. Project Master writes remain Admin/Accounting. Approval-rule and bank-format configuration are Admin-only.
+The configuration menu does not grant project create/update/delete authority. Project Master writes remain Admin/Accounting. Approval-rule configuration and the Track B eligibility-rule configuration are Admin-only. Bank-format configuration is also Admin-only for creating, editing or deactivating a format, though Treasury shares the narrow certify/decertify action on an existing one.
 
-The role cannot commit an unapproved request. Order issuance requires the applicable A1 procurement flow, completed required approvals, an eligible commitment, mandatory documents/quotations, and a usable homologated supplier with a PRV code. Reissuing the same request is designed to return the existing order rather than create a second one.
+The role cannot commit an unapproved request. Order issuance — now a Procurement/Admin action, not Budget's — requires the applicable A1 procurement flow, completed required approvals, Budget's eligible commitment, mandatory documents/quotations, and a usable homologated supplier with a PRV code. Reissuing the same request is designed to return the existing order rather than create a second one.
 
-Annual and monthly controls are cumulative business constraints. An annual balance does not automatically make an over-limit month available. Adjusting a plan is not permission to alter accounting actuals or erase committed/executed amounts. Exception behavior depends on the configured rule and selected strategy.
+Annual and monthly controls are cumulative business constraints. An annual balance does not automatically make an over-limit month available. Adjusting a plan is not permission to alter accounting actuals or erase committed/executed amounts. Exception behavior depends on the configured rule and selected strategy, but the approving authority is always Management regardless of that configuration.
 
 ### Example
 
-Management finishes a CAPEX approval. Budget confirms availability, resolves any budget exception, and performs the financial handoff/order action. If the project or supplier is wrong, Budget asks the responsible profile to correct it instead of editing that master itself.
+Management finishes a CAPEX approval. Budget confirms availability, prepares or reviews any budget exception for Management's decision, and commits the approved budget. Procurement then issues the Purchase or Service Order — Budget's role ends at the commitment. If the project or supplier is wrong, Budget asks the responsible profile to correct it instead of editing that master itself.
 
 SOURCES S01 S03 S07 S12 S15 S23 S25
+
+<!-- pagebreak -->
+
+## Procurement
+
+**Stored role Procurement.** Procurement issues the Purchase or Service Order once an A1 request's required approvals are complete and Budget has committed the funds. A global route-gate defect had blocked this role from the API entirely even though its `ROLE_PERMISSIONS` entry was correct; that defect is now fixed, so Procurement operates as a normal, fully functional profile.
+
+### What Procurement can view
+
+All requests, including drafts, through the same unrestricted request:view-all access as Accounting, Treasury and Budget (Procurement is not subject to the Approver/Management draft exclusion). Supplier Master in read mode, including supplier bank-view data, to confirm a homologated supplier's readiness before issuing an order. Issued Purchase/Service Orders and management reports. Request Detail exposes procurement readiness, quotations, the order snapshot and related financial information.
+
+Procurement does not have the Budget, Accounting, Treasury, user-administration or global audit workspaces — its route access is limited to Requests, Suppliers (read) and Reports. It cannot open the Approval Inbox to decide a step, and it has no Budget-module access at all (`budgetRoutes.js` does not admit it).
+
+### What Procurement can do
+
+- Manually issue the Purchase or Service Order for an eligible A1 request once procurement readiness passes: completed required approvals, Budget's eligible commitment, mandatory documents/quotations, and a usable homologated supplier with a PRV code. This is the order-issuance action the guide previously (and incorrectly) attributed to Budget; Admin can also issue it, and Procurement is notified automatically once a request's budget is committed and ready for its action.
+- Read Supplier Master and supplier banking to confirm a recommended supplier is active, homologated and holds a matching PRV code before issuing an order.
+- View and export the same management reports available to Accounting, Treasury, Budget and Management.
+
+### Limitations
+
+Procurement cannot create or edit a request, approve/observe/return/reject an approval step, adjust or commit a budget, decide a budget exception, propose/verify/homologate a supplier, register invoices, process Accounting, schedule or confirm Treasury payments, control accounting periods, or manage users.
+
+Order issuance still depends on Budget's prior commitment and Accounting/Admin's supplier readiness; Procurement cannot commit a budget or homologate a supplier itself to unblock its own order action. Reissuing an already-ordered request returns the existing order rather than creating a duplicate.
+
+### Practical dashboard and example
+
+Procurement's dashboard shows its own dedicated metrics, distinct from Budget's plan/commitment totals: approved requests still awaiting a Purchase Order, open Purchase Orders, recent orders, invoices registered against those orders, and pending supplier-validation warnings. Its sidebar is limited to Dashboard, Requests, Suppliers and Reports.
+
+After Budget commits an approved A1 request's funds, Procurement confirms the recommended supplier's PRV code and issues the Purchase or Service Order. If the supplier is not yet homologated, Procurement asks Accounting to complete homologation rather than issuing the order against an ineligible supplier.
+
+SOURCES S01 S02 S03 S05 S19 S23
 
 <!-- pagebreak -->
 
@@ -395,6 +498,7 @@ Management request lists/details are not restricted by area in the same way as a
 ### What Management can do
 
 - Approve, observe, return or reject an active step assigned to Management and matching the user's approvalLevel.
+- Approve or reject a pending budget exception. Management is the only role that may decide one — Budget and Admin can only prepare it or mark it reviewed, and Admin can never approve it directly, only repair the exception-approver configuration if it is broken.
 - Review institutional budget availability, commitments, spending, pending approvals and financial execution.
 - View and export permitted management reports.
 
@@ -418,6 +522,38 @@ SOURCES S01 S02 S03 S04 S06 S07 S23
 
 <!-- pagebreak -->
 
+## Management Viewer
+
+**Stored role ManagementViewer.** ManagementViewer is a strictly read-only profile: every permission it holds (`management-portal:view`, `report:view`, `audit:view`) is a view/report/audit token, and the role never appears in an `authorize()`/`authorizePermission()` check on a POST, PUT, PATCH or DELETE route anywhere in the codebase. It was recently expanded from an external aggregate-only portal account to also reach the internal Reports module and the global audit log.
+
+### What ManagementViewer can view
+
+The external institutional Management API (`/api/management/v1` — overview, budget, workflow, payments, SLA and filter aggregates, with its own documentation at `/api/management/v1/api-docs` and OpenAPI document). That external API's own documentation states it "does not expose transaction-level records, personal data, supplier identifiers, bank details, files, or write operations."
+
+The internal Reports module's management summary and CSV export/export-history endpoints — the same `/reports/management*` routes Approver, Accounting, Treasury, Budget, Procurement and Management use. The global audit log and per-request audit timeline through `audit:view`, exactly like Accounting (the audit routes check only that permission, with no additional role restriction).
+
+Its sidebar is limited to Management Portal, Reports and Audit. It has no Dashboard or Requests entry, and — unlike every other profile — it cannot view an individual request or the request list at all: it lacks request:view-all and is neither a requester nor an approver on any request, so the request-visibility filter returns nothing for it even if it reached that screen.
+
+### What ManagementViewer can do
+
+- Call the read-only external Management API endpoints for institutional aggregates.
+- View the internal management-report summary and generate/download its CSV export directly from that endpoint.
+- Read the global audit log and a request's audit timeline.
+
+### Limitations
+
+ManagementViewer cannot create, edit, approve, commit, homologate, schedule, confirm, reconcile, certify, or configure anything. It cannot open Requests, Suppliers, Accounting, Treasury, Budget, or any configuration screen. It is excluded from the approval-decision route entirely: `approvalRoutes.js` explicitly authorizes every other stored role and excludes only ManagementViewer.
+
+A previously generated report file is downloaded through the same generic stored-file route as other categories, and that route's role list for the "reports" category was not changed when ManagementViewer was added (it remains Admin, Approver, Accounting, Treasury, Budget and Management). So ManagementViewer can generate and immediately download a fresh CSV export, but cannot later re-download that same file from the generated-exports history list; a fresh call to the export endpoint is required each time.
+
+### Example
+
+An institutional trustee or auditor is given a ManagementViewer account to review spend, budget and workflow aggregates and the audit trail without being able to act on any individual request, supplier, or payment. They can read the history behind a suspicious entry but cannot correct it — that remains Accounting/Admin's job.
+
+SOURCES S01 S02 S03 S16 S18 S26 S27
+
+<!-- pagebreak -->
+
 ## Approval routes and financial handoffs
 
 ### Rules determine which approvals apply
@@ -426,15 +562,17 @@ Approval routes are selected using active rules, request area, request type, flo
 
 For A1 and other ordinary flows with no matching rules, the fallback route is Area Director then Vice Rector, normally 24 hours per step. Track B uses an explicitly configured B route or an express Area Director fallback of four hours. A due date or overdue indicator is an SLA signal, not automatic approval or a new permission.
 
+Track B eligibility is gated separately from its approval route: a request can only be submitted as Track B when an active Track B eligibility rule — matching area, expense nature and PEN-equivalent amount, configured by Admin — covers it. This check runs at submission (not at draft save), and a request with no matching rule is rejected before any route is even selected; the requester must resubmit through Track A1 instead.
+
 Seed examples include area Director rules, Vice Rector, and a CAPEX Rectorate threshold of PEN 100,000 with a 36-hour SLA. Admin can change the rules. Check the current rule and request snapshot for a specific case; do not treat seed amounts as fixed spending authority.
 
 ### Handoff by track
 
 | Track | Operational handoff and ownership |
 | --- | --- |
-| A1 formal procurement | Requester supplies need and quotations; configured approvers decide; financial handoff reserves budget and may create the order automatically. Admin/Budget also have explicit commit/order actions. Requester or Accounting supplies XML, PDF and conformity after the order stage. Valid invoices can provision CXP before Treasury payment. |
+| A1 formal procurement | Requester supplies need and quotations; configured approvers decide; final approval automatically reserves/commits the budget. Order issuance is a separate, manual step: Admin/Procurement issue the Purchase or Service Order once that commitment exists (Budget's part ends at the commitment). Requester or Accounting supplies XML, PDF and conformity after the order stage. Valid invoices can provision CXP before Treasury payment, which can now be confirmed in full or in part (PARTIALLY_PAID) rather than only fully paid. |
 | A2 invoice batches | Requester or Accounting uploads a batch against an eligible order; the worker validates invoices and provisions valid items. Accounting/Admin resolves observed items. An upload permission does not authorize overriding duplicate, SUNAT or order-ceiling controls. |
-| B direct payment | Requester supplies the required fiscal evidence; express approval is selected by rule. Successful final processing validates fiscal data, reserves applicable budget and provisions CXP. Treasury performs the payment. |
+| B direct payment | Only available when an active Track B eligibility rule matches the request's area, expense nature and amount; otherwise submission is rejected. Requester supplies the required fiscal evidence; express approval is selected by rule. Successful final processing validates fiscal data, reserves applicable budget and provisions CXP (also capable of a PARTIALLY_PAID state before full payment). Treasury performs the payment. |
 | C advance and rendition | Requester obtains advance approval and later submits the rendition. The workflow provisions the advance and Treasury pays. Accounting validates the final expense treatment and any non-deductible balance; eligible settlement can be recorded by Accounting/Treasury/Admin. |
 
 ### Decisions that stop or defer progress
@@ -451,19 +589,19 @@ SOURCES S04 S06 S07 S21 S22 S23
 
 ### Budget controls
 
-Admin and Budget create/adjust annual/monthly plans, maintain allocations/rules and decide budget exceptions. Directors, Vice Rector, Accounting and Management can read the Budget module. Treasury and Requester do not have that module, although individual requests can display related budget data.
+Admin and Budget create/adjust annual/monthly plans and maintain allocations/rules. Only Management may decide (approve/reject) a budget exception; Admin and Budget can prepare one or mark it reviewed, but never approve or reject it themselves. Directors, Vice Rector, Accounting and Management can read the Budget module. Treasury, Procurement and Requester do not have that module, although individual requests can display related budget data.
 
 Budget availability is calculated from the applicable dimensions, period and commitments/execution. Monthly limits can block a transaction even where annual capacity remains. A supported adjustment or exception must be processed by the authorized profile; typing a different requested amount does not override the configured controls.
 
 ### Periods and master data
 
-Admin/Accounting maintain accounting periods, cost centers, expense types, projects, exchange rates, document rules, accounting mappings and Finance settings. Admin alone maintains approval rules and bank-file formats. Budget writes budget rules/allocations and can read Finance settings.
+Admin/Accounting maintain accounting periods, cost centers, expense types, projects, exchange rates, document rules, accounting mappings and Finance settings. Admin alone maintains approval rules and the Track B eligibility-rule configuration (area/expense-nature/amount) that now gates whether a requester can submit through Track B at all. Admin alone creates, edits, and deactivates bank-file format configurations; Treasury shares only the narrow certify/decertify action on an existing format. Budget writes budget rules/allocations and can read Finance settings.
 
 Closed-period controls are action-specific. They affect request changes, approvals and financial transitions according to the saved policy. Admin/Accounting may reopen a period through its controlled action; broad role access does not implicitly override the closed-period guard.
 
 ### Payment and procurement controls
 
-Procurement readiness requires a complete required approval route, the applicable request/expense type, valid commitment and documents, and a homologated active supplier with its PRV code. Order snapshots capture request lines and the recommended supplier's payment terms. Editing a quotation later does not replace an already issued order's terms.
+Procurement readiness requires a complete required approval route, the applicable request/expense type, valid commitment and documents, and a homologated active supplier with its PRV code. Procurement (or Admin) issues the order once these conditions are met; Budget's own role ends at the commitment step that makes readiness possible. Order snapshots capture request lines and the recommended supplier's payment terms. Editing a quotation later does not replace an already issued order's terms.
 
 Payment-term cards and automatic IGV calculations simplify entry; they do not change role permissions. Users enter source values. The server derives item financial amounts and payment splits. Those display totals are not an authorization to change a budget, payable, journal entry or bank destination.
 
@@ -516,7 +654,7 @@ SOURCES S02 S03 S13 S14 S16 S18 S19 S26
 
 ### Permissions and navigation are separate layers
 
-A role matrix, the named-permission catalog, the sidebar and the route gates are not identical. Accounting can void an eligible request through explicit role/workflow checks despite lacking the default request:void token. Budget can access a configuration screen without being authorized to write projects. An extra token does not bypass an explicit role gate.
+A role matrix, the named-permission catalog, the sidebar and the route gates are not identical. Accounting can void an eligible request through explicit role/workflow checks despite lacking the default request:void token. Budget can access a configuration screen without being authorized to write projects. An extra token does not bypass an explicit role gate. Procurement previously illustrated the opposite failure mode: a global route-gate defect blocked the role from the API entirely even though its ROLE_PERMISSIONS entry was correct. That defect is now fixed — a correct catalog entry is necessary but was not, on its own, sufficient.
 
 There is no subtractive per-user deny mechanism in permissionsFor. Removing a token from a user's extra-permission list does not revoke a permission inherited from the role. Changing an assignment should include a review of role, level, areas, CECOs and extra permissions together.
 
@@ -548,7 +686,7 @@ SOURCES S01 S02 S03 S06 S07 S15 S18 S19 S23 S26
 | --- | --- |
 | A Director sees a request but cannot approve it | Check the active stage, route role, assigned approval level and allowed area. Admin corrects assignments; the current responsible approver makes the decision. |
 | A requester cannot edit a submitted request | Editing is limited to owned correctable states. The active approver observes/returns it when correction is required. |
-| An approved request has no order | Check remaining approvals, supplier/PRV readiness, evidence and budget commitment. Budget/Admin handles the manual financial handoff; Accounting handles supplier readiness. |
+| An approved request has no order | Check remaining approvals, supplier/PRV readiness, evidence and budget commitment. Budget/Admin commits the budget; Procurement/Admin then issues the order — Budget no longer issues it. Accounting handles supplier readiness. |
 | Annual funds exist but the month fails | The plan's monthly control can also apply. Budget/Admin reviews the monthly balance, plan adjustment or permitted exception. |
 | Treasury cannot select a bank account | Check active CURRENT type, bank/currency, verification/ownership, and whether a destination is frozen. Accounting/Admin verifies supplier banking. |
 | A requester cannot resolve a batch observation | Uploading is separate from reviewing. Accounting/Admin resolves the observation and retries processing where appropriate. |
@@ -573,17 +711,17 @@ SOURCES S01 S02 S06 S07 S11 S12 S17 S20 S23
 
 ## Technical permission catalog
 
-The following table is generated from the current default permission catalog. It identifies inherited tokens, not every effective endpoint action. DIR and VR share the Approver row. Custom user permissions are additive.
+The following table is generated from the current default permission catalog. It identifies inherited tokens, not every effective endpoint action. DIR and VR share the Approver row. PRO is Procurement and MGV is ManagementViewer. Custom user permissions are additive.
 
 | Permission token | Default profiles |
 | --- | --- |
 | request:create | ADM, REQ |
-| request:view-all | ADM, DIR VR, ACC, TRE, BUD, MGT |
+| request:view-all | ADM, DIR VR, ACC, TRE, BUD, PRO, MGT |
 | request:approve | ADM, DIR VR, MGT |
 | request:void | ADM |
 | supplier:propose | ADM, REQ |
 | supplier:homologate | ADM, ACC |
-| supplier:bank-view | ADM, ACC, TRE |
+| supplier:bank-view | ADM, ACC, TRE, PRO |
 | budget:view | ADM, DIR VR, ACC, BUD, MGT |
 | budget:manage | ADM, BUD |
 | accounting:process | ADM, ACC |
@@ -592,20 +730,22 @@ The following table is generated from the current default permission catalog. It
 | treasury:file | ADM, TRE |
 | payment:confirm | ADM, TRE |
 | payment:reconcile | ADM, TRE |
-| report:view | ADM, DIR VR, ACC, TRE, BUD, MGT |
-| audit:view | ADM, ACC |
+| report:view | ADM, DIR VR, ACC, TRE, BUD, PRO, MGT, MGV |
+| management-portal:view | ADM, MGT, MGV |
+| audit:view | ADM, ACC, MGV |
 | master-data:manage | ADM, ACC |
 | user:manage | ADM |
 | employee-bank:manage-own | ADM, REQ |
 | employee-bank:review | ADM, ACC |
 | employee-bank:view-payment | ADM, ACC, TRE |
 | rendition:review | ADM, ACC |
-| procurement-order:create | ADM, BUD |
+| procurement-order:create | ADM, PRO |
 | batch-invoice:upload | ADM, REQ, ACC |
 | batch-invoice:review | ADM, ACC |
 | payment:reprocess | ADM, TRE |
+| bank-format:certify | ADM, TRE |
 
-The default counts are Admin 27, Requester 4, Director 4, Vice Rector 4, Accounting 14, Treasury 9, Budget 5 and Management 4. A token is only one layer of access: use the capability matrices and limitations above when assigning responsibilities.
+The default counts are Admin 29, Requester 4, Director 4, Vice Rector 4, Accounting 14, Treasury 10, Budget 4, Procurement 4, Management 5 and ManagementViewer 3. A token is only one layer of access: use the capability matrices and limitations above when assigning responsibilities.
 
 SOURCES S01 S02
 
@@ -613,7 +753,7 @@ SOURCES S01 S02
 
 ## Source register and maintenance
 
-The guide is based on the repository's current role catalog, server routes, service guards, navigation rules and seed definitions, reviewed on 10 September 2026. It describes default application behavior rather than the saved settings of a particular live user.
+The guide is based on the repository's current role catalog, server routes, service guards, navigation rules and seed definitions, reviewed on 24 September 2026. It describes default application behavior rather than the saved settings of a particular live user.
 
 | Source | Repository path and subject |
 | --- | --- |
@@ -652,6 +792,7 @@ These sources complete the reference list for configuration, reporting, workflow
 | S24 | backend/src/services/paymentDestinationService.js - eligible and frozen bank destinations |
 | S25 | backend/src/services/budgetPlanService.js and docs/ANNUAL_MONTHLY_BUDGETS.md - annual/monthly planning |
 | S26 | backend/src/routes/auditRoutes.js and backend/src/services/requestService.js - global versus request audit access |
+| S27 | backend/src/routes/externalManagementRoutes.js and backend/src/routes/managementDocsRoutes.js - external Management API scope and its own documentation |
 
 The default-permission unit checks were run during this review and passed. Detailed claims were checked against route and service code; the guide does not represent a new end-to-end certification of every role and deployment configuration.
 
