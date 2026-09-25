@@ -12,7 +12,8 @@ for (const role of authenticatedRoles) {
 assert.equal(dashboardMetricLink("Solicitor", "drafts").to, "/requests?status=BORRADOR");
 assert.equal(dashboardMetricLink("Solicitor", "closed").to, "/requests?status=CERRADO");
 assert.equal(dashboardMetricLink("Solicitor", "rendition").to, "/requests?renditionStatus=PENDING%2CSUBMITTED%2COBSERVED");
-assert.equal(dashboardMetricLink("Approver", "pending").to, "/approvals");
+assert.equal(dashboardMetricLink("AreaDirector", "pending").to, "/approvals");
+assert.equal(dashboardMetricLink("ViceRector", "pending").to, "/approvals");
 assert.equal(dashboardMetricLink("Accounting", "cxp").to, "/accounting/payables");
 assert.equal(dashboardMetricLink("Treasury", "pen").to, "/treasury");
 assert.deepEqual(dashboardMetricLink("Unknown", "requests"), {});

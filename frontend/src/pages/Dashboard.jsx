@@ -9,7 +9,6 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import WorkflowStatusLegend from "../components/WorkflowStatusLegend.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
@@ -19,13 +18,16 @@ import { dashboardMetricLink } from "../utils/dashboardLinks.js";
 const descriptions = {
   Admin: "System activity, workflow health, users, and master-data readiness.",
   Solicitor: "Your drafts, approvals, rejected work, renditions, and recent requests.",
-  Approver: "Approval workload, waiting value, oldest requests, and recent decisions.",
+  AreaDirector: "Approval workload, waiting value, oldest requests, and recent decisions.",
+  ViceRector: "Approval workload, waiting value, oldest requests, and recent decisions.",
   Accounting: "Period readiness, accounting entries, exchange rates, and pending closures.",
   Treasury: "Payable workload, currency totals, bank readiness, and generated files.",
   Budget: "Assigned, available, committed, executed, and paid budget with low-balance controls.",
   Management: "Institutional CAPEX/OPEX, budget availability, spending, and pending commitments.",
   Procurement: "Approved requests awaiting a Purchase Order, open orders, and invoices registered against them."
 };
+
+const isApprovalRole = (role) => role === "AreaDirector" || role === "ViceRector";
 
 const metricIcons = {
   users: Users,
@@ -67,7 +69,7 @@ export default function Dashboard() {
   }
 
   const requestColumns = [
-    ...(summary?.role === "Approver" ? [{ key: "approvalDueAt", label: "SLA due", render: row => <div className="primary-cell"><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><span>{row.approvalDueAt ? formatDateTime(row.approvalDueAt, language) : "-"}</span></div> }] : []),
+    ...(isApprovalRole(summary?.role) ? [{ key: "approvalDueAt", label: "SLA due", render: row => <div className="primary-cell"><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><span>{row.approvalDueAt ? formatDateTime(row.approvalDueAt, language) : "-"}</span></div> }] : []),
     { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
     { key: "supplier", label: "Supplier", getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.name || "-" },
     { key: "totalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.totalAmount, row.currency, language) },
@@ -77,7 +79,8 @@ export default function Dashboard() {
   const workspace = {
     Admin: ["Keep university operations moving", "Review requests and the items that need your team’s attention.", "/administration", "Administration"],
     Solicitor: ["Your next request starts here", "Prepare a request or continue work saved in your drafts.", "/requests/new", "New request"],
-    Approver: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
+    AreaDirector: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
+    ViceRector: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
     Accounting: ["Keep the accounts up to date", "Review pending entries, documents and accounting observations.", "/accounting", "Open Accounting"],
     Treasury: ["A clear view of upcoming payments", "Review payment destinations, scheduled items and bank confirmations.", "/treasury", "Open Treasury"],
     Budget: ["Plan the year. Follow each month.", "Review annual availability, monthly allocations and budget exceptions.", "/budget", "Open Budget Control"],
@@ -87,7 +90,7 @@ export default function Dashboard() {
 
   return (
     <section>
-      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="secondary-button" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button></>} />
+      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
       <ContinueWork />
 
@@ -123,8 +126,8 @@ export default function Dashboard() {
           <div className="dashboard-grid">
             <div className="workspace-panel dashboard-primary">
               <div className="section-heading">
-                <div><h3>{t(summary.role === "Approver" ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3><p>{t("Current operational work in priority order.")}</p></div>
-                <Link className="text-link" to={summary.role === "Approver" ? "/approvals" : summary.role === "Treasury" ? "/treasury" : "/requests"}>{t("View all")}</Link>
+                <div><h3>{t(isApprovalRole(summary.role) ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3><p>{t("Current operational work in priority order.")}</p></div>
+                <Link className="text-link" to={isApprovalRole(summary.role) ? "/approvals" : summary.role === "Treasury" ? "/treasury" : "/requests"}>{t("View all")}</Link>
               </div>
               <DataTable className="dashboard-request-table" controls={false} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." />
             </div>
@@ -165,7 +168,7 @@ export default function Dashboard() {
               />
             )}
 
-            {["Admin", "Approver", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link" to="/reports">{t("More insights in Reports")}</Link>}
+            {["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link" to="/reports">{t("More insights in Reports")}</Link>}
 
           </div>
         </>

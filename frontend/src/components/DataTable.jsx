@@ -57,7 +57,7 @@ export default function DataTable({
   const [sort, setSort] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
-  const [density, setDensity] = useState(() => localStorage.getItem("erp_table_density") || "comfortable");
+  const [density, setDensity] = useState(() => localStorage.getItem("erp_table_density") || "compact");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileCards, setMobileCards] = useState(true);
   const scrollRef = useRef(null);
@@ -217,7 +217,7 @@ export default function DataTable({
             <div className={`table-filter-fields simplified-filters${mobileFiltersOpen ? " is-open" : ""}`}>
               {filters.map((filter) => (
                 <label hidden={!mobileFiltersOpen && filter.key !== primaryFilterKey} className="compact-field" key={filter.key}>
-                  <span>{t(filter.label)}</span>
+                  <span className="sr-only">{t(filter.label)}</span>
                   <select value={activeFilters[filter.key] || ""} onChange={(event) => isRemote ? updateRemote({ filters: { ...activeFilters, [filter.key]: event.target.value }, page: 1 }) : setFilterValues((current) => ({ ...current, [filter.key]: event.target.value }))}>
                     <option value="">{t(filter.allLabel || `All ${filter.label.toLowerCase()}`)}</option>
                     {filter.options.map((option) => (

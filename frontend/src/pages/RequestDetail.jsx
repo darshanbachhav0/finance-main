@@ -8,12 +8,15 @@ import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWor
 import DraftPanel from "../components/DraftPanel.jsx";
 import {
   ArrowLeft,
+  BookOpenCheck,
   Check,
   CheckCircle2,
   CornerUpLeft,
   Download,
   FileCheck2,
   FileText,
+  History as HistoryIcon,
+  Landmark,
   MessageSquareWarning,
   Pencil,
   Printer,
@@ -21,6 +24,7 @@ import {
   ShoppingCart,
   Trash2,
   UploadCloud,
+  WalletCards,
   XCircle
 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
@@ -31,6 +35,7 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import InfoPopover from "../components/InfoPopover.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -125,6 +130,7 @@ function Definition({ label, children }) {
 }
 
 const DetailTab = createContext("General");
+const tabIcons = { General: FileText, Documents: FileCheck2, Approvals: CheckCircle2, Budget: WalletCards, Accounting: BookOpenCheck, Payment: Landmark, History: HistoryIcon };
 const sectionTabs = { "Budget preview": "Budget", "Budget commitment": "Budget", "Procurement Readiness": "Budget", "Documents and fiscal validation": "Documents", "Register A1 invoice and conformity": "Documents", "Invoice control register": "Accounting", "Financial control records": "Payment" };
 function Section({ title, description, children, className = "" }) {
   const { t } = useLanguage();
@@ -133,8 +139,8 @@ function Section({ title, description, children, className = "" }) {
   const sectionId = `request-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
     <div hidden={activeTab !== (sectionTabs[title] || "General")} className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
-      <h3 style={{ margin: 0 }}><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong></span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button></h3>
-      <MotionCollapse className="request-section-content" id={`${sectionId}-content`} open={expanded}>{description && <details className="page-help"><summary>{t("About this section")}</summary><p>{t(description)}</p></details>}{children}</MotionCollapse>
+      <h3 className="request-section-heading"><button type="button" className="request-section-toggle" aria-expanded={expanded} aria-controls={`${sectionId}-content`} onClick={() => setExpanded((value) => !value)}><span><strong>{t(title)}</strong></span><span aria-hidden="true">{expanded ? "−" : "+"}</span></button>{description && <InfoPopover label="About this section" align="end"><p>{t(description)}</p></InfoPopover>}</h3>
+      <MotionCollapse className="request-section-content" id={`${sectionId}-content`} open={expanded}>{children}</MotionCollapse>
     </div>
   );
 }
@@ -400,8 +406,8 @@ export default function RequestDetail() {
         description={requestDescription}
         actions={(
           <div className="page-actions">
-            <Link className="secondary-button" to="/requests"><ArrowLeft size={16} /><span>{t("Back to list")}</span></Link>
-            <button type="button" className="secondary-button" onClick={() => window.print()}><Printer size={16} /><span>{t("Print record")}</span></button>
+            <Link className="text-link back-link" to="/requests"><ArrowLeft size={16} /><span>{t("Back to list")}</span></Link>
+            <button type="button" className="icon-button" onClick={() => window.print()} aria-label={t("Print record")} title={t("Print record")}><Printer size={16} /></button>
             {permissions.modifiable && <Link className="secondary-button" to={`/requests/${id}/edit`}><Pencil size={16} /><span>{t("Edit request")}</span></Link>}
             {permissions.deletable && (
               <button
@@ -432,9 +438,11 @@ export default function RequestDetail() {
         <div><dt>{t("Current status")}</dt><dd><FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact /></dd></div>
       </dl>
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1])}</a></div>}
-      <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
-      <details className="workflow-details"><summary>{t("What do these statuses mean?")}</summary><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></details>
-      <nav className="focus-tabs" aria-label={t("Request sections")}>{["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map(tab => <button type="button" key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}>{t(tab)}</button>)}</nav>
+      <div className="stage-row">
+        <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
+        <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
+      </div>
+      <nav className="focus-tabs" aria-label={t("Request sections")}>{["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map(tab => { const TabIcon = tabIcons[tab]; return <button type="button" key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}><TabIcon size={15} aria-hidden="true" />{t(tab)}</button>; })}</nav>
 
       <div className="request-detail-layout">
         <div className="request-detail-main">

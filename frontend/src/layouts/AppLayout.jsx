@@ -20,7 +20,6 @@ import {
   Menu,
   ReceiptText,
   Search,
-  ScrollText,
   Settings2,
   SlidersHorizontal,
   TriangleAlert,
@@ -81,14 +80,13 @@ const groups = [
       { label: "Cost Centers", path: "/cost-centers", icon: CircleDollarSign },
       { label: "Expense Types", path: "/expense-types", icon: Settings2 },
       { label: "Exchange Rates", path: "/exchange-rates", icon: CircleDollarSign },
-      { label: "Configuration", path: "/configuration/projects", icon: SlidersHorizontal }
+      { label: "Configuration", path: "/configuration/approval-rules", icon: SlidersHorizontal }
     ]
   },
   {
     label: "Administration",
     items: [
-      { label: "Users", path: "/users", icon: Users },
-      { label: "Audit Viewer", path: "/audit", icon: ScrollText }
+      { label: "Users", path: "/users", icon: Users }
     ]
   }
 ];
@@ -119,8 +117,7 @@ const routeTitles = [
   [/^\/expense-types/, "Expense Types"],
   [/^\/exchange-rates/, "Exchange Rates"],
   [/^\/users/, "Users"],
-  [/^\/configuration/, "Configuration"],
-  [/^\/audit/, "Audit Viewer"]
+  [/^\/configuration/, "Configuration"]
 ];
 
 export default function AppLayout() {

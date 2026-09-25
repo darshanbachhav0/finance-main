@@ -1,3 +1,4 @@
+import { Cloud, CloudOff } from "lucide-react";
 import { useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
@@ -10,15 +11,15 @@ export default function DraftPanel({ draft, onDiscard, children, busy = false })
     try { await draft.discard(); setConfirm(false); onDiscard?.(); }
     catch (err) { setError(err.message); }
   }
+  const warning = ["error", "load-error", "conflict"].includes(draft.status);
   return <>
-    <div className={`work-draft-status ${["error", "load-error", "conflict"].includes(draft.status) ? "work-draft-warning" : ""}`}>
-      <div role="status"><strong>{t(labels[draft.status] || labels.ready)}</strong><small>{t("Private draft · Closing keeps your progress · Submission is still required")}</small>
-        {draft.updatedAt && <small>{t("Last saved")}: {new Date(draft.updatedAt).toLocaleString()}</small>}
+    <div className={`work-draft-status${warning ? " work-draft-warning" : ""}`}>
+      <div role="status" title={draft.updatedAt ? `${t("Last saved")}: ${new Date(draft.updatedAt).toLocaleString()}` : undefined}>{warning ? <CloudOff size={14} aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}<strong>{t(labels[draft.status] || labels.ready)}</strong>
         {draft.error && <small>{t(draft.error)}</small>}
         {draft.session.sourceChanged && <small role="alert">{t("The original record changed. Review restored values before submitting.")}</small>}
         {draft.session.backupFailed && draft.status !== "saved" && <small role="alert">{t("Browser backup is unavailable. Keep this page open until your draft is saved to your account.")}</small>}
       </div>
-      <details className="compact-options" open={["error", "load-error", "conflict"].includes(draft.status) ? true : undefined}><summary>{t("Draft options")}</summary><p>{t("Private draft � Closing keeps your progress � Submission is still required")}</p><div className="work-draft-actions">
+      <details className="compact-options" open={warning ? true : undefined}><summary>{t("Draft options")}</summary><p>{t("Private draft · Closing keeps your progress · Submission is still required")}</p><div className="work-draft-actions">
         {draft.ready && draft.startAnother && draft.status !== "conflict" && <button type="button" className="text-button" disabled={busy} onClick={draft.startAnother}>{t("Start another draft")}</button>}
         {["error", "load-error"].includes(draft.status) && <button type="button" className="secondary-button" onClick={draft.retry}>{t("Retry")}</button>}
         {draft.status === "conflict" && <><button type="button" className="secondary-button" onClick={draft.reload}>{t("Load saved version")}</button><button type="button" className="secondary-button" onClick={draft.separateCopy}>{t("Keep as separate draft")}</button></>}

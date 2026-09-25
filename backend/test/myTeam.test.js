@@ -22,7 +22,7 @@ test("My Team: hierarchy traversal, scoped request listing and the roster endpoi
   await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
   try {
     const center = await CostCenter.create({ code: "CC-TEAM", name: "Team", area: "Operations", active: true });
-    const director = await User.create({ name: "Director", email: "team.director@test.local", passwordHash: "unused", role: ROLES.APPROVER, area: "Operations" });
+    const director = await User.create({ name: "Director", email: "team.director@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, area: "Operations" });
     const supervisorA = await User.create({ name: "Supervisor A", email: "team.supA@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", jefe: director._id });
     const supervisorB = await User.create({ name: "Supervisor B", email: "team.supB@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", jefe: director._id });
     const reportA1 = await User.create({ name: "Report A1", email: "team.a1@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id, jefe: supervisorA._id });

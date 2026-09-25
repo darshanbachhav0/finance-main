@@ -12,7 +12,7 @@ import { authorize, protect } from "../middleware/auth.js";
 import { ROLES } from "../utils/constants.js";
 
 const router = Router();
-router.use(protect, authorize(ROLES.ADMIN, ROLES.APPROVER, ROLES.ACCOUNTING, ROLES.BUDGET, ROLES.MANAGEMENT));
+router.use(protect, authorize(ROLES.ADMIN, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.BUDGET, ROLES.MANAGEMENT));
 router.get("/overview", getBudgetOverview);
 router.get("/plans/:id", readBudgetPlan);
 router.post("/plans", authorize(ROLES.ADMIN, ROLES.BUDGET), addBudgetPlan);

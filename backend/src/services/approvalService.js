@@ -121,10 +121,10 @@ export async function listApprovalInbox(queryParams, user) {
   if (user.role !== ROLES.ADMIN) {
     // A manager-chain approver (any role, typically Solicitor) sees requests
     // where they are the pending step's specific approver, regardless of
-    // role/area. A legacy Approver/Management user additionally keeps the
-    // original role+area-scoped pool visibility for rule-based requests.
+    // role/area. An Area Director/Vice-Rector/Management user additionally
+    // keeps the original role+area-scoped pool visibility for rule-based requests.
     const chainMatch = { "approvalRouteSnapshot": { $elemMatch: { approverUser: user._id, status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN } } };
-    if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+    if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
       const legacyMatch = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
       if (legacyMatch.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
         const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);

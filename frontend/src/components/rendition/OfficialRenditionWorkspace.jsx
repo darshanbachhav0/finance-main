@@ -1,4 +1,5 @@
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../../hooks/useWorkDraft.js";
+import InfoPopover from "../InfoPopover.jsx";
 import DraftPanel from "../../components/DraftPanel.jsx";
 import {
   AlertTriangle,
@@ -56,7 +57,7 @@ function sum(rows, field) {
 
 function Section({ icon: Icon, title, description, action, children }) {
   const { t } = useLanguage();
-  return <section className="rendition-section"><header><span className="section-icon"><Icon size={17} /></span><div><h4>{t(title)}</h4><p>{t(description)}</p></div>{action}</header>{children}</section>;
+  return <section className="rendition-section"><header><span className="section-icon"><Icon size={17} /></span><div className="section-title-row"><h4>{t(title)}</h4>{description && <InfoPopover label="About this section"><p>{t(description)}</p></InfoPopover>}</div>{action}</header>{children}</section>;
 }
 
 function ReadOnlyRows({ rows, type }) {

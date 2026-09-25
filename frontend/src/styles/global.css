@@ -193,6 +193,10 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .toggle-field { min-height: 36px; display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--gray-300); border-radius: 5px; background: var(--gray-50); }
 .toggle-field input { width: 16px; height: 16px; accent-color: var(--teal-700); }
 .toggle-field > span { font-weight: 600; }
+.toggle-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggle-chip { padding: 6px 12px; border: 1px solid var(--gray-300); border-radius: 999px; background: var(--gray-50); font-size: 13px; font-weight: 600; color: var(--gray-700); cursor: pointer; }
+.toggle-chip:hover { border-color: var(--teal-700); }
+.toggle-chip.is-active { background: var(--teal-700); border-color: var(--teal-700); color: #fff; }
 .inline-warning, .inline-error { display: flex; align-items: flex-start; gap: 7px; color: var(--amber-700); font-size: 12px; font-weight: 650; }
 .inline-warning { margin-top: 8px; padding: 9px 10px; border: 1px solid #ebcf92; border-radius: 5px; background: var(--surface-tint-fff9ec); }
 .inline-error { color: var(--red-700); }

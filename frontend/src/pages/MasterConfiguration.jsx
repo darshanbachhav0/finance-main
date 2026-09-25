@@ -7,7 +7,7 @@ import ResourceManager from "../components/ResourceManager.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
-import { approvalLevels, banks, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
+import { approvalLevels, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
 import { formatCurrency } from "../utils/formatters.js";
 
 function BankFormatCertificationPanel({ rows, reload }) {
@@ -78,16 +78,9 @@ function BankFormatCertificationPanel({ rows, reload }) {
 const requestTypeOptions = ["*", ...requestTypes].map((value) => ({ value, label: requestTypeLabels[value] || value }));
 const natureOptions = ["*", ...expenseNatures].map((value) => ({ value, label: expenseNatureLabels[value] || value }));
 const flowOptions = ["*", ...flowTypes].map((value) => ({ value, label: flowTypeLabels[value] || value }));
-const documentPhases = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
-
-function parseJsonArray(value) {
-  const parsed = JSON.parse(value || "[]");
-  if (!Array.isArray(parsed)) throw new Error("Requirements must be a JSON array.");
-  return parsed;
-}
 
 export default function MasterConfiguration() {
-  const { resource = "projects" } = useParams();
+  const { resource = "approval-rules" } = useParams();
   const { user } = useAuth();
   const { t, language } = useLanguage();
   const [masters, setMasters] = useState({ costCenters: [], expenseTypes: [] });
@@ -101,17 +94,6 @@ export default function MasterConfiguration() {
   }, []);
 
   const configs = useMemo(() => ({
-    projects: {
-      label: "Projects", roles: ["Admin", "Accounting"], endpoint: "/projects",
-      description: "Maintain active project dimensions used by requests, budgets, and management reporting.",
-      fields: [
-        { name: "code", label: "Code", required: true }, { name: "name", label: "Name", required: true },
-        { name: "description", label: "Description", type: "textarea" },
-        { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
-        { name: "active", label: "Active", type: "checkbox", defaultValue: true }
-      ],
-      columns: [{ key: "code", label: "Code" }, { key: "name", label: "Name" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "active", label: "Status" }]
-    },
     "approval-rules": {
       label: "Approval Rules", roles: ["Admin"], endpoint: "/approval-rules",
       description: "Configure approval sequence, role, amount range, area, and SLA without hard-coding workflow decisions in the UI.",
@@ -177,31 +159,6 @@ export default function MasterConfiguration() {
       ],
       columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
     },
-    "document-rules": {
-      label: "Document Rules", roles: ["Admin", "Accounting"], endpoint: "/document-rules",
-      description: "Configure evidence by track, workflow phase, request type and expense nature. Requirements use kind, minCount, and labelKey.",
-      fields: [
-        { name: "code", label: "Code", required: true }, { name: "flowType", label: "Track", type: "select", defaultValue: "*", options: flowOptions },
-        { name: "phase", label: "Document phase", type: "select", defaultValue: "SUBMISSION", options: documentPhases }, { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions },
-        { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
-        { name: "requirements", label: "Requirements JSON", type: "textarea", rows: 7, required: true, defaultValue: "[]", getValue: (row) => JSON.stringify(row.requirements || [], null, 2), validate: (value) => { try { parseJsonArray(value); return ""; } catch (error) { return error.message; } } },
-        { name: "active", label: "Active", type: "checkbox", defaultValue: true }
-      ],
-      transformSubmit: (form) => ({ ...form, requirements: parseJsonArray(form.requirements) }),
-      columns: [{ key: "code", label: "Code" }, { key: "flowType", label: "Track" }, { key: "phase", label: "Phase" }, { key: "requestType", label: "Request type" }, { key: "expenseNature", label: "Expense nature" }, { key: "requirements", label: "Requirements", getValue: (row) => row.requirements?.map((item) => item.kind).join(" "), render: (row) => row.requirements?.map((item) => `${item.kind} x${item.minCount}`).join(", ") || "-" }, { key: "active", label: "Status" }]
-    },
-    "accounting-mappings": {
-      label: "Accounting Mappings", roles: ["Admin", "Accounting"], endpoint: "/accounting-mappings",
-      description: "Configure expense, asset, non-deductible, CXP, bank, IGV, advance, and return accounts used by posting services.",
-      fields: [
-        { name: "code", label: "Code", required: true }, { name: "name", label: "Name", required: true },
-        { name: "purpose", label: "Purpose", type: "select", required: true, options: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"] },
-        { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
-        { name: "bank", label: "Bank", type: "select", defaultValue: "*", options: ["*", ...banks] }, { name: "currency", label: "Currency", type: "select", defaultValue: "*", options: ["*", ...currencies] },
-        { name: "accountNumber", label: "Account number", required: true }, { name: "subAccount", label: "Subaccount" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
-      ],
-      columns: [{ key: "code", label: "Code" }, { key: "purpose", label: "Purpose" }, { key: "name", label: "Name" }, { key: "accountNumber", label: "Account" }, { key: "requestType", label: "Request type" }, { key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "active", label: "Status" }]
-    },
     "bank-formats": {
       // Treasury can see this section to use the certification panel below, but only Admin may
       // create/edit/delete a format's field configuration - certification is a separate, narrower
@@ -221,7 +178,7 @@ export default function MasterConfiguration() {
   }), [masters, t, language]);
 
   const visibleEntries = Object.entries(configs).filter(([, config]) => config.roles.includes(user.role));
-  if (!configs[resource] || !configs[resource].roles.includes(user.role)) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "projects"}`} replace />;
+  if (!configs[resource] || !configs[resource].roles.includes(user.role)) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "approval-rules"}`} replace />;
   const config = configs[resource];
 
   return <section>

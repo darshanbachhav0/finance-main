@@ -1,0 +1,108 @@
+/* Visual refinement layer: calmer colour use, less chrome, consistent labels.
+   Loaded last so it overrides the earlier stylesheets without editing them. */
+
+/* ---- Brand colour is reserved for primary actions ---------------------- */
+a { color: var(--gray-950); }
+a:hover { color: var(--uma-primary); }
+.text-link, .text-button { color: var(--gray-800); }
+.text-link:hover, .text-button:hover { color: var(--uma-primary); }
+.table-scroll td a:not([class]) { font-weight: 650; text-decoration: underline; text-decoration-color: var(--gray-300); text-underline-offset: 3px; }
+.table-scroll td a:not([class]):hover { text-decoration-color: currentColor; }
+
+.nav-item.active { color: var(--gray-950); background: var(--gray-100); }
+.user-avatar { background: var(--gray-100); color: var(--gray-800); }
+.stat-card.tone-teal .stat-card-heading svg { color: var(--gray-600); }
+.stat-card-link:hover { border-color: var(--gray-400); }
+.stat-card .stat-card-action { color: var(--gray-600); }
+.stat-card-link:hover .stat-card-action { color: var(--gray-950); }
+.dashboard-next { border-left: 1px solid var(--gray-200); }
+.dashboard-next small { color: var(--gray-600); }
+.request-overview { border-top: 1px solid var(--gray-200); }
+.record-next-action { background: var(--gray-50); border-color: var(--gray-200); }
+.simple-stages .current { color: var(--gray-950); }
+
+.toggle-chip:hover { border-color: var(--gray-500); }
+.toggle-chip.is-active { background: var(--gray-950); border-color: var(--gray-950); color: var(--surface-panel); }
+
+/* ---- Sentence-case labels (no shouting uppercase) ---------------------- */
+.detail-grid dt,
+.confirmation-summary dt,
+.supplier-detail-grid dt,
+.stat-card-heading span,
+.totals-bar span,
+.request-summary-main > div span,
+.request-amount-summary span,
+.rendition-totals span,
+.finance-review-row > div > span,
+.supplier-summary-strip > div > span,
+.recommended-supplier-detail > div > span,
+.triple-track-summary-card span,
+.purchase-order-balance-grid span,
+.batch-kpis span,
+.non-deductible-summary span,
+.notification-list-heading strong,
+.table-scroll th {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.detail-grid dt, .table-scroll th { font-weight: 650; }
+
+/* ---- Page header: one-line subtitle, help icon beside the title -------- */
+.page-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.page-title-row h1 { margin: 0; }
+.page-header .page-description { max-width: 72ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.page-actions .back-link { margin-right: 4px; }
+
+/* ---- Info popover (replaces inline help boxes) ------------------------- */
+.info-popover { position: relative; display: inline-flex; flex-shrink: 0; }
+.info-popover-trigger { width: 26px; height: 26px; min-height: 26px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--gray-500); cursor: pointer; }
+.info-popover-trigger:hover, .info-popover-trigger[aria-expanded="true"] { color: var(--gray-950); background: var(--gray-100); }
+.info-popover-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 90; width: max-content; min-width: 240px; max-width: min(380px, 86vw); padding: 14px; background: var(--surface-panel); border: 1px solid var(--gray-200); border-radius: 10px; box-shadow: var(--shadow-md); color: var(--gray-800); font-size: 13px; font-weight: 400; line-height: 1.55; text-align: left; }
+.info-popover-panel.align-end { left: auto; right: 0; }
+.info-popover-panel p { margin: 0; }
+.info-popover-panel .workflow-legend-content { padding-top: 0; }
+.request-section-heading { display: flex; align-items: center; gap: 6px; margin: 0; }
+.request-section-heading .request-section-toggle { flex: 1; min-width: 0; }
+.section-title-row { display: flex; align-items: center; gap: 6px; }
+.section-title-row h4 { margin: 0; }
+.stage-row { display: flex; align-items: center; gap: 8px; }
+.stage-row .simple-stages { flex: 1; min-width: 0; }
+
+/* ---- Autosave bar: one quiet line ------------------------------------- */
+.work-draft-status { margin: 0 0 16px; padding: 6px 10px; gap: 6px 12px; border: 1px solid var(--gray-200); border-left: 1px solid var(--gray-200); border-radius: 8px; background: var(--gray-50); }
+.work-draft-status > div[role=status] { display: flex; align-items: center; gap: 6px; color: var(--gray-600); }
+.work-draft-status > div[role=status] strong { font-size: 12px; font-weight: 600; color: var(--gray-700); }
+.work-draft-status .compact-options > summary { padding: 2px 0; font-size: 12px; }
+.work-draft-status.work-draft-warning { border-color: #ebcf92; background: #fff9ec; }
+[data-theme="dark"] .work-draft-status.work-draft-warning { background: #3a2f1a; border-color: #6b5626; }
+
+/* ---- Tabs on the request record: quiet segmented control -------------- */
+.focus-tabs { gap: 4px; padding: 4px; border: 1px solid var(--gray-200); border-radius: 10px; background: var(--gray-50); width: fit-content; max-width: 100%; }
+.focus-tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--gray-600); font-size: 13px; font-weight: 600; }
+.focus-tabs button:hover { color: var(--gray-950); }
+.focus-tabs button[aria-pressed="true"],
+[data-theme="dark"] .focus-tabs button[aria-pressed="true"] { background: var(--surface-panel); border-color: var(--gray-200); color: var(--gray-950); box-shadow: 0 1px 2px #0000000f; }
+[data-theme="dark"] .focus-tabs button { background: transparent; }
+
+/* ---- Requests list: compact stage progress under the status ----------- */
+.status-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.stage-dots { display: inline-flex; gap: 3px; }
+.stage-dots i { width: 14px; height: 4px; border-radius: 2px; background: var(--gray-200); }
+.stage-dots i.complete { background: var(--green-700); }
+.stage-dots i.current { background: var(--gray-950); }
+
+/* ---- Record forms: grouped sections, two columns ---------------------- */
+.resource-form { column-gap: 16px; row-gap: 16px; align-items: start; }
+.form-section-title { grid-column: 1 / -1; margin: 6px 0 -6px; padding-top: 14px; border-top: 1px solid var(--gray-200); color: var(--gray-950); font-size: 13px; font-weight: 700; }
+.resource-form > .form-section-title:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+@media (min-width: 641px) {
+  .drawer .resource-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .drawer .resource-form > .field-wide { grid-column: 1 / -1; }
+}
+
+/* ---- Chip inputs (tags / multi-select) -------------------------------- */
+.chip-picker { display: flex; flex-direction: column; gap: 8px; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border: 1px solid var(--gray-200); border-radius: 999px; background: var(--gray-100); color: var(--gray-900); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.chip button { width: 18px; height: 18px; min-height: 18px; flex-shrink: 0; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--gray-600); cursor: pointer; }
+.chip button:hover { background: var(--gray-200); color: var(--gray-950); }

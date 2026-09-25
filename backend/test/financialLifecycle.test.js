@@ -70,8 +70,8 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     const nonDeductible = await ExpenseType.create({ code: "EXP-ND", name: "Non-deductible", category: "NON_DEDUCTIBLE", accountingClass: "NON_DEDUCTIBLE", accountNumber: "991001", deductible: false, permittedRequestTypes: [REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO], active: true });
     const users = {
       solicitor: await User.create({ name: "Requester", email: "requester@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id, authorizedCostCenters: [center._id, activeCenter._id, insufficientCenter._id] }),
-      director: await User.create({ name: "Director", email: "director@test.local", passwordHash: "unused", role: ROLES.APPROVER, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["Operations"], area: "Operations" }),
-      vice: await User.create({ name: "Vice", email: "vice@test.local", passwordHash: "unused", role: ROLES.APPROVER, approvalLevel: "VICE_RECTOR", approvalAreas: ["*"], area: "Rectorate" }),
+      director: await User.create({ name: "Director", email: "director@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["Operations"], area: "Operations" }),
+      vice: await User.create({ name: "Vice", email: "vice@test.local", passwordHash: "unused", role: ROLES.VICE_RECTOR, approvalLevel: "VICE_RECTOR", approvalAreas: ["*"], area: "Rectorate" }),
       accounting: await User.create({ name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" }),
       treasury: await User.create({ name: "Treasury", email: "treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
       budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
@@ -81,8 +81,8 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     // engine now requires a specifically configured route for this dimension - mirror
     // the previous hardcoded default (Area Director then Vice Rector) as a real rule.
     await ApprovalRule.create([
-      { name: "Lifecycle Area Director", approvalLevel: "AREA_DIRECTOR", role: ROLES.APPROVER, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 1, slaHours: 24, active: true },
-      { name: "Lifecycle Vice Rector", approvalLevel: "VICE_RECTOR", role: ROLES.APPROVER, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 2, slaHours: 24, active: true }
+      { name: "Lifecycle Area Director", approvalLevel: "AREA_DIRECTOR", role: ROLES.AREA_DIRECTOR, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 1, slaHours: 24, active: true },
+      { name: "Lifecycle Vice Rector", approvalLevel: "VICE_RECTOR", role: ROLES.VICE_RECTOR, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 2, slaHours: 24, active: true }
     ]);
     // Track B is only available where Finance has configured it as an exception -
     // this fixture exercises Track B directly, so give it a permissive rule.
@@ -358,7 +358,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     });
 
     await t.test("32. backend permission enforcement prevents self approval", async () => {
-      const own = await FinancialRequest.create({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, issueDate, accountingPeriod: period, currency: "PEN", supplier: supplier._id, solicitor: users.director._id, requester: users.director._id, status: REQUEST_STATUS.PENDING_APPROVAL, description: "Self approval", lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 1, igvAmount: 0, totalAmount: 1 }], approvalRouteSnapshot: [{ approvalLevel: "AREA_DIRECTOR", role: ROLES.APPROVER, sequence: 1, slaHours: 24, required: true, status: "PENDING" }], approvalStage: "AREA_DIRECTOR" });
+      const own = await FinancialRequest.create({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, issueDate, accountingPeriod: period, currency: "PEN", supplier: supplier._id, solicitor: users.director._id, requester: users.director._id, status: REQUEST_STATUS.PENDING_APPROVAL, description: "Self approval", lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 1, igvAmount: 0, totalAmount: 1 }], approvalRouteSnapshot: [{ approvalLevel: "AREA_DIRECTOR", role: ROLES.AREA_DIRECTOR, sequence: 1, slaHours: 24, required: true, status: "PENDING" }], approvalStage: "AREA_DIRECTOR" });
       await assert.rejects(() => decideApproval({ id: own._id, action: "APPROVE", user: users.director, req }), /cannot approve their own/);
     });
 

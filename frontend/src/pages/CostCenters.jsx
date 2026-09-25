@@ -18,11 +18,13 @@ export default function CostCenters() {
       duplicateFields={["code"]}
       transformSubmit={numberPayload}
       fields={[
+        { type: "section", label: "Identity" },
         { name: "code", label: "Code", required: true },
         { name: "name", label: "Name", required: true },
-        { name: "area", label: "Area", required: true },
+        { name: "area", label: "Area", required: true, wide: true },
         { name: "organizationalUnit", label: "Organizational unit" },
         { name: "organizationalUnitCode", label: "Organizational unit code" },
+        { type: "section", label: "Budget" },
         { name: "annualBudget", label: "Annual assigned budget", type: "number", step: "0.01", defaultValue: 0 },
         { name: "budgetMode", label: "Budget mode", type: "select", defaultValue: "TRANSITIONAL", options: ["TRANSITIONAL", "ACTIVE"] },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true }

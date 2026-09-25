@@ -65,7 +65,7 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
   await t.test("historical approval route structure is retained on resubmission", async () => {
     const historicalRule = new mongoose.Types.ObjectId();
     const request = {
-      approvalRouteSnapshot: [{ rule: historicalRule, approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, slaHours: 12, required: true, status: "RETURNED", completedAt: new Date(), completedBy: new mongoose.Types.ObjectId() }]
+      approvalRouteSnapshot: [{ rule: historicalRule, approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", sequence: 1, slaHours: 12, required: true, status: "RETURNED", completedAt: new Date(), completedBy: new mongoose.Types.ObjectId() }]
     };
     await initializeApprovalRoute(request);
     assert.equal(String(request.approvalRouteSnapshot[0].rule), String(historicalRule));
@@ -87,7 +87,7 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
       const legacyAccounting = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);
       assert.deepEqual(legacyAccounting.map((item) => [item.kind, item.minCount]), [["CONFORMITY", 1]]);
 
-      await ApprovalRule.create({ name: "Legacy B director", approvalLevel: "AREA_DIRECTOR", role: "Approver", flowType: FLOW_TYPE.B, sequence: 1, slaHours: 4 });
+      await ApprovalRule.create({ name: "Legacy B director", approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", flowType: FLOW_TYPE.B, sequence: 1, slaHours: 4 });
       const route = await resolveApprovalRoute({ flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100 });
       assert.deepEqual(route.map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
     } finally {

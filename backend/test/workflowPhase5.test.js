@@ -65,7 +65,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     const expense = await ExpenseType.create({ code: "PH5-GOODS", name: "Medical supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
     const users = {
       solicitor: await User.create({ name: "Phase 5 Requester", email: "phase5.requester@uma.edu.pe", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id }),
-      approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.APPROVER, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR" }),
+      approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR" }),
       budget: await User.create({ name: "Phase 5 Budget", email: "phase5.budget@uma.edu.pe", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
       procurement: await User.create({ name: "Phase 5 Procurement", email: "phase5.procurement@uma.edu.pe", passwordHash: "unused", role: ROLES.PROCUREMENT, area: "Procurement" }),
       treasury: await User.create({ name: "Phase 5 Treasury", email: "phase5.treasury@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
@@ -129,8 +129,8 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
           { kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf" }
         ],
         approvalRouteSnapshot: [
-          { approvalLevel: "AREA_DIRECTOR", role: ROLES.APPROVER, sequence: 1, required: true, status: "APPROVED", completedBy: users.approver._id, completedAt: new Date() },
-          { approvalLevel: "VICE_RECTOR", role: ROLES.APPROVER, sequence: 2, required: true, status: "APPROVED", completedBy: users.approver._id, completedAt: new Date() }
+          { approvalLevel: "AREA_DIRECTOR", role: ROLES.AREA_DIRECTOR, sequence: 1, required: true, status: "APPROVED", completedBy: users.approver._id, completedAt: new Date() },
+          { approvalLevel: "VICE_RECTOR", role: ROLES.VICE_RECTOR, sequence: 2, required: true, status: "APPROVED", completedBy: users.approver._id, completedAt: new Date() }
         ],
         approvalStage: "COMPLETE"
       });

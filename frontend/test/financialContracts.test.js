@@ -37,7 +37,7 @@ test("request type and expense nature are separate controlled taxonomies", () =>
 });
 
 test("all required functional profiles are available", () => {
-  assert.deepEqual(roles, ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"]);
+  assert.deepEqual(roles, ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"]);
 });
 
 test("solicitor navigation exposes work entry but no privileged finance modules", () => {
@@ -59,7 +59,7 @@ test("Treasury can use payment and reporting screens without supplier maintenanc
 
 test("Admin receives every navigation destination", () => {
   assert.ok(visibleNavigationPaths("Admin").length >= 16);
-  assert.equal(canAccessNavigation("Admin", "/audit"), true);
+  assert.equal(canAccessNavigation("Admin", "/users"), true);
 });
 
 test("server table queries retain paging, filters, and sorting without empty parameters", () => {

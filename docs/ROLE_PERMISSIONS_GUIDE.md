@@ -2,11 +2,11 @@
 
 Detailed access and workflow reference for the ten operational profiles
 
-**Version date 24 September 2026**
+**Version date 25 September 2026**
 
 ## Changelog
 
-This revision adds two profiles that did not exist when the guide was last reviewed: **Procurement** (issues Purchase/Service Orders after Track A1 budget commitment) and **ManagementViewer** (strictly read-only: external portal, internal Reports, and audit history). It also corrects five items against `constants.js`/route code: order issuance is Procurement's action, not Budget's; Treasury can now certify a BBVA bank-file format alongside Admin (`BANK_FORMAT_CERTIFY`); only BBVA is a valid outbound payment-file source, while BCP/Interbank/Scotiabank/Banco de la Nación remain beneficiary-only banks; Track B now requires a configured eligibility rule and is no longer a free choice; a new `PARTIALLY_PAID` accounts-payable status exists; and only Management may decide a budget exception — Admin can never approve one directly, only repair the underlying configuration.
+This revision replaces the generic **Approver** role with two distinct stored roles, **AreaDirector** and **ViceRector**, that carry identical permissions (`REQUEST_VIEW_ALL`, `REQUEST_APPROVE`, `BUDGET_VIEW`, `REPORT_VIEW`) — exactly what the former Approver role held. Every route guard, dashboard filter, workflow role-target list, visibility filter, file-access rule and seeded `ApprovalRule.role` value that used to check `role === "Approver"` now checks both roles; this was a mechanical one-role-to-two-roles split, not a permissions change. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is now implied by the role itself and set automatically by the backend the moment Admin assigns that role, rather than a separate field Admin chooses on the Users screen — Management's approval level (RECTORATE / GENERAL_MANAGEMENT) is unaffected and remains admin-editable. The only functional difference between the two new roles remains directional: an Area Director may forward a manager-chain approval up to the Vice-Rector; the Vice-Rector, sitting at the top of that pair, cannot forward further.
 
 This guide explains what each profile can view, create, change, approve, and execute in the UMA finance platform. It also identifies the conditions that can block an otherwise permitted action. Use it for onboarding, assigning accounts, reviewing responsibilities, and diagnosing access issues.
 
@@ -20,8 +20,8 @@ The platform separates requesting, authorization, budget control, accounting, an
 | --- | --- | --- |
 | Administrator | Admin | System administration and authorized exceptions |
 | Requester or Solicitante | Solicitor | Creates and follows own requests |
-| Area Director or Director de Área | Approver | AREA_DIRECTOR |
-| Vice Rector or Vicerrectorado | Approver | VICE_RECTOR |
+| Area Director or Director de Área | AreaDirector | AREA_DIRECTOR |
+| Vice Rector or Vicerrectorado | ViceRector | VICE_RECTOR |
 | Accounting or Contabilidad | Accounting | Supplier review, fiscal processing and renditions |
 | Treasury or Tesorería | Treasury | Scheduling, bank files, payment and reconciliation |
 | Budget or Presupuesto | Budget | Validates, commits and reserves funds; prepares exceptions |
@@ -29,7 +29,9 @@ The platform separates requesting, authorization, budget control, accounting, an
 | Management or Gerencia and Rectorado | Management | Usually RECTORATE; GENERAL_MANAGEMENT can be configured |
 | Management Viewer | ManagementViewer | Read-only institutional portal, reports and audit history |
 
-There are **ten operational profiles and nine stored role names**. Director and Vice Rector share Approver permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
+There are **ten stored roles, one per operational profile**. Area Director and Vice-Rector are separate roles (`AreaDirector`, `ViceRector`) rather than a single Approver role distinguished only by approval level; they hold identical permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
+
+**Area Director and Vice-Rector.** These are the platform's two sequential approval roles. Their only functional difference is directional: an Area Director deciding a manager-chain approval may choose to forward it to the next manager in the request's frozen chain — typically the Vice-Rector, given how the organizational hierarchy is seeded — instead of finalizing it themselves; the Vice-Rector, sitting at the top of that pair, has no further chain position to forward to and cannot forward back to an Area Director. See the Area Director and Vice Rector sections below for the mechanics. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is implied by the role itself and set automatically by the backend the moment Admin assigns that role on the Users screen — it is not a separate field Admin chooses, unlike Management's approval level (RECTORATE or GENERAL_MANAGEMENT), which remains admin-editable.
 
 ManagementViewer is the platform's only strictly read-only profile: every permission it holds is a view/report/audit token, and it never appears in an `authorize()`/`authorizePermission()` check on a POST, PUT, PATCH or DELETE route.
 
@@ -105,7 +107,7 @@ ADM Administrator; REQ Requester; DIR Director; VR Vice Rector; ACC Accounting; 
 | Use the explicit request close action | - | - |
 | Void an eligible request with a reason | - | - |
 
-**Scope notes.** Approver and Management request lists/details exclude drafts but are not restricted to the requester's area. Director approval decisions are area-restricted. Accounting, Treasury, Budget and Procurement can view drafts (all four hold request:view-all without the Approver/Management draft exclusion). Requester edits/deletions have additional status restrictions. Treasury settlement can lead to automatic closure even though the explicit Close endpoint is reserved to Admin and Accounting. ManagementViewer has no row of manual action in this matrix at all: it lacks request:view-all, so it cannot open Requests, and its access is confined to reporting/audit, covered in the next matrix and its own role section. Only Management may approve or reject a budget exception; Budget and Admin may prepare one or mark it reviewed, but neither can decide it — Admin can only repair the underlying approver-role configuration through the audited master-data screen, never approve the exception directly. Budget no longer holds "Manually issue Purchase or Service Order" — Procurement does (Y in the table above), alongside Admin; see the Procurement and Budget role sections.
+**Scope notes.** Area Director, Vice-Rector and Management request lists/details exclude drafts but are not restricted to the requester's area. Director approval decisions are area-restricted. Accounting, Treasury, Budget and Procurement can view drafts (all four hold request:view-all without the Area Director/Vice-Rector/Management draft exclusion). Requester edits/deletions have additional status restrictions. Treasury settlement can lead to automatic closure even though the explicit Close endpoint is reserved to Admin and Accounting. ManagementViewer has no row of manual action in this matrix at all: it lacks request:view-all, so it cannot open Requests, and its access is confined to reporting/audit, covered in the next matrix and its own role section. Only Management may approve or reject a budget exception; Budget and Admin may prepare one or mark it reviewed, but neither can decide it — Admin can only repair the underlying approver-role configuration through the audited master-data screen, never approve the exception directly. Budget no longer holds "Manually issue Purchase or Service Order" — Procurement does (Y in the table above), alongside Admin; see the Procurement and Budget role sections.
 
 SOURCES S02 S03 S05 S06 S07 S08 S09 S10 S11 S12
 
@@ -173,7 +175,7 @@ Use the same profile abbreviations as the preceding matrix. **P** means propose 
 
 Supplier proposals are correctable only while pending validation or observed. A Requester must also be the proposer. Supplier bank entry does not permit changing verification, ownership-review, active/preferred, or Finance decision fields. Employee profile preference/deactivation follows the separate owner permissions shown above.
 
-Procurement and ManagementViewer can both call the management-report summary and CSV-export endpoints directly (reportRoutes.js admits every profile except Requester), but the generated-file category list behind the generic stored-file download route still excludes both of them (it remains Admin, Approver, Accounting, Treasury, Budget and Management) — so neither role can re-download a report file from the export-history list after the fact; a fresh call to the export endpoint is required instead.
+Procurement and ManagementViewer can both call the management-report summary and CSV-export endpoints directly (reportRoutes.js admits every profile except Requester), but the generated-file category list behind the generic stored-file download route still excludes both of them (it remains Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management) — so neither role can re-download a report file from the export-history list after the fact; a fresh call to the export endpoint is required instead.
 
 SOURCES S03 S09 S10 S13 S14 S15 S16
 
@@ -195,7 +197,7 @@ An extra permission does not bypass a route that explicitly requires another rol
 
 Requesters can view and work on their own requests. Request creation and official line/rendition validation restrict their CECO choices to their primary cost center plus authorized cost centers. Admin is exempt from that CECO assignment restriction.
 
-Directors and Vice Rectors share the Approver role. A Director's action must match the active approval level, route role and allowed area. A Vice Rector's level must match the active step. Management similarly needs the exact assigned level and route role.
+Directors and Vice Rectors are separate stored roles (AreaDirector and ViceRector) with identical permission sets. A Director's action must match the active approval level, route role and allowed area. A Vice Rector's level must match the active step. Management similarly needs the exact assigned level and route role.
 
 ### Status and financial controls
 
@@ -224,7 +226,7 @@ All requests, including other users' drafts; supplier and banking information; b
 - Create, edit and submit requests, register invoices, upload batches, manage renditions, and execute authorized approval decisions.
 - Maintain annual/monthly plans, allocations and budget rules; commit approved budgets; and issue eligible procurement orders (the same order-issuance action Procurement holds). Admin can prepare a budget exception or mark it reviewed, and can repair a broken exception-approver configuration, but cannot approve or reject the exception itself — see Limitations.
 - Review and homologate suppliers, verify banking, process Accounting, control periods, generate exports, schedule and confirm payments, reconcile, and handle bounced payments.
-- Create, update or deactivate users; assign the role, approval level, approval areas, primary/authorized CECOs, and additional permissions.
+- Create, update or deactivate users; assign the role, approval areas, primary/authorized CECOs, and additional permissions — plus the approval level for a Management profile (RECTORATE or GENERAL_MANAGEMENT). For Area Director and Vice-Rector, approval level is derived automatically from the role and is not a separate field to set.
 - Maintain approval rules, bank formats, document rules, accounting mappings, projects, expense types and exchange rates.
 
 ### Limitations and exceptions
@@ -281,18 +283,19 @@ SOURCES S02 S05 S09 S10 S13 S14 S21 S22
 
 ## Area Director
 
-**Stored role Approver with AREA_DIRECTOR.** The Director checks the business need and supporting evidence for the area before the next required institutional approval.
+**Stored role AreaDirector.** The Director checks the business need and supporting evidence for the area before the next required institutional approval. AreaDirector's approval level is always `AREA_DIRECTOR`, set automatically by the backend the moment Admin assigns the role — see the note in "The ten operational profiles" above.
 
 ### What the Director can view
 
-Dashboard, non-draft Requests, Approval Inbox, Budget and Management Reports. Request Detail provides quotations, budgets and related financial history for review. Supplier Master, user administration, Accounting and Treasury workspaces are unavailable.
+Dashboard, non-draft Requests, Approval Inbox, Budget and Management Reports. Request Detail provides quotations, budgets and related financial history for review. Supplier Master, user administration, Accounting and Treasury workspaces are unavailable. A Director who has active direct reports (the `jefe` field) additionally sees My Team — a role-agnostic feature available to any user with active reports, not a grant unique to this role.
 
-The Requests list/detail is broader than the Director's approval authority: it permits non-draft requests outside the assigned area. The Approval Inbox normally filters to the configured level and permitted areas. Request-based management reporting restricts Approver users to their configured areas unless wildcard access is present.
+The Requests list/detail is broader than the Director's approval authority: it permits non-draft requests outside the assigned area. The Approval Inbox normally filters to the configured level and permitted areas. Request-based management reporting restricts Area Director and Vice-Rector users to their configured areas unless wildcard access is present.
 
 ### What the Director can do
 
-- Approve the currently pending Area Director step when the route assigns it to Approver and the request belongs to an allowed area.
+- Approve the currently pending Area Director step when the route assigns it to AreaDirector and the request belongs to an allowed area.
 - Observe a request for correction, return it, or reject it at that active step. These three decisions require comments.
+- When deciding a manager-chain approval (the requester's actual organizational chain, not a fixed role/area route), choose to approve and finalize it, or approve and forward it to the next manager already frozen into that request's chain — typically the Vice-Rector, given how the organizational hierarchy is seeded. Forwarding never looks up a manager live; it only activates the next pre-determined position.
 - Read budget availability and commitments, compare suppliers and payment terms, examine supporting evidence, and export permitted management reports.
 
 Allowed areas are the user's area plus approvalAreas. A wildcard grants all-area approval scope. Viewing a request or obtaining its ID does not grant permission to decide another level or another area.
@@ -315,7 +318,7 @@ SOURCES S01 S02 S03 S06 S07 S18 S23
 
 ## Vice Rector
 
-**Stored role Approver with VICE_RECTOR.** The Vice Rector performs the institutional approval required after earlier steps in the configured route. This is a separate operational profile, not a separate stored role.
+**Stored role ViceRector.** The Vice Rector performs the institutional approval required after earlier steps in the configured route — or after an Area Director forwards a manager-chain approval to them (see the Area Director section). ViceRector's approval level is always `VICE_RECTOR`, set automatically by the backend the moment Admin assigns the role. AreaDirector and ViceRector are separate stored roles with identical permissions; the only functional difference is that an Area Director may forward an approval up to the Vice-Rector, never the reverse — the Vice-Rector sits at the top of that pair and has no further chain position to forward to.
 
 ### What the Vice Rector can view
 
@@ -325,10 +328,11 @@ The general Requests view is not limited to the Vice Rector's current inbox. Tha
 
 ### What the Vice Rector can do
 
-- Approve a request when its active step is VICE_RECTOR and the step's required role is Approver.
+- Approve a request when its active step is VICE_RECTOR and the step's required role is ViceRector.
+- When the active step is a manager-chain step forwarded by an Area Director (or reached directly, if the Vice-Rector is the requester's actual supervisor), finalize the approval — there is no further pre-determined position to forward to; attempting to forward raises an error.
 - Observe, return or reject at that stage, with required comments for those decisions.
 - Review the prior approval trail, item totals, quotations, payment terms, budget information and evidence.
-- View/export the reports allowed to Approver users.
+- View/export the reports allowed to Area Director and Vice-Rector users.
 
 If another required Management stage follows, the Vice Rector's approval advances the route to that stage. It does not complete the whole approval chain.
 
@@ -459,7 +463,7 @@ SOURCES S01 S03 S07 S12 S15 S23 S25
 
 ### What Procurement can view
 
-All requests, including drafts, through the same unrestricted request:view-all access as Accounting, Treasury and Budget (Procurement is not subject to the Approver/Management draft exclusion). Supplier Master in read mode, including supplier bank-view data, to confirm a homologated supplier's readiness before issuing an order. Issued Purchase/Service Orders and management reports. Request Detail exposes procurement readiness, quotations, the order snapshot and related financial information.
+All requests, including drafts, through the same unrestricted request:view-all access as Accounting, Treasury and Budget (Procurement is not subject to the Area Director/Vice-Rector/Management draft exclusion). Supplier Master in read mode, including supplier bank-view data, to confirm a homologated supplier's readiness before issuing an order. Issued Purchase/Service Orders and management reports. Request Detail exposes procurement readiness, quotations, the order snapshot and related financial information.
 
 Procurement does not have the Budget, Accounting, Treasury, user-administration or global audit workspaces — its route access is limited to Requests, Suppliers (read) and Reports. It cannot open the Approval Inbox to decide a step, and it has no Budget-module access at all (`budgetRoutes.js` does not admit it).
 
@@ -493,7 +497,7 @@ SOURCES S01 S02 S03 S05 S19 S23
 
 Dashboard, non-draft Requests, Approval Inbox, Budget and Management Reports. Request Detail exposes the submitted justification, financial amounts, quotations/payment terms, approval history and related execution records.
 
-Management request lists/details are not restricted by area in the same way as a Director's decision authority. The management-report request filter applies area restrictions to Approver users, not automatically to Management users.
+Management request lists/details are not restricted by area in the same way as a Director's decision authority. The management-report request filter applies area restrictions to Area Director and Vice-Rector users, not automatically to Management users.
 
 ### What Management can do
 
@@ -530,7 +534,7 @@ SOURCES S01 S02 S03 S04 S06 S07 S23
 
 The external institutional Management API (`/api/management/v1` — overview, budget, workflow, payments, SLA and filter aggregates, with its own documentation at `/api/management/v1/api-docs` and OpenAPI document). That external API's own documentation states it "does not expose transaction-level records, personal data, supplier identifiers, bank details, files, or write operations."
 
-The internal Reports module's management summary and CSV export/export-history endpoints — the same `/reports/management*` routes Approver, Accounting, Treasury, Budget, Procurement and Management use. The global audit log and per-request audit timeline through `audit:view`, exactly like Accounting (the audit routes check only that permission, with no additional role restriction).
+The internal Reports module's management summary and CSV export/export-history endpoints — the same `/reports/management*` routes AreaDirector, ViceRector, Accounting, Treasury, Budget, Procurement and Management use. The global audit log and per-request audit timeline through `audit:view`, exactly like Accounting (the audit routes check only that permission, with no additional role restriction).
 
 Its sidebar is limited to Management Portal, Reports and Audit. It has no Dashboard or Requests entry, and — unlike every other profile — it cannot view an individual request or the request list at all: it lacks request:view-all and is neither a requester nor an approver on any request, so the request-visibility filter returns nothing for it even if it reached that screen.
 
@@ -544,7 +548,7 @@ Its sidebar is limited to Management Portal, Reports and Audit. It has no Dashbo
 
 ManagementViewer cannot create, edit, approve, commit, homologate, schedule, confirm, reconcile, certify, or configure anything. It cannot open Requests, Suppliers, Accounting, Treasury, Budget, or any configuration screen. It is excluded from the approval-decision route entirely: `approvalRoutes.js` explicitly authorizes every other stored role and excludes only ManagementViewer.
 
-A previously generated report file is downloaded through the same generic stored-file route as other categories, and that route's role list for the "reports" category was not changed when ManagementViewer was added (it remains Admin, Approver, Accounting, Treasury, Budget and Management). So ManagementViewer can generate and immediately download a fresh CSV export, but cannot later re-download that same file from the generated-exports history list; a fresh call to the export endpoint is required each time.
+A previously generated report file is downloaded through the same generic stored-file route as other categories, and that route's role list for the "reports" category was not changed when ManagementViewer was added (it remains Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management). So ManagementViewer can generate and immediately download a fresh CSV export, but cannot later re-download that same file from the generated-exports history list; a fresh call to the export endpoint is required each time.
 
 ### Example
 
@@ -619,7 +623,7 @@ SOURCES S05 S11 S12 S15 S17 S21 S22 S24 S25
 
 ### Requests and related records
 
-Requester ownership is enforced on request details, modification, submission, invoice registration and rendition submission. Approver/Management direct request access excludes drafts. Other operational roles can read all requests, including drafts.
+Requester ownership is enforced on request details, modification, submission, invoice registration and rendition submission. Area Director/Vice-Rector/Management direct request access excludes drafts. Other operational roles can read all requests, including drafts.
 
 Request Detail returns related accounting, budget, order, payment and audit information. The global audit log is restricted to Admin/Accounting by default, but an authorized request viewer can read that request's audit history through Request Detail.
 
@@ -641,7 +645,7 @@ Related payable/payment-batch serializers mask bank account values for users out
 | Supplier uploads | Supplier-view roles; Requester additionally must own a pending/observed proposal |
 | Generated bank files | Admin, Accounting and Treasury |
 | Generated accounting files | Admin and Accounting |
-| Generated management reports | Admin, Approver, Accounting, Treasury, Budget and Management |
+| Generated management reports | Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management |
 | Batch observation XML/PDF | Dedicated batch-review permission; Admin/Accounting by default |
 
 Generated report-file downloads are category/role-based, not rechecked against the requesting user's area or the original export's ownership. Management-export history also has no per-user/area ownership filter. Area-limited report generation must therefore not be presented as end-to-end export-file confidentiality.
@@ -666,7 +670,7 @@ Budget overview, plan, commitment and exception reads are not automatically rest
 
 ### Segregation of duties has specific boundaries
 
-Approver self-approval is blocked, with a reasoned Admin exception. There is not a universal second-person requirement for every Accounting and Treasury operation. For example, the Treasury role can both generate a bank file and confirm payment. Bank-side authorization and organizational review remain distinct from those application actions.
+Area Director and Vice-Rector self-approval is blocked, with a reasoned Admin exception. There is not a universal second-person requirement for every Accounting and Treasury operation. For example, the Treasury role can both generate a bank file and confirm payment. Bank-side authorization and organizational review remain distinct from those application actions.
 
 A general Management or GENERAL_MANAGEMENT label does not guarantee every custom route can finish. The route must satisfy the implemented lifecycle and actor checks. New combinations should be tested end to end before they are used operationally.
 
@@ -698,7 +702,7 @@ SOURCES S01 S02 S03 S06 S07 S15 S18 S19 S23 S26
 ### Assigning a user correctly
 
 1. Choose the person's operational responsibility, then assign the corresponding stored role.
-2. For Director, Vice Rector or Management, set the exact approvalLevel and verify matching active approval rules.
+2. For Management, set the exact approvalLevel (RECTORATE or GENERAL_MANAGEMENT) and verify matching active approval rules. For Area Director or Vice-Rector, approvalLevel is set automatically from the role — only verify matching active approval rules.
 3. Set the user's area and approvalAreas. Use wildcard scope only where institution-wide authority is intended.
 4. For Requesters, set the primary cost center and any authorizedCostCenters.
 5. Review additional permissions separately. They are additive and do not replace role/stage/ownership controls.
@@ -711,7 +715,7 @@ SOURCES S01 S02 S06 S07 S11 S12 S17 S20 S23
 
 ## Technical permission catalog
 
-The following table is generated from the current default permission catalog. It identifies inherited tokens, not every effective endpoint action. DIR and VR share the Approver row. PRO is Procurement and MGV is ManagementViewer. Custom user permissions are additive.
+The following table is generated from the current default permission catalog. It identifies inherited tokens, not every effective endpoint action. DIR (AreaDirector) and VR (ViceRector) are shown together in each row because the two roles hold identical permission sets, not because they share a single stored role. PRO is Procurement and MGV is ManagementViewer. Custom user permissions are additive.
 
 | Permission token | Default profiles |
 | --- | --- |
@@ -753,14 +757,14 @@ SOURCES S01 S02
 
 ## Source register and maintenance
 
-The guide is based on the repository's current role catalog, server routes, service guards, navigation rules and seed definitions, reviewed on 24 September 2026. It describes default application behavior rather than the saved settings of a particular live user.
+The guide is based on the repository's current role catalog, server routes, service guards, navigation rules and seed definitions, reviewed on 25 September 2026. It describes default application behavior rather than the saved settings of a particular live user.
 
 | Source | Repository path and subject |
 | --- | --- |
 | S01 | backend/src/utils/constants.js and backend/src/models/User.js - roles, permission defaults, user fields |
 | S02 | backend/src/utils/permissions.js and backend/src/middleware/auth.js - ownership, role/permission gates |
 | S03 | frontend/src/utils/navigationAccess.js - visible module access |
-| S04 | backend/src/seed/seed.js - eight core profiles and example approval rules |
+| S04 | backend/src/seed/seed.js - nine core profiles and example approval rules |
 | S05 | backend/src/routes/requestRoutes.js and backend/src/services/requestService.js - request operations |
 | S06 | backend/src/routes/approvalRoutes.js and backend/src/services/approvalService.js - approval decisions and handoff |
 | S07 | backend/src/services/approvalRuleService.js - route selection and stage completion |

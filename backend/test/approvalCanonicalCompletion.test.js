@@ -38,9 +38,12 @@ test("the parent status never takes on an organization-specific approval-level l
       // Before the fix, only AREA_DIRECTOR/VICE_RECTOR steps could complete a
       // rule-based route into a valid approved state; any other configured
       // final level threw "did not finish in an approved lifecycle state".
-      const generalManagement = await User.create({ name: "General Management Reviewer", email: "canon.generalmgmt@test.local", passwordHash: "unused", role: ROLES.APPROVER, approvalLevel: "GENERAL_MANAGEMENT", approvalAreas: ["*"], area: "Rectorate" });
+      // Uses AREA_DIRECTOR's role (not Management) at this level purely to exercise the
+      // auto-commit path below - GENERAL_MANAGEMENT is not a real Area Director/Vice-Rector
+      // level in production; this only proves any final approvalLevel can reach APROBADO.
+      const generalManagement = await User.create({ name: "General Management Reviewer", email: "canon.generalmgmt@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "GENERAL_MANAGEMENT", approvalAreas: ["*"], area: "Rectorate" });
       const request = await makeRoutedRequest("REQ-2026-97101", [
-        { approvalLevel: "GENERAL_MANAGEMENT", role: ROLES.APPROVER, sequence: 1, slaHours: 24, required: true, status: "PENDING", startedAt: new Date(), dueAt: new Date(Date.now() + 86400000) }
+        { approvalLevel: "GENERAL_MANAGEMENT", role: ROLES.AREA_DIRECTOR, sequence: 1, slaHours: 24, required: true, status: "PENDING", startedAt: new Date(), dueAt: new Date(Date.now() + 86400000) }
       ]);
       const result = await decideApproval({ id: request._id, action: "APPROVE", comments: "General Management approved", user: generalManagement, req });
       // The route completes into APROBADO and budget commitment then runs
@@ -52,11 +55,11 @@ test("the parent status never takes on an organization-specific approval-level l
     });
 
     await t.test("a multi-step route only reaches APROBADO after its final step, never resting at an intermediate label", async () => {
-      const first = await User.create({ name: "First Reviewer", email: "canon.first@test.local", passwordHash: "unused", role: ROLES.APPROVER, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["*"], area: "Operations" });
-      const second = await User.create({ name: "Second Reviewer", email: "canon.second@test.local", passwordHash: "unused", role: ROLES.APPROVER, approvalLevel: "VICE_RECTOR", approvalAreas: ["*"], area: "Rectorate" });
+      const first = await User.create({ name: "First Reviewer", email: "canon.first@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["*"], area: "Operations" });
+      const second = await User.create({ name: "Second Reviewer", email: "canon.second@test.local", passwordHash: "unused", role: ROLES.VICE_RECTOR, approvalLevel: "VICE_RECTOR", approvalAreas: ["*"], area: "Rectorate" });
       const request = await makeRoutedRequest("REQ-2026-97102", [
-        { approvalLevel: "AREA_DIRECTOR", role: ROLES.APPROVER, sequence: 1, slaHours: 24, required: true, status: "PENDING", startedAt: new Date(), dueAt: new Date(Date.now() + 86400000) },
-        { approvalLevel: "VICE_RECTOR", role: ROLES.APPROVER, sequence: 2, slaHours: 24, required: true, status: "PENDING" }
+        { approvalLevel: "AREA_DIRECTOR", role: ROLES.AREA_DIRECTOR, sequence: 1, slaHours: 24, required: true, status: "PENDING", startedAt: new Date(), dueAt: new Date(Date.now() + 86400000) },
+        { approvalLevel: "VICE_RECTOR", role: ROLES.VICE_RECTOR, sequence: 2, slaHours: 24, required: true, status: "PENDING" }
       ]);
       const afterFirst = await decideApproval({ id: request._id, action: "APPROVE", comments: "First approved", user: first, req });
       assert.equal(afterFirst.request.status, REQUEST_STATUS.PENDING_APPROVAL, "still mid-route; no organization-specific label is written");

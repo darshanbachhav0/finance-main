@@ -47,7 +47,7 @@ export function taskBlueprints(type, record, related = {}) {
   if (type === "FinancialRequest") {
     if (record.status === "BORRADOR") return [];
     const step = [...(record.approvalRouteSnapshot || [])].sort((a,b) => a.sequence-b.sequence).find((s) => s.required !== false && s.status === "PENDING");
-    if (approvedStates.includes(record.status) && step) add(`approval-${step.approvalLevel}-${new Date(step.startedAt || record.createdAt).getTime()}`, step.approvalLevel, "Review request approval", [step.role || "Approver"], { module: "Approvals", approval: true, step, waitingSince: step.startedAt || record.createdAt, dueAt: step.dueAt || record.approvalDueAt });
+    if (approvedStates.includes(record.status) && step) add(`approval-${step.approvalLevel}-${new Date(step.startedAt || record.createdAt).getTime()}`, step.approvalLevel, "Review request approval", [step.role || "AreaDirector"], { module: "Approvals", approval: true, step, waitingSince: step.startedAt || record.createdAt, dueAt: step.dueAt || record.approvalDueAt });
     else if (["APROBADO", "APROBADO_VICERRECTOR", "APROBADO_DIRECTOR"].includes(record.status)) add("budget-commit", "Budget", "Review and commit budget", ["Budget", "Admin"]);
     if (record.status === "OBSERVADO_PRESUPUESTO") add("budget-adjustment", "Budget", "Review budget availability", ["Budget", "Admin"]);
     else if (["OBSERVADO", "DEVUELTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(record.status)) correction("request-correction", "Requests");

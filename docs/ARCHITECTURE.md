@@ -20,18 +20,27 @@ financial-progress derivation, budget-planning math, payment-terms math, line-am
 
 ## 2. Roles
 
-Nine stored roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`, `Approver`,
-`Accounting`, `Treasury`, `Budget`, `Procurement`, `Management`, `ManagementViewer`. `Approver`
-covers both Area Director and Vice Rector — the distinction is the user's `approvalLevel` field, not
-a separate role. Permissions are role-based (`ROLE_PERMISSIONS`) with a per-user `permissions`
-override array for exceptions. See `docs/ROLE_PERMISSIONS_GUIDE.md` for the full capability matrix
-and per-role walkthrough — this section only summarizes each role's purpose:
+Ten stored roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`, `AreaDirector`,
+`ViceRector`, `Accounting`, `Treasury`, `Budget`, `Procurement`, `Management`, `ManagementViewer`.
+`AreaDirector` and `ViceRector` are distinct roles with identical permissions
+(`ROLE_PERMISSIONS`) — the only difference is directional: an Area Director's approval on a
+manager-chain request can be forwarded up to the Vice-Rector (`forward: true` in
+`decideApproval`), but the Vice-Rector, sitting at the top of that pair, has no further level to
+forward to. Each role's `approvalLevel` (`AREA_DIRECTOR` / `VICE_RECTOR`) is implied by the role
+itself and set automatically by the backend, not chosen separately by Admin. Permissions are
+role-based with a per-user `permissions` override array for exceptions. See
+`docs/ROLE_PERMISSIONS_GUIDE.md` for the full capability matrix and per-role walkthrough — this
+section only summarizes each role's purpose:
 
 - **Admin** — technical administration, master data, audited exception handling. Deliberately
   *cannot* approve a budget exception or certify a bank format on Management's/Treasury's behalf;
-  Admin's overrides are always a distinct, audited action, never a silent bypass.
+  Admin's overrides are always a distinct, audited action, never a silent bypass. Assigns every
+  user's role, including Area Director and Vice-Rector, from the Users administration screen.
 - **Solicitor** — creates and owns requests, drafts, renditions, supplier proposals.
-- **Approver** — assigned Area Director / Vice Rector approval decisions.
+- **AreaDirector** — first-level approval decisions for their area's requests; has a "My Team"
+  view over their direct reports; can forward an approval up to the Vice-Rector.
+- **ViceRector** — same permissions as Area Director; the escalation target an Area Director can
+  forward to, and the final approval level in that pair (cannot forward further).
 - **Accounting** — supplier homologation, fiscal/XML processing, Accounts Payable, journals,
   periods, SIRE export, rendition review.
 - **Treasury** — payment scheduling, BBVA bank-file generation, payment confirmation,
