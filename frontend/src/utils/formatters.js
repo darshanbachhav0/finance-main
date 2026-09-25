@@ -1,4 +1,11 @@
-export function localeFor(language) {
+// LanguageProvider keeps <html lang> in sync with the selected language, so
+// callers without a `language` argument still format in the app's language.
+function currentLanguage() {
+  if (typeof document !== "undefined" && document.documentElement.lang) return document.documentElement.lang;
+  try { return localStorage.getItem("erp_language") || "es"; } catch { return "es"; }
+}
+
+export function localeFor(language = currentLanguage()) {
   return language === "es" ? "es-PE" : "en-US";
 }
 

@@ -8,7 +8,7 @@ import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDate } from "../utils/formatters.js";
 
 export default function MyTeam() {
   const { t, language } = useLanguage();
@@ -58,7 +58,7 @@ export default function MyTeam() {
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
-            { key: "createdAt", label: "Submitted", render: (row) => row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-" }
+            { key: "createdAt", label: "Submitted", render: (row) => row.createdAt ? formatDate(row.createdAt) : "-" }
           ]}
         />
       </div>

@@ -17,7 +17,7 @@ import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import BudgetPlanWorkspace from "../components/BudgetPlanWorkspace.jsx";
 import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
 export default function BudgetControl() {
   const [focusView, setFocusView] = useState("Budget");
@@ -146,7 +146,7 @@ export default function BudgetControl() {
       { key: "requestNumber", label: "Request", render: (row) => row.request?._id ? <Link to={`/requests/${row.request._id}`}>{row.requestNumber}</Link> : row.requestNumber }, { key: "period", label: "Period" },
       { key: "request", label: "Type", sortable: false, getValue: (row) => row.request?.requestType, render: (row) => row.request?.requestType || "-" }, { key: "requestArea", label: "Area", sortable: false, getValue: (row) => row.request?.requesterArea, render: (row) => row.request?.requesterArea || row.request?.requestingArea || "-" },
       { key: "lines", label: "Dimensions", sortable: false, getValue: (row) => row.lines?.map((line) => `${line.costCenter?.code} ${line.expenseType?.accountNumber}`).join(" "), render: (row) => row.lines?.map((line) => `${line.costCenter?.code || "-"} / ${line.expenseType?.accountNumber || "-"}`).join(", ") },
-      { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }, { key: "totalAmount", label: "Committed amount", align: "right", render: (row) => <strong>{money(row.totalAmount)}</strong> }, { key: "createdAt", label: "Created", render: (row) => new Date(row.createdAt).toLocaleString() }
+      { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }, { key: "totalAmount", label: "Committed amount", align: "right", render: (row) => <strong>{money(row.totalAmount)}</strong> }, { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) }
     ]} /></div>
     <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canDecide} onClose={() => setWorkspace(null)} onSaved={planSaved} />
     <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm ? [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />

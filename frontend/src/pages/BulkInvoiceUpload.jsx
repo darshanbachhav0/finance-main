@@ -11,7 +11,7 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
 const finalStatuses = new Set(["COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAILED"]);
 
@@ -110,7 +110,7 @@ export default function BulkInvoiceUpload() {
           { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
           { key: "processedSuccess", label: "Provisioned", align: "right" },
           { key: "observed", label: "Observed", align: "right" },
-          { key: "createdAt", label: "Uploaded", render: (row) => row.createdAt ? new Date(row.createdAt).toLocaleString() : "-" }
+          { key: "createdAt", label: "Uploaded", render: (row) => row.createdAt ? formatDateTime(row.createdAt) : "-" }
         ]} />
       </div>
     </section>

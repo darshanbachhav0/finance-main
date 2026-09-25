@@ -1,6 +1,7 @@
 import { Cloud, CloudOff } from "lucide-react";
 import { useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { formatDateTime } from "../utils/formatters.js";
 
 const labels = { loading: "Loading saved work...", ready: "Progress saves automatically", waiting: "Unsaved changes", saving: "Saving draft...", saved: "Saved", restored: "Saved work restored", error: "Not saved — check your connection", "load-error": "Saved work could not be loaded", conflict: "This draft changed in another session", "source-changed": "The original record changed. Review restored values before submitting." };
 export default function DraftPanel({ draft, onDiscard, children, busy = false }) {
@@ -14,7 +15,7 @@ export default function DraftPanel({ draft, onDiscard, children, busy = false })
   const warning = ["error", "load-error", "conflict"].includes(draft.status);
   return <>
     <div className={`work-draft-status${warning ? " work-draft-warning" : ""}`}>
-      <div role="status" title={draft.updatedAt ? `${t("Last saved")}: ${new Date(draft.updatedAt).toLocaleString()}` : undefined}>{warning ? <CloudOff size={14} aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}<strong>{t(labels[draft.status] || labels.ready)}</strong>
+      <div role="status" title={draft.updatedAt ? `${t("Last saved")}: ${formatDateTime(draft.updatedAt)}` : undefined}>{warning ? <CloudOff size={14} aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}<strong>{t(labels[draft.status] || labels.ready)}</strong>
         {draft.error && <small>{t(draft.error)}</small>}
         {draft.session.sourceChanged && <small role="alert">{t("The original record changed. Review restored values before submitting.")}</small>}
         {draft.session.backupFailed && draft.status !== "saved" && <small role="alert">{t("Browser backup is unavailable. Keep this page open until your draft is saved to your account.")}</small>}

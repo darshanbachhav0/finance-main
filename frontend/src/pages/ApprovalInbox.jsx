@@ -13,7 +13,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
 export default function ApprovalInbox() {
   const { t, language } = useLanguage();
@@ -162,7 +162,7 @@ export default function ApprovalInbox() {
             { key: "approvalStage", label: "Current stage", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
-            { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? new Date(row.approvalDueAt).toLocaleString() : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
+            { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? formatDateTime(row.approvalDueAt) : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}

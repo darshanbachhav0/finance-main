@@ -18,6 +18,7 @@ import { useId, useMemo } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import { useTheme } from "../context/ThemeContext.jsx";
+import { formatNumber } from "../utils/formatters.js";
 
 const palette = ["#c91545", "#45404e", "#19733d", "#d18a00", "#2463a6", "#7a5ca3", "#667581", "#b4232c"];
 const darkPalette = ["#ff789a", "#bcb4ca", "#78d49b", "#edc06a", "#91beef", "#ba9fe9", "#a9bbc8", "#ff909b"];
@@ -59,7 +60,7 @@ export default function AnalyticsChart({
   loading = false,
   error = "",
   emptyLabel = "No data is available for the selected filters.",
-  valueFormatter = (value) => Number(value || 0).toLocaleString(),
+  valueFormatter = (value) => formatNumber(value),
   onDrillDown,
   horizontal = false,
   compact = false

@@ -1,4 +1,5 @@
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { formatDateTime } from "../utils/formatters.js";
 
 export default function ApprovalTimeline({ history = [] }) {
   const { t } = useLanguage();
@@ -19,7 +20,7 @@ export default function ApprovalTimeline({ history = [] }) {
             </span>
             <p>{item.comments}</p>
             <small>
-              {item.actor?.name || t("System")} · {new Date(item.createdAt).toLocaleString()}
+              {item.actor?.name || t("System")} · {formatDateTime(item.createdAt)}
             </small>
             {(item.stage || item.signature || item.ip) && <small className="timeline-evidence">{[item.stage && t(item.stage), item.signature, item.ip].filter(Boolean).join(" · ")}</small>}
           </div>

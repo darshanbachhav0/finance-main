@@ -46,6 +46,7 @@ import {
 } from "../context/ToastContext.jsx";
 
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import { formatDateTime } from "../utils/formatters.js";
 
 function freshLookupState() {
   return {
@@ -1535,7 +1536,7 @@ export default function Suppliers() {
         }
       >
         {drawer.open && ["create", "edit"].includes(drawer.mode) && <DraftPanel busy={saving} draft={supplierDraft} onDiscard={() => setDrawer({ open: false, mode: "view" })} />}
-        {drawer.mode === "create" && lookup.checkedAt && <p className="section-note">{t("SUNAT lookup last checked")}: {new Date(lookup.checkedAt).toLocaleString()}</p>}
+        {drawer.mode === "create" && lookup.checkedAt && <p className="section-note">{t("SUNAT lookup last checked")}: {formatDateTime(lookup.checkedAt)}</p>}
         <fieldset className="work-draft-fields" disabled={saving || (["create", "edit"].includes(drawer.mode) && (!supplierDraft.ready || supplierDraft.status === "conflict"))}>
         {
           drawer.mode ===
