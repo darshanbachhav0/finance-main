@@ -1,5 +1,6 @@
 import { budgetPlanningSpanish } from "../utils/budgetPlanningSpanish.js";
 import experienceSpanish from "./experienceSpanish.js";
+import refinementSpanish from "./refinementSpanish.js";
 import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
@@ -1810,7 +1811,7 @@ const quotationPaymentSpanish = {
   "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish };
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish };
 Object.assign(spanishDictionary, {
   "Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed.": "Generar una instrucción BBVA de ancho fijo. El pago queda pendiente hasta confirmar la ejecución bancaria.",
   "BBVA confirmed configuration (JSON)": "Configuración BBVA confirmada (JSON)",
