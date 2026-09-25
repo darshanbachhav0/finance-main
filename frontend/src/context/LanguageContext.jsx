@@ -1840,7 +1840,11 @@ export function translateMessage(text, language = "en") {
 }
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => localStorage.getItem("erp_language") || "es");
+  const [language, setLanguage] = useState(() => {
+    const initial = localStorage.getItem("erp_language") || "es";
+    document.documentElement.lang = initial;
+    return initial;
+  });
 
   useEffect(() => {
     document.documentElement.lang = language;

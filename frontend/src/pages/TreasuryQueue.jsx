@@ -34,7 +34,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 
 const amountOf = (row) => Number(row.accountsPayable?.outstandingAmount ?? row.outstandingAmount ?? row.totalAmount ?? 0);
@@ -289,7 +289,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     { key: "status", label: "CXP status", getValue: (row) => row.accountsPayable?.status, render: (row) => <StatusBadge status={row.accountsPayable?.status} /> },
     { key: "amount", sortKey: "outstandingAmount", label: "Outstanding", align: "right", getValue: amountOf, render: (row) => <strong>{money(row.currency || row.accountsPayable?.currency, amountOf(row))}</strong> },
     { key: "paymentTerms", label: "Payment Terms", sortable: false, getValue: (row) => paymentTermsSummary(row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot || {}, t), render: (row) => <PaymentTermsSummary terms={row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot} showAmounts={false} /> },
-    { key: "dueDate", label: "Due date", getValue: (row) => row.accountsPayable?.dueDate, render: (row) => row.accountsPayable?.dueDate ? new Date(row.accountsPayable.dueDate).toLocaleDateString() : row.accountsPayable?.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-" }
+    { key: "dueDate", label: "Due date", getValue: (row) => row.accountsPayable?.dueDate, render: (row) => row.accountsPayable?.dueDate ? formatDate(row.accountsPayable.dueDate) : row.accountsPayable?.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-" }
   ];
 
   return <section>
@@ -332,7 +332,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       { key: "supplier", label: "Supplier", sortable: false, render: (row) => row.supplier?.legalName || row.supplier?.name || row.requester?.name || "UMA collaborator" },
       { key: "voucher", label: "Voucher", sortable: false, render: (row) => [row.accountsPayable?.voucher?.series, row.accountsPayable?.voucher?.number].filter(Boolean).join("-") || "-" },
       { key: "operation", label: "Operation number", render: (row) => row.payment?.operationNumber || "-" },
-      { key: "paidAt", label: "Paid date", render: (row) => row.payment?.paidAt ? new Date(row.payment.paidAt).toLocaleDateString() : "-" },
+      { key: "paidAt", label: "Paid date", render: (row) => row.payment?.paidAt ? formatDate(row.payment.paidAt) : "-" },
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
       { key: "amount", label: "Confirmed", align: "right", render: (row) => <strong>{money(row.currency, row.payment?.confirmedAmount)}</strong> }
     ]} /></div>
@@ -345,7 +345,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       { key: "items", label: "CXP items", sortable: false, render: (row) => row.items?.length || 0 },
       { key: "totalAmount", label: "Total", align: "right", render: (row) => money(row.currency, row.totalAmount) },
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-      { key: "generatedAt", label: "Generated", render: (row) => new Date(row.generatedAt).toLocaleString() },
+      { key: "generatedAt", label: "Generated", render: (row) => formatDateTime(row.generatedAt) },
       { key: "download", label: "", sortable: false, render: (row) => <ProtectedAssetButton className="icon-button" resourcePath={row.url} fileName={row.fileName} title="Download"><Download size={16} /></ProtectedAssetButton> }
     ]} /></div>
 

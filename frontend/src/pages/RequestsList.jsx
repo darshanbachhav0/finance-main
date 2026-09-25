@@ -15,8 +15,8 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { expenseNatures, flowTypes, requestPriorities, requestStatuses, requestTypes } from "../utils/options.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { expenseNatureLabels, expenseNatures, flowTypes, requestPriorities, requestStatuses, requestTypes } from "../utils/options.js";
+import { formatCurrency, formatDate } from "../utils/formatters.js";
 
 export default function RequestsList() {
   const { user } = useAuth();
@@ -105,7 +105,7 @@ export default function RequestsList() {
             ] },
             { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes },
             { key: "requestType", label: "types", allLabel: "All types", options: requestTypes },
-            { key: "expenseNature", label: "expense natures", allLabel: "All expense natures", options: expenseNatures },
+            { key: "expenseNature", label: "expense natures", allLabel: "All expense natures", options: expenseNatures.map((value) => ({ value, label: expenseNatureLabels[value] || value })) },
             { key: "priority", label: "priorities", allLabel: "All priorities", options: requestPriorities },
             { key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] },
             { key: "period", getValue: (row) => row.accountingPeriod, label: "periods", allLabel: "All periods", options: periods },
@@ -124,14 +124,14 @@ export default function RequestsList() {
             { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
             { key: "flowType", label: "Track", render: (row) => <span className="flow-chip">{row.flowType || "A1"}</span> },
             { key: "requestType", label: "Type" },
-            { key: "expenseNature", label: "Expense nature" },
+            { key: "expenseNature", label: "Expense nature", render: (row) => t(expenseNatureLabels[row.expenseNature] || row.expenseNature) },
             { key: "priority", label: "Priority", render: (row) => <span className={`priority priority-${String(row.priority || "MEDIA").toLowerCase()}`}>{t(row.priority || "MEDIA")}</span> },
             { key: "supplier", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
             { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "accountingPeriod", label: "Period" },
             { key: "totalAmount", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "status", label: "Status", render: (row) => <div className="status-cell"><FinancialProgressSummary request={row} compact /><RequestStageIndicator request={row} compact /></div> },
-            { key: "updatedAt", label: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() }
+            { key: "updatedAt", label: "Updated", render: (row) => formatDate(row.updatedAt) }
           ]}
         />
       </div>

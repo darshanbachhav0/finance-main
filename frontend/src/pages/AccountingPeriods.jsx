@@ -12,6 +12,7 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
+import { formatDateTime } from "../utils/formatters.js";
 
 export default function AccountingPeriods() {
   const { t } = useLanguage();
@@ -72,8 +73,8 @@ export default function AccountingPeriods() {
     <Message type="error">{actionError || periodTable.error}</Message>
     <div className="workspace-panel"><DataTable rows={rows} loading={loading} remote={periodTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OPEN", "CLOSED"] }]} searchPlaceholder="Search accounting period..." rowActions={(row) => [{ label: row.status === "OPEN" ? "Close period" : "Reopen period", icon: row.status === "OPEN" ? LockKeyhole : LockOpen, tone: row.status === "OPEN" ? "danger" : "default", onClick: () => requestStatusChange(row) }]} columns={[
       { key: "period", label: "Period" }, { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-      { key: "openedAt", label: "Opened", render: (row) => row.openedAt ? new Date(row.openedAt).toLocaleString() : "-" }, { key: "openedBy", label: "Opened by", render: (row) => row.openedBy?.name || "-" },
-      { key: "closedAt", label: "Closed", render: (row) => row.closedAt ? new Date(row.closedAt).toLocaleString() : "-" }, { key: "closedBy", label: "Closed by", render: (row) => row.closedBy?.name || "-" }, { key: "comments", label: "Comments" }
+      { key: "openedAt", label: "Opened", render: (row) => row.openedAt ? formatDateTime(row.openedAt) : "-" }, { key: "openedBy", label: "Opened by", render: (row) => row.openedBy?.name || "-" },
+      { key: "closedAt", label: "Closed", render: (row) => row.closedAt ? formatDateTime(row.closedAt) : "-" }, { key: "closedBy", label: "Closed by", render: (row) => row.closedBy?.name || "-" }, { key: "comments", label: "Comments" }
     ]} /></div>
     <Drawer open={createOpen} title="New accounting period" description="Create an open period before financial activity begins." onClose={() => !processing && setCreateOpen(false)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCreateOpen(false)}>{t("Cancel")}</button><button type="submit" form="period-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><Save size={16} /><span>{t(processing ? "Saving..." : "Create")}</span></button></>}>
       <DraftPanel busy={processing} draft={draft} onDiscard={() => setCreateOpen(false)}><form id="period-form" className="form-grid" onSubmit={createPeriod}><label className="field"><span>{t("Period")} *</span><input type="month" required value={form.period} onChange={(event) => setForm({ ...form, period: event.target.value })} /></label><label className="field"><span>{t("Opening comments")}</span><textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label></form></DraftPanel>

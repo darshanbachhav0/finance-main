@@ -6,6 +6,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { exchangeRateDescription } from "../utils/financialEvidence.js";
+import { formatDateTime } from "../utils/formatters.js";
 
 function payload(form) {
   return {
@@ -88,9 +89,11 @@ export default function ExchangeRates() {
         {currentEvidence.fallback?.used && <small>{t("Fallback used")}: {currentEvidence.fallback.reason} · {t("Requested date")}: {String(currentEvidence.requestedDate || currentEvidence.fallback.requestedDate || "").slice(0, 10)} · {t("Rate date")}: {String(currentEvidence.date || "").slice(0, 10)}</small>}
       </div>}
       fields={[
+        { type: "section", label: "Rate" },
         { name: "date", label: "Date", type: "date", required: true },
         { name: "period", label: "Period", required: true },
         { name: "rate", label: "Selling rate", type: "number", step: "0.0001", min: "0.0001", required: true, validate: (value) => Number(value) > 0 ? "" : "Enter a rate greater than zero.", hint: "SUNAT values must match the provider evidence." },
+        { type: "section", label: "Source" },
         { name: "source", label: "Source code", defaultValue: "MANUAL", hint: "Use MANUAL unless a configured provider supplied the rate." },
         { name: "sourceLabel", label: "Source description", defaultValue: "Authorized manual entry", hint: "Keep the online source or describe the approved manual source." },
         { name: "providerMode", label: "Provider mode", type: "select", defaultValue: "MANUAL", options: ["MANUAL", "BCRP_FALLBACK", "SUNAT"] }
@@ -102,7 +105,7 @@ export default function ExchangeRates() {
         { key: "sourceLabel", label: "Source", render: (row) => row.sourceLabel || row.source },
         { key: "providerMode", label: "Mode" },
         { key: "authoritative", label: "Official / authoritative", render: (row) => <div className="primary-cell"><StatusBadge status={row.authoritative && row.providerMode === "SUNAT" ? "VERIFIED" : "NOT_VERIFIED"} /><span>{row.authoritative && row.providerMode === "SUNAT" ? t("Official SUNAT") : t("Reference — not authoritative")}</span></div> },
-        { key: "retrievedAt", label: "Retrieved", render: (row) => row.retrievedAt ? new Date(row.retrievedAt).toLocaleString() : "-" }
+        { key: "retrievedAt", label: "Retrieved", render: (row) => row.retrievedAt ? formatDateTime(row.retrievedAt) : "-" }
       ]}
     />
   );

@@ -35,15 +35,13 @@ import {
   flowTypes
 } from "../utils/options.js";
 
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 
 const dateText = (
   value
 ) =>
   value
-    ? new Date(
-        value
-      ).toLocaleDateString()
+    ? formatDate(value)
     : "-";
 
 export default function AccountsPayable() {
@@ -1175,9 +1173,7 @@ export default function AccountsPayable() {
                         <dd>
                           {
                             selected.bouncedPayment.bouncedAt
-                              ? new Date(
-                                  selected.bouncedPayment.bouncedAt
-                                ).toLocaleString()
+                              ? formatDateTime(selected.bouncedPayment.bouncedAt)
                               : "-"
                           }
                         </dd>
@@ -1211,9 +1207,7 @@ export default function AccountsPayable() {
                         >
                           <span>
                             {
-                              new Date(
-                                item.at
-                              ).toLocaleString()
+                              formatDateTime(item.at)
                             }
                             {" - "}
                             {
