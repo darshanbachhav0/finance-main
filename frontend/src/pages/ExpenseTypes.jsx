@@ -1,4 +1,8 @@
 import ResourceManager from "../components/ResourceManager.jsx";
+import { expenseNatureLabels, expenseNatures, requestTypeLabels, requestTypes } from "../utils/options.js";
+
+const requestTypeOptions = requestTypes.map((value) => ({ value, label: requestTypeLabels[value] || value }));
+const expenseNatureOptions = expenseNatures.map((value) => ({ value, label: expenseNatureLabels[value] || value }));
 
 export default function ExpenseTypes() {
   return (
@@ -8,14 +12,16 @@ export default function ExpenseTypes() {
       endpoint="/expense-types"
       duplicateFields={["code", "accountNumber"]}
       fields={[
+        { type: "section", label: "Account" },
         { name: "code", label: "Code", required: true },
         { name: "name", label: "Name", required: true },
         { name: "category", label: "Category", type: "select", required: true, options: ["OPEX", "CAPEX", "NON_DEDUCTIBLE"] },
         { name: "accountingClass", label: "Accounting class", type: "select", required: true, options: ["CLASS_6", "CLASS_3", "NON_DEDUCTIBLE"] },
         { name: "accountNumber", label: "Account number", required: true },
-        { name: "permittedRequestTypes", label: "Permitted request types", type: "textarea", rows: 2, getValue: (row) => (row.permittedRequestTypes || []).join(", "), hint: "Optional comma-separated canonical request types." },
-        { name: "permittedExpenseNatures", label: "Permitted expense natures", type: "textarea", rows: 2, getValue: (row) => (row.permittedExpenseNatures || []).join(", "), hint: "Optional comma-separated canonical expense natures." },
         { name: "deductible", label: "Deductible", type: "checkbox", defaultValue: true },
+        { type: "section", label: "Where it can be used" },
+        { name: "permittedRequestTypes", label: "Permitted request types", type: "multiselect", options: requestTypeOptions, getValue: (row) => row.permittedRequestTypes || [] },
+        { name: "permittedExpenseNatures", label: "Permitted expense natures", type: "multiselect", options: expenseNatureOptions, getValue: (row) => row.permittedExpenseNatures || [] },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ]}
       columns={[
@@ -24,9 +30,8 @@ export default function ExpenseTypes() {
         { key: "category", label: "Category" },
         { key: "accountingClass", label: "Class" },
         { key: "accountNumber", label: "Account" },
-        { key: "active", label: "Active", render: (row) => (row.active ? "Yes" : "No") }
+        { key: "active", label: "Status" }
       ]}
-      transformSubmit={(form) => ({ ...form, permittedRequestTypes: String(form.permittedRequestTypes || "").split(",").map((item) => item.trim()).filter(Boolean), permittedExpenseNatures: String(form.permittedExpenseNatures || "").split(",").map((item) => item.trim()).filter(Boolean) })}
     />
   );
 }

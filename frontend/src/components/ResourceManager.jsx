@@ -334,7 +334,7 @@ export default function ResourceManager({
               ) : field.type === "checkbox" ? (
                 <span className="toggle-field">
                   <input type="checkbox" checked={Boolean(form[field.name])} onChange={(event) => setForm({ ...form, [field.name]: event.target.checked })} />
-                  <span>{t(form[field.name] ? "Active" : "Inactive")}</span>
+                  <span>{t(field.name === "active" ? (form[field.name] ? "Active" : "Inactive") : (form[field.name] ? "Yes" : "No"))}</span>
                 </span>
               ) : field.type === "file" ? (
                 <><input type="file" accept={field.accept} multiple={field.multiple} onChange={(event) => setForm({ ...form, [field.name]: Array.from(event.target.files || []) })} /><small className="field-hint">{form[field.name]?.map((file) => file.name).join(", ") || t(field.placeholder || "Choose file")}</small></>

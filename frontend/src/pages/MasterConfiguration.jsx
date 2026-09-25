@@ -8,7 +8,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { approvalLevels, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 
 function BankFormatCertificationPanel({ rows, reload }) {
   const { t } = useLanguage();
@@ -51,7 +51,7 @@ function BankFormatCertificationPanel({ rows, reload }) {
               <td>{row.currency}</td>
               <td>{row.certified ? t("Yes") : t("No")}</td>
               <td>{row.certifiedBy?.name || "-"}</td>
-              <td>{row.certifiedAt ? new Date(row.certifiedAt).toLocaleString() : "-"}</td>
+              <td>{row.certifiedAt ? formatDateTime(row.certifiedAt) : "-"}</td>
               <td>
                 <input
                   type="text"
@@ -98,11 +98,11 @@ export default function MasterConfiguration() {
       label: "Approval Rules", roles: ["Admin"], endpoint: "/approval-rules",
       description: "Configure approval sequence, role, amount range, area, and SLA without hard-coding workflow decisions in the UI.",
       fields: [
-        { name: "name", label: "Name", required: true }, { name: "approvalLevel", label: "Approval level", type: "select", required: true, options: approvalLevels },
-        { name: "role", label: "Role", type: "select", required: true, options: roles }, { name: "area", label: "Area", defaultValue: "*", required: true },
+        { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "approvalLevel", label: "Approval level", type: "select", required: true, options: approvalLevels },
+        { name: "role", label: "Role", type: "select", required: true, options: roles }, { type: "section", label: "Applies to" }, { name: "area", label: "Area", defaultValue: "*", required: true },
         { name: "amountFrom", label: "Amount from", type: "number", min: 0, step: "0.01", defaultValue: 0 }, { name: "amountTo", label: "Amount to", type: "number", min: 0, step: "0.01" },
         { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "flowType", label: "Track", type: "select", defaultValue: "*", options: flowOptions }, { name: "sequence", label: "Sequence", type: "number", min: 1, defaultValue: 1, required: true },
-        { name: "slaHours", label: "SLA hours", type: "number", min: 1, defaultValue: 24, required: true }, { name: "required", label: "Required", type: "checkbox", defaultValue: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+        { type: "section", label: "Timing" }, { name: "slaHours", label: "SLA hours", type: "number", min: 1, defaultValue: 24, required: true }, { name: "required", label: "Required", type: "checkbox", defaultValue: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "flowType", label: "Track" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
     },
@@ -110,10 +110,10 @@ export default function MasterConfiguration() {
       label: "Track B Eligibility", roles: ["Admin"], endpoint: "/direct-payment-eligibility-rules",
       description: "Track B (direct payment) shortens the normal A1 procurement path - it is only available where a matching active rule exists for the request's area, expense nature, and amount. No matching rule means Track B is refused at submission.",
       fields: [
-        { name: "name", label: "Name", required: true }, { name: "area", label: "Area", defaultValue: "*", required: true },
+        { type: "section", label: "Applies to" }, { name: "name", label: "Name", required: true }, { name: "area", label: "Area", defaultValue: "*", required: true },
         { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
         { name: "maxAmount", label: "Max amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Leave blank for no amount limit within this area/expense-nature match." },
-        { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" },
+        { type: "section", label: "Validity" }, { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" },
         { name: "notes", label: "Notes", type: "textarea" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       columns: [{ key: "name", label: "Name" }, { key: "area", label: "Area" }, { key: "expenseNature", label: "Expense nature" }, { key: "maxAmount", label: "Max amount", render: (row) => row.maxAmount >= 0 ? formatCurrency(row.maxAmount, "PEN", language) : "No limit" }, { key: "active", label: "Status" }]
@@ -122,29 +122,29 @@ export default function MasterConfiguration() {
       label: "Finance Configurations", roles: ["Admin", "Accounting"], endpoint: "/finance-configurations",
       description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",
       fields: [
-        { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS"] },
+        { type: "section", label: "Value" }, { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS"] },
         { name: "numericValue", label: "Value", type: "number", min: 0, step: "0.01", required: true },
         { name: "currency", label: "Currency", type: "select", defaultValue: "PEN", options: currencies },
         { name: "behavior", label: "Behavior", type: "select", defaultValue: "INFORMATION", options: ["INFORMATION", "WARNING", "FLAG", "BLOCK"], hint: "How exceeding this value is treated where it's checked - not every key enforces every behavior." },
-        { name: "effectiveFrom", label: "Effective from", type: "date", required: true }, { name: "effectiveTo", label: "Effective to", type: "date" },
-        { name: "description", label: "Description", type: "textarea" }, { name: "source", label: "Source / reference" },
+        { type: "section", label: "Validity" }, { name: "effectiveFrom", label: "Effective from", type: "date", required: true }, { name: "effectiveTo", label: "Effective to", type: "date" },
+        { type: "section", label: "Reference" }, { name: "description", label: "Description", type: "textarea" }, { name: "source", label: "Source / reference" },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? new Date(row.effectiveFrom).toLocaleDateString() : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString() : "Open" }, { key: "active", label: "Status" }]
+      columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? formatDate(row.effectiveFrom) : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? formatDate(row.effectiveTo) : "Open" }, { key: "active", label: "Status" }]
     },
     "budget-rules": {
       label: "Budget Rules", roles: ["Admin", "Budget"], endpoint: "/budget-rules",
       description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
       fields: [
-        { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
+        { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
         { name: "exceptionStrategy", label: "Exception strategy", type: "select", options: ["REJECT", "REQUEST_BUDGET_INCREASE", "EXTRAORDINARY_APPROVAL"], defaultValue: "REJECT" },
-        { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
+        { type: "section", label: "Applies to" }, { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
         { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project", defaultValue: "*" },
-        { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: ["Management"], hint: "Only Management/Rectorate authority may decide a budget exception - Admin cannot approve on Management's behalf." },
+        { type: "section", label: "Exception authority" }, { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: ["Management"], hint: "Only Management/Rectorate authority may decide a budget exception - Admin cannot approve on Management's behalf." },
         { name: "exceptionEscalationAmount", label: "Escalate above amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Optional. Above this requested amount, a different (higher) authority is required instead." },
         { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: ["Management"], hint: "Required only when an escalation amount is set. Same Management-only restriction applies." },
-        { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+        { type: "section", label: "Validity" }, { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "active", label: "Status" }]
     },
@@ -167,9 +167,9 @@ export default function MasterConfiguration() {
       description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format. Certification is managed separately below.",
       transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [
-        { name: "bank", label: "Bank", type: "select", required: true, options: ["BBVA"] }, { name: "currency", label: "Currency", type: "select", required: true, options: currencies },
+        { type: "section", label: "Format" }, { name: "bank", label: "Bank", type: "select", required: true, options: ["BBVA"] }, { name: "currency", label: "Currency", type: "select", required: true, options: currencies },
         { name: "mode", label: "Mode", type: "select", options: ["FIXED_WIDTH"], defaultValue: "FIXED_WIDTH" }, { name: "specificationVersion", label: "Specification version", required: true, defaultValue: "UMA-BBVA-151-277-v1" },
-        { name: "bbva", label: "BBVA confirmed configuration (JSON)", type: "textarea", rows: 14, getValue: (row) => JSON.stringify(row.bbva || {}, null, 2), hint: "Use the documented field configuration. Set confirmed only after Treasury reviews every field." },
+        { type: "section", label: "Field configuration" }, { name: "bbva", label: "BBVA confirmed configuration (JSON)", type: "textarea", rows: 14, getValue: (row) => JSON.stringify(row.bbva || {}, null, 2), hint: "Use the documented field configuration. Set confirmed only after Treasury reviews every field." },
         { name: "notes", label: "Notes", type: "textarea", defaultValue: "" }, { name: "active", label: "Active", type: "checkbox", defaultValue: false }
       ],
       columns: [{ key: "bank", label: "Bank" }, { key: "currency", label: "Currency" }, { key: "mode", label: "Mode" }, { key: "specificationVersion", label: "Specification version" }, { key: "certified", label: "Certified", render: (row) => row.certified ? t("Yes") : t("No") }, { key: "notes", label: "Notes" }, { key: "active", label: "Status" }],
