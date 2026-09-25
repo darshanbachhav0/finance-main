@@ -29,7 +29,7 @@ function approvalScope(user) {
   const query = { status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalStage: { $ne: "COMPLETE" } };
   if (user.role !== ROLES.ADMIN) {
     const chain = { approvalRouteSnapshot: { $elemMatch: { approverUser: user._id, status: "PENDING", source: "MANAGER_CHAIN" } } };
-    if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+    if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
       const legacy = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
       if (legacy.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
         const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
@@ -144,7 +144,7 @@ async function roleDetails(user, common) {
     );
   }
 
-  if (user.role === ROLES.APPROVER) {
+  if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR].includes(user.role)) {
     const query = approvalScope(user);
     const [waiting, oldest, decisions] = await Promise.all([
       FinancialRequest.aggregate([{ $match: query }, { $group: { _id: null, amount: { $sum: "$totalPENEquivalent" }, count: { $sum: 1 } } }]),

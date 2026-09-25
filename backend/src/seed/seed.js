@@ -130,7 +130,7 @@ async function seedUsers(costCenters) {
       name: "Dirección de Ciencias de la Salud (Demo)",
       email: "demo.director.salud@uma.edu.pe",
       dni: "10000003",
-      role: ROLES.APPROVER,
+      role: ROLES.AREA_DIRECTOR,
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
       area: AREAS.HEALTH,
       approvalAreas: [AREAS.HEALTH]
@@ -140,7 +140,7 @@ async function seedUsers(costCenters) {
       name: "Vicerrectorado Académico UMA (Demo)",
       email: "demo.vicerrector@uma.edu.pe",
       dni: "10000004",
-      role: ROLES.APPROVER,
+      role: ROLES.VICE_RECTOR,
       approvalLevel: APPROVAL_STAGES.VICE_RECTOR,
       area: AREAS.RECTORATE,
       approvalAreas: ["*"]
@@ -206,7 +206,7 @@ async function seedUsers(costCenters) {
       name: "Dirección de Farmacia y Bioquímica (Demo)",
       email: "demo.director.farmacia@uma.edu.pe",
       dni: "10000010",
-      role: ROLES.APPROVER,
+      role: ROLES.AREA_DIRECTOR,
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
       area: AREAS.PHARMACY,
       approvalAreas: [AREAS.PHARMACY]
@@ -226,7 +226,7 @@ async function seedUsers(costCenters) {
       name: "Dirección de Ingeniería y Negocios (Demo)",
       email: "demo.director.ingenieria@uma.edu.pe",
       dni: "10000012",
-      role: ROLES.APPROVER,
+      role: ROLES.AREA_DIRECTOR,
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
       area: AREAS.ENGINEERING,
       approvalAreas: [AREAS.ENGINEERING]
@@ -730,7 +730,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
   for (const area of [AREAS.HEALTH, AREAS.PHARMACY, AREAS.ENGINEERING]) {
     await upsert(ApprovalRule, { name: `Dirección de Área - ${area}` }, {
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
-      role: ROLES.APPROVER,
+      role: ROLES.AREA_DIRECTOR,
       area,
       amountFrom: 0,
       requestType: "*",
@@ -743,7 +743,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
   }
   await upsert(ApprovalRule, { name: "Vicerrectorado - ruta institucional UMA" }, {
     approvalLevel: APPROVAL_STAGES.VICE_RECTOR,
-    role: ROLES.APPROVER,
+    role: ROLES.VICE_RECTOR,
     area: "*",
     amountFrom: 0,
     requestType: "*",
@@ -767,7 +767,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
   });
   await upsert(ApprovalRule, { name: "Pago directo express - Vía B" }, {
     approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
-    role: ROLES.APPROVER,
+    role: ROLES.AREA_DIRECTOR,
     area: "*",
     amountFrom: 0,
     requestType: "*",
@@ -779,7 +779,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
   });
   await upsert(ApprovalRule, { name: "Vicerrectorado - Vía B" }, {
     approvalLevel: APPROVAL_STAGES.VICE_RECTOR,
-    role: ROLES.APPROVER,
+    role: ROLES.VICE_RECTOR,
     area: "*",
     amountFrom: 0,
     requestType: "*",

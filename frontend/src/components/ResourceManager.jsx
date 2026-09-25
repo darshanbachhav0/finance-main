@@ -14,7 +14,7 @@ import PageHeader from "./PageHeader.jsx";
 import StatusBadge from "./StatusBadge.jsx";
 
 function defaultValue(fields) {
-  return Object.fromEntries(fields.map((field) => [field.name, field.defaultValue ?? (field.type === "checkbox" ? false : field.type === "file" ? [] : "")]));
+  return Object.fromEntries(fields.map((field) => [field.name, field.defaultValue ?? (field.type === "checkbox" ? false : field.type === "file" || field.type === "toggle-list" ? [] : "")]));
 }
 
 export default function ResourceManager({
@@ -237,6 +237,46 @@ export default function ResourceManager({
                   <option value="">{t("Select")}</option>
                   {field.options.map((option) => <option key={option.value ?? option} value={option.value ?? option}>{t(option.label ?? option)}</option>)}
                 </select>
+              ) : field.type === "toggle-group" ? (
+                <span className="toggle-group" role="radiogroup">
+                  {field.options.map((option) => {
+                    const value = option.value ?? option;
+                    const active = form[field.name] === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        className={`toggle-chip${active ? " is-active" : ""}`}
+                        onClick={() => setForm({ ...form, [field.name]: value, ...field.onSelect?.(value) })}
+                      >
+                        {t(option.label ?? option)}
+                      </button>
+                    );
+                  })}
+                </span>
+              ) : field.type === "toggle-list" ? (
+                <span className="toggle-group">
+                  {field.options.map((option) => {
+                    const value = option.value ?? option;
+                    const selected = Array.isArray(form[field.name]) && form[field.name].includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={selected}
+                        className={`toggle-chip${selected ? " is-active" : ""}`}
+                        onClick={() => {
+                          const current = Array.isArray(form[field.name]) ? form[field.name] : [];
+                          setForm({ ...form, [field.name]: selected ? current.filter((item) => item !== value) : [...current, value] });
+                        }}
+                      >
+                        {t(option.label ?? option)}
+                      </button>
+                    );
+                  })}
+                </span>
               ) : field.type === "checkbox" ? (
                 <span className="toggle-field">
                   <input type="checkbox" checked={Boolean(form[field.name])} onChange={(event) => setForm({ ...form, [field.name]: event.target.checked })} />

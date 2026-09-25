@@ -202,7 +202,7 @@ try {
   await page.locator("#treasury-history").waitFor({ state: "visible" });
   assert.equal(await page.locator("#treasury-history").isVisible(), true);
   assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
-  for (const [role, expected, approvalLevel] of [["Solicitor", 5], ["Approver", 4, "AREA_DIRECTOR"], ["Approver", 4, "VICE_RECTOR"], ["Budget", 4], ["Accounting", 6], ["Treasury", 4], ["Management", 5], ["Procurement", 5], ["Admin", 3]]) {
+  for (const [role, expected, approvalLevel] of [["Solicitor", 5], ["AreaDirector", 4, "AREA_DIRECTOR"], ["ViceRector", 4, "VICE_RECTOR"], ["Budget", 4], ["Accounting", 6], ["Treasury", 4], ["Management", 5], ["Procurement", 5], ["Admin", 3]]) {
     user.role = role; user.approvalLevel = approvalLevel;
     await page.goto("http://127.0.0.1:5190/");
     await page.waitForLoadState("networkidle");

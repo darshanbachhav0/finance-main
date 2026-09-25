@@ -5,14 +5,24 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH } from "../utils/constants.js";
+import { APPROVAL_STAGES, ERROR_CODES, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
 const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
 
+// Area Director and Vice-Rector are single-level roles: their approvalLevel is
+// implied by the role itself, never a separate admin choice (unlike Management,
+// which can sit at RECTORATE or GENERAL_MANAGEMENT and keeps approvalLevel editable).
+const IMPLIED_APPROVAL_LEVEL = Object.freeze({
+  [ROLES.AREA_DIRECTOR]: APPROVAL_STAGES.AREA_DIRECTOR,
+  [ROLES.VICE_RECTOR]: APPROVAL_STAGES.VICE_RECTOR
+});
+
 function editablePayload(body) {
-  return Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+  const payload = Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+  if (payload.role && IMPLIED_APPROVAL_LEVEL[payload.role]) payload.approvalLevel = IMPLIED_APPROVAL_LEVEL[payload.role];
+  return payload;
 }
 
 export async function validateSupervisor(userId, supervisorId) {

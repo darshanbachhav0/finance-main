@@ -109,7 +109,7 @@ export default function BudgetControl() {
   }
 
   return <section>
-    <WorkspaceTools links={[["Configuration", "/configuration/projects"], ["Management Reports", "/reports"]]} />
+    <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
       <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
     <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error}</Message>
     <div className="period-toolbar budget-period-toolbar">

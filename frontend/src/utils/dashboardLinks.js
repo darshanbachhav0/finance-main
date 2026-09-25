@@ -5,7 +5,7 @@ export function dashboardMetricLink(role, key) {
   let destination;
   if (role === "Budget" || ["budget", "available", "assigned", "committed", "executed", "paid"].includes(key)) {
     destination = ["/budget", "Open Budget Control"];
-  } else if (role === "Approver") {
+  } else if (role === "AreaDirector" || role === "ViceRector") {
     destination = ["/approvals", "Review approvals"];
   } else if (role === "Treasury") {
     destination = ["/treasury", "Open Treasury"];

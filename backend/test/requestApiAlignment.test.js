@@ -4,8 +4,8 @@ import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
 import { applyRenditionStatusFilter } from "../src/services/requestService.js";
 
 const owner = { _id: "owner", role: "Solicitor", active: true, area: "Operations" };
-const director = { _id: "director", role: "Approver", active: true, approvalLevel: "AREA_DIRECTOR", area: "Operations" };
-const vice = { _id: "vice", role: "Approver", active: true, approvalLevel: "VICE_RECTOR", area: "Management" };
+const director = { _id: "director", role: "AreaDirector", active: true, approvalLevel: "AREA_DIRECTOR", area: "Operations" };
+const vice = { _id: "vice", role: "ViceRector", active: true, approvalLevel: "VICE_RECTOR", area: "Management" };
 const accounting = { _id: "accounting", role: "Accounting", active: true, area: "Finance" };
 
 function approvalRequest(overrides = {}) {
@@ -15,7 +15,7 @@ function approvalRequest(overrides = {}) {
     requesterArea: "Operations",
     status: "PENDIENTE_APROBACION",
     approvalStage: "AREA_DIRECTOR",
-    approvalRouteSnapshot: [{ sequence: 1, required: true, status: "PENDING", role: "Approver", approvalLevel: "AREA_DIRECTOR" }],
+    approvalRouteSnapshot: [{ sequence: 1, required: true, status: "PENDING", role: "AreaDirector", approvalLevel: "AREA_DIRECTOR" }],
     ...overrides
   };
 }

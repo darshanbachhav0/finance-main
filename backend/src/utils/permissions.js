@@ -52,23 +52,23 @@ function requesterIdOf(request) {
 // most chain approvers are) has no blanket view of other people's requests —
 // they see their own, and anything specifically routed to them for approval.
 // Roles with REQUEST_VIEW_ALL (Accounting, Treasury, Budget, Management, and
-// the legacy Approver role kept for backward compatibility) are unaffected.
+// the Area Director/Vice-Rector approval-pool roles) are unaffected.
 export function canViewRequest(request, user) {
   if (!request || !user) return false;
   if (user.role === ROLES.ADMIN) return true;
   if (requesterIdOf(request) === String(user._id)) return true;
   if ((request.approvalRouteSnapshot || []).some((step) => step.approverUser && String(step.approverUser?._id || step.approverUser) === String(user._id))) return true;
-  // Preserves the legacy Approver/Management carve-out exactly: broad but
+  // Preserves the Area Director/Vice-Rector/Management carve-out exactly: broad but
   // never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
   // (Accounting, Treasury, Budget) keeps its original unrestricted access.
-  if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
+  if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
   return hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL);
 }
 
 export function requestVisibilityFilter(user) {
   if (!user) return { _id: null };
   if (user.role === ROLES.ADMIN) return {};
-  if ([ROLES.APPROVER, ROLES.MANAGEMENT].includes(user.role)) {
+  if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
     return { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
   }
   if (hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL)) return {};

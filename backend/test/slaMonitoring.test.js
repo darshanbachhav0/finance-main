@@ -18,15 +18,15 @@ test("SLA notifications, escalation, retries and immutable audit", { timeout: 12
   const oid = () => new mongoose.Types.ObjectId();
   try {
     await Promise.all([Notification.init(), AuditLog.init()]);
-    const director = { _id: oid(), name: "Director", role: "Approver", approvalLevel: "AREA_DIRECTOR", area: "Operations", active: true };
-    const vice = { ...director, _id: oid(), name: "Vice Rector", approvalLevel: "VICE_RECTOR" };
+    const director = { _id: oid(), name: "Director", role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", area: "Operations", active: true };
+    const vice = { ...director, _id: oid(), name: "Vice Rector", role: "ViceRector", approvalLevel: "VICE_RECTOR" };
     const other = { ...director, _id: oid(), area: "Other" };
     const manager = { _id: oid(), name: "Management", role: "Management", active: true };
     await User.collection.insertMany([director, vice, other, manager].map((user, i) => ({ ...user, email: `sla${i}@test.local`, passwordHash: "unused" })));
     const id = oid(), stepId = oid();
     const dueAt = new Date(now.getTime() + 3600000);
     await FinancialRequest.collection.insertOne({ _id: id, requestNumber: "SLA-TEST", requester: oid(), status: "PENDIENTE_APROBACION", requesterArea: "Operations", approvalStage: "AREA_DIRECTOR", approvalDueAt: dueAt,
-      approvalRouteSnapshot: [{ _id: stepId, sequence: 1, role: "Approver", approvalLevel: "AREA_DIRECTOR", required: true, status: "PENDING", startedAt: new Date(now.getTime() - 23 * 3600000), dueAt }] });
+      approvalRouteSnapshot: [{ _id: stepId, sequence: 1, role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", required: true, status: "PENDING", startedAt: new Date(now.getTime() - 23 * 3600000), dueAt }] });
     const scan = at => checkApprovalSlas({ now: at || now, config });
 
     await t.test("due soon reaches only eligible current approvers", async () => {
@@ -68,7 +68,7 @@ test("SLA notifications, escalation, retries and immutable audit", { timeout: 12
     await t.test("new approval stage gets a new alert cycle; terminal and observed states never alert", async () => {
       for (const status of ["RECHAZADO", "ANULADO", "CERRADO", "OBSERVADO", "DEVUELTO"]) assert.equal(approvalSlaCycle({ status, approvalDueAt: dueAt }), null);
       const nextDue = new Date(now.getTime() + 2 * 3600000);
-      await FinancialRequest.collection.updateOne({ _id: id }, { $set: { status: "APROBADO_DIRECTOR", approvalStage: "VICE_RECTOR", approvalDueAt: nextDue, approvalRouteSnapshot: [{ _id: oid(), sequence: 2, role: "Approver", approvalLevel: "VICE_RECTOR", status: "PENDING", dueAt: nextDue, startedAt: now }] } });
+      await FinancialRequest.collection.updateOne({ _id: id }, { $set: { status: "APROBADO_DIRECTOR", approvalStage: "VICE_RECTOR", approvalDueAt: nextDue, approvalRouteSnapshot: [{ _id: oid(), sequence: 2, role: "ViceRector", approvalLevel: "VICE_RECTOR", status: "PENDING", dueAt: nextDue, startedAt: now }] } });
       await scan();
       const alert = await Notification.findOne({ type: "SLA_DUE_SOON", resolvedAt: null });
       assert.equal(String(alert.user), String(vice._id));

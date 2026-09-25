@@ -1,7 +1,8 @@
 export const ROLES = Object.freeze({
   ADMIN: "Admin",
   SOLICITOR: "Solicitor",
-  APPROVER: "Approver",
+  AREA_DIRECTOR: "AreaDirector",
+  VICE_RECTOR: "ViceRector",
   ACCOUNTING: "Accounting",
   TREASURY: "Treasury",
   BUDGET: "Budget",
@@ -45,7 +46,12 @@ export const PERMISSIONS = Object.freeze({
 export const ROLE_PERMISSIONS = Object.freeze({
   [ROLES.ADMIN]: Object.values(PERMISSIONS),
   [ROLES.SOLICITOR]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.BATCH_INVOICE_UPLOAD],
-  [ROLES.APPROVER]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW],
+  // Vice-Rector is a Area Director's escalation target and holds the identical permission
+  // set - the only difference between the two is directional (an Area Director may forward
+  // an approval up to the Vice-Rector; the Vice-Rector, being the top of this pair, cannot
+  // forward back down). See resolveManagerChain/activateNextChainStep in approvalRuleService.js.
+  [ROLES.AREA_DIRECTOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW],
+  [ROLES.VICE_RECTOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW],
   [ROLES.ACCOUNTING]: [
     PERMISSIONS.REQUEST_VIEW_ALL,
     PERMISSIONS.SUPPLIER_HOMOLOGATE,

@@ -6,18 +6,20 @@ import { canApproveStage, canCreateRequest, canModifyRequest, canViewRequest, ca
 const solicitor = { _id: "user-1", role: ROLES.SOLICITOR };
 const anotherSolicitor = { _id: "user-2", role: ROLES.SOLICITOR };
 const admin = { _id: "admin-1", role: ROLES.ADMIN };
-const approver = { _id: "approver-1", role: ROLES.APPROVER };
+const approver = { _id: "approver-1", role: ROLES.AREA_DIRECTOR };
 
 test("only Admin and Solicitor can create financial requests", () => {
   assert.equal(canCreateRequest(ROLES.ADMIN), true);
   assert.equal(canCreateRequest(ROLES.SOLICITOR), true);
-  assert.equal(canCreateRequest(ROLES.APPROVER), false);
+  assert.equal(canCreateRequest(ROLES.AREA_DIRECTOR), false);
+  assert.equal(canCreateRequest(ROLES.VICE_RECTOR), false);
   assert.equal(canCreateRequest(ROLES.ACCOUNTING), false);
   assert.equal(canCreateRequest(ROLES.TREASURY), false);
 });
 
-test("Approver cannot access Suppliers while operational roles can", () => {
-  assert.equal(canViewSuppliers(ROLES.APPROVER), false);
+test("Area Director/Vice-Rector cannot access Suppliers while operational roles can", () => {
+  assert.equal(canViewSuppliers(ROLES.AREA_DIRECTOR), false);
+  assert.equal(canViewSuppliers(ROLES.VICE_RECTOR), false);
   assert.equal(canViewSuppliers(ROLES.ADMIN), true);
   assert.equal(canViewSuppliers(ROLES.SOLICITOR), true);
   assert.equal(canViewSuppliers(ROLES.ACCOUNTING), true);
@@ -36,7 +38,7 @@ test("Solicitor can modify only owned editable requests; rejected requests remai
   assert.equal(canModifyRequest(ownedPending, admin), false);
 });
 
-test("Approver cannot view drafts but Accounting and Treasury retain operational visibility", () => {
+test("Area Director cannot view drafts but Accounting and Treasury retain operational visibility", () => {
   const draft = { solicitor: "user-1", status: REQUEST_STATUS.DRAFT };
   assert.equal(canViewRequest(draft, approver), false);
   assert.equal(canViewRequest(draft, { _id: "accounting-1", role: ROLES.ACCOUNTING }), true);
@@ -45,11 +47,11 @@ test("Approver cannot view drafts but Accounting and Treasury retain operational
   assert.equal(canViewRequest(draft, anotherSolicitor), false);
 });
 
-test("Approvers can act only at their assigned workflow level while Admin can act at either level", () => {
+test("Area Director and Vice-Rector can act only at their assigned workflow level while Admin can act at either level", () => {
   const directorRequest = { approvalStage: APPROVAL_STAGES.AREA_DIRECTOR };
   const viceRequest = { approvalStage: APPROVAL_STAGES.VICE_RECTOR };
-  const director = { role: ROLES.APPROVER, approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR };
-  const vice = { role: ROLES.APPROVER, approvalLevel: APPROVAL_STAGES.VICE_RECTOR };
+  const director = { role: ROLES.AREA_DIRECTOR, approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR };
+  const vice = { role: ROLES.VICE_RECTOR, approvalLevel: APPROVAL_STAGES.VICE_RECTOR };
   assert.equal(canApproveStage(directorRequest, director), true);
   assert.equal(canApproveStage(viceRequest, director), false);
   assert.equal(canApproveStage(viceRequest, vice), true);

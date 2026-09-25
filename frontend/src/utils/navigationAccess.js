@@ -1,7 +1,8 @@
 export const authenticatedRoles = [
   "Admin",
   "Solicitor",
-  "Approver",
+  "AreaDirector",
+  "ViceRector",
   "Accounting",
   "Treasury",
   "Budget",
@@ -13,7 +14,7 @@ export const authenticatedRoles = [
 export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
   "/management-view": ["Admin", "Management", "ManagementViewer"],
-  "/requests": ["Admin", "Solicitor", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
+  "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
   "/my-team": authenticatedRoles,
   "/requests/new": ["Admin", "Solicitor"],
   "/administration": ["Admin"],
@@ -26,17 +27,15 @@ export const navigationAccess = Object.freeze({
   "/accounting/invoice-observations": ["Admin", "Accounting"],
   "/treasury": ["Admin", "Treasury"],
   "/reimbursement-bank": ["Admin", "Solicitor", "Accounting", "Treasury"],
-  "/budget": ["Admin", "Approver", "Accounting", "Budget", "Management"],
+  "/budget": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Budget", "Management"],
   "/accounting/periods": ["Admin", "Accounting"],
   "/accounting/sire": ["Admin", "Accounting"],
-  "/reports": ["Admin", "Approver", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"],
+  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"],
   "/suppliers": ["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"],
   "/cost-centers": ["Admin", "Accounting"],
   "/expense-types": ["Admin", "Accounting"],
   "/exchange-rates": ["Admin", "Accounting"],
-  "/configuration/projects": ["Admin", "Accounting", "Budget"],
-  "/users": ["Admin"],
-  "/audit": ["Admin", "Accounting", "ManagementViewer"]
+  "/users": ["Admin"]
 });
 
 export function canAccessNavigation(role, path, user) {
@@ -59,12 +58,13 @@ export function navigationForUser(user) {
 
 export const roleNavigation = {
   Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["Approvals", "/approvals"]],
-  Approver: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
+  AreaDirector: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
+  ViceRector: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
   Budget: [["Dashboard", "/"], ["Budget Control", "/budget"], ["Requests", "/requests"]],
   Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],
   Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["SIRE", "/accounting/sire"]],
   Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"]],
   Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
-  ManagementViewer: [["Management Portal", "/management-view"], ["Reports", "/reports"], ["Audit", "/audit"]],
+  ManagementViewer: [["Management Portal", "/management-view"], ["Reports", "/reports"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
 };

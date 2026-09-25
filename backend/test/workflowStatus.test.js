@@ -76,7 +76,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     for (const [purpose, accountNumber] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) await AccountingMapping.create({ code: "STATUS-" + purpose, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: purpose === "BANK" ? "BCP" : "*", currency: "*", accountNumber, active: true });
     const req = { headers: {}, ip: "127.0.0.1" };
     let sequence = 0;
-    const makeRequest = overrides => FinancialRequest.create({ issueDate: "2026-08-10", accountingPeriod: "2026-08", flowType: "A1", requestType: "OPEX", expenseNature: "MAINTENANCE", supplier: supplier._id, solicitor: owner._id, requester: owner._id, requesterArea: "Operations", currency: "PEN", description: "Workflow regression", status: "COMPROMISO_PRESUPUESTAL", approvalStage: "COMPLETE", approvalRouteSnapshot: [{ approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, required: true, status: "APPROVED" }], lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }], ...overrides });
+    const makeRequest = overrides => FinancialRequest.create({ issueDate: "2026-08-10", accountingPeriod: "2026-08", flowType: "A1", requestType: "OPEX", expenseNature: "MAINTENANCE", supplier: supplier._id, solicitor: owner._id, requester: owner._id, requesterArea: "Operations", currency: "PEN", description: "Workflow regression", status: "COMPROMISO_PRESUPUESTAL", approvalStage: "COMPLETE", approvalRouteSnapshot: [{ approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", sequence: 1, required: true, status: "APPROVED" }], lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }], ...overrides });
     async function payable(request, flowType = request.flowType) {
       await reserveBudget(request, admin._id);
       const voucher = { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F001", number: String(++sequence), issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
@@ -225,16 +225,16 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         status: "APROBADO_VICERRECTOR",
         approvalStage: "COMPLETE",
         approvalRouteSnapshot: [
-          { approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, required: true, status: "APPROVED" },
-          { approvalLevel: "VICE_RECTOR", role: "Approver", sequence: 2, required: true, status: "APPROVED" }
+          { approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", sequence: 1, required: true, status: "APPROVED" },
+          { approvalLevel: "VICE_RECTOR", role: "ViceRector", sequence: 2, required: true, status: "APPROVED" }
         ]
       });
       const stillPending = await makeRequest({
         status: "APROBADO_DIRECTOR",
         approvalStage: "VICE_RECTOR",
         approvalRouteSnapshot: [
-          { approvalLevel: "AREA_DIRECTOR", role: "Approver", sequence: 1, required: true, status: "APPROVED" },
-          { approvalLevel: "VICE_RECTOR", role: "Approver", sequence: 2, required: true, status: "PENDING" }
+          { approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", sequence: 1, required: true, status: "APPROVED" },
+          { approvalLevel: "VICE_RECTOR", role: "ViceRector", sequence: 2, required: true, status: "PENDING" }
         ]
       });
       const dry = await migrateWorkflowStatuses(mongoose.connection.db);

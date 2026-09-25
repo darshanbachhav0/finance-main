@@ -16,7 +16,7 @@ const defaultRoute = Object.freeze([
   {
     name: "Default Area Director approval",
     approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
-    role: ROLES.APPROVER,
+    role: ROLES.AREA_DIRECTOR,
     sequence: 1,
     slaHours: DEFAULT_APPROVAL_SLA_HOURS,
     required: true
@@ -24,7 +24,7 @@ const defaultRoute = Object.freeze([
   {
     name: "Default Vice Rector approval",
     approvalLevel: APPROVAL_STAGES.VICE_RECTOR,
-    role: ROLES.APPROVER,
+    role: ROLES.VICE_RECTOR,
     sequence: 2,
     slaHours: DEFAULT_APPROVAL_SLA_HOURS,
     required: true

@@ -102,7 +102,8 @@ const spanish = {
   Login: "Ingresar",
   Admin: "Admin",
   Solicitor: "Solicitante",
-  Approver: "Aprobador",
+  AreaDirector: "Director de Área",
+  ViceRector: "Vicerrector",
   "Operational snapshot for requests, approvals, payment readiness, and closed work.":
     "Resumen operativo de solicitudes, aprobaciones, pagos listos y procesos cerrados.",
   "Loading dashboard...": "Cargando panel...",
@@ -374,7 +375,8 @@ const additionalSpanish = {
   "Status changes to OPEN": "El estado cambia a ABIERTO",
   "Admin Dashboard": "Panel de administración",
   "Solicitor Dashboard": "Panel del solicitante",
-  "Approver Dashboard": "Panel del aprobador",
+  "AreaDirector Dashboard": "Panel del Director de Área",
+  "ViceRector Dashboard": "Panel del Vicerrector",
   "Accounting Dashboard": "Panel de contabilidad",
   "Treasury Dashboard": "Panel de tesorería",
   "System activity, workflow health, users, and master-data readiness.": "Actividad del sistema, salud del flujo, usuarios y preparación de datos maestros.",
@@ -803,8 +805,6 @@ const productionSpanish = {
   "One or more dimensions have low availability or over-execution.": "Una o más dimensiones tienen baja disponibilidad o sobreejecución.",
   "Insufficient-budget branches require an explicit decision and remain auditable.": "Las excepciones por presupuesto insuficiente requieren una decisión explícita y quedan auditadas.",
   "Commit budget": "Comprometer presupuesto",
-  "Audit Viewer": "Visor de auditoría",
-  "Read-only, insert-only history of workflow decisions, financial operations, overrides, and blocked controls.": "Historial de solo lectura y solo inserción de decisiones, operaciones financieras, excepciones y controles bloqueados.",
   "Financial control records": "Registros de control financiero",
   "Immutable audit": "Auditoría inmutable",
   "Application audit records are append-only.": "Los registros de auditoría de la aplicación solo permiten nuevas inserciones.",
@@ -817,18 +817,12 @@ const productionSpanish = {
   "Recorded values": "Valores registrados",
   "No audit events available.": "No hay eventos de auditoría disponibles.",
   "Configuration sections": "Secciones de configuración",
-  "Projects": "Proyectos",
-  "Maintain active project dimensions used by requests, budgets, and management reporting.": "Mantiene proyectos activos usados por solicitudes, presupuestos y reportes gerenciales.",
   "Approval Rules": "Reglas de aprobación",
   "Configure approval sequence, role, amount range, area, and SLA without hard-coding workflow decisions in the UI.": "Configura secuencia, rol, rango de monto, área y SLA sin fijar decisiones del flujo en la interfaz.",
   "Budget Rules": "Reglas presupuestales",
   "Select active or transitional control and the explicit insufficient-budget exception strategy by dimension.": "Selecciona control activo o transitorio y la estrategia explícita para presupuesto insuficiente por dimensión.",
   "Budget Allocations": "Asignaciones presupuestales",
   "Maintain assigned budget by period, Cost Center, expense classification, and project.": "Mantiene el presupuesto asignado por período, centro de costos, clasificación del gasto y proyecto.",
-  "Document Rules": "Reglas documentales",
-  "Configure the evidence required by request type and expense nature. Requirements use kind, minCount, and labelKey.": "Configura la evidencia requerida por tipo de solicitud y naturaleza del gasto. Los requisitos usan kind, minCount y labelKey.",
-  "Accounting Mappings": "Mapeos contables",
-  "Configure expense, asset, non-deductible, CXP, bank, IGV, advance, and return accounts used by posting services.": "Configura las cuentas de gasto, activo, no deducible, CXP, banco, IGV, adelanto y devolución usadas en la contabilización.",
   "Bank Formats": "Formatos bancarios",
   "Record bank-adapter mode and specification version. Demo formats remain clearly marked as not certified.": "Registra el modo del adaptador y la versión de especificación. Los formatos demo se identifican como no certificados.",
   "Amount from": "Monto desde",
@@ -1091,7 +1085,8 @@ const uiUxSpanish = {
   "Print record": "Imprimir expediente",
   "Admin Dashboard": "Panel de Administración",
   "Solicitor Dashboard": "Panel del Solicitante",
-  "Approver Dashboard": "Panel del Aprobador",
+  "AreaDirector Dashboard": "Panel del Director de Área",
+  "ViceRector Dashboard": "Panel del Vicerrector",
   "Accounting Dashboard": "Panel de Contabilidad",
   "Treasury Dashboard": "Panel de Tesorería",
   "Budget Dashboard": "Panel de Presupuesto",
@@ -1823,7 +1818,7 @@ Object.assign(spanishDictionary, {
   "Use the documented field configuration. Set confirmed only after Treasury reviews every field.": "Use la configuración documentada. Active confirmed solo después de la revisión de todos los campos por Tesorería."
 });
 
-Object.assign(spanishDictionary, {"My Requests": "Mis solicitudes", "Approvals": "Aprobaciones", "Payments": "Pagos", "Payment History": "Historial de pagos", "Administration": "Administración", "Users & Roles": "Usuarios y roles", "Accounting Configuration": "Configuración contable", "BBVA Configuration": "Configuración BBVA", "Other workspaces": "Otras áreas de trabajo", "Current stage": "Etapa actual", "General": "General", "Payment": "Pago", "History": "Historial", "What do these statuses mean?": "¿Qué significan estos estados?", "More filters": "Más filtros", "Related tools": "Herramientas relacionadas", "More insights in Reports": "Más información en Reportes", "Advanced validation details": "Detalles avanzados de validación", "Reference rate": "Tipo de cambio referencial", "Official SUNAT rate": "Tipo de cambio oficial SUNAT", "The advance is paid to the requester. No supplier is required.": "El adelanto se paga al solicitante. No se requiere proveedor.", "Select invoices to include in the BBVA payment file.": "Seleccione los comprobantes para el archivo de pagos BBVA.", "Download previously generated payment files.": "Descargue los archivos de pago generados anteriormente."});
+Object.assign(spanishDictionary, {"My Requests": "Mis solicitudes", "Approvals": "Aprobaciones", "Payments": "Pagos", "Payment History": "Historial de pagos", "Administration": "Administración", "Users & Roles": "Usuarios y roles", "BBVA Configuration": "Configuración BBVA", "Other workspaces": "Otras áreas de trabajo", "Current stage": "Etapa actual", "General": "General", "Payment": "Pago", "History": "Historial", "What do these statuses mean?": "¿Qué significan estos estados?", "More filters": "Más filtros", "Related tools": "Herramientas relacionadas", "More insights in Reports": "Más información en Reportes", "Advanced validation details": "Detalles avanzados de validación", "Reference rate": "Tipo de cambio referencial", "Official SUNAT rate": "Tipo de cambio oficial SUNAT", "The advance is paid to the requester. No supplier is required.": "El adelanto se paga al solicitante. No se requiere proveedor.", "Select invoices to include in the BBVA payment file.": "Seleccione los comprobantes para el archivo de pagos BBVA.", "Download previously generated payment files.": "Descargue los archivos de pago generados anteriormente."});
 
 Object.assign(spanishDictionary, { "SUNAT administration": "Administración SUNAT", "Sections": "Secciones", "Processing": "Por procesar", "Entries": "Asientos", "Consolidation": "Consolidación", "Exceptions": "Excepciones", "Commitments": "Compromisos", "Invoices": "Comprobantes", "Pending payments": "Pagos pendientes", "Generate BBVA TXT": "Generar TXT BBVA" });
 Object.assign(spanishDictionary, { "Current phase only": "Solo etapa actual", "All document phases": "Todas las etapas documentales" });
