@@ -103,7 +103,7 @@ export default function BulkInvoiceUpload() {
 
       <div className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Recent batches")}</h3><p>{t("Open a batch to inspect per-invoice results.")}</p></div></div>
-        <DataTable rows={batchTable.rows} loading={batchTable.loading} remote={batchTable.remote} filters={[{ key: "status", label: "statuses", allLabel: "All statuses", options: ["QUEUED", "PROCESSING", "COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAILED"] }]} searchPlaceholder="Search batch..." rowActions={(row) => [{ label: "View batch", icon: Eye, onClick: () => openBatch(row) }]} columns={[
+        <DataTable rows={batchTable.rows} loading={batchTable.loading} remote={batchTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["QUEUED", "PROCESSING", "COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAILED"] }]} searchPlaceholder="Search batch..." rowActions={(row) => [{ label: "View batch", icon: Eye, onClick: () => openBatch(row) }]} columns={[
           { key: "batchCode", label: "Batch" },
           { key: "purchaseOrder", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
           { key: "request", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },

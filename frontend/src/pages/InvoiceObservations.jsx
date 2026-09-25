@@ -80,7 +80,7 @@ export default function InvoiceObservations() {
       <PageHeader title="Invoice observation inbox" description="Accounting reviews only invoices isolated by SUNAT, document, duplicate, or PO-ceiling controls. Valid invoices from the same batch remain provisioned." actions={<button type="button" className="secondary-button" onClick={table.reload} disabled={table.loading}><RefreshCw className={table.loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
       <Message type="error">{table.error}</Message>
       <div className="workspace-panel">
-        <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "statuses", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, onClick: () => open(row) }]} columns={[
+        <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, onClick: () => open(row) }]} columns={[
           { key: "request", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },
           { key: "purchaseOrder", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
           { key: "rucIssuer", label: "RUC" },

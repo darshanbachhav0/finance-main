@@ -9,6 +9,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
+import RequestStageIndicator from "../components/RequestStageIndicator.jsx";
 import WorkflowStatusLegend from "../components/WorkflowStatusLegend.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
@@ -85,10 +86,10 @@ export default function RequestsList() {
       <PageHeader
         title="Requests"
         description="Create, track, submit, and review financial requests by status and accounting period."
+        help={<WorkflowStatusLegend align="start" />}
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}
       />
       <Message type="error">{actionError || requestsTable.error}</Message>
-      <WorkflowStatusLegend />
       <div className="workspace-panel">
         <DataTable
           tableId="requests"
@@ -97,7 +98,7 @@ export default function RequestsList() {
           loading={loading}
           remote={requestsTable.remote}
           filters={[
-            { key: "status", label: "statuses", allLabel: "All statuses", options: requestStatuses },
+            { key: "status", label: "Status", allLabel: "All statuses", options: requestStatuses },
             { key: "renditionStatus", label: "rendition statuses", allLabel: "All rendition statuses", options: [
               { value: "PENDING,SUBMITTED,OBSERVED", label: "Pending / submitted / observed" },
               "VALIDATED", "NOT_REQUIRED"
@@ -129,7 +130,7 @@ export default function RequestsList() {
             { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "accountingPeriod", label: "Period" },
             { key: "totalAmount", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
-            { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> },
+            { key: "status", label: "Status", render: (row) => <div className="status-cell"><FinancialProgressSummary request={row} compact /><RequestStageIndicator request={row} compact /></div> },
             { key: "updatedAt", label: "Updated", render: (row) => new Date(row.updatedAt).toLocaleDateString() }
           ]}
         />
