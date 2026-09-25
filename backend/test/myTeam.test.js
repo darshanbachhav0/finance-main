@@ -55,6 +55,18 @@ test("My Team: hierarchy traversal, scoped request listing and the roster endpoi
       assert.ok(!ids.includes(String(outsiderRequest._id)));
     });
 
+    await t.test("ownScope keeps a report's request out of the jefe's My Requests, even when the jefe approves it", async () => {
+      await FinancialRequest.updateOne({ _id: teamRequest._id }, { $set: { approvalRouteSnapshot: [{ approverUser: supervisorA._id }] } });
+      const ownRequest = await makeRequest(supervisorA, "REQ-2026-96003");
+      const jefeOwn = (await listRequestsPage({ ownScope: "true" }, supervisorA)).data.map((row) => String(row._id));
+      assert.deepEqual(jefeOwn, [String(ownRequest._id)]);
+      const reportOwn = (await listRequestsPage({ ownScope: "true" }, reportA1)).data.map((row) => String(row._id));
+      assert.deepEqual(reportOwn, [String(teamRequest._id)]);
+      const jefeTeam = (await listRequestsPage({ teamScope: "true" }, supervisorA)).data.map((row) => String(row._id));
+      assert.deepEqual(jefeTeam, [String(teamRequest._id)]);
+      await FinancialRequest.deleteOne({ _id: ownRequest._id });
+    });
+
     await t.test("teamScope for a manager with no reports returns nothing, not everything", async () => {
       const page = await listRequestsPage({ teamScope: true }, outsider);
       assert.equal(page.data.length, 0);

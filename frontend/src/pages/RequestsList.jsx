@@ -28,7 +28,10 @@ export default function RequestsList() {
   const [deleteRow, setDeleteRow] = useState(null);
   const [actionError, setActionError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  // Solicitors see "My Requests": only their own. Their reports' requests are on My Team.
+  const ownScope = user.role === "Solicitor";
   const requestsTable = usePaginatedResource("/requests", {
+    fixedParams: ownScope ? { ownScope: true } : {},
     initialSearch: searchParams.get("search") || "",
     initialFilters: {
       status: searchParams.get("status") || "",
@@ -84,7 +87,7 @@ export default function RequestsList() {
     <section>
       <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
       <PageHeader
-        title="Requests"
+        title={ownScope ? "My Requests" : "Requests"}
         description="Create, track, submit, and review financial requests by status and accounting period."
         help={<WorkflowStatusLegend align="start" />}
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}

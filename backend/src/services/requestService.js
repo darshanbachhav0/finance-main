@@ -623,7 +623,11 @@ export async function teamMemberIds(managerId) {
 
 export async function listRequestsPage(queryParams, user) {
   const query = {};
-  if (queryParams.teamScope && user.role !== ROLES.ADMIN) {
+  if (queryParams.ownScope) {
+    // "My Requests": only what this user raised. Team members' requests live
+    // under My Team, even when this user is on their approval route.
+    query.$or = [{ requester: user._id }, { solicitor: user._id }];
+  } else if (queryParams.teamScope && user.role !== ROLES.ADMIN) {
     const teamIds = await teamMemberIds(user._id);
     query.$and = [...(query.$and || []), { $or: teamIds.length ? [{ requester: { $in: teamIds } }, { solicitor: { $in: teamIds } }] : [{ _id: null }] }];
   } else {
