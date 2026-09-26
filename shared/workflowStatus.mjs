@@ -20,6 +20,16 @@ export function renditionPending(request) {
     && ["PENDING", "SUBMITTED", "OBSERVED"].includes(request.rendition?.status);
 }
 
+// A Track C advance is settled for closure once its rendition is VALIDATED with nothing left to
+// render/return, or once a REJECTED rendition's advance has been fully RECOVERED (reimbursement
+// or payroll deduction). Requests without a rendition obligation are always settled here.
+export function renditionSettledForClosure(request) {
+  if (!(request?.flowType === "C" || request?.requestType === "ENTREGA_RENDIR")) return true;
+  const rendition = request.rendition || {};
+  if (rendition.status === "VALIDATED") return amount(rendition.balanceOutstanding) === 0;
+  return rendition.status === "REJECTED" && rendition.recovery?.status === "RECOVERED";
+}
+
 // Derive progress from financial evidence, never from the parent status alone.
 export function deriveFinancialProgress(request, payables = [], reconciliations = [], purchaseOrder = null, vouchers = []) {
   const active = payables.filter(ap => ap.status !== "CANCELLED");
@@ -54,7 +64,10 @@ export function deriveFinancialProgress(request, payables = [], reconciliations 
     return { id: id(ap), accounted, scheduled, fileGenerated, paid, partiallyPaid, reconciled, outstandingAmount: ap.outstandingAmount };
   });
   const unaccountedVouchers = vouchers.filter(v => !v.accountsPayable && !v.supersededBy).length;
-  const orderOpen = Boolean(purchaseOrder && Number(purchaseOrder.remainingAmount || 0) > 0);
+  // Informational only: a Purchase Order may still hold an uninvoiced balance. It no longer
+  // blocks closure - closing the request means invoicing is complete, so the remaining order
+  // balance is cancelled and its budget commitment released at that point.
+  const orderOpen = Boolean(purchaseOrder && ["ISSUED", "PARTIALLY_LIQUIDATED"].includes(purchaseOrder.status || "ISSUED") && Number(purchaseOrder.remainingAmount || 0) > 0);
   let status = null;
   if (counts.total && counts.accounted === counts.total && !unaccountedVouchers) {
     status = "CONTABILIZADO";

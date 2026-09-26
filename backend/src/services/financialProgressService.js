@@ -7,7 +7,7 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import Reconciliation from "../models/Reconciliation.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SunatVoucher from "../models/SunatVoucher.js";
-import { deriveFinancialProgress, canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { deriveFinancialProgress, canonicalRequestStatus, isTerminalRequest, renditionSettledForClosure } from "../../../shared/workflowStatus.mjs";
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { AppError } from "../utils/AppError.js";
@@ -75,7 +75,9 @@ export async function assertClosureAllowed(request, { session } = {}) {
   if (canonicalRequestStatus(request.status) !== "CONCILIADO" || progress.status !== "CONCILIADO") {
     throw new AppError(409, "Every active obligation must be paid and reconciled before closure.", progress, "INVALID_STATUS_TRANSITION");
   }
-  if (progress.orderOpen) throw new AppError(409, "The purchase order still has an unconsumed balance.");
+  // A remaining Purchase Order balance no longer blocks closure: closing the request is the
+  // point at which invoicing is complete, and settleProcurementAtClosure (purchaseOrderService)
+  // then cancels the uninvoiced order balance and releases the matching budget commitment.
   const [invoiceObservation, budgetException] = await Promise.all([
     InvoiceObservation.exists({ request: request._id, resolutionStatus: "OPEN" }).session(session || null),
     BudgetException.exists({ request: request._id, status: "PENDING" }).session(session || null)
@@ -83,9 +85,10 @@ export async function assertClosureAllowed(request, { session } = {}) {
   if (invoiceObservation || budgetException) throw new AppError(409, "Resolve pending invoice and budget observations before closure.");
   if (request.approvalRouteSnapshot?.some(step => step.required !== false && step.status !== "APPROVED")) throw new AppError(409, "Required approvals are incomplete.");
   if (request.observation?.code && !request.observation?.resolvedAt) throw new AppError(409, "Resolve the open observation before closure.");
-  if ((request.flowType === "C" || request.requestType === "ENTREGA_RENDIR") &&
-      (request.rendition?.status !== "VALIDATED" || Number(request.rendition?.balanceOutstanding || 0) !== 0)) {
-    throw new AppError(422, "The advance must be fully rendered/returned and the rendition validated.", undefined, "RENDITION_REQUIRED");
+  // Same rule as workflowService's closure control: a validated rendition, or full recovery of a
+  // rejected rendition's advance.
+  if (!renditionSettledForClosure(request)) {
+    throw new AppError(422, "The advance must be fully rendered/returned and the rendition validated, or a rejected rendition's advance fully recovered.", undefined, "RENDITION_REQUIRED");
   }
   if (Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Settle the outstanding rendition balance before closure.", undefined, "RENDITION_REQUIRED");
   return progress;

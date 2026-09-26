@@ -22,7 +22,8 @@ function kinds(request, phase) {
 test("phase-based document and approval workflow rules", { timeout: 120000 }, async t => {
   await t.test("A1 goods requirements are enforced at their correct phases", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS };
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION", 3]]);
+    // Product decision: at least one quotation; three quotations are not compulsory.
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML", 1], ["PDF", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
   });

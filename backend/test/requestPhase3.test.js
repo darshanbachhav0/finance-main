@@ -191,7 +191,8 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
     await t.test("configured quotation policy exposes its real minimum and detailed recommendation errors", async () => {
       const policy = await requestFormPolicy({ requestType: "OPEX", expenseNature: "MAINTENANCE" });
       assert.equal(policy.quotationPolicy.enabled, true);
-      assert.equal(policy.quotationPolicy.minimumCount, 3);
+      // The rule was configured with the legacy "3 quotations"; the product decision makes one quotation the minimum.
+      assert.equal(policy.quotationPolicy.minimumCount, 1);
       const base = { supplier: suppliers[0]._id, supplierSelectionReason: "Technical choice", quotations: [] };
       const none = validateStructuredQuotationComparison(base, policy.quotationPolicy);
       assert.ok(none.errors.some((item) => item.code === "QUOTATION_MINIMUM_NOT_MET"));
@@ -219,7 +220,7 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
     });
 
     await t.test("quotation evidence, minimum, recommendation and supplier consistency are enforced", async () => {
-      const insufficient = await officialDocument({ quotations: [{ supplier: suppliers[1]._id, recommended: true }] });
+      const insufficient = await officialDocument({ quotations: [], attachments: [] });
       await assert.rejects(() => submitFinancialRequest({ id: insufficient._id, user: solicitor, req }), (error) => error.code === "QUOTATION_MINIMUM_NOT_MET");
       const noEvidence = await officialDocument();
       noEvidence.quotations[0].attachment = undefined;
@@ -228,6 +229,15 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       await assert.rejects(() => submitFinancialRequest({ id: noEvidence._id, user: solicitor, req }), (error) => error.code === "QUOTATION_ATTACHMENT_REQUIRED");
       const mismatch = await officialDocument({ supplier: suppliers[0]._id });
       await assert.rejects(() => submitFinancialRequest({ id: mismatch._id, user: solicitor, req }), (error) => error.code === "RECOMMENDED_SUPPLIER_MISMATCH");
+    });
+
+    await t.test("a single recommended quotation with evidence is enough (three quotations are not compulsory)", async () => {
+      const single = await officialDocument();
+      single.quotations = [single.quotations.find((quotation) => quotation.recommended).toObject()];
+      await single.save();
+      const submitted = await submitFinancialRequest({ id: single._id, user: solicitor, req, comments: "One quotation" });
+      assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(submitted.quotations.length, 1);
     });
 
     await t.test("pending and observed suppliers may be reviewed, while rejected/inactive and commitment use remain blocked", () => {

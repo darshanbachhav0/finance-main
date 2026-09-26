@@ -15,6 +15,7 @@ import { slaStatus } from "../services/approvalRuleService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { budgetOverview } from "../services/budgetReportingService.js";
+import { countPendingBudgetExceptions } from "../services/budgetExceptionService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 function currentPeriod() {
@@ -86,8 +87,11 @@ async function buildTasks(user) {
     const period = await AccountingPeriod.findOne({ period: currentPeriod() });
     items.push({ key: "period", label: period?.status === "OPEN" ? "Current accounting period open" : "Current accounting period unavailable", count: period?.status === "OPEN" ? 0 : 1, path: "/accounting/periods", tone: "amber" });
   }
-  if ([ROLES.ADMIN, ROLES.BUDGET].includes(user.role)) {
-    items.push({ key: "budgetExceptions", label: "Budget exceptions pending", count: await BudgetException.countDocuments({ status: "PENDING" }), path: "/budget", tone: "red" });
+  // Budget/Admin see every open exception (review first); Management sees the ones Budget has
+  // reviewed and that now await its decision. Moot or terminal-request exceptions never count.
+  if ([ROLES.ADMIN, ROLES.BUDGET, ROLES.MANAGEMENT].includes(user.role)) {
+    const management = user.role === ROLES.MANAGEMENT;
+    items.push({ key: "budgetExceptions", label: management ? "Budget exceptions awaiting your decision" : "Budget exceptions pending", count: await countPendingBudgetExceptions(management ? { awaitingDecision: true } : {}), path: "/budget?tab=exceptions&exceptionStatus=PENDING", tone: "red" });
   }
   if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role)) {
     items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: await FinancialRequest.countDocuments({ flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null }), path: "/requests", tone: "amber" });

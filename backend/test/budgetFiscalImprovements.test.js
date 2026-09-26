@@ -95,6 +95,9 @@ test("budget commitment, exceptions, separation of duties and cancellation histo
       const shortage = make(150);
       await assert.rejects(() => reserveBudget(shortage, budget._id));
       const exception = await BudgetException.findOne({ request: shortage._id });
+      // Budget reviews first; Management cannot decide an unreviewed exception.
+      await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Too early", management, {}), e => e.statusCode === 409 && /review/.test(e.message));
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget recommends the overrun", budget, {});
       await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Self", { _id: budget._id, role: "Management" }, {}), e => e.statusCode === 403);
       await FinancialRequest.collection.insertOne({ _id: shortage._id, requester: management._id });
       await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Own request", management, {}), e => e.statusCode === 403);

@@ -71,6 +71,49 @@ export function orderKindForRequest(request) {
   return null;
 }
 
+// Expense natures that are never bought through a Purchase/Service Order (travel, research
+// grants, petty cash, reimbursement liquidations). An A1 request with one of these natures, or
+// with a non-procurement request type, goes straight from budget commitment to invoice
+// registration and Accounting: there is no order to issue and none to wait for.
+export const NO_ORDER_EXPENSE_NATURES = Object.freeze([
+  EXPENSE_NATURE.TRAVEL,
+  EXPENSE_NATURE.RESEARCH,
+  EXPENSE_NATURE.PETTY_CASH,
+  EXPENSE_NATURE.REIMBURSEMENT_LIQUIDATION
+]);
+
+const procurementRequestTypes = new Set([REQUEST_TYPE.OPEX, REQUEST_TYPE.CAPEX, REQUEST_TYPE.PAGO_CON_COTIZACION]);
+
+// The single eligibility rule shared by readiness, order issuance and Accounting: only an A1
+// procurement-type request whose expense nature identifies a Purchase or Service Order needs one.
+export function requiresPurchaseOrder(request) {
+  return request?.flowType === FLOW_TYPE.A1
+    && procurementRequestTypes.has(request.requestType)
+    && Boolean(orderKindForRequest(request));
+}
+
+function notApplicableReason(request) {
+  if (request.flowType !== FLOW_TYPE.A1) return "TRACK_WITHOUT_ORDER";
+  if (!procurementRequestTypes.has(request.requestType)) return "REQUEST_TYPE_WITHOUT_ORDER";
+  return "EXPENSE_NATURE_WITHOUT_ORDER";
+}
+
+// "Not applicable" is a clean, final answer rather than a list of blocking issues: the request
+// is not waiting on Procurement, supplier homologation or quotation checks for an order that
+// will never exist.
+function notApplicableReadiness(request, existingOrder) {
+  return {
+    applicable: false,
+    notApplicable: true,
+    reason: notApplicableReason(request),
+    ready: false,
+    readyForOrderCreation: false,
+    orderKind: null,
+    existingOrder: existingOrder || null,
+    issues: [issue(ERROR_CODES.PROCUREMENT_NOT_APPLICABLE, "This request does not require a Purchase or Service Order.", { flowType: request.flowType, requestType: request.requestType, expenseNature: request.expenseNature })]
+  };
+}
+
 async function loadSupplier(request) {
   if (request.supplier?.homologationStatus) return request.supplier;
   return Supplier.findById(request.supplier);
@@ -84,6 +127,9 @@ async function loadCommitment(request, session, suppliedCommitment) {
 }
 
 export async function evaluateProcurementReadiness(request, { session, commitment: suppliedCommitment } = {}) {
+  if (!requiresPurchaseOrder(request)) {
+    return notApplicableReadiness(request, await PurchaseOrder.findOne({ request: request._id }).session(session || null));
+  }
   const [supplier, commitment, quotationPolicy, requirements, existingOrder] = await Promise.all([
     loadSupplier(request),
     loadCommitment(request, session, suppliedCommitment),
@@ -94,16 +140,8 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
   const quotationResult = validateStructuredQuotationComparison(request, quotationPolicy);
   const documentResult = validateDocumentRequirements(request, requirements);
   const orderKind = orderKindForRequest(request);
-  const procurementType = [REQUEST_TYPE.OPEX, REQUEST_TYPE.CAPEX, REQUEST_TYPE.PAGO_CON_COTIZACION].includes(request.requestType);
-  const applicable = request.flowType === FLOW_TYPE.A1 && procurementType && Boolean(orderKind);
+  const applicable = true;
   const issues = [];
-
-  if (!applicable) {
-    issues.push(issue(ERROR_CODES.PROCUREMENT_NOT_APPLICABLE, "This request does not require a Purchase or Service Order.", { requestType: request.requestType, quotationPolicyEnabled: quotationPolicy.enabled }));
-  }
-  if (procurementType && !orderKind && (request.requestType === REQUEST_TYPE.PAGO_CON_COTIZACION || quotationPolicy.enabled)) {
-    issues.push(issue(ERROR_CODES.ORDER_KIND_UNDETERMINED, "The controlled expense nature does not identify a Purchase or Service Order kind.", { expenseNature: request.expenseNature }));
-  }
   if (!approvalCompleteStatuses.has(request.status) || (request.approvalRouteSnapshot || []).some((step) => step.required !== false && step.status !== "APPROVED")) {
     issues.push(issue(ERROR_CODES.REQUEST_APPROVAL_PENDING, "All configured request approvals must be complete.", { status: request.status, approvalStage: request.approvalStage }));
   }

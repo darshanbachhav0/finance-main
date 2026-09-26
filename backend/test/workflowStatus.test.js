@@ -365,6 +365,57 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await assert.rejects(() => payable(request), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
       assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
     });
+    await t.test("closing a request invoiced below its PO releases the PO remainder and the matching commitment", async () => {
+      const BudgetCommitment = mongoose.model("BudgetCommitment");
+      const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 300, igvAmount: 54, totalAmount: 354 }] });
+      const order = await PurchaseOrder.create({ poNumber: `OC-CLOSE-${request._id}`, request: request._id, supplier: supplier._id, amount: 354, consumedAmount: 118, liquidatedInvoiceCount: 1, currency: "PEN", generatedBy: admin._id });
+      assert.equal(order.status, "PARTIALLY_LIQUIDATED");
+      const ap = await payable(request);
+      const committedBefore = (await CostCenter.findById(center._id)).committedAmount;
+      await makeBatch([ap]); await confirm(ap); await reconcile(ap);
+      const loaded = await FinancialRequest.findById(request._id);
+      assert.equal(loaded.status, "CONCILIADO");
+      assert.equal((await getFinancialProgress(loaded)).orderOpen, true, "the uninvoiced balance is still visible before closure");
+      const closed = await closeFinancialRequest({ id: request._id, user: admin, req });
+      assert.equal(closed.status, "CERRADO", "a remaining PO balance no longer blocks closure");
+      const settled = await PurchaseOrder.findById(order._id);
+      assert.equal(settled.status, "CLOSED");
+      assert.equal(settled.remainingAmount, 0);
+      assert.equal(settled.cancelledAmount, 236);
+      assert.equal(settled.consumedAmount, 118);
+      const commitment = await BudgetCommitment.findOne({ request: request._id });
+      assert.equal(commitment.totalAmount, 118);
+      assert.equal(commitment.status, "CLOSED");
+      assert.equal(commitment.adjustments.at(-1).reason, "UNINVOICED_BALANCE_RELEASED");
+      assert.equal((await CostCenter.findById(center._id)).committedAmount, committedBefore - 236, "the uninvoiced 236 returns to the Cost Center");
+      assert.ok(await AuditLog.exists({ requestId: request._id, action: "BALANCE_RELEASED_AT_CLOSURE" }));
+      assert.ok(await AuditLog.exists({ requestId: request._id, action: "UNINVOICED_BUDGET_RELEASED" }));
+    });
+    await t.test("voiding a request cancels its PO and releases its commitment", async () => {
+      const BudgetCommitment = mongoose.model("BudgetCommitment");
+      const request = await makeRequest();
+      await reserveBudget(request, admin._id);
+      const order = await PurchaseOrder.create({ poNumber: `OC-VOID-${request._id}`, request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: admin._id });
+      const committedBefore = (await CostCenter.findById(center._id)).committedAmount;
+      const voided = await voidFinancialRequest({ id: request._id, user: admin, req, comments: "Purchase no longer needed" });
+      assert.equal(voided.status, "ANULADO");
+      const cancelled = await PurchaseOrder.findById(order._id);
+      assert.equal(cancelled.status, "CANCELLED");
+      assert.equal(cancelled.cancelledAmount, 118);
+      assert.equal(cancelled.remainingAmount, 0);
+      assert.equal((await BudgetCommitment.findOne({ request: request._id })).status, "RELEASED");
+      assert.equal((await CostCenter.findById(center._id)).committedAmount, committedBefore - 118);
+      assert.ok(await AuditLog.exists({ requestId: request._id, entityType: "PurchaseOrder", action: "CANCELLED" }));
+    });
+    await t.test("a Track C request whose rejected rendition advance was fully recovered can be closed", async () => {
+      const request = await makeRequest({ flowType: "C", requestType: "ENTREGA_RENDIR", supplier: undefined, requesterCostCenter: center._id, status: "APROBADO" });
+      const { accountsPayable: ap } = await provisionTrackCAdvance({ request, user: admin, req });
+      await makeBatch([ap]); await confirm(ap); await reconcile(ap);
+      await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { "rendition.status": "REJECTED", "rendition.balanceOutstanding": 118, "rendition.recovery": { status: "PENDING", outstandingAmount: 118, settlements: [] } } });
+      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "RENDITION_REQUIRED");
+      await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { "rendition.recovery.status": "RECOVERED", "rendition.recovery.outstandingAmount": 0 } });
+      assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+    });
   } finally {
     await mongoose.connection.dropDatabase(); await mongoose.disconnect();
     for (const file of files) await fs.rm(file, { force: true });

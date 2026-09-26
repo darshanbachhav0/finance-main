@@ -3,6 +3,8 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import { recordAudit } from "./auditService.js";
 import { nextPurchaseOrderNumber } from "./sequenceService.js";
 import { assertProcurementReady } from "./procurementReadinessService.js";
+import { cancelPurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
+import { releaseUnexecutedCommitment } from "./budgetService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS } from "../utils/constants.js";
@@ -100,6 +102,43 @@ export async function generatePurchaseOrder(request, user, req, { session, commi
     session
   });
   return purchaseOrder;
+}
+
+// Invoicing is complete when the request is closed (CERRADO): by then every obligation is paid
+// and reconciled, so no further invoice can be registered against the order. At that point the
+// order's uninvoiced remainder is cancelled (status CLOSED) and the matching, never-executed part
+// of the budget commitment is released back to its Cost Center / budget plan. Both movements are
+// audited. Runs inside the closure transaction when one is available.
+export async function settleProcurementAtClosure({ request, user, req, session }) {
+  const reason = `Request ${request.requestNumber || request._id} closed: invoicing is complete.`;
+  const order = await PurchaseOrder.findOne({ request: request._id }).session(session || null);
+  let orderResult = { changed: false, cancelledAmount: 0 };
+  if (order) {
+    orderResult = await cancelPurchaseOrderBalance(order._id, { status: "CLOSED", reason, userId: user._id, session });
+    if (orderResult.changed) {
+      await recordAudit({ entityType: "PurchaseOrder", entity: orderResult.order, requestId: request._id, action: "BALANCE_RELEASED_AT_CLOSURE", user, req, module: "PURCHASE_ORDERS", comments: reason,
+        oldValues: orderResult.previous, newValues: { status: orderResult.order.status, remainingAmount: 0, cancelledAmount: orderResult.order.cancelledAmount, consumedAmount: orderResult.order.consumedAmount }, session });
+    }
+  }
+  const budget = await releaseUnexecutedCommitment(request, user._id, reason, { session });
+  if (budget.releasedAmount > 0) {
+    await recordAudit({ entityType: "BudgetCommitment", entity: budget.commitment, requestId: request._id, action: "UNINVOICED_BUDGET_RELEASED", user, req, module: "BUDGET", comments: reason,
+      newValues: { releasedAmount: budget.releasedAmount, status: budget.commitment?.status, totalAmount: budget.commitment?.totalAmount }, session });
+  }
+  return { purchaseOrder: orderResult.order || order || null, cancelledOrderAmount: orderResult.cancelledAmount, releasedBudgetAmount: budget.releasedAmount };
+}
+
+// A voided request will never be invoiced: its order (if any) is cancelled in full. The budget
+// commitment itself is released by the void flow (releaseBudget).
+export async function cancelProcurementOnVoid({ request, user, req, reason, session }) {
+  const order = await PurchaseOrder.findOne({ request: request._id }).session(session || null);
+  if (!order) return null;
+  const result = await cancelPurchaseOrderBalance(order._id, { status: "CANCELLED", reason: reason || "Request voided.", userId: user._id, session });
+  if (result.changed) {
+    await recordAudit({ entityType: "PurchaseOrder", entity: result.order, requestId: request._id, action: "CANCELLED", user, req, module: "PURCHASE_ORDERS", comments: reason,
+      oldValues: result.previous, newValues: { status: "CANCELLED", cancelledAmount: result.order.cancelledAmount }, session });
+  }
+  return result.order;
 }
 
 export async function issueProcurementOrder({ requestId, user, req }) {

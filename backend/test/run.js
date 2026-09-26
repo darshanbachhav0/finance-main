@@ -42,5 +42,6 @@ import "./myTeam.test.js";
 import "./businessCalendar.test.js";
 import "./approvalCanonicalCompletion.test.js";
 import "./budgetExceptionRouting.test.js";
+import "./budgetProcurementDecisions.test.js";
 import "./exchangeRateEvidence.test.js";
 import "./productionControls.test.js";
