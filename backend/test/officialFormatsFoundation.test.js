@@ -19,9 +19,22 @@ import {
 } from "../src/services/officialFormatsFoundationMigrationService.js";
 import { nextRenditionNumber, nextSupplierCode } from "../src/services/sequenceService.js";
 import {
-  addVerifiedSupplierBankAccount,
-  updateAndReviewSupplier
+  addSupplierBankAccount,
+  setPreferredSupplierBankAccount,
+  updateAndReviewSupplier,
+  verifySupplierBankAccount
 } from "../src/services/supplierService.js";
+
+// One person registers the account and a different one verifies it (segregation of duties).
+async function addVerifiedSupplierBankAccount({ supplier, payload, user, verifier, req }) {
+  const added = await addSupplierBankAccount({ supplierId: supplier._id, payload: {
+    bank: payload.bank, currency: payload.currency, accountType: payload.accountType,
+    accountHolderName: payload.accountHolderName, accountNumber: payload.accountNumber, cci: payload.cci
+  }, user, req });
+  const account = await verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: payload.ownershipResult }, user: verifier, req });
+  if (payload.preferred) await setPreferredSupplierBankAccount({ supplierId: supplier._id, accountId: account._id, user: verifier, req });
+  return { account, warnings: added.warnings };
+}
 import {
   assertValidCci,
   normalizeBankAccountNumber,
@@ -188,6 +201,14 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
       role: ROLES.ADMIN,
       area: "Finance"
     });
+    const accountant = await User.create({
+      employeeCode: "UMA-TEST-ACCOUNTING",
+      name: "Finance Accountant",
+      email: "finance.accountant@test.local",
+      passwordHash: "unused",
+      role: ROLES.ACCOUNTING,
+      area: "Finance"
+    });
     const employee = await User.create({
       employeeCode: "UMA-TEST-EMPLOYEE",
       name: "Requesting Employee",
@@ -237,6 +258,7 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
           ownershipResult: "MATCH"
         },
         user: admin,
+        verifier: accountant,
         req
       });
       const result = await updateAndReviewSupplier({
@@ -260,7 +282,8 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
           accountHolderName: result.supplier.legalName,
           ownershipResult: "MATCH"
         },
-        user: admin
+        user: admin,
+        verifier: accountant
       });
       assert.equal(await SupplierBankAccount.countDocuments({ supplier: supplier._id, active: true }), 2);
       assert.equal((await Supplier.findById(supplier._id)).supplierCode, originalCode);

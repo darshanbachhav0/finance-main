@@ -120,6 +120,12 @@ const supplierSchema = new mongoose.Schema(
     bankName: { type: String, trim: true },
     bankAccount: { type: String, trim: true },
     cci: { type: String, trim: true },
+    // Banco de la Nacion detracciones (SPOT) account, where Treasury deposits the detraccion.
+    detractionAccount: {
+      accountNumber: { type: String, trim: true, default: "" },
+      updatedAt: Date,
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
     taxpayerStatus: { type: String, enum: ["PENDING", "ACTIVE", "INACTIVE", "NOT_CONFIGURED", "MANUALLY_VALIDATED"], default: "PENDING" },
     taxpayerValidation: {
       status: { type: String, enum: ["NOT_VERIFIED", "VALID", "INVALID"], default: "NOT_VERIFIED" },

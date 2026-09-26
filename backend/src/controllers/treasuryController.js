@@ -1,6 +1,10 @@
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { publicRequestPayload } from "../services/requestService.js";
+import { listSpotCategories, setSupplierDetractionAccount, updateSpotCategory } from "../services/detractionService.js";
 import {
+  cancelPaymentBatch,
+  listDetractionQueue,
+  recordDetractionDeposit,
   confirmTreasuryPayment,
   confirmTreasuryPayable,
   generatePaymentBatch,
@@ -69,6 +73,31 @@ export const bouncePayablePayment = asyncHandler(async (req, res) => {
 export const reprogramPayablePayment = asyncHandler(async (req, res) => {
   const result = await reprogramBouncedPayment({ accountsPayableId: req.params.id, payload: req.body, files: req.files, user: req.user, req });
   res.json({ data: publicRequestPayload(result.request), accountsPayable: result.accountsPayable });
+});
+
+export const cancelBankFile = asyncHandler(async (req, res) => {
+  const result = await cancelPaymentBatch({ batchId: req.params.id, payload: req.body, user: req.user, req });
+  res.json({ data: result.batch, accountsPayables: result.accountsPayables.map((ap) => ap._id) });
+});
+
+export const detractionQueue = asyncHandler(async (req, res) => res.json(await listDetractionQueue(req.query)));
+
+export const depositDetraction = asyncHandler(async (req, res) => {
+  const result = await recordDetractionDeposit({ accountsPayableId: req.params.id, payload: req.body, user: req.user, req });
+  res.json({ data: publicRequestPayload(result.request), accountsPayable: result.accountsPayable, paymentJournal: result.journal });
+});
+
+export const spotCategories = asyncHandler(async (req, res) => {
+  res.json({ data: await listSpotCategories({ at: req.query.at, includeHistory: req.query.history === "true" }) });
+});
+
+export const saveSpotCategory = asyncHandler(async (req, res) => {
+  res.json({ data: await updateSpotCategory({ code: req.params.code, payload: req.body, user: req.user, req }) });
+});
+
+export const saveSupplierDetractionAccount = asyncHandler(async (req, res) => {
+  const supplier = await setSupplierDetractionAccount({ supplierId: req.params.id, accountNumber: req.body.accountNumber, user: req.user, req });
+  res.json({ data: { _id: supplier._id, detractionAccount: supplier.detractionAccount } });
 });
 
 export const reconcileRequestPayment = asyncHandler(async (req, res) => {

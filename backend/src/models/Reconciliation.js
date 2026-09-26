@@ -9,6 +9,7 @@ const reconciliationSchema = new mongoose.Schema(
     reconciledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     reconciledAt: { type: Date, required: true, default: Date.now },
     bankReference: { type: String, required: true, trim: true },
+    currency: { type: String, enum: ["PEN", "USD"] },
     statementAmount: { type: Number, required: true, min: 0 },
     paidAmount: { type: Number, required: true, min: 0 },
     difference: { type: Number, required: true },

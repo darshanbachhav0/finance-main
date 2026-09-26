@@ -10,7 +10,7 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
 import JournalEntry from "../models/JournalEntry.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
-import { requireAccountingMapping } from "./accountingMappingService.js";
+import { requireAccountingMapping, resolveAccountingMapping } from "./accountingMappingService.js";
 import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
@@ -281,28 +281,62 @@ export async function createProvisionJournalForVoucher(request, accountsPayable,
   });
 }
 
-export async function createPaymentJournal(request, accountsPayable, userId, { bank, paymentDate, session } = {}) {
+// One journal per confirmed bank operation (an installment of a partial payment, or the SPOT
+// detraccion deposit), never the whole CXP: debit AP / credit bank for exactly the confirmed
+// amount, keyed on the CXP id + the real operation number so a retry is idempotent and two
+// installments never collide. The period is the actual payment date's month.
+// USD: AP is relieved at the CXP rate. When EXCHANGE_GAIN and EXCHANGE_LOSS mappings exist the
+// bank is credited at the payment-date SUNAT rate and the difference is posted; otherwise the
+// bank is also credited at the CXP rate and the line description says so.
+export async function createPaymentJournal(request, accountsPayable, userId, { bank, paymentDate, amount, amountPen, operationNumber, kind = "PAYMENT", session } = {}) {
+  const currency = accountsPayable?.currency || request.currency;
+  const detraction = kind === "DETRACTION";
   const [payable, bankMapping] = await Promise.all([
     requireAccountingMapping("ACCOUNTS_PAYABLE", request),
-    requireAccountingMapping("BANK", request, { bank, currency: request.currency })
+    // A detraccion is always deposited in soles at Banco de la Nacion from UMA's PEN account.
+    requireAccountingMapping("BANK", request, { bank, currency: detraction ? "PEN" : currency })
   ]);
-  const sourceAmount = roundMoney(accountsPayable?.originalAmount ?? request.totalAmount);
-  const rate = Number(accountsPayable?.exchangeRate ?? request.exchangeRate ?? 1);
-  const amount = roundMoney(accountsPayable?.penEquivalent ?? multiplyMoney(sourceAmount, rate));
+  const sourceAmount = roundMoney(amount ?? accountsPayable?.originalAmount ?? request.totalAmount);
+  const cxpRate = Number(accountsPayable?.exchangeRate ?? request.exchangeRate ?? 1);
+  const reference = String(operationNumber || request.requestNumber).trim();
+  let apPen = roundMoney(detraction && amountPen !== undefined ? amountPen : multiplyMoney(sourceAmount, cxpRate));
+  let bankPen = apPen;
+  let rate = cxpRate;
+  let rateNote = "";
+  let gainMapping = null;
+  let lossMapping = null;
+  if (!detraction && currency !== "PEN" && paymentDate) {
+    [gainMapping, lossMapping] = await Promise.all([
+      resolveAccountingMapping("EXCHANGE_GAIN", request),
+      resolveAccountingMapping("EXCHANGE_LOSS", request)
+    ]);
+    if (gainMapping && lossMapping) {
+      rate = Number((await resolveExchangeRateSnapshot(currency, paymentDate)).rate);
+      bankPen = roundMoney(multiplyMoney(sourceAmount, rate));
+    } else {
+      rateNote = " at CXP rate (no exchange-difference mapping)";
+    }
+  }
+  const label = detraction ? `SPOT detraccion deposit ${reference}` : `Bank payment ${reference}`;
+  const lines = [
+    debitLine({ accountNumber: payable.accountNumber, subAccount: payable.subAccount, description: `Settle CXP ${request.requestNumber}`, amount: apPen }),
+    creditLine({ accountNumber: bankMapping.accountNumber, subAccount: bankMapping.subAccount, description: `${label} ${request.requestNumber}${rateNote}`, amount: bankPen })
+  ];
+  const difference = subtractMoney(bankPen, apPen);
+  if (difference > 0) lines.push(debitLine({ accountNumber: lossMapping.accountNumber, subAccount: lossMapping.subAccount, description: `Exchange loss ${request.requestNumber}`, amount: difference }));
+  if (difference < 0) lines.push(creditLine({ accountNumber: gainMapping.accountNumber, subAccount: gainMapping.subAccount, description: `Exchange gain ${request.requestNumber}`, amount: -difference }));
   return createJournal({
     request,
     accountsPayable,
     entryType: "PAYMENT",
     period: paymentDate ? new Date(paymentDate).toISOString().slice(0, 7) : undefined,
-    sourceTransaction: `PAYMENT:${request.payment?.operationNumber || request.requestNumber}:${accountsPayable?._id || ""}`,
-    lines: [
-      debitLine({ accountNumber: payable.accountNumber, subAccount: payable.subAccount, description: `Settle CXP ${request.requestNumber}`, amount }),
-      creditLine({ accountNumber: bankMapping.accountNumber, subAccount: bankMapping.subAccount, description: `Bank payment ${request.requestNumber}`, amount })
-    ],
+    sourceTransaction: `${detraction ? "DETRACTION" : "PAYMENT"}:${accountsPayable?._id || request.requestNumber}:${reference}`,
+    lines,
     userId,
-    originalAmount: sourceAmount,
-    exchangeRate: rate,
-    penEquivalent: amount,
+    originalAmount: detraction ? apPen : sourceAmount,
+    currency: detraction ? "PEN" : currency,
+    exchangeRate: detraction ? 1 : rate,
+    penEquivalent: bankPen,
     session
   });
 }

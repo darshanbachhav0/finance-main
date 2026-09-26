@@ -3,7 +3,7 @@ import test from "node:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import mongoose from "mongoose";
-import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
+import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 import AccountingMapping from "../src/models/AccountingMapping.js";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
 import AccountsPayable from "../src/models/AccountsPayable.js";
@@ -100,7 +100,7 @@ test("BBVA certification is a controlled, per-format/currency action that never 
     let firstBatch, firstGeneratedFile;
     await t.test("a batch generated while certified snapshots certified=true", async () => {
       const { payable } = await makeCertifiedFlowRequestAndPayable("REQ-2026-98001");
-      const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: treasury, req });
+      const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       cleanupPaths.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       firstBatch = await PaymentBatch.findById(result.batch._id);
       assert.equal(firstBatch.certificationSnapshot.certified, true);
@@ -122,7 +122,7 @@ test("BBVA certification is a controlled, per-format/currency action that never 
 
     await t.test("a new batch generated after decertifying snapshots certified=false", async () => {
       const { payable } = await makeCertifiedFlowRequestAndPayable("REQ-2026-98002");
-      const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: treasury, req });
+      const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       cleanupPaths.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       const secondBatch = await PaymentBatch.findById(result.batch._id);
       assert.equal(secondBatch.certificationSnapshot.certified, false);
