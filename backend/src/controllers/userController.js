@@ -3,13 +3,14 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
+import { reassignPendingApprovalsFor } from "../services/approvalService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
 import { APPROVAL_STAGES, ERROR_CODES, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
-const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active"];
+const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil"];
 
 // Area Director and Vice-Rector are single-level roles: their approvalLevel is
 // implied by the role itself, never a separate admin choice (unlike Management,
@@ -41,13 +42,13 @@ export async function validateSupervisor(userId, supervisorId) {
 // Availability follows active direct reports, rather than a fixed role.
 export const listMyTeam = asyncHandler(async (req, res) => {
   const reports = await User.find({ jefe: req.user._id, active: true, _id: { $ne: req.user._id } })
-    .select("name area jobTitle role organizationalUnit costCenter")
+    .select("name area jobTitle role organizationalUnit costCenter onLeave leaveUntil")
     .populate("costCenter", "code name")
     .sort({ name: 1 });
   if (!reports.length) throw new AppError(403, "My Team is available only to users with active team members.", undefined, ERROR_CODES.FORBIDDEN);
   const reportIds = reports.map((report) => report._id);
   const counts = reportIds.length ? await FinancialRequest.aggregate([
-    { $match: { $or: [{ requester: { $in: reportIds } }, { solicitor: { $in: reportIds } }] } },
+    { $match: { status: { $ne: REQUEST_STATUS.DRAFT }, $or: [{ requester: { $in: reportIds } }, { solicitor: { $in: reportIds } }] } },
     { $group: { _id: { $ifNull: ["$requester", "$solicitor"] }, total: { $sum: 1 }, active: { $sum: { $cond: [{ $in: ["$status", terminalStatuses] }, 0, 1] } } } }
   ]) : [];
   const countsById = new Map(counts.map((row) => [String(row._id), row]));
@@ -98,8 +99,9 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (String(user._id) === String(req.user._id) && req.body.active === false) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe };
+  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, onLeave: Boolean(user.onLeave) };
   Object.assign(user, editablePayload(req.body));
+  applyLeaveDates(user, oldValues.onLeave);
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
   if (req.body.password) {
     if (String(req.body.password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
@@ -108,8 +110,41 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.tokenVersion = (user.tokenVersion || 0) + 1;
   }
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, passwordChanged: Boolean(req.body.password) } });
-  res.json({ data: user });
+  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, passwordChanged: Boolean(req.body.password) } });
+  const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
+  res.json({ data: user, approvalReassignment });
+});
+
+function applyLeaveDates(user, wasOnLeave) {
+  if (user.onLeave && !wasOnLeave) user.leaveStartedAt = new Date();
+  if (!user.onLeave && wasOnLeave) {
+    user.leaveStartedAt = undefined;
+    user.leaveUntil = undefined;
+  }
+}
+
+// A user who was just deactivated or put on leave hands every pending approval
+// waiting on them to their nearest available jefe.
+async function reassignAfterAvailabilityChange(user, oldValues, req) {
+  const deactivated = oldValues.active !== false && user.active === false;
+  const wentOnLeave = !oldValues.onLeave && Boolean(user.onLeave);
+  if (!deactivated && !wentOnLeave) return undefined;
+  return reassignPendingApprovalsFor(user._id, { actor: req.user, req, reason: deactivated ? "DEACTIVATED" : "ON_LEAVE" });
+}
+
+// Self-service: a user may record their own leave (and return from it).
+export const updateMyLeave = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) throw new AppError(404, "User not found.", undefined, ERROR_CODES.NOT_FOUND);
+  if (typeof req.body.onLeave !== "boolean") throw new AppError(422, "onLeave must be true or false.", { field: "onLeave" }, ERROR_CODES.VALIDATION_ERROR);
+  const oldValues = { active: user.active, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil };
+  user.onLeave = req.body.onLeave;
+  if (req.body.leaveUntil !== undefined) user.leaveUntil = req.body.leaveUntil || undefined;
+  applyLeaveDates(user, oldValues.onLeave);
+  await user.save();
+  await recordAudit({ entityType: "User", entity: user, action: user.onLeave ? "LEAVE_STARTED" : "LEAVE_ENDED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { onLeave: user.onLeave, leaveUntil: user.leaveUntil } });
+  const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
+  res.json({ data: user, approvalReassignment });
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {
@@ -120,5 +155,6 @@ export const deleteUser = asyncHandler(async (req, res) => {
   user.active = false;
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "DEACTIVATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { active: false } });
-  res.json({ data: user });
+  const approvalReassignment = await reassignAfterAvailabilityChange(user, { ...oldValues, onLeave: Boolean(user.onLeave) }, req);
+  res.json({ data: user, approvalReassignment });
 });

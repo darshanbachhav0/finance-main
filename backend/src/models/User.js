@@ -31,7 +31,13 @@ const userSchema = new mongoose.Schema(
     approvalAreas: [{ type: String, trim: true }],
     permissions: [{ type: String, enum: Object.values(PERMISSIONS) }],
     area: { type: String, trim: true, default: "General" },
-    active: { type: Boolean, default: true }
+    active: { type: Boolean, default: true },
+    // Temporary absence (vacation, medical leave). An on-leave user keeps their
+    // account but is skipped as an approver: pending manager-chain steps move to
+    // their nearest available jefe and new submissions route past them.
+    onLeave: { type: Boolean, default: false },
+    leaveStartedAt: Date,
+    leaveUntil: Date
   },
   { timestamps: true }
 );

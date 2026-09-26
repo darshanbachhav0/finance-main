@@ -1,4 +1,4 @@
-import { isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
 import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
@@ -46,6 +46,16 @@ export function canModifyRequest(request, user) {
 
 function requesterIdOf(request) {
   return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
+}
+
+// The requester may withdraw a submitted request back to draft until the first
+// approver decides: only while it is still PENDIENTE_APROBACION and no step of
+// its current approval route has been APPROVED.
+export function canWithdrawRequest(request, user) {
+  if (!request || !user || user.active === false) return false;
+  if (requesterIdOf(request) !== String(user._id)) return false;
+  if (canonicalRequestStatus(request.status) !== REQUEST_STATUS.PENDING_APPROVAL) return false;
+  return !(request.approvalRouteSnapshot || []).some((step) => step.status === "APPROVED");
 }
 
 // Visibility is identity-based for the manager chain: a plain Solicitor (which

@@ -62,18 +62,6 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
     assert.deepEqual(defaultApprovalRouteForFlow(FLOW_TYPE.B).map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
   });
 
-  await t.test("historical approval route structure is retained on resubmission", async () => {
-    const historicalRule = new mongoose.Types.ObjectId();
-    const request = {
-      approvalRouteSnapshot: [{ rule: historicalRule, approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", sequence: 1, slaHours: 12, required: true, status: "RETURNED", completedAt: new Date(), completedBy: new mongoose.Types.ObjectId() }]
-    };
-    await initializeApprovalRoute(request);
-    assert.equal(String(request.approvalRouteSnapshot[0].rule), String(historicalRule));
-    assert.equal(request.approvalRouteSnapshot[0].slaHours, 12);
-    assert.equal(request.approvalRouteSnapshot[0].status, "PENDING");
-    assert.equal(request.approvalRouteSnapshot[0].completedAt, undefined);
-  });
-
   await t.test("configured rules match flowType instead of being bypassed", async () => {
     const databaseName = `erp_document_phase_${process.pid}_${Date.now()}`;
     await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
@@ -90,6 +78,19 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
       await ApprovalRule.create({ name: "Legacy B director", approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", flowType: FLOW_TYPE.B, sequence: 1, slaHours: 4 });
       const route = await resolveApprovalRoute({ flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100 });
       assert.deepEqual(route.map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
+
+      // Product decision: a resubmission re-resolves the route for the request as it
+      // is now (amount, track, area) instead of re-running the historical snapshot.
+      const historicalRule = new mongoose.Types.ObjectId();
+      const resubmitted = {
+        flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100,
+        approvalRouteSnapshot: [{ rule: historicalRule, approvalLevel: "RECTORATE", role: "Management", sequence: 1, slaHours: 12, required: true, status: "RETURNED", completedAt: new Date(), completedBy: new mongoose.Types.ObjectId() }]
+      };
+      await initializeApprovalRoute(resubmitted);
+      assert.deepEqual(resubmitted.approvalRouteSnapshot.map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
+      assert.ok(!resubmitted.approvalRouteSnapshot.some((step) => String(step.rule) === String(historicalRule)));
+      assert.equal(resubmitted.approvalRouteSnapshot[0].status, "PENDING");
+      assert.equal(resubmitted.approvalRouteSnapshot[0].completedAt, undefined);
     } finally {
       await mongoose.connection.dropDatabase();
       await mongoose.disconnect();

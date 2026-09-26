@@ -27,7 +27,8 @@ const observationStates = [
 
 const transitionGraph = Object.freeze({
   BORRADOR: ["PENDIENTE_APROBACION", "ANULADO"],
-  PENDIENTE_APROBACION: ["APROBADO_DIRECTOR", "APROBADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  // BORRADOR: the requester withdraws before the first approver decides (canWithdrawRequest).
+  PENDIENTE_APROBACION: ["BORRADOR", "APROBADO_DIRECTOR", "APROBADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO_DIRECTOR: ["APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO_VICERRECTOR: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
@@ -44,6 +45,7 @@ const transitionGraph = Object.freeze({
 });
 
 const roleTargets = Object.freeze({
+  [REQUEST_STATUS.DRAFT]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.VALIDATION]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.SENT]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.PENDING_APPROVAL]: [ROLES.ADMIN, ROLES.SOLICITOR],
@@ -87,7 +89,7 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
   const allowedRoles = roleTargets[targetStatus] || [];
   if (!skipRoleCheck && !allowedRoles.includes(user.role)) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
 
-  if ([REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL].includes(targetStatus)) {
+  if ([REQUEST_STATUS.DRAFT, REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL].includes(targetStatus)) {
     if (user.role !== ROLES.ADMIN && requesterId(request) !== String(user._id)) throw new AppError(403, "Only the requester can submit this request.", undefined, ERROR_CODES.FORBIDDEN);
   }
 

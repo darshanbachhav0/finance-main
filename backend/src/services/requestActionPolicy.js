@@ -1,7 +1,7 @@
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "./approvalRuleService.js";
 import { canTransition } from "./workflowService.js";
-import { canApproveStage, canModifyRequest, hasPermission, isActiveChainApprover } from "../utils/permissions.js";
+import { canApproveStage, canModifyRequest, canWithdrawRequest, hasPermission, isActiveChainApprover } from "../utils/permissions.js";
 import { APPROVAL_ROUTING_MODE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 export const REQUEST_ACTION = Object.freeze({
@@ -16,7 +16,8 @@ export const REQUEST_ACTION = Object.freeze({
   CLOSE: "CLOSE",
   COMMIT_BUDGET: "COMMIT_BUDGET",
   ISSUE_ORDER: "ISSUE_ORDER",
-  REGISTER_INVOICE: "REGISTER_INVOICE"
+  REGISTER_INVOICE: "REGISTER_INVOICE",
+  WITHDRAW: "WITHDRAW"
 });
 
 const approvalStatuses = new Set([
@@ -72,6 +73,8 @@ export function allowedRequestActions(request, user, context = {}) {
     actions.add(REQUEST_ACTION.SUBMIT);
     if (status === REQUEST_STATUS.DRAFT) actions.add(REQUEST_ACTION.DELETE);
   }
+
+  if (canWithdrawRequest(request, user)) actions.add(REQUEST_ACTION.WITHDRAW);
 
   if (approvalActionsAllowed(request, user)) {
     for (const action of [REQUEST_ACTION.APPROVE, REQUEST_ACTION.OBSERVE, REQUEST_ACTION.RETURN, REQUEST_ACTION.REJECT]) actions.add(action);

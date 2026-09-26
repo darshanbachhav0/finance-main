@@ -14,7 +14,8 @@ import {
   requestFormPolicy,
   submitFinancialRequest,
   updateFinancialRequest,
-  voidFinancialRequest
+  voidFinancialRequest,
+  withdrawFinancialRequest
 } from "../services/requestService.js";
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
 import { registerA1Invoice } from "../services/invoiceRegistrationService.js";
@@ -100,6 +101,11 @@ export const registerInvoice = asyncHandler(async (req, res) => {
 
 export const submitRequest = asyncHandler(async (req, res) => {
   const request = await submitFinancialRequest({ id: req.params.id, user: req.user, req, comments: req.body.comments });
+  res.json({ data: publicRequestPayload(request, req.user) });
+});
+
+export const withdrawRequest = asyncHandler(async (req, res) => {
+  const request = await withdrawFinancialRequest({ id: req.params.id, user: req.user, req, comments: req.body.comments });
   res.json({ data: publicRequestPayload(request, req.user) });
 });
 
