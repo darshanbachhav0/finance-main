@@ -22,6 +22,34 @@ SUNAT integration (`backend/src/services/sunatService.js`):
   taxpayer/voucher check, and the server now logs a clear warning about this at boot.
 - `SUNAT_PADRON_DATA_DIR` — where the downloaded national RUC padrón is stored/indexed.
 
+SIRE / RCE export (`backend/src/services/sireService.js`, screen Accounting → SIRE):
+- `SIRE_TAXPAYER_RUC` — UMA's own RUC (field 1 and the file name). Required; the export is blocked
+  and the preview shows a configuration error until it is set to a valid RUC.
+- `SIRE_TAXPAYER_NAME` — UMA's legal name exactly as registered with SUNAT (field 2). Required.
+- `SIRE_RCE_IGV_DESTINATION` — which Anexo 11 column pair receives the base/IGV of taxed purchases:
+  `DG` (15/16, default), `DGNG` (17/18) or `DNG` (19/20). **Must be confirmed by UMA's accountant**
+  (it depends on whether UMA's own operations are taxed with IGV).
+- `SIRE_RCE_BOOK_CURRENCY` — `PEN` (default) or `USD`; sets the file name's currency indicator.
+
+The export is SUNAT's RCE "reemplazo de la propuesta" TXT, structure **Anexo 11 of RS
+000112-2021/SUNAT as replaced by Anexo F of RS 000040-2022/SUNAT** (tag `RCE_ANEXO11_RS040_2022`;
+RS 000138-2023/SUNAT did not modify Anexo 11). 37 pipe-separated fields per voucher, dates
+DD/MM/AAAA, amounts with 2 decimals and no thousands separator (credit notes negative), exchange
+rate `#.###`, CRLF line endings, UTF-8, no header. File name per Tabla 13.1:
+`LE<RUC><AAAA><MM>00080400021<I><M>2.TXT`, e.g. `LE2010000000920260800080400021112.TXT` for RUC 20100000009, August 2026, with data, in soles.
+Cancelled CXPs and duplicate voucher links are excluded and listed; any other failing
+voucher blocks the file and is listed with its errors. Upload to SUNAT is manual (SUNAT Operaciones
+en Línea → SIRE → RCE → Propuesta → Reemplazar); SUNAT's API upload additionally requires zipping.
+Sources:
+- https://www.sunat.gob.pe/legislacion/superin/2022/anexo-040-2022.pdf (Anexo 1 tablas 11-13, Anexo 11)
+- https://www.sunat.gob.pe/legislacion/superin/2022/040-2022.pdf
+- https://www.sunat.gob.pe/legislacion/superin/2023/000138-2023.pdf
+- https://cpe.sunat.gob.pe/sites/default/files/inline-files/Manual%20de%20servicios%20Web%20Api%20-%20SIRE_Compras%20v24.pdf
+
+Rules not stated verbatim in those sources are marked `// VERIFY:` in `sireService.js` and should be
+confirmed with UMA's accountant before the first filing (ideally by running the file through
+SUNAT's PVSIRE validator).
+
 Batch invoice worker (`backend/src/workers/batchInvoiceWorker.js` /
 `backend/src/queues/batchInvoiceQueue.js`):
 - `BATCH_INVOICE_INLINE_PROCESSING` — dev convenience only; must stay unset/false in production so

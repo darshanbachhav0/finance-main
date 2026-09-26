@@ -33,6 +33,7 @@ import "./cecoImport.test.js";
 import "./bbvaFormat.test.js";
 import "./requestApiAlignment.test.js";
 import "./sireVoucherExport.test.js";
+import "./sireOfficialTxt.test.js";
 import "./slaMonitoring.test.js";
 import "./managementApi.test.js";
 import "./budgetPhaseMode.test.js";

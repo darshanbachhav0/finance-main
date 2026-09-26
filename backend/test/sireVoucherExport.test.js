@@ -16,9 +16,12 @@ test("SIRE/RCE uses one validated fiscal voucher per row", { timeout: 120000 }, 
   await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`);
   const generatedFiles = [];
   let sequence = 0;
+  const previousEnv = { ruc: process.env.SIRE_TAXPAYER_RUC, name: process.env.SIRE_TAXPAYER_NAME };
+  process.env.SIRE_TAXPAYER_RUC = "20100000009";
+  process.env.SIRE_TAXPAYER_NAME = "UNIVERSIDAD DE PRUEBA SAC";
   try {
     await Promise.all([AccountsPayable.init(), SunatVoucher.init(), GeneratedFile.init()]);
-    const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20600000001", legalName: "Proveedor Fiscal UMA SAC", name: "Proveedor Fiscal UMA SAC", active: true });
+    const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20600000005", legalName: "Proveedor Fiscal UMA SAC", name: "Proveedor Fiscal UMA SAC", active: true });
     const user = { _id: new mongoose.Types.ObjectId() };
 
     async function request(period, flowType = "A1") {
@@ -159,10 +162,10 @@ test("SIRE/RCE uses one validated fiscal voucher per row", { timeout: 120000 }, 
       await invoice({ request: parent, number: "000011" });
       const first = await exportSireFile({ period: "2026-07", user });
       const second = await exportSireFile({ period: "2026-07", user });
-      generatedFiles.push(path.join(generatedRoot, "reports", first.history.fileName), path.join(generatedRoot, "reports", second.history.fileName));
+      generatedFiles.push(path.dirname(path.join(generatedRoot, first.history.url.replace(/^\/generated\//, ""))), path.dirname(path.join(generatedRoot, second.history.url.replace(/^\/generated\//, ""))));
       for (const result of [first, second]) {
         const lines = result.content.trim().split(/\r?\n/);
-        assert.equal(lines.length, 2);
+        assert.equal(lines.length, 1);
         assert.equal(result.history.rowCount, 1);
         assert.equal(result.history.metadata.voucherKeys.length, 1);
       }
@@ -173,7 +176,11 @@ test("SIRE/RCE uses one validated fiscal voucher per row", { timeout: 120000 }, 
     assert.equal(sireVoucherKey({ supplierRuc: supplier.rucDni, documentType: "factura", series: "f001", number: "1" }), `${supplier.rucDni}|FACTURA|F001|1`);
     assert.equal(hasAuthoritativeVoucherValidation({ validationStatus: "VALID", validationEvidence: { valid: true, fiscal: { valid: true, voucherVerified: true } } }), true);
   } finally {
-    await Promise.all(generatedFiles.map((file) => fs.rm(file, { force: true })));
+    await Promise.all(generatedFiles.map((file) => fs.rm(file, { force: true, recursive: true })));
+    for (const [key, value] of [["SIRE_TAXPAYER_RUC", previousEnv.ruc], ["SIRE_TAXPAYER_NAME", previousEnv.name]]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     if (mongoose.connection.name === database) await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
   }

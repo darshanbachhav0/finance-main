@@ -230,7 +230,8 @@ which SUNAT provider is active. Legal-representative lookup (Playwright scraping
 website) is a best-effort supplementary check during supplier onboarding — it never blocks supplier
 creation and no financial transition depends on it succeeding.
 
-**SIRE**: prepares and exports a CSV register of SIRE/RCE-eligible payables. There is no direct
+**SIRE**: validates the period's payables and generates SUNAT's official RCE replacement TXT
+(Anexo 11, official file name; cancelled CXPs excluded) — see `OPERATIONS.md` §1. There is no direct
 SUNAT submission — that remains a distinct, not-yet-built integration.
 
 ## 9. What's intentionally out of scope for this release
