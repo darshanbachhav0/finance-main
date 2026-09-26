@@ -15,6 +15,7 @@ import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { reserveBudget } from "./budgetService.js";
 import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "./directPaymentService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
+import { commitUndocumentedReimbursementBudget } from "./renditionService.js";
 import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
@@ -33,6 +34,7 @@ import {
   FLOW_TYPE,
   PERMISSIONS,
   REQUEST_STATUS,
+  REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
 import { canApproveStage, hasPermission } from "../utils/permissions.js";
@@ -245,6 +247,7 @@ export async function commitApprovedRequestBudget({ request, user, req }) {
     throw new AppError(409, "Financial handoff can only run after every required approval is complete or after a budget observation is resolved.", { status: request.status, approvalStage: request.approvalStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
 
+  if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req });
   if (request.flowType === FLOW_TYPE.C) {
     const result = await runFinancialOperation(async (session) => {
       await provisionTrackCAdvance({ request, user, req, session });

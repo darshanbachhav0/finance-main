@@ -3,15 +3,20 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 const source = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
-test("Track C enforces a configurable rendition deadline (10-day default) and blocks new overdue advances", () => {
+test("Track C enforces a configurable rendition deadline (10 working-day default) and blocks new overdue advances", () => {
   const treasury = source("../src/services/treasuryService.js");
   const requests = source("../src/services/requestService.js");
   const constants = source("../src/utils/constants.js");
   assert.match(treasury, /renditionDueDate/);
+  assert.match(treasury, /addWorkingDays\(paidAt, days\)/, "the deadline counts working days, not calendar days");
+  assert.doesNotMatch(treasury, /days \* 24 \* 60 \* 60 \* 1000/);
+  assert.doesNotMatch(treasury, /due within 10 days/, "the notice prints the real due date");
   assert.match(constants, /RENDITION_OVERDUE_DAYS/);
   assert.match(constants, /DEFAULT_RENDITION_OVERDUE_DAYS\s*=\s*10/);
   assert.match(requests, /rendition\.dueAt/);
   assert.match(requests, /OVERDUE_RENDITION/);
+  // Only an overdue rendition that has not been submitted blocks (SUBMITTED never does).
+  assert.match(requests, /"rendition\.status": \{ \$in: \["PENDING", "OBSERVED"\] \}/);
 });
 test("non-deductible Account 14 balance supports reimbursement or payroll deduction", () => {
   const rendition = source("../src/services/renditionService.js");

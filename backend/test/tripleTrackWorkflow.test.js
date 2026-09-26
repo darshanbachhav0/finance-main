@@ -20,13 +20,17 @@ test("audit log remains append-only", () => {
   assert.match(audit, /deleteOne|deleteMany/);
 });
 
-test("A1 and B creation only allow CAPEX/OPEX while C stays an advance-to-render", () => {
+test("A1 and B creation only allow CAPEX/OPEX while C offers an advance or an undocumented reimbursement", () => {
   const requestService = source("../src/services/requestService.js");
   const frontendOptions = source("../../frontend/src/utils/options.js");
   const requestCreate = source("../../frontend/src/pages/RequestCreate.jsx");
 
   assert.match(frontendOptions, /requestCreationClassifications = \["OPEX", "CAPEX"\]/);
-  assert.match(frontendOptions, /if \(flowType === "C"\) return "ENTREGA_RENDIR"/);
+  // Product decision: Track C also carries REEMBOLSO_SIN_SUSTENTO; anything else defaults to an advance.
+  assert.match(frontendOptions, /trackCRequestTypes = \["ENTREGA_RENDIR", "REEMBOLSO_SIN_SUSTENTO"\]/);
+  assert.match(frontendOptions, /if \(flowType === "C"\) return trackCRequestTypes\.includes\(currentRequestType\) \? currentRequestType : "ENTREGA_RENDIR"/);
+  assert.match(requestCreate, /trackCRequestTypes\.map/);
+  assert.match(requestService, /TRACK_C_REQUEST_TYPES = new Set\(\[REQUEST_TYPE\.ENTREGA_RENDIR, REQUEST_TYPE\.REEMBOLSO_SIN_SUSTENTO\]\)/);
   assert.match(requestService, /Tracks A1 and B only allow CAPEX or OPEX as the expenditure classification\./);
   assert.match(requestCreate, /CAPEX \/ OPEX \*/);
   assert.match(requestCreate, /form\.flowType !== "C"/);

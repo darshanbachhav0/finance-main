@@ -18,6 +18,7 @@ import "./tripleTrackWorkflow.test.js";
 import "./batchInvoiceProcessing.test.js";
 import "./directPaymentWorkflow.test.js";
 import "./renditionDeadline.test.js";
+import "./trackCRenditions.test.js";
 import "./notificationBell.test.js";
 import "./budgetSimulator.test.js";
 
