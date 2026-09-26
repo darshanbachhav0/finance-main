@@ -39,6 +39,7 @@ import "./budgetPhaseMode.test.js";
 import "./treasuryObservationGate.test.js";
 import "./bbvaCertificationGovernance.test.js";
 import "./myTeam.test.js";
+import "./businessCalendar.test.js";
 import "./approvalCanonicalCompletion.test.js";
 import "./budgetExceptionRouting.test.js";
 import "./exchangeRateEvidence.test.js";
