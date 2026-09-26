@@ -86,7 +86,7 @@ npm run build
 npm run verify
 ```
 
-The backend suite is a full integration suite (310 tests) against a real local MongoDB instance —
+The backend suite is a full integration suite against a real local MongoDB instance —
 it needs MongoDB reachable, not a mock. The frontend suite covers canonical UI contracts, role
 navigation, and accessibility behavior.
 
@@ -100,9 +100,17 @@ navigation, and accessibility behavior.
   capability matrix and walkthrough, also rendered to a printable PDF by
   `scripts/build-role-permissions-guide.py`.
 
-## Temporary Cloudflare sharing
+## Production deployment
 
-With MongoDB and this PC running:
+Production runs on **Render** (`render.yaml`): one web service with a persistent disk; the A2
+batch-invoice worker, the approval-SLA worker and the SUNAT Padrón refresh run inside it. See
+[docs/OPERATIONS.md §4](docs/OPERATIONS.md) for the layout and the `*_WORKER_ENABLED` flags.
+
+## Demo-only public links
+
+`START_UMA_PUBLIC_FIXED.bat` (ngrok) and the Cloudflare commands below are **for demos only** —
+they publish this PC's local copy with demo data through a temporary URL. They are not the
+production deployment; never load real data into them.
 
 ```powershell
 npm run share
@@ -110,6 +118,5 @@ npm run share:status
 npm run share:stop
 ```
 
-The generated `trycloudflare.com` URL is temporary. `npm run share:publish` also publishes the
-current tunnel URL to the stable Render access page (`link-site/`). The local PC, ERP server,
-MongoDB, and tunnel must all remain running for the shared link to work.
+The generated `trycloudflare.com` URL is temporary. The local PC, ERP server, MongoDB, and tunnel
+must all remain running for the shared link to work.

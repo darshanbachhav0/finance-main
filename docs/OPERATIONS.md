@@ -22,12 +22,22 @@ SUNAT integration (`backend/src/services/sunatService.js`):
   taxpayer/voucher check, and the server now logs a clear warning about this at boot.
 - `SUNAT_PADRON_DATA_DIR` — where the downloaded national RUC padrón is stored/indexed.
 
-Batch invoice worker (`backend/src/workers/batchInvoiceWorker.js` /
-`backend/src/queues/batchInvoiceQueue.js`):
+Background workers (see §4 — in production they run inside the web service process):
+- `BATCH_INVOICE_WORKER_ENABLED`, `SLA_WORKER_ENABLED`, `SUNAT_PADRON_WORKER_ENABLED` — start the
+  A2 batch-invoice worker, the approval-SLA worker and the SUNAT Padrón refresh inside `npm start`.
+  Each defaults to `true` when `NODE_ENV=production` and `false` otherwise; set one to `false` to
+  host that worker separately. The Padrón refresh also requires `SUNAT_PROVIDER_MODE=PADRON`.
 - `BATCH_INVOICE_INLINE_PROCESSING` — dev convenience only; must stay unset/false in production so
-  the real worker (not the request thread) processes uploads.
+  the durable worker (not the request thread) processes uploads. While it is on, the in-process
+  batch worker never starts.
 - `BATCH_INVOICE_POLL_MS`, `BATCH_INVOICE_STALE_MINUTES`, `BATCH_INVOICE_WORKER_CONCURRENCY` —
-  worker tuning, all have safe defaults.
+  batch worker tuning; `SLA_POLL_MS`, `SLA_DUE_SOON_HOURS`, `SLA_ESCALATION_HOURS` — SLA worker
+  tuning. All have safe defaults.
+
+Authentication:
+- `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 15) — per-account
+  lockout after repeated failed sign-ins. Failed, locked-out and successful sign-ins and sign-outs
+  are written to the audit log (module `AUTH`).
 
 ## 2. Local development
 
@@ -66,32 +76,70 @@ npm run verify      # test + build
 
 The backend suite (`backend/test/run.js`) is a full integration suite against a real, per-test-file,
 uniquely-named MongoDB database (dropped on completion) — it needs a reachable MongoDB instance, not
-a mock. As of this writing it is 310 tests, all passing.
+a mock.
 
-## 4. Background workers (must run in production)
+## 4. Production on Render and background workers
 
-Three long-running background processes exist beyond the web server. All three are provisioned in
-`render.yaml` as separate Render services if deploying there:
+Production runs on **Render** from `render.yaml`: a single web service (`uma-finance`) with one
+persistent disk mounted at `/var/data` (`UMA_STORAGE_ROOT=/var/data`,
+`SUNAT_PADRON_DATA_DIR=/var/data/sunat-padron`). Render disks belong to exactly one service and
+cannot be shared, so every background job that touches files runs **inside the web service
+process**, started by `backend/server.js` (`backend/src/workers/inProcessWorkers.js`):
 
-| Worker | Command | Purpose | Depends on |
+| Worker | Flag (default in production) | Purpose | Uses |
 | --- | --- | --- | --- |
-| SLA | `npm run worker:sla` | Escalates overdue approval steps | `MONGODB_URI` |
-| Batch invoice | `npm run worker:batch` | Processes queued Track A2 mass-invoice uploads | `MONGODB_URI` |
-| SUNAT padrón sync | `npm run sunat:padron:worker` | Keeps the local RUC registry copy fresh | `SUNAT_PADRON_DATA_DIR` (filesystem-only, no DB) |
+| A2 batch invoice | `BATCH_INVOICE_WORKER_ENABLED` (`true`) | Processes queued mass-invoice uploads | MongoDB + uploaded files on the disk |
+| Approval SLA | `SLA_WORKER_ENABLED` (`true`) | Due-soon / overdue notifications and escalation | MongoDB |
+| SUNAT Padrón refresh | `SUNAT_PADRON_WORKER_ENABLED` (`true`, PADRON mode only) | Keeps the local RUC registry fresh (daily 03:00 Lima) | `SUNAT_PADRON_DATA_DIR` on the disk |
 
-If the batch-invoice worker isn't running, uploaded invoice batches will sit `QUEUED` indefinitely —
-there is no other path that processes them in production (`BATCH_INVOICE_INLINE_PROCESSING` must
-stay off there).
+The boot log prints one line with the state of all three
+(`[WORKERS] In-process: batch-invoice=on, sla=on, sunat-padron=on`). On `SIGTERM` (every Render
+deploy) the server stops accepting requests and lets in-flight worker work finish (up to ~25s).
 
-`backend/scripts/startPadronWorker.ps1` registers the padrón sync as a Windows Scheduled Task — that
-script is for **local Windows development only**; production uses the Render worker service.
-`backend/Dockerfile.padron` / `backend/compose.padron.yml` are an alternative self-contained
-Docker path for hosting the padrón worker outside Render, kept for that use case.
+Running more than one copy is safe: the batch worker claims each `QUEUED` batch with an atomic
+`QUEUED → PROCESSING` update; SLA notifications and audit rows are idempotent (unique `eventKey`);
+the Padrón refresh holds a heartbeat lease file (`worker.lock`) in its data directory and a new
+instance waits for a previous instance's lease to go stale (~1 minute) before taking over. Keep
+the Render service at **one instance** anyway — its disk can only attach to one.
+
+There are no separate Render worker services any more. If one was created from an older
+`render.yaml`, delete it in the Render dashboard (and its separate `uma-finance-padron-data` disk).
+If the batch worker is off and nothing else runs it, uploaded invoice batches sit `QUEUED`
+indefinitely.
+
+Standalone entry points still exist for local development or hosting a worker elsewhere (turn the
+matching `*_WORKER_ENABLED` flag off on the web service first):
+`npm run worker:batch`, `npm run worker:sla` (`npm run sla:check --workspace backend` for one
+scan), `npm run sunat:padron:worker --workspace backend`. A standalone batch worker must see the
+same `UMA_STORAGE_ROOT` files as the web service.
+
+`backend/scripts/startPadronWorker.ps1` registers the padrón sync as a Windows Scheduled Task — for
+**local Windows development and the demo launcher only**. `backend/Dockerfile.padron` /
+`compose.padron.yml` remain an alternative self-contained Docker path for hosting the padrón worker
+outside Render.
 
 The four SUNAT padrón CLI scripts under `backend/scripts/` (`syncSunatPadron.js`, `padronWorker.js`,
 `indexSunatPadron.js`, `padronStatus.js`) serve different one-off purposes (sync once, run as a
 daemon, rebuild the search index only, or print status) — each has a short comment at its top saying
 which of the other three to reach for instead.
+
+### Demo-only public links (not production)
+
+`START_UMA_PUBLIC_FIXED.bat` (ngrok) and `npm run share` (`scripts/share-cloudflare.ps1`,
+Cloudflare Quick Tunnel) expose **this PC's** copy with demo data through a temporary public URL,
+for presentations only. They are never the production deployment and must not hold real university
+data.
+
+- The launcher runs MongoDB in Docker bound to `127.0.0.1:27018` only, with authentication. The
+  admin password is generated on first run and kept in `.uma-local-mongo-password` (git-ignored,
+  next to `.uma-local-jwt-secret`). An older unauthenticated `uma-finance-triple-mongo` container
+  is migrated automatically (user added, container recreated on the same volume). If the password
+  file is lost, the secured container cannot be opened; the launcher explains how to start over.
+- Both start the demo server with `BATCH_INVOICE_WORKER_ENABLED=true` and `SLA_WORKER_ENABLED=true`,
+  so A2 batches and SLA escalation work during a demo; the Padrón refresh stays with the scheduled
+  task registered by `startPadronWorker.ps1`.
+- The former `share:publish` / `link:publish` flow (rewriting a Render gateway to the tunnel) was
+  removed: production now lives on Render itself, so there is nothing to publish.
 
 ## 5. Migrations & data operations
 
@@ -129,7 +177,7 @@ These require a real institutional decision or credential this codebase cannot s
 
 - **BBVA production certification** — `BankFormatConfiguration.certified` stays `false` until
   Treasury/BBVA formally accept the generated PEN/USD test files through the certification action
-  (Admin or Treasury, `/configuration/bank-formats`).
+  (Admin or Treasury, `/configuration/bank-formats`, linked from Treasury's menu as "Bank Formats").
 - **A contracted SUNAT CPE API** — if/when one exists, set `SUNAT_PROVIDER_MODE=PRODUCTION` and the
   associated env vars; until then, production should run on `PADRON` mode (taxpayer-status only).
 - **The organizational roster's manager-chain (`jefe`) data** — approval routing prefers this over
