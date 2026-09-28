@@ -18,6 +18,8 @@
     "backup": "npm run backup --workspace backend",
     "migrate:workflow": "npm run migrate:workflow --workspace backend",
     "migrate:workflow:apply": "npm run migrate:workflow:apply --workspace backend",
+    "migrate:accounting-fixes": "npm run migrate:accounting-fixes --workspace backend",
+    "migrate:accounting-fixes:apply": "npm run migrate:accounting-fixes:apply --workspace backend",
     "migrate:official-formats": "npm run migrate:official-formats --workspace backend",
     "migrate:official-formats:apply": "npm run migrate:official-formats:apply --workspace backend",
     "verify:data": "npm run verify:data --workspace backend",

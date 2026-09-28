@@ -11,6 +11,8 @@
     "seed:reset": "node scripts/resetDevelopment.js --confirm --purge-files",
     "migrate:workflow": "node scripts/migrateCanonicalWorkflow.js",
     "migrate:workflow:apply": "node scripts/migrateCanonicalWorkflow.js --apply",
+    "migrate:accounting-fixes": "node scripts/migrateAccountingFixes.js",
+    "migrate:accounting-fixes:apply": "node scripts/migrateAccountingFixes.js --apply",
     "migrate:official-formats": "node scripts/migrateOfficialUmaFormatsFoundation.js",
     "migrate:official-formats:apply": "node scripts/migrateOfficialUmaFormatsFoundation.js --apply",
     "backup": "node scripts/backupLocalData.js",

@@ -10,7 +10,8 @@ const accountingMappingSchema = new mongoose.Schema(
     purpose: {
       type: String,
       // SUPPLIER_CREDIT: receivable from a supplier created by a credit note on an already-paid invoice.
-      enum: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE", "SUPPLIER_CREDIT"],
+      // EXCHANGE_GAIN / EXCHANGE_LOSS: exchange difference on USD payments (Accounts 776 / 676).
+      enum: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE", "SUPPLIER_CREDIT", "EXCHANGE_GAIN", "EXCHANGE_LOSS"],
       required: true
     },
     requestType: { type: String, enum: ["*", ...REQUEST_TYPES], default: "*" },

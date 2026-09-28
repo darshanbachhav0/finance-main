@@ -237,8 +237,14 @@ per-line and reversed symmetrically on cancellation/void (`releaseBudget`,
 - **Cancelling an unpaid CXP** (`POST /accounting/accounts-payable/:id/cancel`, Admin/Accounting) is
   only possible while it's `OPEN` or `SCHEDULED` (no money has moved) — it posts a `REVERSAL` journal
   entry that exactly offsets the original provision and moves the budget back to committed. A
-  partially paid or fully paid CXP cannot be cancelled this way — real money has moved, so it needs a
-  refund/credit-note process, which is intentionally outside this system's current scope.
+  partially paid or fully paid CXP cannot be cancelled this way — real money has moved, so it is
+  corrected with a supplier credit note instead.
+- **Credit and debit notes** (`adjustmentNoteService.js`): every note is linked to its original
+  voucher (from the XML reference or chosen by Accounting) and reverses the matching accounting
+  amount. A credit note on an unpaid invoice reduces its outstanding balance; on a paid invoice the
+  paid part becomes a `SupplierCredit` (receivable, mapping `SUPPLIER_CREDIT`) that is applied to a
+  later invoice from the same supplier or recovered into the bank. A debit note increases the
+  original payable. A note is never booked as a new payable.
 - **Scheduling & payment**: Treasury resolves the payment destination (verified supplier bank
   account or the request's frozen employee-reimbursement snapshot for Track C/reimbursements),
   generates a BBVA fixed-width payment file (`POST /treasury/batch` — **BBVA is the only source
@@ -327,8 +333,9 @@ SUNAT submission — that remains a distinct, not-yet-built integration.
 - Per-voucher SUNAT API validation without real production credentials (padrón-only baseline).
 - Fixed-asset depreciation/amortization from CAPEX fields (`assetCategory`, `usefulLifeYears`,
   `npv`, `payback` are captured for approval-committee context and reporting only).
-- Refund/credit-note remediation for a partially or fully paid Accounts Payable record (only an
-  *unpaid* CXP can be cancelled — see §5).
+- An admin screen for accounting mappings (they are managed through `/api/accounting-mappings`;
+  `EXCHANGE_GAIN`/`EXCHANGE_LOSS` must be configured there for USD payments to post exchange
+  differences).
 - BBVA/SUNAT production certification itself — those are external approvals this codebase cannot
   grant to itself; `BankFormatConfiguration.certified` and the SUNAT provider mode both stay in
   their honest, uncertified/unconfigured state until the real institution provides them.
