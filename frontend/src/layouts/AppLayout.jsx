@@ -80,7 +80,10 @@ const groups = [
       { label: "Cost Centers", path: "/cost-centers", icon: CircleDollarSign },
       { label: "Expense Types", path: "/expense-types", icon: Settings2 },
       { label: "Exchange Rates", path: "/exchange-rates", icon: CircleDollarSign },
-      { label: "Configuration", path: "/configuration/approval-rules", icon: SlidersHorizontal }
+      { label: "Configuration", path: "/configuration/approval-rules", icon: SlidersHorizontal },
+      { label: "Budget Rules", path: "/configuration/budget-rules", icon: SlidersHorizontal },
+      { label: "Finance Configurations", path: "/configuration/finance-configurations", icon: SlidersHorizontal },
+      { label: "Bank Formats", path: "/configuration/bank-formats", icon: Landmark }
     ]
   },
   {

@@ -644,7 +644,10 @@ export async function listRequestsPage(queryParams, user) {
     Object.assign(query, requestVisibilityFilter(user));
   }
   if (queryParams.status === "RENDICION_PENDIENTE") { query.flowType = "C"; query["rendition.status"] = { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }; query.status = { $nin: terminalStatusValues }; }
-  else if (queryParams.status) query.status = { $in: statusAliases(canonicalRequestStatus(queryParams.status)) };
+  // Dashboard drill-down: Track A1 requests with committed budget still waiting for a Purchase Order.
+  else if (queryParams.status === "PENDIENTE_OC") { query.flowType = "A1"; query.status = REQUEST_STATUS.BUDGET_COMMITTED; query.purchaseOrder = null; }
+  // A comma-separated list selects any of several statuses (e.g. DEVUELTO,OBSERVADO).
+  else if (queryParams.status) query.status = { $in: [...new Set(String(queryParams.status).split(",").map((value) => value.trim()).filter(Boolean).flatMap((value) => statusAliases(canonicalRequestStatus(value))))] };
   applyRenditionStatusFilter(query, queryParams.renditionStatus);
   if (queryParams.type || queryParams.requestType) query.requestType = queryParams.type || queryParams.requestType;
   if (queryParams.flowType) query.flowType = queryParams.flowType;

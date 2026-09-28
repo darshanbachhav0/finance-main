@@ -23,7 +23,7 @@ export const protect = asyncHandler(async (req, _res, next) => {
     }
 
     if ((decoded.tokenVersion || 0) !== (user.tokenVersion || 0)) throw new AppError(401, "Your credentials changed. Sign in again.");
-    if (user.passwordResetRequired && !["/api/auth/me", "/api/auth/change-password"].includes(req.originalUrl?.split("?")[0])) {
+    if (user.passwordResetRequired && !["/api/auth/me", "/api/auth/change-password", "/api/auth/logout"].includes(req.originalUrl?.split("?")[0])) {
       throw new AppError(403, "Change your initial password before using the platform.", undefined, "PASSWORD_CHANGE_REQUIRED");
     }
 

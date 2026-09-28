@@ -1,33 +1,20 @@
 import "dotenv/config";
 
+import mongoose from "mongoose";
+
 import { connectDB } from "./src/config/db.js";
 
 import { getSunatPadronStatus } from "./src/services/sunatPadronService.js";
 import { getSunatProvider } from "./src/services/sunatService.js";
 
 import app from "./src/app.js";
+import { startInProcessWorkers, usesPublicPadron as usesPublicPadronMode } from "./src/workers/inProcessWorkers.js";
 
 const PORT =
   process.env.PORT ||
   5000;
 
-const sunatMode =
-  String(
-    process.env
-      .SUNAT_PROVIDER_MODE ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-
-const usesPublicPadron =
-  [
-    "PADRON",
-    "PUBLIC_PADRON",
-    "PUBLIC-PADRON"
-  ].includes(
-    sunatMode
-  );
+const usesPublicPadron = usesPublicPadronMode();
 
 if (
   process.env.NODE_ENV ===
@@ -67,12 +54,12 @@ connectDB()
       usesPublicPadron
     ) {
       const status = await getSunatPadronStatus();
-      console.log(status.ready ? `[SUNAT PADRON] Local dataset ready (${status.manifest.datasetDate || "date unavailable"}). Updates run separately.` : "[SUNAT PADRON] No local dataset. Manual proposals remain available; taxpayer validation is pending.");
+      console.log(status.ready ? `[SUNAT PADRON] Local dataset ready (${status.manifest.datasetDate || "date unavailable"}). Updates run in the background worker.` : "[SUNAT PADRON] No local dataset. Manual proposals remain available; taxpayer validation is pending.");
     }
 
     warnIfSunatProviderMisconfigured();
 
-    app.listen(
+    const server = app.listen(
       PORT,
       () => {
         console.log(
@@ -80,6 +67,26 @@ connectDB()
         );
       }
     );
+
+    // Batch invoices, SLA escalation and the Padrón refresh run in this process (see
+    // src/workers/inProcessWorkers.js for the env flags that turn each one off).
+    const workers = await startInProcessWorkers();
+
+    let shuttingDown = false;
+    const shutdown = async (signal) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.log(`${signal} received: stopping background workers and HTTP server...`);
+      // Render allows ~30s between SIGTERM and SIGKILL; never hang past that on a slow batch.
+      const forceExit = setTimeout(() => process.exit(0), 25000);
+      forceExit.unref();
+      server.close();
+      await workers.stop();
+      await mongoose.disconnect().catch(() => {});
+      process.exit(0);
+    };
+    process.on("SIGTERM", () => { void shutdown("SIGTERM"); });
+    process.on("SIGINT", () => { void shutdown("SIGINT"); });
   })
   .catch((error) => {
     console.error(

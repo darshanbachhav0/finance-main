@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import mongoose from "mongoose";
-import { APPROVAL_STAGES, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { APPROVAL_STAGES, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, ROLES } from "../utils/constants.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -11,6 +11,9 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     passwordResetRequired: { type: Boolean, default: false },
     tokenVersion: { type: Number, default: 0 },
+    // Per-account sign-in lockout (authController.login).
+    failedLoginAttempts: { type: Number, default: 0, min: 0 },
+    lockedUntil: { type: Date, default: null },
     jefe: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     jobTitle: { type: String, trim: true },
     organizationalUnit: { type: String, trim: true },
@@ -36,6 +39,16 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ManagementViewer is portal-only and strictly read-only: it may never be granted any other
+// permission (in particular no write capability), whatever path saves the user.
+userSchema.pre("validate", function restrictManagementViewerPermissions(next) {
+  if (this.role === ROLES.MANAGEMENT_VIEWER) {
+    const disallowed = (this.permissions || []).filter((permission) => !MANAGEMENT_VIEWER_PERMISSIONS.includes(permission));
+    if (disallowed.length) this.invalidate("permissions", `ManagementViewer cannot be granted: ${disallowed.join(", ")}.`);
+  }
+  next();
+});
+
 userSchema.methods.comparePassword = function comparePassword(password) {
   return bcrypt.compare(password, this.passwordHash);
 };
@@ -43,6 +56,8 @@ userSchema.methods.comparePassword = function comparePassword(password) {
 userSchema.methods.toJSON = function toJSON() {
   const obj = this.toObject();
   delete obj.passwordHash;
+  delete obj.failedLoginAttempts;
+  delete obj.lockedUntil;
   return obj;
 };
 

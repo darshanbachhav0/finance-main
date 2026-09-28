@@ -13,7 +13,7 @@ import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
-import { dashboardMetricLink } from "../utils/dashboardLinks.js";
+import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
 
 const descriptions = {
   Admin: "System activity, workflow health, users, and master-data readiness.",
@@ -85,7 +85,7 @@ export default function Dashboard() {
     Treasury: ["A clear view of upcoming payments", "Review payment destinations, scheduled items and bank confirmations.", "/treasury", "Open Treasury"],
     Budget: ["Plan the year. Follow each month.", "Review annual availability, monthly allocations and budget exceptions.", "/budget", "Open Budget Control"],
     Management: ["See the institution’s financial position", "Explore spending, budget availability and work awaiting completion.", "/reports", "Open reports"],
-    Procurement: ["Keep approved requests moving to a Purchase Order", "Review requests awaiting an order, open orders, and invoices registered against them.", "/requests", "Review requests"]
+    Procurement: ["Keep approved requests moving to a Purchase Order", "Review requests awaiting an order, open orders, and invoices registered against them.", AWAITING_PURCHASE_ORDER_PATH, "Review requests"]
   }[summary?.role];
 
   return (

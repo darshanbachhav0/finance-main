@@ -3,23 +3,44 @@ import test from "node:test";
 import fs from "node:fs";
 import { managementOpenApi } from "../src/docs/managementOpenApi.js";
 import { assertSafeManagementPayload, managementEnvelope, parseManagementFilters } from "../src/services/externalManagementService.js";
-import { PERMISSIONS, ROLE_PERMISSIONS, ROLES } from "../src/utils/constants.js";
-import { hasPermission } from "../src/utils/permissions.js";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import app from "../src/app.js";
+import { createUser } from "../src/controllers/userController.js";
+import User from "../src/models/User.js";
+import { MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, ROLE_PERMISSIONS, ROLES } from "../src/utils/constants.js";
+import { hasPermission, permissionsFor } from "../src/utils/permissions.js";
 
-test("ManagementViewer is read-only: dashboards/reports/audit permissions, never a mutation permission", () => {
-  assert.deepEqual(ROLE_PERMISSIONS[ROLES.MANAGEMENT_VIEWER], [PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.AUDIT_VIEW]);
+test("ManagementViewer is portal-only: the management-portal permission and nothing else", () => {
+  assert.deepEqual(ROLE_PERMISSIONS[ROLES.MANAGEMENT_VIEWER], [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
+  assert.deepEqual(MANAGEMENT_VIEWER_PERMISSIONS, [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
   assert.equal(hasPermission(ROLES.MANAGEMENT_VIEWER, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
-  assert.equal(hasPermission(ROLES.MANAGEMENT_VIEWER, PERMISSIONS.REPORT_VIEW), true);
-  assert.equal(hasPermission(ROLES.MANAGEMENT_VIEWER, PERMISSIONS.AUDIT_VIEW), true);
-  // Every remaining permission is either a write/mutation capability or a broad
-  // per-request view the role must not have - none of them should be granted.
-  const readOnlyGranted = new Set([PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.AUDIT_VIEW]);
   for (const permission of Object.values(PERMISSIONS)) {
-    if (readOnlyGranted.has(permission)) continue;
+    if (permission === PERMISSIONS.MANAGEMENT_PORTAL_VIEW) continue;
     assert.equal(hasPermission(ROLES.MANAGEMENT_VIEWER, permission), false, `ManagementViewer must not have ${permission}`);
   }
+  // A stored extra grant (legacy data) never widens the role.
+  const legacyViewer = { role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.REPORT_VIEW, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.USER_MANAGE] };
+  assert.deepEqual(permissionsFor(legacyViewer), [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
+  // Other roles keep additive custom permissions.
+  assert.equal(hasPermission({ role: ROLES.BUDGET, permissions: [PERMISSIONS.AUDIT_VIEW] }, PERMISSIONS.AUDIT_VIEW), true);
   assert.equal(hasPermission(ROLES.MANAGEMENT, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
   assert.equal(hasPermission(ROLES.ADMIN, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
+});
+
+test("a ManagementViewer can never be saved with any other permission", async () => {
+  const viewer = new User({ name: "Viewer", dni: "44444444", passwordHash: "unused", role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.REQUEST_APPROVE] });
+  const error = await viewer.validate().then(() => null, (caught) => caught);
+  assert.equal(error?.name, "ValidationError");
+  assert.match(error.errors.permissions.message, /request:approve/);
+  await new User({ name: "Viewer", dni: "44444445", passwordHash: "unused", role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW] }).validate();
+  await new User({ name: "Budget", dni: "44444446", passwordHash: "unused", role: ROLES.BUDGET, permissions: [PERMISSIONS.AUDIT_VIEW] }).validate();
+
+  const res = { status() { return this; }, json() { return this; } };
+  let caught;
+  await createUser({ user: { _id: "admin" }, body: { name: "Viewer", dni: "44444447", password: "Long-Enough-1!", role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.REPORT_VIEW] } }, res, (err) => { caught = err; });
+  assert.equal(caught?.statusCode, 422);
+  assert.deepEqual(caught.details.disallowed, [PERMISSIONS.REPORT_VIEW]);
 });
 
 test("management filters accept bounded reporting scopes and reject query-shaped values", () => {
@@ -33,21 +54,42 @@ test("management filters accept bounded reporting scopes and reject query-shaped
   assert.throws(() => parseManagementFilters({ area: "$where" }), /area/);
 });
 
-test("internal API gate is mounted after the external management API and admits ManagementViewer read-only", () => {
+test("internal API gate is mounted after the external management API and excludes ManagementViewer", () => {
   const source = fs.readFileSync(new URL("../src/routes/index.js", import.meta.url), "utf8");
   const managementIndex = source.indexOf('router.use("/management/v1", externalManagementRoutes)');
   const internalGateIndex = source.indexOf("router.use(protect, authorize(");
   const requestIndex = source.indexOf('router.use("/requests", requestRoutes)');
   assert.ok(managementIndex >= 0 && internalGateIndex > managementIndex && requestIndex > internalGateIndex);
-  const gateClause = source.slice(internalGateIndex, requestIndex);
+  const gateClause = source.slice(internalGateIndex, source.indexOf(";", internalGateIndex));
   assert.match(gateClause, /ROLES\.MANAGEMENT\b/);
-  // ManagementViewer is now admitted past the outer gate (it has real, if narrow, internal
-  // read-only screens) - but nothing beyond this single blanket gate grants it further access;
-  // per-route authorize()/authorizePermission() calls throughout the API still decide what it
-  // can actually reach, and it must never appear alongside a write-capable role list there.
-  assert.match(gateClause, /ROLES\.MANAGEMENT_VIEWER/);
-  const requestRoutesSource = fs.readFileSync(new URL("../src/routes/requestRoutes.js", import.meta.url), "utf8");
-  assert.equal(requestRoutesSource.includes("ROLES.MANAGEMENT_VIEWER"), false, "ManagementViewer must not appear on any request-mutation route");
+  // Portal-only: the viewer never passes the internal gate (no Reports, dashboards, audit, requests).
+  assert.equal(gateClause.includes("ROLES.MANAGEMENT_VIEWER"), false);
+  for (const file of ["reportRoutes.js", "requestRoutes.js", "dashboardRoutes.js"]) {
+    const routeSource = fs.readFileSync(new URL(`../src/routes/${file}`, import.meta.url), "utf8");
+    assert.equal(/authorize\([^)]*ROLES\.MANAGEMENT_VIEWER/.test(routeSource), false, `${file} must not admit ManagementViewer`);
+  }
+});
+
+test("ManagementViewer reaches the portal API but is refused internal reports over HTTP", { timeout: 60000 }, async () => {
+  const database = `erp_management_viewer_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`, { serverSelectionTimeoutMS: 5000 });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.on("listening", resolve));
+  try {
+    const viewer = await User.create({ name: "Portal viewer", dni: "55555555", passwordHash: "unused", role: ROLES.MANAGEMENT_VIEWER });
+    const management = await User.create({ name: "Management", dni: "55555556", passwordHash: "unused", role: ROLES.MANAGEMENT });
+    const token = (user) => jwt.sign({ id: user._id }, process.env.JWT_SECRET || "dev_secret_change_me");
+    const get = async (path, user) => (await fetch(`http://127.0.0.1:${server.address().port}/api${path}`, { headers: { Authorization: `Bearer ${token(user)}` } })).status;
+    assert.equal(await get("/management/v1/overview", viewer), 200);
+    for (const path of ["/reports/management", "/reports/management/export", "/reports/management/exports", "/dashboard/summary", "/dashboard/tasks", "/requests", "/notifications"]) {
+      assert.equal(await get(path, viewer), 403, `${path} is internal`);
+    }
+    assert.equal(await get("/reports/management", management), 200);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
 });
 
 test("management response guard blocks transaction and identity fields", () => {

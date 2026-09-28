@@ -1,8 +1,14 @@
 @echo off
 
 rem ============================================================
-rem UMA FINANCE - FINAL ONE-CLICK PUBLIC DEPLOYMENT
+rem UMA FINANCE - DEMO-ONLY PUBLIC LAUNCHER (ngrok)
 rem ============================================================
+rem
+rem DEMO ONLY. This is NOT the production deployment.
+rem Production runs on Render (render.yaml, docs/OPERATIONS.md).
+rem This launcher exposes a laptop-hosted copy with demo data
+rem through a temporary ngrok link for presentations only.
+rem Never load real university data into it.
 rem
 rem Put this BAT file in:
 rem finance-main\
@@ -10,20 +16,24 @@ rem
 rem This launcher starts:
 rem
 rem 1. Docker Desktop
-rem 2. Isolated MongoDB
+rem 2. Isolated MongoDB (127.0.0.1 only, authentication on)
 rem 3. SUNAT Public Padron synchronization
 rem 4. Database
 rem 5. Frontend production build
 rem 6. ngrok
-rem 7. Production server
-rem 8. A2 batch worker
-rem 9. Health check
+rem 7. Server (runs the A2 batch worker and the SLA
+rem    escalation worker in-process)
+rem 8. Health check
 rem
 rem App port:
 rem 5175
 rem
 rem MongoDB port:
-rem 27018
+rem 127.0.0.1:27018 (never published on the network)
+rem
+rem MongoDB credentials:
+rem user uma_demo_admin, password generated on first run and
+rem stored only in .uma-local-mongo-password (not committed)
 rem
 rem Database:
 rem uma_finance_triple_track_fresh
@@ -36,7 +46,7 @@ rem ============================================================
 
 if /I "%~1"=="__UMA_INNER__" goto :MAIN
 
-start "UMA Finance - Public Deployment" cmd.exe /k ""%~f0" __UMA_INNER__"
+start "UMA Finance - DEMO Public Launcher" cmd.exe /k ""%~f0" __UMA_INNER__"
 
 exit /b 0
 
@@ -45,7 +55,7 @@ exit /b 0
 
 setlocal EnableExtensions
 
-title UMA Finance - Public Deployment
+title UMA Finance - DEMO Public Launcher
 
 color 0A
 
@@ -58,7 +68,11 @@ set "PROJECT_DIR=%~dp0"
 
 set "APP_PORT=5175"
 
-set "MONGO_CONTAINER=uma-finance-triple-mongo"
+rem Secured container (127.0.0.1 binding + auth). The previous,
+rem unauthenticated container name is migrated automatically.
+set "MONGO_CONTAINER=uma-finance-triple-mongo-auth"
+
+set "LEGACY_MONGO_CONTAINER=uma-finance-triple-mongo"
 
 set "MONGO_VOLUME=uma_finance_triple_mongo_data"
 
@@ -66,7 +80,9 @@ set "MONGO_PORT=27018"
 
 set "MONGO_DB=uma_finance_triple_track_fresh"
 
-set "MONGODB_URI=mongodb://127.0.0.1:%MONGO_PORT%/%MONGO_DB%"
+set "MONGO_USER=uma_demo_admin"
+
+set "MONGO_PASSWORD_FILE=%PROJECT_DIR%.uma-local-mongo-password"
 
 set "URL_FILE=%TEMP%\uma_finance_public_url.txt"
 
@@ -85,12 +101,15 @@ cls
 
 
 echo ============================================================
-echo             UMA FINANCE - PUBLIC DEPLOYMENT
+echo        UMA FINANCE - DEMO-ONLY PUBLIC LAUNCHER
 echo ============================================================
+echo.
+echo  DEMO ONLY - production runs on Render, not on this PC.
+echo  Use demo data only. The ngrok link is temporary.
 echo.
 echo Project : %PROJECT_DIR%
 echo App port: %APP_PORT%
-echo MongoDB : localhost:%MONGO_PORT%
+echo MongoDB : 127.0.0.1:%MONGO_PORT% (authentication on)
 echo Database: %MONGO_DB%
 echo SUNAT   : Official Public Padron + Consulta RUC
 echo.
@@ -179,19 +198,123 @@ echo.
 
 
 rem ============================================================
+rem MONGODB PASSWORD (generated locally, never committed)
+rem ============================================================
+
+set "MONGO_PASSWORD_CREATED="
+
+if exist "%MONGO_PASSWORD_FILE%" goto :MONGO_PASSWORD_EXISTS
+
+
+echo       Creating local MongoDB password...
+
+
+node -e "process.stdout.write(require('crypto').randomBytes(24).toString('hex'))" > "%MONGO_PASSWORD_FILE%"
+
+
+if errorlevel 1 goto :MONGO_PASSWORD_ERROR
+
+
+set "MONGO_PASSWORD_CREATED=1"
+
+
+
+:MONGO_PASSWORD_EXISTS
+
+set "MONGO_PASSWORD="
+
+
+set /p "MONGO_PASSWORD="<"%MONGO_PASSWORD_FILE%"
+
+
+if not defined MONGO_PASSWORD goto :MONGO_PASSWORD_ERROR
+
+
+set "MONGO_SHELL_AUTH=-u %MONGO_USER% -p %MONGO_PASSWORD% --authenticationDatabase admin"
+
+set "MONGODB_URI=mongodb://%MONGO_USER%:%MONGO_PASSWORD%@127.0.0.1:%MONGO_PORT%/%MONGO_DB%?authSource=admin"
+
+
+
+rem ============================================================
 rem STEP 2 - ISOLATED MONGODB
 rem ============================================================
 
-echo [2/9] Starting isolated MongoDB...
+echo [2/9] Starting isolated MongoDB (127.0.0.1 only, auth on)...
 
 
 docker inspect "%MONGO_CONTAINER%" >nul 2>&1
 
 
-if errorlevel 1 goto :CREATE_MONGO
+if errorlevel 1 goto :CHECK_LEGACY_MONGO
+
+
+rem A secured container whose password file was deleted cannot be
+rem opened with a newly generated password.
+if defined MONGO_PASSWORD_CREATED goto :MONGO_PASSWORD_LOST
 
 
 goto :START_EXISTING_MONGO
+
+
+
+:CHECK_LEGACY_MONGO
+
+docker inspect "%LEGACY_MONGO_CONTAINER%" >nul 2>&1
+
+
+if errorlevel 1 goto :CREATE_MONGO
+
+
+rem ------------------------------------------------------------
+rem Migrate the old container (published on 0.0.0.0, no auth):
+rem add the admin user to its data, remove the container, and
+rem recreate it on the same volume bound to 127.0.0.1 with auth.
+rem ------------------------------------------------------------
+
+echo       Securing the existing demo MongoDB...
+echo       (binding to 127.0.0.1 and enabling authentication)
+
+
+docker start "%LEGACY_MONGO_CONTAINER%" >nul 2>&1
+
+
+if errorlevel 1 goto :MONGO_SECURE_ERROR
+
+
+for /L %%I in (1,1,45) do (
+    docker exec "%LEGACY_MONGO_CONTAINER%" mongosh --quiet --eval "db.runCommand({ping:1})" >nul 2>&1
+
+    if not errorlevel 1 goto :LEGACY_MONGO_READY
+
+    timeout /t 2 /nobreak >nul
+)
+
+
+goto :MONGO_SECURE_ERROR
+
+
+
+:LEGACY_MONGO_READY
+
+docker exec "%LEGACY_MONGO_CONTAINER%" mongosh --quiet admin --eval "if (db.getUser('%MONGO_USER%')) { db.changeUserPassword('%MONGO_USER%', '%MONGO_PASSWORD%') } else { db.createUser({ user: '%MONGO_USER%', pwd: '%MONGO_PASSWORD%', roles: [{ role: 'root', db: 'admin' }] }) }" >nul
+
+
+if errorlevel 1 goto :MONGO_SECURE_ERROR
+
+
+docker stop "%LEGACY_MONGO_CONTAINER%" >nul 2>&1
+
+docker rm "%LEGACY_MONGO_CONTAINER%" >nul 2>&1
+
+
+if errorlevel 1 goto :MONGO_SECURE_ERROR
+
+
+echo       Old container removed. Data volume kept: %MONGO_VOLUME%
+
+
+goto :MONGO_VOLUME_READY
 
 
 
@@ -223,7 +346,10 @@ if errorlevel 1 goto :MONGO_VOLUME_ERROR
 echo       Creating MongoDB container...
 
 
-docker run -d --name "%MONGO_CONTAINER%" --restart unless-stopped -p %MONGO_PORT%:27017 -v "%MONGO_VOLUME%:/data/db" mongo:7 >nul
+rem -p 127.0.0.1:... keeps MongoDB off the LAN. MONGO_INITDB_* create
+rem the admin user on a fresh volume; --auth enforces credentials
+rem on an existing volume as well.
+docker run -d --name "%MONGO_CONTAINER%" --restart unless-stopped -p 127.0.0.1:%MONGO_PORT%:27017 -e MONGO_INITDB_ROOT_USERNAME=%MONGO_USER% -e MONGO_INITDB_ROOT_PASSWORD=%MONGO_PASSWORD% -v "%MONGO_VOLUME%:/data/db" mongo:7 --auth >nul
 
 
 if errorlevel 1 goto :MONGO_CREATE_ERROR
@@ -254,7 +380,7 @@ echo       Waiting for MongoDB to become ready...
 
 
 for /L %%I in (1,1,45) do (
-    docker exec "%MONGO_CONTAINER%" mongosh --quiet --eval "db.runCommand({ping:1})" >nul 2>&1
+    docker exec "%MONGO_CONTAINER%" mongosh --quiet %MONGO_SHELL_AUTH% --eval "db.runCommand({ping:1})" >nul 2>&1
 
     if not errorlevel 1 goto :MONGO_READY
 
@@ -269,7 +395,7 @@ goto :MONGO_TIMEOUT
 :MONGO_READY
 
 echo       MongoDB is ready.
-echo       Port    : %MONGO_PORT%
+echo       Address : 127.0.0.1:%MONGO_PORT% (authentication on)
 echo       Database: %MONGO_DB%
 echo.
 
@@ -342,6 +468,21 @@ set "BATCH_INVOICE_STALE_MINUTES=15"
 
 set "BATCH_INVOICE_INLINE_PROCESSING=false"
 
+rem Background workers run inside the server process
+rem (backend/src/workers/inProcessWorkers.js). The Padron refresh
+rem stays with the separate updater started in step 4.
+set "BATCH_INVOICE_WORKER_ENABLED=true"
+
+set "SLA_WORKER_ENABLED=true"
+
+set "SUNAT_PADRON_WORKER_ENABLED=false"
+
+set "SLA_DUE_SOON_HOURS=4"
+
+set "SLA_ESCALATION_HOURS=24"
+
+set "SLA_POLL_MS=60000"
+
 set "BATCH_MAX_ENTRIES=500"
 
 set "BATCH_MAX_ENTRY_BYTES=10485760"
@@ -367,7 +508,49 @@ echo       Creating local JWT secret...
 node -e "process.stdout.write(require('crypto').randomBytes(48).toString('hex'))" > "%JWT_FILE%"
 
 
-if errorlevel 1 goto :JWT_ERROR
+if errorlevel 1 goto :MONGO_PASSWORD_ERROR
+
+echo.
+echo [ERROR] Could not create or read the local MongoDB password.
+echo.
+echo File:
+echo     %MONGO_PASSWORD_FILE%
+echo.
+goto :FAIL
+
+
+
+:MONGO_PASSWORD_LOST
+
+echo.
+echo [ERROR] The secured MongoDB container exists but its password
+echo         file was missing, so a new password was generated.
+echo.
+echo Restore the original file:
+echo     %MONGO_PASSWORD_FILE%
+echo.
+echo or, to start over with an EMPTY demo database, run:
+echo     docker rm -f %MONGO_CONTAINER%
+echo     docker volume rm %MONGO_VOLUME%
+echo.
+del /q "%MONGO_PASSWORD_FILE%" >nul 2>&1
+goto :FAIL
+
+
+
+:MONGO_SECURE_ERROR
+
+echo.
+echo [ERROR] Could not secure the existing demo MongoDB container:
+echo     %LEGACY_MONGO_CONTAINER%
+echo.
+docker logs --tail 30 "%LEGACY_MONGO_CONTAINER%" 2>nul
+echo.
+goto :FAIL
+
+
+
+:JWT_ERROR
 
 
 
@@ -462,7 +645,7 @@ echo [5/9] Checking isolated UMA database...
 del /q "%COUNT_FILE%" >nul 2>&1
 
 
-docker exec "%MONGO_CONTAINER%" mongosh --quiet "mongodb://127.0.0.1:27017/%MONGO_DB%" --eval "print(db.users.countDocuments({}))" > "%COUNT_FILE%" 2>nul
+docker exec "%MONGO_CONTAINER%" mongosh --quiet %MONGO_SHELL_AUTH% "mongodb://127.0.0.1:27017/%MONGO_DB%" --eval "print(db.users.countDocuments({}))" > "%COUNT_FILE%" 2>nul
 
 
 if errorlevel 1 goto :DATABASE_CHECK_ERROR
@@ -550,10 +733,10 @@ echo       Stopping previous app instance if present...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$items=Get-NetTCPConnection -LocalPort %APP_PORT% -State Listen -ErrorAction SilentlyContinue; foreach($item in $items){$id=$item.OwningProcess; if($id -and $id -ne $PID){Stop-Process -Id $id -Force -ErrorAction SilentlyContinue}}" >nul 2>&1
 
 
-echo       Stopping previous batch worker if present...
+echo       Stopping previous standalone workers if present...
 
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$items=Get-CimInstance Win32_Process -ErrorAction SilentlyContinue; foreach($item in $items){if($item.Name -eq 'node.exe' -and $item.CommandLine -like '*batchInvoiceWorker.js*'){Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue}}" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$items=Get-CimInstance Win32_Process -ErrorAction SilentlyContinue; foreach($item in $items){if($item.Name -eq 'node.exe' -and ($item.CommandLine -like '*batchInvoiceWorker.js*' -or $item.CommandLine -like '*slaWorker.js*')){Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue}}" >nul 2>&1
 
 
 echo       Stopping previous ngrok process if present...
@@ -626,25 +809,16 @@ set "NODE_ENV=production"
 
 
 rem ============================================================
-rem STEP 8 - START PRODUCTION SERVER AND BATCH WORKER
+rem STEP 8 - START DEMO SERVER (WITH BATCH AND SLA WORKERS)
 rem ============================================================
 
-echo [8/9] Starting UMA Finance services...
+echo [8/9] Starting UMA Finance demo server...
 
 
-echo       Starting Production Server...
+echo       Starting server (A2 batch + SLA workers in-process)...
 
 
-start "UMA Finance - Production Server" cmd.exe /k "npm run start:public"
-
-
-timeout /t 3 /nobreak >nul
-
-
-echo       Starting A2 Batch Worker...
-
-
-start "UMA Finance - Batch Worker" cmd.exe /k "npm run worker:batch"
+start "UMA Finance - DEMO Server" cmd.exe /k "npm run start:public"
 
 
 echo.
@@ -726,7 +900,7 @@ cls
 
 echo ============================================================
 echo.
-echo                  DEPLOYMENT IS ONLINE
+echo              DEMO IS ONLINE (DEMO ONLY)
 echo.
 echo ============================================================
 echo.
@@ -744,8 +918,9 @@ echo ============================================================
 echo.
 echo DATABASE:
 echo.
-echo     MongoDB : localhost:%MONGO_PORT%
+echo     MongoDB : 127.0.0.1:%MONGO_PORT% (authentication on)
 echo     Database: %MONGO_DB%
+echo     Password: .uma-local-mongo-password (keep private)
 echo.
 echo ============================================================
 echo.
@@ -791,15 +966,16 @@ echo     for authoritative invoice-level SUNAT validation.
 echo.
 echo ============================================================
 echo.
-echo A2 BATCH PROCESSING:
+echo BACKGROUND WORKERS (inside the demo server):
 echo.
-echo     Batch Worker: RUNNING
+echo     A2 Batch Worker     : RUNNING
+echo     SLA Escalation      : RUNNING
 echo.
 echo ============================================================
 echo.
 echo PUBLIC LINK COPIED TO CLIPBOARD
 echo.
-echo You can send this URL to your friends:
+echo DEMO ONLY - share this temporary URL only with demo viewers:
 echo.
 echo     %PUBLIC_URL%
 echo.
@@ -809,8 +985,7 @@ echo IMPORTANT:
 echo.
 echo - Keep this PC powered on.
 echo - Keep Docker Desktop running.
-echo - Keep the Production Server window running.
-echo - Keep the Batch Worker window running.
+echo - Keep the DEMO Server window running.
 echo - Keep the ngrok window running.
 echo.
 echo - Do NOT close Chromium while SUNAT representative lookup
@@ -831,7 +1006,7 @@ echo.
 echo Press any key to close THIS launcher window.
 echo.
 echo Closing this launcher window will NOT stop the server,
-echo worker, MongoDB, or ngrok.
+echo MongoDB, or ngrok.
 echo.
 
 
@@ -1139,7 +1314,7 @@ echo     http://localhost:%APP_PORT%
 echo.
 echo Check the window named:
 echo.
-echo     UMA Finance - Production Server
+echo     UMA Finance - DEMO Server
 echo.
 echo That window should show the exact backend error.
 echo.
