@@ -56,6 +56,8 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     const nonDeductible = await ExpenseType.create({ code: "TC-ND", name: "Undocumented expense", category: "NON_DEDUCTIBLE", accountingClass: "NON_DEDUCTIBLE", accountNumber: "659901", deductible: false, permittedRequestTypes: [REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO], active: true });
     const owner = await User.create({ name: "Track C Employee", dni: "44556677", employeeCode: "UMA-TC-1", email: "tc.owner@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id, authorizedCostCenters: [center._id] });
     const director = await User.create({ name: "Track C Director", email: "tc.director@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["*"], area: "Operations" });
+    owner.jefe = director._id;
+    await owner.save();
     const accounting = await User.create({ name: "Track C Accounting", email: "tc.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const accounting2 = await User.create({ name: "Track C Accounting 2", email: "tc.accounting2@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "Track C Treasury", email: "tc.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
@@ -80,7 +82,7 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
       },
       files: {}, user: owner, req
     });
-    const approve = async (request) => (await decideApproval({ id: request._id, action: "APPROVE", comments: "Approved", user: director, req })).request;
+    const approve = async (request) => (await decideApproval({ id: request._id, action: "APPROVE", comments: "Approved", forward: false, user: director, req })).request;
 
     await t.test("5. nobody verifies their own reimbursement bank account or details they entered", async () => {
       const own = await createEmployeeReimbursementBankAccount({ payload: { ownerId: String(accounting._id), bank: "BCP", currency: "PEN", accountHolderName: accounting.name, accountNumber: "1941000000091", cci: "00219410000000000091", preferred: true }, user: admin, req });

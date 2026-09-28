@@ -12,6 +12,9 @@ import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
+  "Pending with": "Pendiente de",
+  "This completes all request approvals and proceeds to budget control. Budget and accounting checks still apply.": "Esto completa todas las aprobaciones y pasa al control presupuestal. Se mantienen los controles de presupuesto y contabilidad.",
+  "Approval complete - Budget control": "Aprobacion completa - Control presupuestal",
   "Direct supervisor": "Jefe inmediato",
   "Job title": "Cargo",
   "New password": "Nueva contraseña",

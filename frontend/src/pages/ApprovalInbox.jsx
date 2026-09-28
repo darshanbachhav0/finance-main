@@ -84,15 +84,11 @@ export default function ApprovalInbox() {
         result: "This step is marked approved and your jefe decides next: finalize, or send it to their own jefe."
       } : {
         title: "Approve this request and finalize?",
-        description: row.approvalOptions?.remainingPolicyStages?.length
-          ? "This records your approval as final for the manager chain. The configured approval stages that still apply follow next."
-          : "This records your approval as final. No further manager will review it and the budget commitment runs automatically.",
+        description: "This completes all request approvals and proceeds to budget control. Budget and accounting checks still apply.",
         confirmLabel: "Approve and finalize",
         tone: "success",
         inputLabel: "Approval comments",
-        result: row.approvalOptions?.remainingPolicyStages?.length
-          ? `${t("Remaining configured stages:")} ${row.approvalOptions.remainingPolicyStages.map((stage) => t(stage)).join(", ")}`
-          : "The approval chain is closed and the budget is committed automatically."
+        result: "Approval complete - Budget control"
       }) : {
         title: "Approve this request?",
         description: directorStage

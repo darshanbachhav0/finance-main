@@ -77,6 +77,10 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
       admin: await User.create({ name: "Admin", email: "admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" })
     };
+    users.solicitor.jefe = users.director._id;
+    users.director.jefe = users.vice._id;
+    await users.solicitor.save();
+    await users.director.save();
     // No manager-chain identity is set up for this fixture (no jefe), so the approval
     // engine now requires a specifically configured route for this dimension - mirror
     // the previous hardcoded default (Area Director then Vice Rector) as a real rule.
@@ -144,7 +148,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     await t.test("2. submit complete request", async () => {
       request = await submitFinancialRequest({ id: request._id, user: users.solicitor, req, comments: "Submit" });
       assert.equal(request.status, REQUEST_STATUS.PENDING_APPROVAL);
-      assert.equal(request.approvalRouteSnapshot.length, 2);
+      assert.equal(request.approvalRouteSnapshot.length, 1);
     });
 
     await t.test("3. missing required attachment blocks submit", async () => {
@@ -190,18 +194,18 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     });
 
     await t.test("7. Director approval", async () => {
-      const result = await decideApproval({ id: request._id, action: "APPROVE", comments: "Director approved", user: users.director, req });
+      const result = await decideApproval({ id: request._id, action: "APPROVE", comments: "Director approved", forward: true, user: users.director, req });
       request = result.request;
       // The parent status never takes on an organization-specific label; it
       // stays PENDIENTE_APROBACION until the whole route is complete, while
       // the Director's decision is recorded in approvalHistory/route snapshot.
       assert.equal(request.status, REQUEST_STATUS.PENDING_APPROVAL);
-      assert.equal(request.approvalStage, "VICE_RECTOR");
-      assert.ok(request.approvalHistory.some((event) => event.action === "AREA_DIRECTOR_APPROVED"));
+      assert.equal(String(request.approvalRouteSnapshot.find(step => step.status === "PENDING").approverUser), String(users.vice._id));
+      assert.ok(request.approvalHistory.some((event) => event.action === "CHAIN_APPROVED_FORWARDED"));
     });
 
     await t.test("8. Vice Rector approval and transitional budget commitment", async () => {
-      const result = await decideApproval({ id: request._id, action: "APPROVE", comments: "Vice approved", user: users.vice, req });
+      const result = await decideApproval({ id: request._id, action: "APPROVE", comments: "Vice approved", forward: false, user: users.vice, req });
       request = result.request;
       assert.equal(request.status, REQUEST_STATUS.BUDGET_COMMITTED);
       assert.ok(request.budgetCommitment);

@@ -28,6 +28,7 @@ import "./supplierProposalValidation.test.js";
 import "./workflowStatus.test.js";
 import "./documentApprovalWorkflow.test.js";
 import "./managerChainApproval.test.js";
+import "./hierarchyFinalizationMigration.test.js";
 import "./authDni.test.js";
 import "./userIdentifiers.test.js";
 import "./budgetFiscalImprovements.test.js";

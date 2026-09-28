@@ -522,14 +522,11 @@ export async function approvalDecisionOptions(request) {
   const step = activeApprovalStep(request);
   if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) return { ...noChainOptions };
   const nextApprover = await nextChainApprover(request, step);
-  const remainingPolicyStages = [...(request.approvalRouteSnapshot || [])]
-    .filter((item) => item.sequence > step.sequence && item.required !== false && item.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN && ["PENDING", "NOT_REACHED"].includes(item.status))
-    .map((item) => item.approvalLevel);
   return {
     chain: true,
     canForward: Boolean(nextApprover),
     forwardTo: nextApprover ? { _id: nextApprover._id, name: nextApprover.name, jobTitle: nextApprover.jobTitle } : null,
-    remainingPolicyStages
+    remainingPolicyStages: []
   };
 }
 

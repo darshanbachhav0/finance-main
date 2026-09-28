@@ -232,7 +232,6 @@ export default function RequestDetail() {
   }, [id, permissions.canApprove, isChainApprovalStep, activeApprovalStep?._id]);
   const canForwardChain = isChainApprovalStep && Boolean(approvalOptions?.canForward);
   const forwardToName = approvalOptions?.forwardTo?.name || "";
-  const remainingPolicyStages = approvalOptions?.remainingPolicyStages || [];
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
@@ -356,15 +355,11 @@ export default function RequestDetail() {
         details: [details, ...(forwardToName ? [{ label: "Next approver", value: forwardToName }] : []), { label: "Result", value: "This step is marked approved and your jefe decides next: finalize, or send it to their own jefe." }]
       } : {
         title: "Approve this request and finalize?",
-        description: remainingPolicyStages.length
-          ? "This records your approval as final for the manager chain. The configured approval stages that still apply follow next."
-          : "This records your approval as final. No further manager will review it and the budget commitment runs automatically.",
+        description: "This completes all request approvals and proceeds to budget control. Budget and accounting checks still apply.",
         confirmLabel: "Approve and finalize",
         tone: "success",
         inputLabel: "Approval comments",
-        details: [details, remainingPolicyStages.length
-          ? { label: "Remaining configured stages:", value: remainingPolicyStages.map((stage) => t(stage)).join(", ") }
-          : { label: "Result", value: "The approval chain is closed and the budget is committed automatically." }]
+        details: [details, { label: "Result", value: "Approval complete - Budget control" }]
       }) : {
         title: "Approve this request?",
         description: "Record an authenticated electronic sign-off and advance the configured route.",
@@ -467,6 +462,7 @@ export default function RequestDetail() {
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1])}</a></div>}
       <div className="stage-row">
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
+        {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
       </div>
       <nav className="focus-tabs" aria-label={t("Request sections")}>{["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map(tab => { const TabIcon = tabIcons[tab]; return <button type="button" key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}><TabIcon size={15} aria-hidden="true" />{t(tab)}</button>; })}</nav>

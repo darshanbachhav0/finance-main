@@ -27,10 +27,11 @@ test("manager-chain approval routing", { timeout: 60000 }, async (t) => {
   const databaseName = `erp_manager_chain_${process.pid}_${Date.now()}`;
   await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
   try {
-    await t.test("a requester with no jefe falls back to the rule-based route", async () => {
+    await t.test("a requester without a jefe requires an explicit supervisor assignment", async () => {
       const requester = await makeUser({ dni: "90000001", name: "No Manager" });
       const route = await resolveManagerChain({ requester: requester._id });
       assert.equal(route, null);
+      await assert.rejects(initializeApprovalRoute({ requester: requester._id, flowType: "B" }), error => error.code === "APPROVAL_ROUTE_NOT_CONFIGURED");
     });
 
     await t.test("initializeApprovalRoute picks the manager chain when the requester has a jefe", async () => {
@@ -96,6 +97,21 @@ test("manager-chain approval routing", { timeout: 60000 }, async (t) => {
       ] };
       assert.equal((await finalizeChainApproval(request, activeApprovalStep(request), { _id: mid })).complete, true);
       assert.deepEqual(request.approvalRouteSnapshot.map((step) => step.status), ["APPROVED", "SKIPPED"]);
+    });
+
+    await t.test("all tracks finalize without a legacy Approver policy tail", async () => {
+      const jefe = await makeUser({ name: "All tracks jefe" });
+      const requester = await makeUser({ name: "All tracks requester", jefe: jefe._id });
+      for (const flowType of ["A1", "A2", "B", "C"]) {
+        const request = { requester: requester._id, flowType };
+        await initializeApprovalRoute(request);
+        assert.equal(request.approvalRouteSnapshot.length, 1);
+        request.approvalRouteSnapshot.push({ source: "RULE_BASED", role: "Approver", approvalLevel: "VICE_RECTOR", sequence: 2, status: "NOT_REACHED", required: true });
+        const result = await finalizeChainApproval(request, activeApprovalStep(request), jefe);
+        assert.equal(result.complete, true);
+        assert.equal(request.approvalRouteSnapshot[1].status, "SKIPPED");
+        assert.equal(request.approvalDueAt, null);
+      }
     });
 
     await t.test("the root of the chain cannot forward further", async () => {

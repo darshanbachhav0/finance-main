@@ -81,7 +81,7 @@ export async function resolveApprovalRoute(request, { configuredOnly = false } =
     // contain unrelated higher-value stages.
     if (request.flowType !== FLOW_TYPE.B) return rules;
   }
-  if (configuredOnly && request.flowType !== FLOW_TYPE.B) return [];
+  if (configuredOnly) return [];
   if (request.flowType === FLOW_TYPE.B) {
     return defaultApprovalRouteForFlow(FLOW_TYPE.B);
   }
@@ -167,8 +167,7 @@ function chainStep(jefe, { sequence, startedAt }) {
 // The manager chain is resolved by identity, not by role/area membership: a
 // request's approval path is always the requester's real organizational chain
 // (jefe, jefe's jefe, and so on). Requesters without a jefe (not yet imported
-// from the org roster, or admin-created accounts) fall back to the rule-based
-// route untouched.
+// from the org roster, or admin-created accounts) must have a supervisor assigned.
 //
 // Flexible chain: only the first available jefe is placed on the route at
 // submission. At every chain step the approver either finalizes the approval
@@ -192,13 +191,6 @@ export async function resolveManagerChain(request) {
 export async function initializeApprovalRoute(request) {
   const chain = await resolveManagerChain(request);
   if (chain) {
-    // Organizational identity never exempts a request from configured authority:
-    // policy stages follow the chain and are skipped only when someone who
-    // approved in the chain already holds that authority (finalizeChainApproval).
-    const rules = await resolveApprovalRoute(request, { configuredOnly: true });
-    for (const rule of rules.filter(rule => rule.required !== false)) {
-      chain.push({ rule: rule.rule?._id || rule.rule || rule._id, approvalLevel: rule.approvalLevel, role: rule.role, sequence: chain.length + 1, slaHours: rule.slaHours, required: true, status: "NOT_REACHED", source: APPROVAL_ROUTING_MODE.RULE_BASED });
-    }
     request.approvalRoutingMode = APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
     request.approvalRouteSnapshot = chain;
     const first = activeApprovalStep(request);
@@ -207,47 +199,11 @@ export async function initializeApprovalRoute(request) {
     return request.approvalRouteSnapshot;
   }
 
-  // No manager-chain identity exists for this requester (jefe not set in the organizational
-  // roster). That is a master-data gap, not grounds to silently fall back to the generic
-  // hardcoded default route - proceed only when a specifically configured ApprovalRule exists
-  // for this exact area/type/flow/amount dimension (a real, deliberate exception), or when the
-  // flow itself always defines its own default (Track B's expedited path already does, inside
-  // resolveApprovalRoute). Otherwise this is a configuration error the requester cannot resolve.
-  const configuredRules = await resolveApprovalRoute(request, { configuredOnly: true });
-  if (!configuredRules.length) {
-    throw new AppError(
-      422,
-      "This requester has no assigned supervisor in the organizational roster, and no approval rule is configured for this request's area, type, and flow. Fix the organizational roster (assign a supervisor) or configure an approval rule before this request can be submitted.",
-      { area: request.requesterArea || request.requestingArea, requestType: request.requestType, flowType: request.flowType },
-      ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED
-    );
-  }
-  request.approvalRoutingMode = APPROVAL_ROUTING_MODE.RULE_BASED;
-  const rules = configuredRules;
-  const startedAt = new Date();
-  request.approvalRouteSnapshot = rules.map((rule, index) => ({
-    rule: rule.rule?._id || rule.rule || rule._id,
-    approvalLevel: rule.approvalLevel,
-    role: rule.role,
-    sequence: rule.sequence,
-    slaHours: rule.slaHours,
-    required: rule.required !== false,
-    status: rule.required === false ? "SKIPPED" : "PENDING",
-    startedAt: index === 0 && rule.required !== false ? startedAt : undefined,
-    dueAt: index === 0 && rule.required !== false ? dueDate(rule.slaHours, startedAt) : undefined,
-    completedAt: undefined,
-    completedBy: undefined,
-    source: APPROVAL_ROUTING_MODE.RULE_BASED
-  }));
-  const first = activeApprovalStep(request);
-  if (first && !first.startedAt) {
-    first.startedAt = startedAt;
-    first.dueAt = dueDate(first.slaHours, startedAt);
-  }
-  request.approvalStage = first?.approvalLevel || APPROVAL_STAGES.COMPLETE;
-  request.approvalDueAt = first?.dueAt || null;
-  return request.approvalRouteSnapshot;
+  throw new AppError(422,
+    "Assign an active supervisor to this requester in User Administration before submitting. Requests without a jefe cannot be sent to a generic or demo approval account.",
+    { field: "jefe" }, ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED);
 }
+
 
 export function activeApprovalStep(request) {
   return [...(request.approvalRouteSnapshot || [])]
@@ -336,28 +292,18 @@ export async function activateNextChainStep(request, currentStep, decidingUser) 
 }
 
 // "Approve and finalize": completes the manager chain at this level, whatever the
-// level. Configured policy stages after the chain still apply, except those whose
-// authority (role + approval level) a chain approver who approved already holds.
+// level. Legacy policy tails are retained as explicit skips, not new approvals.
 export async function finalizeChainApproval(request, currentStep, decidingUser) {
   const completedAt = new Date();
   markApproved(currentStep, decidingUser, completedAt);
   skipLegacyChainLevels(request, currentStep, completedAt);
-  const approvers = await User.find({ _id: { $in: approvedChainApproverIds(request) } }).select("role approvalLevel").lean();
-  const remaining = bySequence(request).filter((step) => step.sequence > currentStep.sequence && step.required !== false && OPEN_STEP_STATUSES.includes(step.status));
-  for (const step of remaining) {
-    if (approvers.some((user) => user.role === step.role && user.approvalLevel === step.approvalLevel)) {
+  // The jefe's final decision supersedes only uncompleted legacy tail steps.
+  // Completed sign-offs and the original route remain available for audit.
+  for (const step of request.approvalRouteSnapshot || []) {
+    if (step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
       step.status = "SKIPPED";
       step.completedAt = completedAt;
     }
-  }
-  const next = remaining.find((step) => OPEN_STEP_STATUSES.includes(step.status));
-  if (next) {
-    next.status = "PENDING";
-    next.startedAt = completedAt;
-    next.dueAt = dueDate(next.slaHours, completedAt);
-    request.approvalStage = next.approvalLevel;
-    request.approvalDueAt = next.dueAt;
-    return { complete: false, next };
   }
   request.approvalStage = APPROVAL_STAGES.COMPLETE;
   request.approvalDueAt = null;

@@ -85,16 +85,13 @@ test("production control regressions", { timeout: 60000 }, async t => {
       assert.equal(String(activeApprovalStep(request).approverUser), String(manager._id));
       assert.ok(request.approvalDueAt instanceof Date);
     });
-    await t.test("configured management authority is added after hierarchy and cannot be skipped", async () => {
+    await t.test("hierarchy finalization is independent of configured role stages", async () => {
       await ApprovalRule.create({ name: "High-value Rectorate", role: "Management", approvalLevel: "RECTORATE", flowType: "A1", sequence: 1, slaHours: 8, amountFrom: 100 });
       const request = { requester: owner._id, flowType: "A1", requestType: "OPEX", totalAmount: 118 };
       await initializeApprovalRoute(request);
-      assert.equal(request.approvalRouteSnapshot.at(-1).approvalLevel, "RECTORATE");
-      // Finalizing the chain at the first level still leaves the configured stage.
-      const next = await finalizeChainApproval(request, activeApprovalStep(request), manager);
-      assert.equal(next.complete, false);
-      assert.equal(next.next.source, "RULE_BASED");
-      assert.equal(advanceApprovalRoute(request, root._id).complete, true);
+      assert.equal(request.approvalRouteSnapshot.length, 1);
+      assert.equal((await finalizeChainApproval(request, activeApprovalStep(request), manager)).complete, true);
+      assert.equal(activeApprovalStep(request), undefined);
     });
     await t.test("initial password is enforced, change is audited, and previous tokens are revoked", async () => {
       const signed = await call(login, { body: { dni: owner.dni, password: "InitialPassword!1" } });

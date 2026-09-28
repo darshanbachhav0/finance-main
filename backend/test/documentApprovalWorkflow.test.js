@@ -87,11 +87,8 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
         flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100,
         approvalRouteSnapshot: [{ rule: historicalRule, approvalLevel: "RECTORATE", role: "Management", sequence: 1, slaHours: 12, required: true, status: "RETURNED", completedAt: new Date(), completedBy: new mongoose.Types.ObjectId() }]
       };
-      await initializeApprovalRoute(resubmitted);
-      assert.deepEqual(resubmitted.approvalRouteSnapshot.map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
-      assert.ok(!resubmitted.approvalRouteSnapshot.some((step) => String(step.rule) === String(historicalRule)));
-      assert.equal(resubmitted.approvalRouteSnapshot[0].status, "PENDING");
-      assert.equal(resubmitted.approvalRouteSnapshot[0].completedAt, undefined);
+      await assert.rejects(initializeApprovalRoute(resubmitted), error => error.code === "APPROVAL_ROUTE_NOT_CONFIGURED");
+      assert.equal(String(resubmitted.approvalRouteSnapshot[0].rule), String(historicalRule), "failed submission preserves the previous snapshot");
     } finally {
       await mongoose.connection.dropDatabase();
       await mongoose.disconnect();
