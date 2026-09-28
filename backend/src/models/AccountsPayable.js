@@ -24,7 +24,57 @@ const accountsPayableSchema = new mongoose.Schema(
       number: String,
       documentDate: Date
     },
+    // Current payable amount: the invoice total adjusted by credit/debit notes applied to it.
     originalAmount: { type: Number, required: true, min: 0 },
+    // Invoice total as registered, before any credit/debit note adjustment.
+    invoiceAmount: { type: Number, min: 0 },
+    // PEN value posted by the provision journal (the source side of the period consolidation).
+    invoicePenEquivalent: { type: Number, min: 0 },
+    // Period the provision was posted in (the invoice/document date's period).
+    accountingPeriod: { type: String, match: /^\d{4}-\d{2}$/, index: true },
+    // false once the CXP is cancelled, so the same voucher identity can be registered again.
+    voucherActive: { type: Boolean, default: true },
+    sunatValidation: {
+      status: String,
+      manualException: {
+        reason: String,
+        evidenceReference: String,
+        approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        approvedAt: Date
+      }
+    },
+    adjustments: [{
+      kind: { type: String, enum: ["CREDIT_NOTE", "DEBIT_NOTE"], required: true },
+      sunatVoucher: { type: mongoose.Schema.Types.ObjectId, ref: "SunatVoucher" },
+      voucherType: String,
+      series: String,
+      number: String,
+      documentDate: Date,
+      amount: { type: Number, min: 0 },
+      appliedToPayable: { type: Number, min: 0, default: 0 },
+      supplierCreditAmount: { type: Number, min: 0, default: 0 },
+      supplierCredit: { type: mongoose.Schema.Types.ObjectId, ref: "SupplierCredit" },
+      penEquivalent: { type: Number, min: 0 },
+      journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" },
+      period: String,
+      at: { type: Date, default: Date.now },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    }],
+    supplierCreditApplications: [{
+      supplierCredit: { type: mongoose.Schema.Types.ObjectId, ref: "SupplierCredit" },
+      amount: { type: Number, min: 0 },
+      journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" },
+      at: { type: Date, default: Date.now },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    }],
+    cancellation: {
+      reason: String,
+      period: String,
+      penEquivalent: Number,
+      journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" },
+      at: Date,
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
     currency: { type: String, enum: CURRENCY, required: true },
     exchangeRate: { type: Number, required: true, min: 0 },
     exchangeRateEvidence: mongoose.Schema.Types.Mixed,
@@ -95,13 +145,16 @@ accountsPayableSchema.index(
   },
   {
     unique: true,
+    // Only active (non-cancelled) payables hold the voucher identity. Existing databases must drop
+    // the previous "accounts_payable_voucher_unique" index once (see docs/OPERATIONS.md).
     partialFilterExpression: {
       supplierIdentifierSnapshot: { $type: "string" },
       "voucher.voucherType": { $type: "string" },
       "voucher.series": { $type: "string" },
-      "voucher.number": { $type: "string" }
+      "voucher.number": { $type: "string" },
+      voucherActive: true
     },
-    name: "accounts_payable_voucher_unique"
+    name: "accounts_payable_active_voucher_unique"
   }
 );
 

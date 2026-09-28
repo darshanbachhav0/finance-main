@@ -1,7 +1,7 @@
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
-import { Download, Eye, FileCheck2, RefreshCw } from "lucide-react";
+import { Download, Eye, FileCheck2, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/client.js";
@@ -33,6 +33,27 @@ export default function AccountingEntries() {
   const entriesTable = usePaginatedResource("/accounting/entries", { fixedParams: { period } });
   const pendingTable = usePaginatedResource("/accounting/pending", { fixedParams: { period } });
   const historyTable = usePaginatedResource("/accounting/exports");
+  const sunatTable = usePaginatedResource("/accounting/sunat-observations");
+  const [exceptionTarget, setExceptionTarget] = useState(null);
+  const [exceptionForm, setExceptionForm] = useState({ reason: "", evidenceReference: "" });
+  const [exceptionSaving, setExceptionSaving] = useState(false);
+
+  function openException(row) { setExceptionForm({ reason: "", evidenceReference: "" }); setExceptionTarget(row); }
+
+  async function approveException(event) {
+    event.preventDefault();
+    if (!exceptionForm.reason.trim()) return;
+    setExceptionSaving(true);
+    try {
+      const requestId = exceptionTarget.request?._id || exceptionTarget.request;
+      const response = await api.post(`/requests/${requestId}/invoice/${exceptionTarget._id}/manual-sunat-override`, { reason: exceptionForm.reason.trim(), evidenceReference: exceptionForm.evidenceReference.trim() });
+      notify(response.data.provisioned ? "Manual SUNAT exception approved. The invoice was posted and its CXP created." : response.data.detail ? `${t("Manual SUNAT exception approved. The invoice could not be posted yet:")} ${response.data.detail}` : "Manual SUNAT exception approved. Process the request again to post the invoice.", response.data.provisioned || !response.data.detail ? "success" : "warning");
+      setExceptionTarget(null);
+      load();
+      sunatTable.reload();
+    } catch (err) { setActionError(err.message); notify(err.message, "error"); }
+    finally { setExceptionSaving(false); }
+  }
   const entries = entriesTable.rows;
   const pending = pendingTable.rows;
   const history = historyTable.rows;
@@ -93,7 +114,7 @@ export default function AccountingEntries() {
   function openFiscalProcessing(request) {
     const documentDate = request.issueDate?.slice(0, 10) || "";
     setSelectedRequest(request);
-    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: request.accountingPeriod || period, dueDate: "", accountNumber: request.lines?.[0]?.expenseType?.accountNumber || "", subaccountNumber: "", comments: "" });
+    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountNumber: request.lines?.[0]?.expenseType?.accountNumber || "", subaccountNumber: "", comments: "" });
   }
 
   async function processRequest(event) {
@@ -101,7 +122,7 @@ export default function AccountingEntries() {
     event.preventDefault();
     setProcessing(true);
     try {
-      await api.post(`/accounting/requests/${selectedRequest._id}/process`, fiscalForm);
+      await api.post(`/accounting/requests/${selectedRequest._id}/process`, { ...fiscalForm, fiscalPeriod: fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod });
       await draft.complete();
       notify("Fiscal document validated and account payable created.");
       setSelectedRequest(null);
@@ -132,7 +153,18 @@ export default function AccountingEntries() {
         <StatCard label="Reconciliation difference" value={formatCurrency(previewSummary.difference || 0, "PEN", language)} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "green" : "red"} />
       </div>
 
-      <nav className="focus-tabs" aria-label={t("Sections")}>{["Processing", "Entries", "Consolidation", "History"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
+      <nav className="focus-tabs" aria-label={t("Sections")}>{["Processing", "SUNAT exceptions", "Entries", "Consolidation", "History"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
+      <div hidden={focusView !== "SUNAT exceptions"} className="workspace-panel">
+        <div className="section-heading"><div><h3>{t("Invoices SUNAT could not validate")}</h3><p>{t("When SUNAT is down or the platform runs in Padrón-only mode, one Accounting user can approve a manual SUNAT exception. The reason is required and audited, and the exception stays visible on the invoice and its CXP.")}</p></div><span className="section-count">{sunatTable.pagination.total}</span></div>
+        {sunatTable.payload.sunat?.variant === "PADRON" && <div className="document-requirement"><FileCheck2 size={20} /><div><strong>{t("Padrón-only mode")}</strong><p>{t("The public Padrón checks the supplier's RUC status but never verifies an individual invoice, so every invoice needs a manual SUNAT exception.")}</p></div></div>}
+        <DataTable rows={sunatTable.rows} loading={sunatTable.loading} remote={sunatTable.remote} searchPlaceholder="Search request, RUC, or voucher..." rowActions={(row) => [{ label: "Approve manual SUNAT exception", icon: ShieldCheck, onClick: () => openException(row) }]} columns={[
+          { key: "request", label: "Request", sortable: false, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
+          { key: "seriesNumber", label: "Voucher", render: (row) => <div className="primary-cell"><strong>{t(row.voucherType)} {row.seriesNumber}</strong><span>{row.rucIssuer}</span></div> },
+          { key: "xmlAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.xmlAmount || 0, row.currency || "PEN", language) },
+          { key: "observationDetail", label: "Observation", sortable: false, render: (row) => row.observationDetail || "-" },
+          { key: "updatedAt", label: "Observed", render: (row) => formatDateTime(row.updatedAt) }
+        ]} />
+      </div>
       <div hidden={focusView !== "Processing"} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
         <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, onClick: () => openFiscalProcessing(row) }]} columns={[
@@ -152,7 +184,7 @@ export default function AccountingEntries() {
           rows={entries}
           loading={entriesTable.loading}
           remote={entriesTable.remote}
-          filters={[{ key: "type", label: "entry types", allLabel: "All entry types", options: ["PROVISION", "ADVANCE", "PAYMENT", "RENDITION"] }]}
+          filters={[{ key: "type", label: "entry types", allLabel: "All entry types", options: ["PROVISION", "ADVANCE", "PAYMENT", "RENDITION", "REVERSAL", "CREDIT_NOTE", "DEBIT_NOTE", "SUPPLIER_CREDIT_APPLICATION", "SUPPLIER_CREDIT_RECOVERY"] }]}
           searchPlaceholder="Search entry, request, account, or description..."
           columns={[
             { key: "entryNumber", label: "Entry" },
@@ -199,17 +231,25 @@ export default function AccountingEntries() {
       <Drawer open={Boolean(selectedRequest)} title="Process account payable" description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : "Validate and create CXP")}</span></button></>}>
         <div className="document-requirement required"><FileCheck2 size={20} /><div><strong>{t("Fiscal duplicate control")}</strong><p>{t("The system blocks repeated RUC + document type + series + number combinations.")}</p></div></div>
         <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelectedRequest(null)}><form id="fiscal-processing-form" className="form-grid two-column-form" onSubmit={processRequest}>
-          <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option>FACTURA</option><option>BOLETA</option><option>RXH</option><option>NOTA_CREDITO</option></select></label>
+          <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option value="FACTURA">{t("FACTURA")}</option><option value="BOLETA">{t("BOLETA")}</option><option value="RXH">{t("RXH")}</option></select><small className="field-hint">{t("Credit and debit notes are registered against their original invoice from Accounts Payable.")}</small></label>
           <label className="field"><span>{t("Series")} *</span><input required value={fiscalForm.series} onChange={(event) => setFiscalForm({ ...fiscalForm, series: event.target.value.toUpperCase() })} /></label>
           <label className="field"><span>{t("Document number")} *</span><input required value={fiscalForm.number} onChange={(event) => setFiscalForm({ ...fiscalForm, number: event.target.value })} /></label>
-          <label className="field"><span>{t("Document date")} *</span><input required type="date" value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value })} /></label>
+          <label className="field"><span>{t("Document date")} *</span><input required type="date" value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value, fiscalPeriod: event.target.value.slice(0, 7) })} /></label>
           <label className="field"><span>{t("Accounting date")} *</span><input required type="date" value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
-          <label className="field"><span>{t("Fiscal period")} *</span><input required type="month" value={fiscalForm.fiscalPeriod} onChange={(event) => setFiscalForm({ ...fiscalForm, fiscalPeriod: event.target.value })} /></label>
+          <label className="field"><span>{t("Fiscal period")}</span><input type="month" readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
           <label className="field"><span>{t("Due date")}</span><input type="date" value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
-          <label className="field"><span>{t("Account number")} *</span><input required value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("The posting account is still validated against the configured mapping.")}</small></label>
+          <label className="field"><span>{t("Account number")}</span><input value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("Posting uses the account of each line's Expense Type. A different account number is rejected.")}</small></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>
         </form></DraftPanel>
+      </Drawer>
+
+      <Drawer open={Boolean(exceptionTarget)} title="Approve manual SUNAT exception" description={exceptionTarget ? `${exceptionTarget.seriesNumber} · ${exceptionTarget.request?.requestNumber || ""}` : ""} onClose={() => !exceptionSaving && setExceptionTarget(null)} footer={<><button type="button" className="secondary-button" disabled={exceptionSaving} onClick={() => setExceptionTarget(null)}>{t("Cancel")}</button><button type="submit" form="sunat-exception-form" className="primary-button" disabled={exceptionSaving || !exceptionForm.reason.trim()}><ShieldCheck size={16} /><span>{t(exceptionSaving ? "Processing..." : "Approve exception")}</span></button></>}>
+        {exceptionTarget && <form id="sunat-exception-form" className="form-grid" onSubmit={approveException}>
+          <div className="document-requirement required"><ShieldCheck size={20} /><div><strong>{t("Non-authoritative decision")}</strong><p>{exceptionTarget.observationDetail}</p><p>{t("The invoice will be posted and paid on Accounting's responsibility. It cannot override a supplier mismatch, a duplicate or the Purchase Order ceiling.")}</p></div></div>
+          <label className="field"><span>{t("Reason")} *</span><textarea rows="3" required value={exceptionForm.reason} onChange={(event) => setExceptionForm({ ...exceptionForm, reason: event.target.value })} placeholder={t("For example: SUNAT CPE service unavailable; PDF checked against the supplier's portal.")} /></label>
+          <label className="field"><span>{t("Evidence reference")}</span><input value={exceptionForm.evidenceReference} onChange={(event) => setExceptionForm({ ...exceptionForm, evidenceReference: event.target.value })} /></label>
+        </form>}
       </Drawer>
     </section>
   );

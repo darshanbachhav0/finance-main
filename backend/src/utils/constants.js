@@ -271,7 +271,8 @@ export const BATCH_UPLOAD_STATUSES = Object.freeze(["QUEUED", "PROCESSING", "COM
 // MANUAL_EXCEPTION is a distinct, explicitly non-authoritative status: a human (Admin/Accounting)
 // recorded and audited override of automated SUNAT validation. It is never equivalent to VALID and
 // must never be produced by the automatic validation path (see ManualSunatProvider / getSunatProvider).
-export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION"]);
+// ANNULLED marks the evidence of a cancelled CXP so the same or a corrected voucher can be registered again.
+export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION", "ANNULLED"]);
 
 export const CAPEX_ASSET_CATEGORIES = Object.freeze(["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]);
 export const OPEX_EXPENSE_FREQUENCIES = Object.freeze(["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);

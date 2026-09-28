@@ -59,7 +59,7 @@ export default function AccountingPeriods() {
       action: closing ? "close" : "reopen",
       title: closing ? "Close accounting period?" : "Reopen accounting period?",
       description: closing
-        ? "The backend will first verify open transactions and a zero-difference consolidation. A closed period blocks controlled financial mutations."
+        ? "The backend first verifies that no invoice dated in the period is unposted or observed and that the AP subledger reconciles with the journals. Posted invoices that are still unpaid stay as outstanding payables and do not block the close. A closed period blocks controlled financial mutations."
         : "Reopening permits controlled workflow and accounting changes again and is recorded in the audit history.",
       confirmLabel: closing ? "Close period" : "Reopen period",
       tone: closing ? "danger" : "primary",

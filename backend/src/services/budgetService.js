@@ -455,7 +455,7 @@ export async function reverseBudgetExecution(request, userId, amount, { session,
     commitment.status = deriveCommitmentStatus(commitment);
     commitment.history.push({
       status: commitment.status,
-      amount: -applied,
+      amount: applied, // history.amount has min 0; the reversal direction is in status/comments
       by: userId,
       comments: comments || "Budget execution reversed after an Accounts Payable cancellation."
     });

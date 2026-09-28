@@ -15,12 +15,15 @@ import { AppError } from "../utils/AppError.js";
 export function assertRequestActive(request) {
   if (isTerminalRequest(request.status)) throw new AppError(409, "This request is terminal and cannot be changed.", { status: request.status }, "INVALID_STATUS_TRANSITION");
 }
+// The request's own creation month never decides where a posting lands: invoices post in their
+// document date's period and payments in the payment date's period. Callers pass the period the
+// posting lands in (createJournal in accountingService guards every journal's own period).
 export async function assertPostingAllowed(request, { user, req, period } = {}) {
   assertRequestActive(request);
-  const stored = await FinancialRequest.findById(request._id).select("status accountingPeriod fiscalData.fiscalPeriod").lean();
+  const stored = await FinancialRequest.findById(request._id).select("status").lean();
   if (stored) assertRequestActive(stored);
-  for (const value of new Set([request.accountingPeriod, request.fiscalData?.fiscalPeriod, stored?.accountingPeriod, stored?.fiscalData?.fiscalPeriod, period].filter(Boolean))) {
-    await guardAccountingPeriod({ period: value, action: "POST", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
+  if (period) {
+    await guardAccountingPeriod({ period, action: "POST", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   }
 }
 export async function getFinancialProgress(request, { session } = {}) {
@@ -52,13 +55,18 @@ export async function getFinancialProgressForRequests(requests) {
     return [key, deriveFinancialProgress(request, ap.get(key), rec.get(key), po.get(key)?.[0], voucher.get(key))];
   }));
 }
+const FINANCIAL_MILESTONES = new Set(["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "PAGO_REBOTADO"]);
+
+// Re-derives the parent status from its child obligations. This is not a posting, so it is not
+// tied to the request's creation-month period; each underlying posting guards its own period.
 export async function syncFinancialProgress({ request, user, req, session, action = "FINANCIAL_PROGRESS_UPDATED" }) {
   assertRequestActive(request);
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "UPDATE", user, req, module: "WORKFLOW", entityId: request._id, requestId: request._id });
   const progress = await getFinancialProgress(request, { session });
   const from = request.status;
-  // A pending invoice is not yet an accounted obligation.
-  const next = progress.status || (progress.counts.total && progress.unaccountedVouchers ? "COMPROMISO_PRESUPUESTAL" : null);
+  // A pending invoice is not yet an accounted obligation, and a request whose every payable was
+  // cancelled returns to its budget commitment so a corrected invoice can be registered.
+  const noActivePayable = !progress.counts.total && FINANCIAL_MILESTONES.has(canonicalRequestStatus(from));
+  const next = progress.status || ((progress.counts.total && progress.unaccountedVouchers) || noActivePayable ? "COMPROMISO_PRESUPUESTAL" : null);
   if (next && from !== next) {
     request.status = next;
     request.workflowVersion = 2;

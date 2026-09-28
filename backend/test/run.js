@@ -44,3 +44,4 @@ import "./approvalCanonicalCompletion.test.js";
 import "./budgetExceptionRouting.test.js";
 import "./exchangeRateEvidence.test.js";
 import "./productionControls.test.js";
+import "./accountingFixes.test.js";
