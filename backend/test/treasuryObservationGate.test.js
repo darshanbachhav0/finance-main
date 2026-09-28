@@ -3,7 +3,7 @@ import test from "node:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import mongoose from "mongoose";
-import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
+import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 import AccountingMapping from "../src/models/AccountingMapping.js";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
 import AccountsPayable from "../src/models/AccountsPayable.js";
@@ -90,7 +90,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
 
     await t.test("an unresolved observation blocks scheduling", async () => {
       await assert.rejects(
-        () => schedulePayments({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: treasury, req }),
+        () => schedulePayments({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req }),
         (error) => error.code === "PAYABLE_BLOCKING_OBSERVATION"
       );
       assert.equal((await AccountsPayable.findById(blockedPayable._id)).status, AP_STATUS.OPEN, "the payable is not silently advanced");
@@ -98,7 +98,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
 
     await t.test("an unresolved observation blocks BBVA batch generation", async () => {
       await assert.rejects(
-        () => generatePaymentBatch({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: treasury, req }),
+        () => generatePaymentBatch({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req }),
         (error) => error.code === "PAYABLE_BLOCKING_OBSERVATION"
       );
       assert.equal(await PaymentBatch.countDocuments(), 0, "no bank file is produced for a blocked payable");
@@ -108,7 +108,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
       voucher.validationStatus = "VALID";
       voucher.observationDetail = "";
       await voucher.save();
-      const scheduled = await schedulePayments({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: treasury, req });
+      const scheduled = await schedulePayments({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       assert.equal(scheduled.length, 1);
       assert.equal((await AccountsPayable.findById(blockedPayable._id)).status, AP_STATUS.SCHEDULED);
     });
@@ -140,7 +140,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
     });
 
     await t.test("an unaffected normal payable still schedules and generates a BBVA batch exactly as before", async () => {
-      const result = await generatePaymentBatch({ payableIds: [String(cleanPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: treasury, req });
+      const result = await generatePaymentBatch({ payableIds: [String(cleanPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       cleanupPaths.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       assert.equal(await PaymentBatch.countDocuments(), 1);
       assert.equal((await AccountsPayable.findById(cleanPayable._id)).status, AP_STATUS.PAYMENT_FILE_CREATED);

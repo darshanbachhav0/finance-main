@@ -411,13 +411,13 @@ Treasury cannot create or approve requests, homologate suppliers, verify/add sup
 
 For suppliers, selectable payment accounts must be active CURRENT accounts and match the bank/currency. Verification and ownership checks apply; eligible LEGACY_ACCEPTED accounts remain supported. Detraction accounts and invalid, mismatched or unverified accounts are not ordinary supplier payment destinations.
 
-A destination is frozen when the payable is scheduled. Treasury cannot substitute another account in that normal flow. The bounced-payment reprogramming process requires a signed CCI letter, resets the payable for rescheduling, and retains evidence/history. It does not verify a replacement master account.
+A destination is frozen when the payable is scheduled. Treasury cannot substitute another account in that normal flow. The bounced-payment reprogramming process requires a signed CCI letter when the bank rejected the beneficiary's bank details (a technical rejection on a still-verified account can be retried without one), resets the payable for rescheduling, and retains evidence/history. It does not verify a replacement master account.
 
 Employee reimbursements use the captured, verified employee destination; Treasury cannot replace it with an arbitrary supplier account. Generating a bank file is not proof that the bank paid it. Confirmation and reconciliation are separate actions.
 
 ### Example
 
-For a bounced payment, Treasury records the rejection and attaches the signed replacement CCI evidence through reprogramming. Accounting must handle any supplier bank verification required before rescheduling to the replacement account.
+For a bounced payment, Treasury records the rejection with its reason category (BANK_DETAILS or TECHNICAL); for BANK_DETAILS it attaches the signed replacement CCI evidence through reprogramming and the bounced account is flagged until re-verified. Treasury can also cancel a generated file or some of its items before any confirmation, and records SPOT detracción deposits (constancia, date, amount). Accounting must handle any supplier bank verification required before rescheduling to the replacement account.
 
 SOURCES S05 S11 S13 S14 S16 S22 S24
 
@@ -621,7 +621,7 @@ Payment-term cards and automatic IGV calculations simplify entry; they do not ch
 
 The requester submits only an owned eligible rendition. Accounting/Admin validates submitted renditions and reviews employee-bank verification. For a validated Track C non-deductible balance, settlement requires a supported method, a receipt/payroll reference, and a positive amount no larger than the outstanding balance.
 
-Treasury/Admin can reprogram a bounced payable only through the supported evidence-based workflow. The signed CCI replacement document is required. Supplier bank verification remains with Accounting/Admin; reprogramming is not a shortcut to verify bank data.
+Treasury/Admin can reprogram a bounced payable only through the supported evidence-based workflow. The signed CCI replacement document is required for bank-details rejections. A user cannot verify a supplier bank account they registered themselves. Supplier bank verification remains with Accounting/Admin; reprogramming is not a shortcut to verify bank data.
 
 SOURCES S05 S11 S12 S15 S17 S21 S22 S24 S25
 

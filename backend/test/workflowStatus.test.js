@@ -2,7 +2,7 @@ import EmployeeReimbursementBankAccount from "../src/models/EmployeeReimbursemen
 import { submitRendition, reviewRendition } from "../src/services/renditionService.js";
 import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "../src/services/directPaymentService.js";
 import { fiscalFixture, invoiceXml, invoiceZip } from "./fiscalFixtures.js";
-import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
+import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 import { reserveBudget, deferBudget } from "../src/services/budgetService.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -86,7 +86,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       return ap;
     }
     async function makeBatch(payables) {
-      const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: "2026-08-15", user: treasury, req });
+      const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       return result;
     }

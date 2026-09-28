@@ -48,6 +48,9 @@ const accountsPayableSchema = new mongoose.Schema(
     status: { type: String, enum: Object.values(AP_STATUS), default: AP_STATUS.OPEN, index: true },
     provisionJournal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" },
     paymentJournal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" },
+    // Every payment-side journal (one per confirmed installment and one per detraccion deposit);
+    // paymentJournal keeps pointing at the latest for backward compatibility.
+    paymentJournals: [{ type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" }],
     paymentBatch: { type: mongoose.Schema.Types.ObjectId, ref: "PaymentBatch" },
     bankAccountSnapshot: {
       sourceType: { type: String, enum: PAYMENT_DESTINATION_SOURCES },
@@ -65,12 +68,47 @@ const accountsPayableSchema = new mongoose.Schema(
       capturedAt: Date
     },
     scheduledFor: Date,
+    // Payments follow the university cycle (15th / 30th). A date off that cycle needs an audited reason.
+    scheduleOverride: {
+      reason: String,
+      cycleDate: String,
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      at: Date
+    },
+    // SPOT detraccion. UMA is not an IGV withholding agent, so there is no retention - only the
+    // detraccion deposit to the supplier's Banco de la Nacion account when the good/service is
+    // subject to SPOT. The CXP is PAID only after both the net transfer and the deposit.
+    detraction: {
+      status: { type: String, enum: ["NOT_APPLICABLE", "PENDING", "DEPOSITED"] },
+      categoryCode: String,
+      categoryDescription: String,
+      rate: Number,
+      minimumAmount: Number,
+      baseAmountPen: Number,
+      amount: Number,
+      amountPen: Number,
+      determinedAt: Date,
+      beneficiaryAccountNumber: String,
+      constancyNumber: String,
+      depositDate: Date,
+      depositedAt: Date,
+      depositedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" }
+    },
     reconciliation: { type: mongoose.Schema.Types.ObjectId, ref: "Reconciliation" },
     reconciledAt: Date,
     paidDate: Date,
     bouncedPayment: {
       bouncedAt: Date,
       reason: String,
+      // BANK_DETAILS: incorrect/invalid/changed/unverified beneficiary data - needs a signed CCI
+      // letter and the bounced account is flagged until re-verified. TECHNICAL: a temporary bank
+      // problem - Treasury may retry on the still-verified account without a new letter.
+      reasonCategory: { type: String, enum: ["BANK_DETAILS", "TECHNICAL"] },
+      flaggedAccount: {
+        sourceType: String,
+        accountId: { type: mongoose.Schema.Types.ObjectId }
+      },
       bankReference: String,
       reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       reprogrammedAt: Date,

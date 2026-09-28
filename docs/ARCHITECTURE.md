@@ -243,12 +243,26 @@ per-line and reversed symmetrically on cancellation/void (`releaseBudget`,
   account or the request's frozen employee-reimbursement snapshot for Track C/reimbursements),
   generates a BBVA fixed-width payment file (`POST /treasury/batch` — **BBVA is the only source
   bank that can generate an outbound file**; see §6), then confirms the actual bank operation.
-  Confirming an amount less than the outstanding balance now records a **partial payment**
-  (`AP_STATUS.PARTIALLY_PAID`) — the CXP stays open for the remainder rather than requiring one
-  all-or-nothing confirmation.
-- **Bounced payments**: reopens the CXP to `OPEN` with its bank-account snapshot cleared, requiring
-  a signed replacement CCI letter — the next scheduling attempt re-resolves and re-verifies the
-  destination account from scratch (there is no way to reuse an unverified snapshot).
+  Confirming an amount less than the outstanding balance records a **partial payment**
+  (`AP_STATUS.PARTIALLY_PAID`); each confirmation posts a journal for exactly that amount, in the
+  actual payment date's month, keyed on the CXP + bank operation number (a repeated operation
+  number is refused with 409). Treasury can put the unpaid remainder into a new BBVA file.
+- **Payment cycle**: payments run on the 15th and 30th (last day in February). Scheduling defaults
+  to the next cycle date; another date needs an audited reason; past dates are refused.
+- **Bounced payments** carry a reason category. `BANK_DETAILS` (incorrect/invalid/changed/unverified
+  data) flags the destination account `OBSERVED` until Accounting re-verifies it and requires a
+  signed CCI letter to reprogram; `TECHNICAL` on a still-verified account is retried without a
+  letter. Track C/reimbursement destinations are refreshed from the employee's current verified
+  profile on reprogram.
+- **Cancelling a generated file** (`POST /treasury/bank-files/:id/cancel`, whole file or selected
+  items, audited, reason required) is allowed only before any payment in it is confirmed; the CXPs
+  return to the queue without a bounce.
+- **Detracciones (SPOT)**: UMA is not an IGV withholding agent, so no IGV retention is applied.
+  When an expense type carries a SPOT category (configurable `SpotCategory` table seeded from
+  R.S. 183-2004/SUNAT) and the operation exceeds its threshold, the BBVA file pays the net amount
+  and Treasury records the Banco de la Nación deposit separately (`POST
+  /treasury/payables/:id/detraction-deposit`, constancia/date/amount). The CXP is `PAID` only after
+  both; AP is debited for the full amount across the two balanced journals.
 - **Reconciliation & close**: a bank-statement reconciliation record per paid CXP; a request closes
   once every CXP is reconciled (or, for Track C, once its rendition is `VALIDATED`, or `REJECTED` with
   the advance fully `RECOVERED`). A remaining Purchase Order balance does not block closure — it is
@@ -274,9 +288,9 @@ review → homologation (assigns the permanent `PRV-####` code). Homologation no
 configurable validity window (default 12 months, `FinanceConfiguration` key
 `SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS`) and is automatically reset to pending on a material
 fiscal/legal field change or on reactivating a previously inactive supplier — a bank-account change
-alone only re-triggers bank-account verification, not full re-homologation. Detraction-type bank
-accounts are recorded for compatibility but cannot be newly selected for payment — there is no
-complete detracción payment workflow yet.
+alone only re-triggers bank-account verification, not full re-homologation. The person who
+registered a bank account cannot verify it. The supplier's Banco de la Nación detracciones account
+(`Supplier.detractionAccount`) receives SPOT deposits and is never a BBVA transfer destination.
 
 ## 8. SUNAT / SIRE integration
 
@@ -307,7 +321,8 @@ SUNAT submission — that remains a distinct, not-yet-built integration.
 
 ## 9. What's intentionally out of scope for this release
 
-- Automatic detracción (withholding) payment processing.
+- Electronic submission of detracción deposits to Banco de la Nación (Treasury records the
+  constancia of a deposit made outside the system).
 - Direct SIRE/RCE submission to SUNAT (export/preparation only).
 - Per-voucher SUNAT API validation without real production credentials (padrón-only baseline).
 - Fixed-asset depreciation/amortization from CAPEX fields (`assetCategory`, `usefulLifeYears`,

@@ -103,7 +103,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
         supplierId: supplier._id,
         accountId: added.account._id,
         payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" },
-        user: users.accounting,
+        user: users.admin,
         req
       });
       return SupplierBankAccount.findById(added.account._id);
@@ -226,7 +226,8 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       await setPreferredSupplierBankAccount({ supplierId: supplier._id, accountId: second.account._id, user: users.accounting, req });
       assert.equal(await SupplierBankAccount.countDocuments({ supplier: supplier._id, currency: "PEN", accountType: "CURRENT", active: true, preferred: true }), 1);
       assert.equal((await SupplierBankAccount.findById(first.account._id)).preferred, false);
-      const verified = await verifySupplierBankAccount({ supplierId: supplier._id, accountId: second.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" }, user: users.accounting, req });
+      await assert.rejects(() => verifySupplierBankAccount({ supplierId: supplier._id, accountId: second.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" }, user: users.accounting, req }), (error) => error.statusCode === 403 && /another authorized user/.test(error.message), "the person who added an account cannot verify it");
+      const verified = await verifySupplierBankAccount({ supplierId: supplier._id, accountId: second.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" }, user: users.admin, req });
       assert.equal(verified.verificationSource, "AUTHORIZED_MANUAL_REVIEW");
       await assert.rejects(() => addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BCP", accountType: "CURRENT", accountNumber: "191", cci: "002123", currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req }), /exactly 20 digits/);
       await deactivateSupplierBankAccount({ supplierId: supplier._id, accountId: first.account._id, user: users.accounting, req });
@@ -236,7 +237,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     await t.test("18. ownership mismatch cannot satisfy new-supplier homologation", async () => {
       const supplier = await completeSupplier();
       const added = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BCP", accountType: "CURRENT", accountNumber: "191006600001", cci: nextCci(), currency: "PEN", accountHolderName: "Different Holder SAC" }, user: users.accounting, req });
-      await verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MISMATCH", comments: "Certificate holder differs from legal name." }, user: users.accounting, req });
+      await verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MISMATCH", comments: "Certificate holder differs from legal name." }, user: users.admin, req });
       const readiness = await evaluateSupplierHomologation(supplier._id);
       assert.ok(readiness.issues.some((item) => item.code === "BANK_ACCOUNT_FINANCE_VERIFICATION_REQUIRED"));
     });
@@ -244,8 +245,8 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     await t.test("19. authorized manual ownership acceptance requires comments and is audited", async () => {
       const supplier = await completeSupplier();
       const added = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BCP", accountType: "CURRENT", accountNumber: "191007700001", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
-      await assert.rejects(() => verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MANUAL_ACCEPTED" }, user: users.accounting, req }), /Comments are required/);
-      await verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MANUAL_ACCEPTED", comments: "Bank certificate manually reviewed by Accounting." }, user: users.accounting, req });
+      await assert.rejects(() => verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MANUAL_ACCEPTED" }, user: users.admin, req }), /Comments are required/);
+      await verifySupplierBankAccount({ supplierId: supplier._id, accountId: added.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MANUAL_ACCEPTED", comments: "Bank certificate manually reviewed by Accounting." }, user: users.admin, req });
       const readiness = await evaluateSupplierHomologation(supplier._id);
       assert.equal(readiness.valid, true, JSON.stringify(readiness.issues));
       const audit = await AuditLog.findOne({ entityId: supplier._id, action: "BANK_ACCOUNT_REVIEWED", "newValues.ownershipResult": "MANUAL_ACCEPTED" });
