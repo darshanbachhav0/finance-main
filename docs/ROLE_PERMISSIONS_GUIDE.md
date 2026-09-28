@@ -27,13 +27,13 @@ The platform separates requesting, authorization, budget control, accounting, an
 | Budget or Presupuesto | Budget | Validates, commits and reserves funds; prepares exceptions |
 | Procurement or Abastecimiento | Procurement | Issues Purchase/Service Orders after budget commitment |
 | Management or Gerencia and Rectorado | Management | Usually RECTORATE; GENERAL_MANAGEMENT can be configured |
-| Management Viewer | ManagementViewer | Read-only institutional portal, reports and audit history |
+| Management Viewer | ManagementViewer | Read-only institutional management portal only |
 
 There are **ten stored roles, one per operational profile**. Area Director and Vice-Rector are separate roles (`AreaDirector`, `ViceRector`) rather than a single Approver role distinguished only by approval level; they hold identical permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
 
 **Area Director and Vice-Rector.** These are the platform's two sequential approval roles. Their only functional difference is directional: an Area Director deciding a manager-chain approval may choose to forward it to the next manager in the request's frozen chain — typically the Vice-Rector, given how the organizational hierarchy is seeded — instead of finalizing it themselves; the Vice-Rector, sitting at the top of that pair, has no further chain position to forward to and cannot forward back to an Area Director. See the Area Director and Vice Rector sections below for the mechanics. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is implied by the role itself and set automatically by the backend the moment Admin assigns that role on the Users screen — it is not a separate field Admin chooses, unlike Management's approval level (RECTORATE or GENERAL_MANAGEMENT), which remains admin-editable.
 
-ManagementViewer is the platform's only strictly read-only profile: every permission it holds is a view/report/audit token, and it never appears in an `authorize()`/`authorizePermission()` check on a POST, PUT, PATCH or DELETE route.
+ManagementViewer is the platform's only strictly read-only profile: it holds only `management-portal:view`, reaches only the aggregate management API, and can never be granted another permission.
 
 **Reading the guide.** Start with the two capability matrices, then the common access rules and your role section. Later sections explain approval routes, annual/monthly budget limits, data visibility, exceptions, practical scenarios, and the technical permission catalog.
 
@@ -165,17 +165,17 @@ Use the same profile abbreviations as the preceding matrix. **P** means propose 
 | Configure bank file formats | - | - |
 | Certify a bank file format | - | - |
 | Open close or reopen accounting periods | - | - |
-| View and export management reports | R | R |
+| View and export management reports | R | - |
 | Export accounting consolidation or SIRE | - | - |
 | Download existing generated bank file | - | - |
-| Use global audit log | - | R |
+| Use global audit log | - | - |
 | Create update deactivate user accounts | - | - |
 
 **Important differences.** Reading a supplier does not authorize verifying its bank account. Downloading an already generated bank file does not authorize generating, scheduling, or confirming payments. Budget's configuration menu does not grant project-master write access; project writes remain Admin/Accounting. Bank-format certification is a narrow, additional exception to Admin-only configuration: Treasury holds `bank-format:certify` and can certify or decertify an existing bank-file format, but creating, editing, deactivating or reactivating that configuration record remains Admin-only. Only BBVA is a supported source/generator format (`SOURCE_BANKS`); BCP, Interbank, Scotiabank and Banco de la Nación (`BENEFICIARY_BANKS`) can be a supplier's or employee's beneficiary bank for a CCI transfer, but none of them is a format UMA can generate an outbound payment file through. Procurement's Supplier Master access mirrors Treasury's: read-only, for confirming an eligible homologated supplier before issuing an order, never a proposal, verification or homologation action.
 
 Supplier proposals are correctable only while pending validation or observed. A Requester must also be the proposer. Supplier bank entry does not permit changing verification, ownership-review, active/preferred, or Finance decision fields. Employee profile preference/deactivation follows the separate owner permissions shown above.
 
-Procurement and ManagementViewer can both call the management-report summary and CSV-export endpoints directly (reportRoutes.js admits every profile except Requester), but the generated-file category list behind the generic stored-file download route still excludes both of them (it remains Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management) — so neither role can re-download a report file from the export-history list after the fact; a fresh call to the export endpoint is required instead.
+Procurement can call the management-report summary and CSV-export endpoints directly (reportRoutes.js admits every internal profile except Requester), but the generated-file category list behind the generic stored-file download route excludes it (it remains Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management) — so the export-history list shows file names without a download button for Procurement; a fresh export is required instead. ManagementViewer has no Reports access at all.
 
 SOURCES S03 S09 S10 S13 S14 S15 S16
 
@@ -189,7 +189,7 @@ Protected APIs require a valid sign-in token and an active user record. The serv
 
 ### Role gates and extra permissions
 
-Most module routes explicitly allow particular stored roles. Some routes, especially batch invoices, global audit, bank-format certification and the management-report/portal group, check named permissions instead of a role list — that is how Treasury gained bank-format certification and ManagementViewer gained audit/report access without a broader role grant. A user's effective named permissions are the union of the role defaults and their additional permissions. Extra permissions add capabilities; they do not remove role defaults.
+Most module routes explicitly allow particular stored roles. Some routes, especially batch invoices, global audit, bank-format certification and the management-report/portal group, check named permissions instead of a role list — that is how Treasury gained bank-format certification (reachable from its "Bank Formats" menu entry) without a broader role grant. A user's effective named permissions are the union of the role defaults and their additional permissions. Extra permissions add capabilities; they do not remove role defaults.
 
 An extra permission does not bypass a route that explicitly requires another role, a record-ownership check, or a workflow condition. Sidebar visibility also follows role-based navigation rules. Consequently, adding a permission does not necessarily create a working menu or authorize an entire module.
 
@@ -207,7 +207,7 @@ Closed-period blocking is action-specific and controlled by period policy. Defau
 
 ### Reading is not editing
 
-All profiles except ManagementViewer have Requests navigation. ManagementViewer's own navigation is limited to the Management Portal, Reports and Audit, matching its strictly read-only scope; it lacks request:view-all and is neither a requester nor an approver, so the request-visibility filter returns nothing for it even if it reached that screen. Request Detail can include related accounting, budget, payment and audit information without granting edit access to those modules. The common dashboard and some reference-data APIs have broader scope than the dedicated request list. See the visibility limitations section before treating a hidden menu as a confidentiality boundary.
+All profiles except ManagementViewer have Requests navigation. ManagementViewer's own navigation is limited to the Management Portal, and the internal API refuses it outright. Request Detail can include related accounting, budget, payment and audit information without granting edit access to those modules. The common dashboard and some reference-data APIs have broader scope than the dedicated request list. See the visibility limitations section before treating a hidden menu as a confidentiality boundary.
 
 SOURCES S01 S02 S03 S05 S17 S18 S19
 
@@ -528,31 +528,25 @@ SOURCES S01 S02 S03 S04 S06 S07 S23
 
 ## Management Viewer
 
-**Stored role ManagementViewer.** ManagementViewer is a strictly read-only profile: every permission it holds (`management-portal:view`, `report:view`, `audit:view`) is a view/report/audit token, and the role never appears in an `authorize()`/`authorizePermission()` check on a POST, PUT, PATCH or DELETE route anywhere in the codebase. It was recently expanded from an external aggregate-only portal account to also reach the internal Reports module and the global audit log.
+**Stored role ManagementViewer.** ManagementViewer is a portal-only, strictly read-only profile. Its only permission is `management-portal:view`; the User model and user administration reject any additional permission for this role, and a legacy extra grant is ignored at runtime.
 
 ### What ManagementViewer can view
 
-The external institutional Management API (`/api/management/v1` — overview, budget, workflow, payments, SLA and filter aggregates, with its own documentation at `/api/management/v1/api-docs` and OpenAPI document). That external API's own documentation states it "does not expose transaction-level records, personal data, supplier identifiers, bank details, files, or write operations."
+The external institutional Management API (`/api/management/v1` — overview, budget, workflow, payments, SLA and filter aggregates, with its own documentation at `/api/management/v1/api-docs` and OpenAPI document) through the Management Portal screen. That API "does not expose transaction-level records, personal data, supplier identifiers, bank details, files, or write operations."
 
-The internal Reports module's management summary and CSV export/export-history endpoints — the same `/reports/management*` routes AreaDirector, ViceRector, Accounting, Treasury, Budget, Procurement and Management use. The global audit log and per-request audit timeline through `audit:view`, exactly like Accounting (the audit routes check only that permission, with no additional role restriction).
-
-Its sidebar is limited to Management Portal, Reports and Audit. It has no Dashboard or Requests entry, and — unlike every other profile — it cannot view an individual request or the request list at all: it lacks request:view-all and is neither a requester nor an approver on any request, so the request-visibility filter returns nothing for it even if it reached that screen.
+Its sidebar has a single entry, Management Portal. It has no Dashboard, Reports, audit, notification or Requests access: the internal API gate (`routes/index.js`) does not admit the role, so every internal endpoint — including `/reports/management*` — answers 403.
 
 ### What ManagementViewer can do
 
-- Call the read-only external Management API endpoints for institutional aggregates.
-- View the internal management-report summary and generate/download its CSV export directly from that endpoint.
-- Read the global audit log and a request's audit timeline.
+- Call the read-only external Management API endpoints for institutional aggregates and view them in the portal.
 
 ### Limitations
 
-ManagementViewer cannot create, edit, approve, commit, homologate, schedule, confirm, reconcile, certify, or configure anything. It cannot open Requests, Suppliers, Accounting, Treasury, Budget, or any configuration screen. It is excluded from the approval-decision route entirely: `approvalRoutes.js` explicitly authorizes every other stored role and excludes only ManagementViewer.
-
-A previously generated report file is downloaded through the same generic stored-file route as other categories, and that route's role list for the "reports" category was not changed when ManagementViewer was added (it remains Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management). So ManagementViewer can generate and immediately download a fresh CSV export, but cannot later re-download that same file from the generated-exports history list; a fresh call to the export endpoint is required each time.
+ManagementViewer cannot create, edit, approve, commit, homologate, schedule, confirm, reconcile, certify, or configure anything, and cannot open internal Reports, dashboards, the audit log, Requests, Suppliers, Accounting, Treasury, Budget, or any configuration screen. It cannot be anyone's supervisor, so it never has My Team.
 
 ### Example
 
-An institutional trustee or auditor is given a ManagementViewer account to review spend, budget and workflow aggregates and the audit trail without being able to act on any individual request, supplier, or payment. They can read the history behind a suspicious entry but cannot correct it — that remains Accounting/Admin's job.
+An institutional trustee is given a ManagementViewer account to review spend, budget, workflow and payment aggregates in the management portal without seeing or acting on any individual request, supplier, or payment.
 
 SOURCES S01 S02 S03 S16 S18 S26 S27
 
@@ -715,7 +709,7 @@ SOURCES S01 S02 S06 S07 S11 S12 S17 S20 S23
 
 ## Technical permission catalog
 
-The following table is generated from the current default permission catalog. It identifies inherited tokens, not every effective endpoint action. DIR (AreaDirector) and VR (ViceRector) are shown together in each row because the two roles hold identical permission sets, not because they share a single stored role. PRO is Procurement and MGV is ManagementViewer. Custom user permissions are additive.
+The following table is generated from the current default permission catalog. It identifies inherited tokens, not every effective endpoint action. DIR (AreaDirector) and VR (ViceRector) are shown together in each row because the two roles hold identical permission sets, not because they share a single stored role. PRO is Procurement and MGV is ManagementViewer. Custom user permissions are additive, except that ManagementViewer can never hold any permission beyond management-portal:view.
 
 | Permission token | Default profiles |
 | --- | --- |
@@ -734,9 +728,9 @@ The following table is generated from the current default permission catalog. It
 | treasury:file | ADM, TRE |
 | payment:confirm | ADM, TRE |
 | payment:reconcile | ADM, TRE |
-| report:view | ADM, DIR VR, ACC, TRE, BUD, PRO, MGT, MGV |
+| report:view | ADM, DIR VR, ACC, TRE, BUD, PRO, MGT |
 | management-portal:view | ADM, MGT, MGV |
-| audit:view | ADM, ACC, MGV |
+| audit:view | ADM, ACC |
 | master-data:manage | ADM, ACC |
 | user:manage | ADM |
 | employee-bank:manage-own | ADM, REQ |
@@ -749,7 +743,7 @@ The following table is generated from the current default permission catalog. It
 | payment:reprocess | ADM, TRE |
 | bank-format:certify | ADM, TRE |
 
-The default counts are Admin 29, Requester 4, Director 4, Vice Rector 4, Accounting 14, Treasury 10, Budget 4, Procurement 4, Management 5 and ManagementViewer 3. A token is only one layer of access: use the capability matrices and limitations above when assigning responsibilities.
+The default counts are Admin 29, Requester 4, Director 4, Vice Rector 4, Accounting 14, Treasury 10, Budget 4, Procurement 4, Management 5 and ManagementViewer 1. A token is only one layer of access: use the capability matrices and limitations above when assigning responsibilities.
 
 SOURCES S01 S02
 

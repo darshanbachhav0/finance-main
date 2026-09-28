@@ -39,7 +39,9 @@ import { ROLES } from "../utils/constants.js";
 const router = Router();
 router.use("/auth", authRoutes);
 router.use("/management/v1", externalManagementRoutes);
-router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.MANAGEMENT_VIEWER));
+// Internal API gate. ManagementViewer is portal-only: it reaches /auth and /management/v1 above
+// and is refused (403) by every internal route below.
+router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT));
 
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);

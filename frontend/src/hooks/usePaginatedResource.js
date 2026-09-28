@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/client.js";
+import { initialTableQuery } from "../utils/initialTableQuery.js";
 import { buildRemoteTableParams } from "../utils/tableQuery.js";
 
 const emptyPagination = Object.freeze({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
@@ -15,14 +16,11 @@ export default function usePaginatedResource(endpoint, {
 } = {}) {
   const storageKey = `erp_table_query:${persistKey || endpoint}`;
   const [query, setQuery] = useState(() => {
-    const fallback = { page: 1, pageSize: initialPageSize, search: initialSearch, filters: initialFilters, sort: null };
+    const options = { initialFilters, initialSearch, initialPageSize };
     try {
-      const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null");
-      if (!stored) return fallback;
-      const explicitFilters = Object.fromEntries(Object.entries(initialFilters).filter(([, value]) => value !== "" && value !== undefined && value !== null));
-      return { ...fallback, ...stored, ...(initialSearch ? { search: initialSearch } : {}), filters: { ...stored.filters, ...explicitFilters } };
+      return initialTableQuery(JSON.parse(sessionStorage.getItem(storageKey) || "null"), options);
     } catch {
-      return fallback;
+      return initialTableQuery(null, options);
     }
   });
   const [rows, setRows] = useState([]);

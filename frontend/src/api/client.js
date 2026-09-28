@@ -8,6 +8,9 @@ function defaultApiUrl() {
   return `http://${host}:5000/api`;
 }
 
+export const SESSION_EXPIRED_EVENT = "erp:session-expired";
+const sessionExemptPaths = ["/auth/login", "/auth/change-password", "/auth/logout"];
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || defaultApiUrl()
 });
@@ -26,6 +29,12 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // A 401 on an authenticated call means the session ended (expired, signed out elsewhere, or
+    // the password changed). AuthContext clears it and sends the user to sign in again; saved
+    // drafts are kept. Sign-in and password endpoints answer 401 for wrong passwords instead.
+    if (error.response?.status === 401 && localStorage.getItem("erp_token") && !sessionExemptPaths.some((path) => error.config?.url?.endsWith(path))) {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    }
     const message = apiErrorMessage(error, text => translateMessage(text, localStorage.getItem("erp_language") || "es"));
     const details = error.response?.data?.details;
     const code = error.response?.data?.code || "API_ERROR";

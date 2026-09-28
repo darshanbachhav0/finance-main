@@ -15,7 +15,10 @@ import { slaStatus } from "../services/approvalRuleService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { budgetOverview } from "../services/budgetReportingService.js";
+import { isEligibleSupplierPaymentAccount, usesEmployeeReimbursementDestination } from "../services/paymentDestinationService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { requestVisibilityFilter } from "../utils/permissions.js";
+import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
 
 function currentPeriod() {
   return new Date().toISOString().slice(0, 7);
@@ -23,6 +26,27 @@ function currentPeriod() {
 
 function ownerScope(user) {
   return user.role === ROLES.SOLICITOR ? { $or: [{ requester: user._id }, { solicitor: user._id }] } : {};
+}
+
+// Requests the dashboard may count or list for this user: what the request list would show them
+// (requestVisibilityFilter; a Solicitor's dashboard stays on their own requests), and never
+// somebody else's draft.
+export function dashboardRequestScope(user) {
+  const visibility = user.role === ROLES.SOLICITOR ? ownerScope(user) : requestVisibilityFilter(user);
+  const notOthersDrafts = { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
+  return { $and: [visibility, notOthersDrafts].filter((clause) => Object.keys(clause).length) };
+}
+
+// Treasury can pay a payable only to a verified destination: a destination frozen on the CXP
+// when it was scheduled, the verified employee reimbursement snapshot, or an eligible verified
+// supplier CURRENT account in the payable's currency (see paymentDestinationService.js).
+function hasVerifiedPaymentDestination(payable, supplierAccounts) {
+  const frozen = payable.bankAccountSnapshot;
+  if (payable.status !== AP_STATUS.OPEN && frozen?.bank && (frozen.accountNumber || frozen.cci)) return true;
+  const request = payable.request;
+  if (request && usesEmployeeReimbursementDestination(request)) return request.rendition?.reimbursementBankSnapshot?.verificationStatus === "VERIFIED";
+  const supplierId = String(payable.supplier?._id || payable.supplier || request?.supplier?._id || request?.supplier || "");
+  return (supplierAccounts.get(supplierId) || []).some((account) => isEligibleSupplierPaymentAccount(account, { currency: payable.currency }));
 }
 
 function approvalScope(user) {
@@ -40,6 +64,9 @@ function approvalScope(user) {
   }
   return query;
 }
+
+// Request list filtered to Track A1 requests with committed budget and no Purchase Order yet.
+export const AWAITING_PURCHASE_ORDER_PATH = "/requests?status=PENDIENTE_OC";
 
 async function missingExchangeRateDates() {
   const requests = await FinancialRequest.find({ currency: "USD", status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED] } }).select("issueDate").lean();
@@ -90,13 +117,13 @@ async function buildTasks(user) {
     items.push({ key: "budgetExceptions", label: "Budget exceptions pending", count: await BudgetException.countDocuments({ status: "PENDING" }), path: "/budget", tone: "red" });
   }
   if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role)) {
-    items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: await FinancialRequest.countDocuments({ flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null }), path: "/requests", tone: "amber" });
+    items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: await FinancialRequest.countDocuments({ flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null }), path: AWAITING_PURCHASE_ORDER_PATH, tone: "amber" });
   }
   return { items, total: items.reduce((sum, item) => sum + Number(item.count || 0), 0), counters: Object.fromEntries(items.map((item) => [item.key, item.count])) };
 }
 
 async function commonSummary(user) {
-  const scope = ownerScope(user);
+  const scope = dashboardRequestScope(user);
   const [total, byStatus, byType, byCurrency, recentRequests] = await Promise.all([
     FinancialRequest.countDocuments(scope),
     FinancialRequest.aggregate([{ $match: scope }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
@@ -163,12 +190,14 @@ async function roleDetails(user, common) {
   }
 
   if (user.role === ROLES.MANAGEMENT) {
-    const [overview, pendingCommitments] = await Promise.all([
+    // Controlled spend follows the Reports rule: drafts, rejected and voided requests never count.
+    const [overview, pendingCommitments, spendByType] = await Promise.all([
       budgetOverview({ period }),
-      FinancialRequest.countDocuments({ status: { $in: [REQUEST_STATUS.APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED] } })
+      FinancialRequest.countDocuments({ status: { $in: [REQUEST_STATUS.APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED] } }),
+      FinancialRequest.aggregate([{ $match: { $and: [dashboardRequestScope(user), { status: { $nin: [...REPORTING_EXCLUDED_REQUEST_STATUSES] } }] } }, { $group: { _id: "$requestType", amount: { $sum: "$totalPENEquivalent" } } }])
     ]);
-    const typeTotals = new Map(common.byType.map((item) => [item._id, item.amount || 0]));
-    const totalSpend = common.byType.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const typeTotals = new Map(spendByType.map((item) => [item._id, item.amount || 0]));
+    const totalSpend = spendByType.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     metrics.push(
       { key: "spend", label: "Controlled spend", value: totalSpend, format: "currency", tone: "navy" },
       { key: "capex", label: "CAPEX", value: typeTotals.get("CAPEX") || 0, format: "currency", tone: "teal" },
@@ -201,9 +230,13 @@ async function roleDetails(user, common) {
   if (user.role === ROLES.TREASURY) {
     const queue = await AccountsPayable.find({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } }).populate("supplier").populate("request").sort({ dueDate: 1 });
     const totals = queue.reduce((result, item) => ({ ...result, [item.currency]: (result[item.currency] || 0) + item.outstandingAmount }), {});
-    const supplierIds = queue.map((item) => item.supplier?._id).filter(Boolean);
-    const validBankSuppliers = new Set((await SupplierBankAccount.find({ supplier: { $in: supplierIds }, active: true }).select("supplier")).map((item) => String(item.supplier)));
-    const missingBank = queue.filter((item) => !validBankSuppliers.has(String(item.supplier?._id))).length;
+    const supplierIds = [...new Set(queue.map((item) => String(item.supplier?._id || item.request?.supplier || "")).filter(Boolean))];
+    const supplierAccounts = new Map();
+    for (const account of await SupplierBankAccount.find({ supplier: { $in: supplierIds }, active: true, accountType: "CURRENT" })) {
+      const key = String(account.supplier);
+      supplierAccounts.set(key, [...(supplierAccounts.get(key) || []), account]);
+    }
+    const missingBank = queue.filter((item) => !hasVerifiedPaymentDestination(item, supplierAccounts)).length;
     const recentFiles = await PaymentBatch.find().populate("generatedBy", "name role").sort({ generatedAt: -1 }).limit(6);
     metrics.push(
       { key: "queue", label: "Payable queue", value: queue.length, tone: "amber" },

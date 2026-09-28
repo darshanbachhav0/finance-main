@@ -5,7 +5,7 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { APPROVAL_STAGES, ERROR_CODES, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
+import { APPROVAL_STAGES, ERROR_CODES, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
@@ -23,6 +23,16 @@ function editablePayload(body) {
   const payload = Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
   if (payload.role && IMPLIED_APPROVAL_LEVEL[payload.role]) payload.approvalLevel = IMPLIED_APPROVAL_LEVEL[payload.role];
   return payload;
+}
+
+// ManagementViewer is portal-only and read-only: reject any extra permission up front with a
+// clear message (the User model enforces the same rule on every save).
+function assertManagementViewerPermissions(role, permissions) {
+  if (role !== ROLES.MANAGEMENT_VIEWER) return;
+  const disallowed = (Array.isArray(permissions) ? permissions : []).filter((permission) => !MANAGEMENT_VIEWER_PERMISSIONS.includes(permission));
+  if (disallowed.length) {
+    throw new AppError(422, "A Management Viewer only has access to the management portal; additional permissions cannot be granted.", { field: "permissions", disallowed }, ERROR_CODES.VALIDATION_ERROR);
+  }
 }
 
 export async function validateSupervisor(userId, supervisorId) {
@@ -81,6 +91,7 @@ export const createUser = asyncHandler(async (req, res) => {
   if (String(password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
   const normalizedDni = String(dni).trim();
   if (!/^\d{8}$/.test(normalizedDni)) throw new AppError(422, "DNI must contain 8 digits.");
+  assertManagementViewerPermissions(role, req.body.permissions);
   await validateSupervisor(null, req.body.jefe);
   if (await User.exists({ dni: normalizedDni })) throw new AppError(409, "A user with this DNI already exists.", undefined, ERROR_CODES.CONFLICT);
   if (email) {
@@ -96,6 +107,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id) && req.body.active === false) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
+  assertManagementViewerPermissions(req.body.role ?? user.role, req.body.permissions ?? user.permissions);
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
   const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe };
@@ -106,6 +118,9 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.passwordHash = await bcrypt.hash(req.body.password, 12);
     user.passwordResetRequired = true;
     user.tokenVersion = (user.tokenVersion || 0) + 1;
+    // An administrator's password reset also lifts a sign-in lockout.
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = null;
   }
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, passwordChanged: Boolean(req.body.password) } });

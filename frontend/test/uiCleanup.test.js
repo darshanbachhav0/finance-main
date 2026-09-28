@@ -3,12 +3,13 @@ import { roleNavigation, canAccessNavigation } from "../src/utils/navigationAcce
 import { requestStage } from "../src/utils/requestStage.js";
 import { displayedRequestStatus } from "../src/utils/requestPresentation.js";
 for (const [role, items] of Object.entries(roleNavigation)) {
-  assert.ok(items.length <= 5, `${role}: primary menu stays focused`);
+  // Accounting's daily work spans more screens (Suppliers, Invoice Observations, Periods).
+  assert.ok(items.length <= (role === "Accounting" ? 8 : 5), `${role}: primary menu stays focused`);
   assert.equal(new Set(items.map(([, path]) => path)).size, items.length);
   items.forEach(([, path]) => assert.ok(canAccessNavigation(role, path), `${role}: ${path}`));
 }
 assert.deepEqual(roleNavigation.Admin.map(([, path]) => path), ["/", "/administration"]);
-assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history"]);
+assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/configuration/bank-formats"]);
 assert.equal(canAccessNavigation("Solicitor", "/suppliers"), true, "Contextual supplier workflow remains accessible");
 assert.equal(canAccessNavigation("Solicitor", "/administration"), false);
 assert.equal(requestStage("TXT_GENERADO"), 4, "TXT generation does not complete Payment");

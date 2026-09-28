@@ -51,8 +51,9 @@ section only summarizes each role's purpose:
   (Track A1), tracks invoices registered against open orders, has its own dashboard.
 - **Management** — executive reporting, and the sole authority that may approve/reject a
   configured budget exception.
-- **ManagementViewer** — strictly read-only: the external aggregate API, plus internal Reports and
-  Audit history. Never has a write/mutation permission of any kind.
+- **ManagementViewer** — management portal only: the read-only aggregate API
+  (`/api/management/v1`) and its portal screen. No internal Reports, dashboards, audit or request
+  data (the internal API gate refuses it), and it can never be granted any other permission.
 
 ## 3. The request lifecycle and the "triple-track" workflow
 

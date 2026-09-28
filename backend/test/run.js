@@ -45,3 +45,4 @@ import "./budgetExceptionRouting.test.js";
 import "./exchangeRateEvidence.test.js";
 import "./productionControls.test.js";
 import "./inProcessWorkers.test.js";
+import "./operationsNumbers.test.js";
