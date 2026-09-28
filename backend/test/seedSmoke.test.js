@@ -36,6 +36,7 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     SUNAT_PROVIDER_MODE: "MOCK",
     BATCH_INVOICE_INLINE_PROCESSING: "false"
   };
+  let connection;
   delete env.UPLOAD_DIR;
   delete env.GENERATED_DIR;
   delete env.SUNAT_EXCHANGE_RATE_ENDPOINT;
@@ -76,8 +77,10 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     assert.equal(byKey.UMA_19_VIA_B_CONCILIADO.flowType, "B");
     assert.equal(byKey.UMA_13_RENDICION_CERRADA.flowType, "C");
 
-    await mongoose.connect(uri);
-    const db = mongoose.connection.db;
+    // A separate connection with no models registered, so no auto-index build recreates
+    // collections after the drop below.
+    connection = await mongoose.createConnection(uri).asPromise();
+    const db = connection.db;
     const rates = await db.collection("exchangerates").find({ authoritative: true, providerMode: "SUNAT" }).toArray();
     assert.ok(rates.length > 0 && rates.every((rate) => /^DEMO/.test(rate.sourceLabel)), "demo rates are labelled as demo data");
     const batch = await db.collection("massuploadbatches").findOne({});
@@ -91,9 +94,9 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     assert.ok(closed.purchaseOrder);
     assert.ok(closed.approvalRouteSnapshot.some((step) => step.status === "SKIPPED" && step.required !== false));
   } finally {
-    if (mongoose.connection.readyState === 0) await mongoose.connect(uri);
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    connection ||= await mongoose.createConnection(uri).asPromise();
+    await connection.dropDatabase();
+    await connection.close();
     await fs.rm(storageRoot, { recursive: true, force: true });
   }
 });
