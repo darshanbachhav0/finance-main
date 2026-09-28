@@ -33,7 +33,7 @@ import {
 import { ensureDetraction, pendingDetractionAmount, resolveSupplierDetractionAccount } from "./detractionService.js";
 import { notifyBouncedAccountReview } from "./bankNotificationService.js";
 import { isPaymentCycleDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
-import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
+import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { nextPaymentBatchNumber } from "./sequenceService.js";
 import { cleanupUploadedFiles, generatedRoot, persistUploadedFiles } from "./storageService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -412,6 +412,7 @@ export async function listTreasuryQueue(queryParams) {
       { request: { $in: requestIds } }
     ] }];
   }
+  withDeepLink(query, queryParams);
   const { page, pageSize, skip } = parsePagination(queryParams);
   const sort = parseSort(queryParams, ["dueDate", "outstandingAmount", "currency", "createdAt", "status", "paymentPriority", "flowType"], { paymentPriority: -1, dueDate: 1, createdAt: 1 });
   const [records, total, totalsByCurrency, missingBankDetails] = await Promise.all([
@@ -686,7 +687,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         type: "PAYMENT_CONFIRMATION",
         title: "Payment confirmation required",
         message: `${item.requestNumber} is in ${batchNumber}; confirm it only after bank execution.`,
-        path: "/treasury",
+        path: `/treasury?tab=confirm&record=${item.accountsPayable._id}`,
         entityType: "FinancialRequest",
         entityId: item.request._id
       });
@@ -980,7 +981,7 @@ export async function reprogramBouncedPayment({ accountsPayableId, payload, file
       type: "PAYMENT_REPROGRAMMED",
       title: "Payment ready to reprogram",
       message: `${request.requestNumber} is back in the Treasury queue${attachment ? " with updated signed CCI evidence" : " for a retry"}.`,
-      path: "/treasury",
+      path: `/treasury?tab=prepare&record=${accountsPayable._id}`,
       entityType: "AccountsPayable",
       entityId: accountsPayable._id
     });
@@ -1142,6 +1143,7 @@ export async function listDetractionQueue(queryParams = {}) {
   const { page, pageSize, skip } = parsePagination(queryParams);
   const query = { "detraction.status": queryParams.detractionStatus || "PENDING", status: { $nin: [AP_STATUS.CANCELLED] } };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   const [records, total] = await Promise.all([
     AccountsPayable.find(query).populate({ path: "request", select: "requestNumber currency status" }).populate("supplier", "name legalName rucDni detractionAccount")
       .sort({ dueDate: 1, createdAt: 1 }).skip(skip).limit(pageSize),
@@ -1235,6 +1237,7 @@ export async function listPaymentConfirmationQueue(queryParams = {}) {
     ? { status: queryParams.status }
     : { status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] }, paymentBatch: { $ne: null } };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.paymentPriority) query.paymentPriority = queryParams.paymentPriority;
   if (queryParams.search) {
@@ -1270,6 +1273,7 @@ export async function listBouncedPayments(queryParams = {}) {
   const { page, pageSize, skip } = parsePagination(queryParams);
   const query = { status: AP_STATUS.PAYMENT_BOUNCED };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.search) {
     const search = new RegExp(escapedRegex(queryParams.search), "i");
@@ -1318,6 +1322,7 @@ export async function listReconciliationQueue(queryParams = {}) {
   const ids = await FinancialRequest.distinct("_id", requestQuery);
   const query = { status: AP_STATUS.PAID, reconciliation: null, _id: { $nin: excluded }, request: { $in: ids } };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   const [records, total] = await Promise.all([
     AccountsPayable.find(query).populate({ path: "request", populate: { path: "supplier" } }).sort({ paidDate: 1 }).skip(skip).limit(pageSize),
     AccountsPayable.countDocuments(query)

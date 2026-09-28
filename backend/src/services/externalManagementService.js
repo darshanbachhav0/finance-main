@@ -1,6 +1,7 @@
 import AccountsPayable from "../models/AccountsPayable.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import { budgetAllocationRows } from "./budgetReportingService.js";
+import { countEscalatedApprovals } from "./slaMonitoringService.js";
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
@@ -169,20 +170,24 @@ async function payments(filters) {
 async function sla(filters) {
   const match = requestMatch(filters);
   const now = new Date();
-  const escalationHours = Math.max(1, Number(process.env.SLA_ESCALATION_HOURS || 24));
-  const longOverdue = new Date(now.getTime() - escalationHours * 3600000);
-  const [completed, timing, current] = await Promise.all([
+  const currentMatch = { ...match, status: { $in: approvalStatuses }, approvalDueAt: { $ne: null } };
+  const [completed, timing, current, escalated] = await Promise.all([
     FinancialRequest.aggregate([{ $match: match }, { $unwind: "$approvalHistory" }, { $match: { "approvalHistory.completedAt": { $ne: null }, "approvalHistory.slaResult": { $in: ["ON_TIME", "OVERDUE"] } } }, { $group: { _id: "$approvalHistory.slaResult", count: { $sum: 1 } } }]),
     FinancialRequest.aggregate([{ $match: match }, { $unwind: "$approvalHistory" }, { $match: { "approvalHistory.startedAt": { $ne: null }, "approvalHistory.completedAt": { $ne: null } } }, { $group: { _id: { $ifNull: ["$requesterArea", "$requestingArea"] }, count: { $sum: 1 }, averageHours: { $avg: { $divide: [{ $subtract: ["$approvalHistory.completedAt", "$approvalHistory.startedAt"] }, 3600000] } } } }, { $sort: { averageHours: -1 } }]),
-    FinancialRequest.aggregate([{ $match: { ...match, status: { $in: approvalStatuses }, approvalDueAt: { $ne: null } } }, { $project: { bucket: { $switch: { branches: [
-      { case: { $lt: ["$approvalDueAt", longOverdue] }, then: "LONG_OVERDUE" },
-      { case: { $lt: ["$approvalDueAt", now] }, then: "OVERDUE" }
-    ], default: "ON_TRACK" } } } }, { $group: { _id: "$bucket", count: { $sum: 1 } } }])
+    FinancialRequest.aggregate([{ $match: currentMatch }, { $project: { bucket: { $cond: [{ $lt: ["$approvalDueAt", now] }, "OVERDUE", "ON_TRACK"] } } }, { $group: { _id: "$bucket", count: { $sum: 1 } } }]),
+    // LONG_OVERDUE = escalated under the same working-day rule the SLA worker applies.
+    countEscalatedApprovals(currentMatch, { now })
   ]);
+  const buckets = new Map(grouped(current).map(({ key, count }) => [key, count]));
+  if (escalated) {
+    buckets.set("OVERDUE", (buckets.get("OVERDUE") || 0) - escalated);
+    buckets.set("LONG_OVERDUE", escalated);
+    if (!buckets.get("OVERDUE")) buckets.delete("OVERDUE");
+  }
   return {
     completed: grouped(completed).map(({ key, count }) => ({ key, count })),
     averageHoursByArea: (timing || []).map((row) => ({ key: row._id || "UNASSIGNED", count: row.count, averageHours: number(row.averageHours) })),
-    current: grouped(current).map(({ key, count }) => ({ key, count }))
+    current: [...buckets].map(([key, count]) => ({ key, count }))
   };
 }
 

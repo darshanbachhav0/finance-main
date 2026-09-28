@@ -53,3 +53,4 @@ import "./inProcessWorkers.test.js";
 import "./operationsNumbers.test.js";
 import "./accountingFixes.test.js";
 import "./plainClone.test.js";
+import "./notificationLinks.test.js";

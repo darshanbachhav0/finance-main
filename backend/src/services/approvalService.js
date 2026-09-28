@@ -23,7 +23,7 @@ import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
 import { assertSupplierUsable } from "./supplierService.js";
-import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
+import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { requestListPopulate, requestListSelect, requestPopulate } from "./requestService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
@@ -161,6 +161,9 @@ export async function listApprovalInbox(queryParams, user) {
       { solicitor: { $in: userIds } }
     ] }];
   }
+  // /approvals?request=<id> (approval notifications) narrows the inbox to that request; the
+  // visibility clauses above still apply, so a link never exposes someone else's approval.
+  withDeepLink(query, queryParams, { request: "_id" });
   const { page, pageSize, skip } = parsePagination(queryParams);
   const sort = parseSort(queryParams, ["requestNumber", "requestType", "priority", "approvalStage", "status", "totalPENEquivalent", "approvalDueAt", "createdAt"], { approvalDueAt: 1, createdAt: 1 });
   const [requests, total, summaryRows] = await Promise.all([
@@ -300,7 +303,7 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "PROCUREMENT_ORDER",
     title: request.flowType === FLOW_TYPE.B ? "Priority payment ready" : "Purchase order required",
     message: request.flowType === FLOW_TYPE.B ? `${request.requestNumber} was auto-provisioned and is ready for priority Treasury payment.` : `${request.requestNumber} is budget committed and ready for Procurement to issue the order.`,
-    path: request.flowType === FLOW_TYPE.B ? "/treasury" : `/requests/${request._id}`,
+    path: request.flowType === FLOW_TYPE.B ? `/treasury?tab=prepare&request=${request._id}` : `/requests/${request._id}`,
     entityType: "FinancialRequest",
     entityId: request._id
   });
@@ -487,7 +490,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       type: "BUDGET_EXCEPTION",
       title: "Budget exception pending",
       message: `${request.requestNumber} cannot be committed until its budget exception is resolved.`,
-      path: "/budget",
+      path: `/budget?tab=exceptions&request=${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
     });
@@ -504,7 +507,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       type: "BUDGET_COMMITMENT",
       title: "Budget commitment required",
       message: `${request.requestNumber} completed its approval route, but the automatic budget commitment could not run: ${budgetDeferred.message}`,
-      path: "/budget",
+      path: `/requests/${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
     });

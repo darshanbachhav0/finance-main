@@ -31,7 +31,7 @@ export async function notifyBouncedAccountReview({ flagged, requestNumber }) {
     type: employee ? "EMPLOYEE_BANK_REVIEW" : "SUPPLIER_BANK_REVIEW",
     title: "Bank account needs re-verification",
     message: `${requestNumber}: the bank rejected a payment for incorrect or changed account details. Re-verify the account before it is used again.`,
-    path: employee ? `/reimbursement-bank?record=${flagged.accountId}` : "/suppliers",
+    path: employee ? `/reimbursement-bank?record=${flagged.accountId}` : flagged.supplierId ? `/suppliers?record=${flagged.supplierId}` : "/suppliers",
     entityType: employee ? "EmployeeReimbursementBankAccount" : "SupplierBankAccount",
     entityId: flagged.accountId
   });

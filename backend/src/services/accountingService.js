@@ -1017,7 +1017,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     type: "TREASURY_PAYABLE",
     title: "Payable item ready",
     message: `${request.requestNumber} has an open CXP ready for Treasury scheduling.`,
-    path: "/treasury",
+    path: `/treasury?tab=prepare&request=${request._id}`,
     entityType: "FinancialRequest",
     entityId: request._id
   });

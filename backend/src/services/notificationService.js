@@ -16,8 +16,27 @@ export async function notifyApprovalStep(request) {
     areas: step.approvalLevel === "AREA_DIRECTOR" ? [request.requesterArea || request.requestingArea] : undefined });
 }
 
-export async function notifyUser({ userId, eventKey, type, title, message, path, entityType, entityId }) {
+// A notification must open the exact record. Call sites that still pass a bare list path get
+// the record appended from the notification's entity: /treasury filters to the CXP (or to the
+// request's CXPs), and a bare /budget link - a request-level budget problem with no exception
+// record to open - goes to the request itself, where the budget state and actions are shown.
+export function recordLinkFor(path, entityType, entityId) {
+  if (!path || !entityId || path.includes("?")) return path;
+  const id = String(entityId?._id || entityId);
+  if (path === "/treasury") {
+    if (entityType === "AccountsPayable") return `/treasury?record=${id}`;
+    if (entityType === "FinancialRequest") return `/treasury?request=${id}`;
+  }
+  if (path === "/budget") {
+    if (entityType === "BudgetException") return `/budget?tab=exceptions&record=${id}`;
+    if (entityType === "FinancialRequest") return `/requests/${id}`;
+  }
+  return path;
+}
+
+export async function notifyUser({ userId, eventKey, type, title, message, path: requestedPath, entityType, entityId }) {
   if (!userId) return null;
+  const path = recordLinkFor(requestedPath, entityType, entityId);
   return Notification.findOneAndUpdate(
     { user: userId, eventKey },
     // A re-sent notification (same event key, e.g. an approval that comes back to

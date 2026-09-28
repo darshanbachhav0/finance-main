@@ -19,10 +19,11 @@ import {
   UploadCloud,
   XCircle
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Drawer from "../components/Drawer.jsx";
 import Message from "../components/Message.jsx";
@@ -36,6 +37,7 @@ import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
@@ -47,6 +49,7 @@ const netAmountOf = (row) => Number(row.accountsPayable?.netPayableAmount ?? amo
 const onPaymentCycle = (dateKey) => Boolean(dateKey) && isPaymentCycleDate(new Date(`${dateKey}T12:00:00.000Z`));
 const requestIdOf = (row) => row.requestId || row.request?._id || row._id;
 const payableIdOf = (row) => row.accountsPayable?._id || row._id;
+const PAYMENT_VIEWS = ["prepare", "confirm", "detractions", "reconcile", "returned"];
 
 export default function TreasuryQueue({ historyOnly = false }) {
   const [paymentView, setPaymentView] = useState("prepare");
@@ -89,12 +92,42 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const reconciliationDraft = useWorkDraft({ scope: "payment-reconciliation", recordId: reconciliationRow ? String(payableIdOf(reconciliationRow)) : "new", title: "Payment reconciliation", enabled: Boolean(reconciliationRow), value: reconciliationForm, restore: setReconciliationForm, sourceVersion: reconciliationRow?.updatedAt });
   useDraftResume("payment-reconciliation", id => resumeDraftRecord("/treasury/reconciliation", id, payableIdOf, openReconciliation, setActionError));
 
-  const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: { bank, currency }, persistKey: "treasury-queue" });
+  // Notification links: /treasury?tab=<stage>&record=<CXP id> or ?request=<request id>. Every stage
+  // table narrows to the linked CXP(s); the named stage opens, or else the first stage holding it.
+  const deepLink = useDeepLink(["record", "request"]);
+  const linkActive = deepLink.active && !historyOnly;
+  const linkParams = linkActive ? deepLink.link : {};
+  const linkOptions = { fixedParams: linkParams, deepLink: linkActive };
+  // The linked CXP is listed whatever its currency; the currency selector follows it (below).
+  const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: linkActive ? { bank, ...linkParams } : { bank, currency }, persistKey: "treasury-queue", deepLink: linkActive });
   const historyTable = usePaginatedResource("/treasury/bank-files");
-  const confirmationTable = usePaginatedResource("/treasury/payment-confirmations");
-  const bouncedTable = usePaginatedResource("/treasury/bounced-payments");
-  const reconciliationTable = usePaginatedResource("/treasury/reconciliation");
-  const detractionTable = usePaginatedResource("/treasury/detractions");
+  const confirmationTable = usePaginatedResource("/treasury/payment-confirmations", linkOptions);
+  const bouncedTable = usePaginatedResource("/treasury/bounced-payments", linkOptions);
+  const reconciliationTable = usePaginatedResource("/treasury/reconciliation", linkOptions);
+  const detractionTable = usePaginatedResource("/treasury/detractions", linkOptions);
+  const stageTables = { prepare: queueTable, confirm: confirmationTable, detractions: detractionTable, reconcile: reconciliationTable, returned: bouncedTable };
+  const stageTotals = PAYMENT_VIEWS.map((view) => stageTables[view].loading ? null : Number(stageTables[view].pagination.total || 0));
+  const stageTotalsKey = stageTotals.join(",");
+  const linkMissing = linkActive && stageTotals.every((total) => total === 0);
+  const linkResolved = useRef("");
+  useEffect(() => {
+    linkResolved.current = "";
+    if (linkActive && PAYMENT_VIEWS.includes(deepLink.tab)) setPaymentView(deepLink.tab);
+  }, [deepLink.linkKey, deepLink.tab, linkActive]);
+  useEffect(() => {
+    const linkId = deepLink.linkKey + deepLink.tab;
+    if (!linkActive || linkResolved.current === linkId || stageTotals.some((total) => total === null)) return;
+    linkResolved.current = linkId;
+    const named = PAYMENT_VIEWS.indexOf(deepLink.tab);
+    if (named >= 0 && stageTotals[named] > 0) return;
+    const found = stageTotals.findIndex((total) => total > 0);
+    if (found >= 0) setPaymentView(PAYMENT_VIEWS[found]);
+  }, [deepLink.linkKey, deepLink.tab, linkActive, stageTotalsKey]);
+  useEffect(() => {
+    const linked = linkActive ? queueTable.rows[0] : null;
+    const linkedCurrency = linked?.accountsPayable?.currency || linked?.currency;
+    if (linkedCurrency && linkedCurrency !== currency) setCurrency(linkedCurrency);
+  }, [linkActive, queueTable.rows]);
   const rows = queueTable.rows;
   const loading = queueTable.loading || historyTable.loading || confirmationTable.loading || bouncedTable.loading || reconciliationTable.loading || detractionTable.loading;
   const resourceError = queueTable.error || historyTable.error || confirmationTable.error || bouncedTable.error || reconciliationTable.error || detractionTable.error;
@@ -367,6 +400,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     <WorkspaceTools links={[["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Management Reports", "/reports"]]} />
       <PageHeader title={historyOnly ? "Payment History" : "Payments"} description="Schedule and confirm payments." actions={<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
     <Message type="error">{actionError || resourceError}</Message>
+    {linkActive && <DeepLinkNotice title="Showing the payment linked from your notification" missing={linkMissing} missingDescription="This payment is no longer pending in any Treasury stage. It may already be paid and reconciled." clearLabel="Show all payments" onClear={deepLink.clear} />}
     <div hidden={historyOnly} className="stats-grid"><StatCard label="Payable queue" value={queueTable.pagination.total} tone="amber" /><StatCard label="Missing bank details" value={missingBank} tone={missingBank ? "red" : "green"} /><StatCard label="Payment confirmation" value={confirmationTable.pagination.total} tone="amber" /><StatCard label="Bounced payments" value={bouncedTable.pagination.total} tone={bouncedTable.pagination.total ? "red" : "green"} /></div>
 
     {missingBank > 0 && <div className="alert-strip error"><AlertTriangle size={20} /><div><strong>{t("Some payments are blocked")}</strong><p>{t("A payment needs a verified eligible current account, or the immutable employee reimbursement destination, before file generation.")}</p></div></div>}

@@ -1,8 +1,9 @@
 import { CheckCircle2, CornerUpLeft, Eye, Forward, MessageSquareWarning, RefreshCw, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -11,6 +12,7 @@ import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
@@ -22,7 +24,12 @@ export default function ApprovalInbox() {
   const [confirm, setConfirm] = useState(null);
   const [actionError, setActionError] = useState("");
   const [processing, setProcessing] = useState(false);
-  const approvalTable = usePaginatedResource("/approvals/inbox");
+  // /approvals?request=<id> (approval notifications): the inbox narrows to that request and its
+  // quick view opens, so the approver lands on the decision row.
+  const deepLink = useDeepLink(["request"]);
+  const linkedRequest = deepLink.link.request || "";
+  const approvalTable = usePaginatedResource("/approvals/inbox", { fixedParams: deepLink.link, deepLink: deepLink.active });
+  useEffect(() => { if (linkedRequest) setQuickViewId(linkedRequest); }, [linkedRequest]);
   const { rows, loading } = approvalTable;
 
   const summary = useMemo(() => ({
@@ -142,6 +149,7 @@ export default function ApprovalInbox() {
     <section>
       <PageHeader title="Approval Inbox" description="Review pending requests in oldest-first order and record a clear approval decision." actions={<button type="button" className="secondary-button" onClick={approvalTable.reload} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
       <Message type="error">{actionError || approvalTable.error}</Message>
+      {deepLink.active && <DeepLinkNotice title="Showing the request linked from your notification" missing={!loading && !rows.length} missingDescription="This request is no longer waiting for your approval. Its quick view shows the current status." clearLabel="Show all pending approvals" onClear={() => { setQuickViewId(null); deepLink.clear(); }} />}
       <div className="stats-grid compact-stats">
         <StatCard label="Pending approval" value={summary.total} tone="amber" />
         <StatCard label="PEN equivalent waiting" value={formatCurrency(summary.amount, "PEN", language)} tone="teal" />

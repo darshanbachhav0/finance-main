@@ -20,6 +20,7 @@ export const configurationAccess = Object.freeze({
   "approval-rules": ["Admin"],
   "direct-payment-eligibility": ["Admin"],
   "finance-configurations": ["Admin", "Accounting"],
+  "accounting-mappings": ["Admin", "Accounting"],
   "budget-rules": ["Admin", "Budget"],
   "budget-allocations": ["Admin", "Budget"],
   "bank-formats": ["Admin", "Treasury"]

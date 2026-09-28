@@ -59,7 +59,7 @@ Background workers (see §4 — in production they run inside the web service pr
   the durable worker (not the request thread) processes uploads. While it is on, the in-process
   batch worker never starts.
 - `BATCH_INVOICE_POLL_MS`, `BATCH_INVOICE_STALE_MINUTES`, `BATCH_INVOICE_WORKER_CONCURRENCY` —
-  batch worker tuning; `SLA_POLL_MS`, `SLA_DUE_SOON_HOURS`, `SLA_ESCALATION_HOURS` — SLA worker
+  batch worker tuning; `SLA_POLL_MS`, `SLA_DUE_SOON_HOURS`, `APPROVAL_SLA_WORKING_DAYS`, `SLA_ESCALATION_WORKING_DAYS` (Peruvian working days; the dashboard and management-portal escalation counters use the same rule) — SLA worker
   tuning. All have safe defaults.
 
 Authentication:
