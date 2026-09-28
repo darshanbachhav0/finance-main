@@ -18,7 +18,6 @@ import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/inde
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
-import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import { markBudgetPaidAmount } from "./budgetService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
@@ -759,7 +758,9 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
     const awaitingDetraction = !fullyPaid && moneyEquals(remainingOutstanding, pendingDetractionAmount(accountsPayable));
     accountsPayable.history.push({ status: accountsPayable.status, by: user._id, comments: `Payment confirmed: ${operationNumber} (${confirmedAmount.toFixed(2)}${fullyPaid ? "" : `, ${remainingOutstanding.toFixed(2)} remaining${awaitingDetraction ? " - awaiting the SPOT detraccion deposit" : ""}`}).` });
 
-    if (accountsPayable.flowType !== FLOW_TYPE.C) {
+    // Advances (ENTREGA_RENDIR) record budget use when the rendition is validated; an undocumented
+    // reimbursement executed its budget when Accounting approved it, so its payment is recorded here.
+    if (accountsPayable.flowType !== FLOW_TYPE.C || request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) {
       const paidPenEquivalent = roundMoney(multiplyMoney(confirmedAmount, accountsPayable.exchangeRate));
       await markBudgetPaidAmount(request, user._id, paidPenEquivalent, {
         session,

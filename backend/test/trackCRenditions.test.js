@@ -22,7 +22,7 @@ import { closeFinancialRequest, createFinancialRequest, normalizeRequestTypeForT
 import { confirmTreasuryPayable, generatePaymentBatch, reconcilePayment, renditionDueDate } from "../src/services/treasuryService.js";
 import { generatedRoot } from "../src/services/storageService.js";
 import { AP_STATUS, ERROR_CODES, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
-import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
+import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 const period = "2026-09";
@@ -67,7 +67,7 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     await ApprovalRule.create({ name: "Track C director", approvalLevel: "AREA_DIRECTOR", role: ROLES.AREA_DIRECTOR, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 1, slaHours: 24, active: true });
 
     const makeBatch = async (payable) => {
-      const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: "2026-09-15", user: treasury, req });
+      const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       return result;
     };
@@ -231,6 +231,8 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
       const { batch } = await makeBatch(payable);
       assert.equal(batch.items[0].bankAccount.cci, "00219410000000000001", "paid to the employee's verified reimbursement account");
       await confirmTreasuryPayable({ accountsPayableId: payable._id, payload: { operationNumber: "REIMB-OP-1", paidAt: "2026-09-21", confirmedAmount: 80 }, user: treasury, req });
+      const paidCommitment = await mongoose.model("BudgetCommitment").findOne({ request: reimbursement._id });
+      assert.equal(paidCommitment?.paidAmount, 80, "the reimbursement payment is recorded against the budget");
       let loaded = await FinancialRequest.findById(reimbursement._id);
       assert.equal(loaded.status, REQUEST_STATUS.PAID);
       assert.equal(loaded.rendition.status, "VALIDATED", "payment does not reopen a rendition for a reimbursement");

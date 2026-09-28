@@ -600,7 +600,7 @@ export default function RequestDetail() {
                 <div><span>{t("PRV status")}</span><StatusBadge status={supplier?.supplierCode ? "COMPLIANT" : "PENDING"} /></div>
               </div>
               <div className="responsibility-map">
-                <div><span>{t("School")}</span><strong>{t("Requirement, CECO, three quotations and conformity")}</strong></div>
+                <div><span>{t("School")}</span><strong>{t("Requirement, CECO, quotations and conformity")}</strong></div>
                 <div><span>{t("System")}</span><strong>{t("Budget, PO ceiling, SUNAT and duplicate controls")}</strong></div>
                 <div><span>{t("Accounting / Treasury")}</span><strong>{t("CXP provision and bank payment processing")}</strong></div>
               </div>

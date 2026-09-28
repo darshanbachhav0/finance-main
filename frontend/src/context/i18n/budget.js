@@ -31,5 +31,6 @@ export default {
   "Open commitments move to January of the next year.": "Los compromisos abiertos pasan a enero del año siguiente.",
   "{count} open commitments carried over to {year} ({amount}).": "{count} compromisos abiertos trasladados a {year} ({amount}).",
   // Procurement readiness
-  "This request does not require a Purchase or Service Order.": "Esta solicitud no requiere una Orden de Compra o de Servicio."
+  "This request does not require a Purchase or Service Order.": "Esta solicitud no requiere una Orden de Compra o de Servicio.",
+  "Requirement, CECO, quotations and conformity": "Requerimiento, CECO, cotizaciones y conformidad"
 };
