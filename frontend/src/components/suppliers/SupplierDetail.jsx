@@ -20,6 +20,7 @@ import {
   X
 } from "lucide-react";
 import { useState } from "react";
+import api from "../../api/client.js";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import ProtectedAssetButton from "../ProtectedAssetButton.jsx";
 import StatusBadge from "../StatusBadge.jsx";
@@ -89,6 +90,19 @@ export default function SupplierDetail({
   const [taxForm, setTaxForm] = useState({ valid: true, returnedIdentifier: supplier.rucDni || "", returnedLegalName: supplier.legalName || supplier.name || "", comments: "" });
   const [financeReview, setFinanceReview] = useState({ result: supplier.complianceReview?.result || "PENDING", comments: supplier.complianceReview?.comments || "" });
   const permissions = supplier.permissions || {};
+  // SPOT: Banco de la Nacion detracciones account, maintained by Accounting/Admin.
+  const [detractionAccount, setDetractionAccount] = useState(supplier.detractionAccount?.accountNumber || "");
+  const [detractionMessage, setDetractionMessage] = useState("");
+  async function saveDetractionAccount(event) {
+    event.preventDefault();
+    try {
+      const response = await api.put(`/treasury/suppliers/${supplier._id}/detraction-account`, { accountNumber: detractionAccount });
+      setDetractionAccount(response.data?.data?.detractionAccount?.accountNumber || detractionAccount);
+      setDetractionMessage(t("Detracciones account saved."));
+    } catch (error) {
+      setDetractionMessage(error.message);
+    }
+  }
   // Fix 1: the possible-duplicate-name signal is shown as its own alert in Legal Identification below
   // (it needs the matched supplier's name), so it is excluded here to avoid showing it twice.
   const riskWarnings = (supplier.riskyDeclarations || readiness?.warnings || []).filter((warning) => warning.code !== "POSSIBLE_DUPLICATE_SUPPLIER_NAME");
@@ -243,6 +257,12 @@ export default function SupplierDetail({
           ))}
           {!supplier.bankAccounts?.length && <p className="empty-inline">{t("No supplier bank accounts recorded.")}</p>}
         </div>
+        <form className="supplier-inline-form" onSubmit={saveDetractionAccount}>
+          <div className="form-grid supplier-form-grid">
+            <label className="field"><span>{t("Banco de la Nación detracciones account")}</span><input inputMode="numeric" value={detractionAccount} readOnly={!permissions.canVerifyBanking} onChange={(event) => setDetractionAccount(event.target.value)} /><small className="field-hint">{detractionMessage || t("Treasury deposits SPOT detracciones here; it is never a BBVA transfer destination.")}</small></label>
+          </div>
+          {permissions.canVerifyBanking && <div className="inline-form-actions"><button type="submit" className="secondary-button" disabled={loading || !detractionAccount.trim()}><Save size={15} /><span>{t("Save detracciones account")}</span></button></div>}
+        </form>
 
         {reviewAccount && (
           <DraftPanel busy={loading} draft={bankReviewDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitBankReview}>

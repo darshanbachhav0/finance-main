@@ -66,7 +66,7 @@ npm run verify      # test + build
 
 The backend suite (`backend/test/run.js`) is a full integration suite against a real, per-test-file,
 uniquely-named MongoDB database (dropped on completion) — it needs a reachable MongoDB instance, not
-a mock. As of this writing it is 310 tests, all passing.
+a mock. As of this writing it is 326 tests, all passing.
 
 ## 4. Background workers (must run in production)
 

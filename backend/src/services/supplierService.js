@@ -327,6 +327,7 @@ function serializeSupplierBase(supplier, user) {
     ...value,
     bankAccount: maskBankValue(value.bankAccount),
     cci: maskBankValue(value.cci),
+    detractionAccount: value.detractionAccount ? { ...value.detractionAccount, accountNumber: maskBankValue(value.detractionAccount.accountNumber) } : value.detractionAccount,
     bankHistory: (value.bankHistory || []).map((item) => ({
       ...item,
       bankAccount: maskBankValue(item.bankAccount),
