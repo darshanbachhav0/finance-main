@@ -29,7 +29,7 @@ import {
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, notifyApprovalStep, resolveNotification } from "./notificationService.js";
+import { notifyRoles, notifyApprovalStep, resolveApprovalNotifications, resolveNotification } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
@@ -47,7 +47,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canModifyRequest, canUseCostCenter, canViewRequest, requestVisibilityFilter } from "../utils/permissions.js";
+import { canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, requestVisibilityFilter } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
@@ -597,11 +597,43 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   return { supplier, files };
 }
 
+function routeAuditSnapshot(route = []) {
+  return [...route].sort((a, b) => a.sequence - b.sequence).map((step) => ({
+    sequence: step.sequence,
+    approvalLevel: step.approvalLevel,
+    role: step.role,
+    approverUser: step.approverUser?._id || step.approverUser,
+    approverName: step.approverSnapshot?.name,
+    status: step.status,
+    completedAt: step.completedAt,
+    completedBy: step.completedBy?._id || step.completedBy,
+    source: step.source
+  }));
+}
+
 async function submitPreparedRequest(request, { user, req, comments }) {
   assertRequestActive(request);
+  // A resubmission (after OBSERVE, RETURN or a withdrawal) never reuses the old
+  // route: the route is re-resolved for the request's current amount, track and
+  // area and restarts at the first approver. The replaced route is kept in the
+  // audit log so its decisions stay visible.
+  const previousRoute = routeAuditSnapshot(request.approvalRouteSnapshot || []);
   await initializeApprovalRoute(request);
   request.rejectionReason = "";
   await request.save();
+  if (previousRoute.length) {
+    await recordAudit({
+      entityType: "FinancialRequest",
+      entity: request,
+      action: "APPROVAL_ROUTE_RESET",
+      user,
+      req,
+      module: "APPROVALS",
+      comments: "Resubmitted: the approval route was re-resolved and restarts at the first approver.",
+      oldValues: { approvalRoute: previousRoute },
+      newValues: { approvalRoute: routeAuditSnapshot(request.approvalRouteSnapshot), approvalRoutingMode: request.approvalRoutingMode }
+    });
+  }
 
   await transitionRequest({
     request,
@@ -637,9 +669,11 @@ export async function listRequestsPage(queryParams, user) {
     // "My Requests": only what this user raised. Team members' requests live
     // under My Team, even when this user is on their approval route.
     query.$or = [{ requester: user._id }, { solicitor: user._id }];
-  } else if (queryParams.teamScope && user.role !== ROLES.ADMIN) {
+  } else if (queryParams.teamScope) {
+    // My Team: submitted requests from this user's own hierarchy - never the
+    // team's drafts, and for Admin too only its own team, not everything.
     const teamIds = await teamMemberIds(user._id);
-    query.$and = [...(query.$and || []), { $or: teamIds.length ? [{ requester: { $in: teamIds } }, { solicitor: { $in: teamIds } }] : [{ _id: null }] }];
+    query.$and = [...(query.$and || []), { status: { $ne: REQUEST_STATUS.DRAFT } }, { $or: teamIds.length ? [{ requester: { $in: teamIds } }, { solicitor: { $in: teamIds } }] : [{ _id: null }] }];
   } else {
     Object.assign(query, requestVisibilityFilter(user));
   }
@@ -686,7 +720,9 @@ export async function listRequestsPage(queryParams, user) {
     FinancialRequest.countDocuments(query)
   ]);
   const progress = await getFinancialProgressForRequests(data);
-  const rows = data.map(record => ({ ...record.toObject(), status: canonicalRequestStatus(record.status), financialProgress: progress.get(String(record._id)), allowedActions: allowedRequestActions(record, user) }));
+  // canView tells list screens (My Team especially) whether a row may link to its
+  // detail page: listing a team request does not by itself grant opening it.
+  const rows = data.map(record => ({ ...record.toObject(), status: canonicalRequestStatus(record.status), financialProgress: progress.get(String(record._id)), allowedActions: allowedRequestActions(record, user), canView: canViewRequest(record, user) }));
   return paginatedPayload(rows, total, page, pageSize);
 }
 
@@ -874,6 +910,52 @@ export async function submitFinancialRequest({ id, user, req, comments }) {
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "SUBMIT", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await prepareRequest(request, { user, validateSubmission: true });
   await submitPreparedRequest(request, { user, req, comments });
+  await request.populate(requestPopulate);
+  return request;
+}
+
+// The requester takes a submitted request back to draft before their first
+// approver decides, to correct and resubmit it. The open steps are closed as
+// SKIPPED (the next submission resolves a fresh route anyway) and the approver's
+// pending task and SLA alerts are resolved.
+export async function withdrawFinancialRequest({ id, user, req, comments }) {
+  const request = await FinancialRequest.findById(id);
+  if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
+  if (!canWithdrawRequest(request, user)) {
+    throw new AppError(409, "Only the requester can withdraw a request, and only while it is pending approval and no approver has approved it yet.", { status: canonicalRequestStatus(request.status) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  const withdrawnAt = new Date();
+  const pendingApprovers = [];
+  for (const step of request.approvalRouteSnapshot || []) {
+    if (["PENDING", "NOT_REACHED"].includes(step.status)) {
+      if (step.status === "PENDING" && step.approverUser) pendingApprovers.push(step.approverUser);
+      step.status = "SKIPPED";
+      step.completedAt = withdrawnAt;
+    }
+  }
+  await transitionRequest({
+    request,
+    targetStatus: REQUEST_STATUS.DRAFT,
+    user,
+    req,
+    action: "WITHDRAWN",
+    comments: String(comments || "").trim() || "Withdrawn by the requester before the first approval.",
+    dueAt: null,
+    skipControls: true,
+    skipRoleCheck: true
+  });
+  await resolveApprovalNotifications(request._id);
+  await recordAudit({
+    entityType: "FinancialRequest",
+    entity: request,
+    action: "REQUEST_WITHDRAWN",
+    user,
+    req,
+    module: "APPROVALS",
+    comments: String(comments || "").trim() || undefined,
+    oldValues: { status: REQUEST_STATUS.PENDING_APPROVAL, pendingApprovers },
+    newValues: { status: REQUEST_STATUS.DRAFT }
+  });
   await request.populate(requestPopulate);
   return request;
 }

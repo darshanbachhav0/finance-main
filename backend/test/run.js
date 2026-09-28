@@ -43,6 +43,7 @@ import "./bbvaCertificationGovernance.test.js";
 import "./myTeam.test.js";
 import "./businessCalendar.test.js";
 import "./approvalCanonicalCompletion.test.js";
+import "./approvalFlexibleChain.test.js";
 import "./budgetExceptionRouting.test.js";
 import "./exchangeRateEvidence.test.js";
 import "./productionControls.test.js";

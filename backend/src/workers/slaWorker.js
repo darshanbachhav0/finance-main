@@ -21,7 +21,7 @@ export function startSlaWorker({ once = false } = {}) {
   let stopping = false;
   let timer;
   let wake;
-  console.log(`SLA worker: every ${config.pollMs}ms; due soon ${config.dueSoonHours}h; escalation ${config.escalationHours}h overdue`);
+  console.log(`SLA worker: every ${config.pollMs}ms; approval SLA ${config.approvalWorkingDays} working day(s); due soon ${config.dueSoonHours}h; escalation to the approver's jefe after ${config.escalationWorkingDays} further working day(s)`);
   const done = (async () => {
     await ensureIdempotencyIndexes();
     do {

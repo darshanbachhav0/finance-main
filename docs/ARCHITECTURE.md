@@ -23,10 +23,8 @@ financial-progress derivation, budget-planning math, payment-terms math, line-am
 Ten stored roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`, `AreaDirector`,
 `ViceRector`, `Accounting`, `Treasury`, `Budget`, `Procurement`, `Management`, `ManagementViewer`.
 `AreaDirector` and `ViceRector` are distinct roles with identical permissions
-(`ROLE_PERMISSIONS`) — the only difference is directional: an Area Director's approval on a
-manager-chain request can be forwarded up to the Vice-Rector (`forward: true` in
-`decideApproval`), but the Vice-Rector, sitting at the top of that pair, has no further level to
-forward to. Each role's `approvalLevel` (`AREA_DIRECTOR` / `VICE_RECTOR`) is implied by the role
+(`ROLE_PERMISSIONS`). On a manager-chain request any approver, whatever their role, may finalize
+or send the approval to their own jefe (`forward: true` in `decideApproval`) — see §3.3. Each role's `approvalLevel` (`AREA_DIRECTOR` / `VICE_RECTOR`) is implied by the role
 itself and set automatically by the backend, not chosen separately by Admin. Permissions are
 role-based with a per-user `permissions` override array for exceptions. See
 `docs/ROLE_PERMISSIONS_GUIDE.md` for the full capability matrix and per-role walkthrough — this
@@ -129,11 +127,18 @@ the actual child records before allowing it).
 
 One engine, two identity sources, resolved in `backend/src/services/approvalRuleService.js`:
 
-1. **Manager chain (primary).** If the requester has a `jefe` (supervisor) set in the organizational
-   roster, the full chain (jefe, jefe's jefe, …) is resolved and frozen at submission time, then
-   augmented with any *configured* policy stage (`ApprovalRule`) not already covered by someone in
-   the chain. This is what makes the "manager chain vs. rule-based" split largely academic in
-   practice — the chain is enriched with policy, not replaced by it.
+1. **Manager chain (primary, flexible).** If the requester has a `jefe` (supervisor) set in the
+   organizational roster, the route starts with the requester's nearest *available* jefe (inactive
+   or on-leave managers are skipped going up; if nobody is available, submission fails with a
+   "contact the Admin" error). At every chain step the approving jefe chooses either **Approve and
+   finalize** (the manager chain is complete at that level) or **Send to my jefe**
+   (`forward: true`), which records the approval and only then adds the approver's own nearest
+   available jefe as the next step. "Send to my jefe" is offered only while the current approver
+   has such a jefe (`GET /approvals/:id/options`). Levels that were never asked are simply not on
+   the route, so the history shows exactly who decided. Any *configured* policy stage
+   (`ApprovalRule`) matching the request is appended after the chain and still applies after the
+   chain is finalized, unless someone who approved in the chain already holds that
+   role/approval level (it is then recorded as `SKIPPED`).
 2. **Rule-based fallback.** If the requester has no `jefe` at all, a specifically configured
    `ApprovalRule` for the request's exact area/type/flow/amount is required. **There is no silent
    generic default anymore** — a missing supervisor with no matching rule is treated as a real
@@ -141,10 +146,34 @@ One engine, two identity sources, resolved in `backend/src/services/approvalRule
    naming the missing roster entry or rule so an administrator can fix it (Track B always has its
    own always-available expedited default and is unaffected by this gate).
 
-Approval actions: `APPROVE` (advances the route), `OBSERVE` (non-terminal — request stays at the
-current checkpoint for the requester to supply clarification, then returns to the same checkpoint),
-`RETURN` (sends it back to the requester/previous stage for correction), `REJECT` (terminal — no
-further processing; any unexecuted budget/commitments are released).
+Approval actions: `APPROVE` (advances the route), `OBSERVE` (non-terminal — the requester supplies
+clarification and resubmits), `RETURN` (sends it back to the requester for correction), `REJECT`
+(terminal — no further processing; any unexecuted budget/commitments are released). Submission
+controls (documents, dimensions, XML, period) gate `APPROVE` only; an approver can always observe,
+return or reject.
+
+- **Resubmission** after `OBSERVE`/`RETURN` (or a withdrawal) re-resolves the route from scratch for
+  the request's current amount, track, area and roster, and restarts at the first approver. The
+  replaced route is kept in an `APPROVAL_ROUTE_RESET` audit entry.
+- **Withdrawal.** The requester may withdraw a submitted request back to `BORRADOR`
+  (`POST /requests/:id/withdraw`) while it is `PENDIENTE_APROBACION` and no step has been
+  `APPROVED`. Open steps become `SKIPPED`, the approver's task and SLA alerts are resolved, and a
+  `REQUEST_WITHDRAWN` audit entry is written.
+- **Absence.** `User.onLeave` (set by Admin in Users, or by the user via `PUT /users/me/leave`) or
+  deactivation moves every pending manager-chain step waiting on that user to their nearest
+  available jefe, with an `APPROVAL_REASSIGNED` audit entry and a notification to the new
+  approver (Admin is notified when nobody above is available).
+- **SLA in working days.** Due dates use the Peruvian working-day calendar
+  (`businessCalendarService.addWorkingDays`: weekends, national holidays and `UMA_EXTRA_HOLIDAYS`
+  excluded). `APPROVAL_SLA_WORKING_DAYS` (default 1, the former 24h) sets a chain step's SLA; a
+  rule's `slaHours` is read as 24 per working day. An overdue step escalates after
+  `SLA_ESCALATION_WORKING_DAYS` more working days (default 1) to the approver's own nearest
+  available jefe (Management only if there is nobody above), and the requester is told the
+  approval is overdue.
+- **After final approval** every route — rule-based, manager-chain or Management-final — runs the
+  automatic budget commitment (`commitApprovedRequestBudget`). A budget shortfall keeps the
+  existing exception/observation/rejection behaviour; any other failure leaves the commitment to
+  Budget's manual retry. The requester is notified that the request was approved.
 
 ## 4. Budget
 

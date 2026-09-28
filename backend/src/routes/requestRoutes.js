@@ -25,6 +25,7 @@ import {
   uploadRendition,
   validateRendition,
   voidRequest,
+  withdrawRequest,
 } from "../controllers/requestController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
@@ -44,6 +45,7 @@ router.route("/:id").get(getRequest).put(uploadFields, updateRequest).delete(del
 router.get("/:id/procurement-readiness", getProcurementReadiness);
 router.post("/:id/procurement-order", authorize(ROLES.ADMIN, ROLES.PROCUREMENT), createProcurementOrder);
 router.post("/:id/submit", submitRequest);
+router.post("/:id/withdraw", withdrawRequest);
 router.post("/:id/invoice", authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.ACCOUNTING), uploadFields, registerInvoice);
 router.post("/:id/rendition", authorize(ROLES.ADMIN, ROLES.SOLICITOR), uploadFields, uploadRendition);
 router.get("/:id/rendition/policy", getRenditionFormPolicy);

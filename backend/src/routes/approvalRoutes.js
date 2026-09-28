@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { approveRequest, getApprovalInbox, observeRequest, rejectRequest, returnRequest } from "../controllers/approvalController.js";
+import { approveRequest, getApprovalInbox, getApprovalOptions, observeRequest, rejectRequest, returnRequest } from "../controllers/approvalController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { ROLES } from "../utils/constants.js";
 
@@ -11,6 +11,7 @@ const router = Router();
 // / isActiveChainApprover), not by this role gate.
 router.use(protect, authorize(...Object.values(ROLES).filter(role => role !== ROLES.MANAGEMENT_VIEWER)));
 router.get("/inbox", getApprovalInbox);
+router.get("/:id/options", getApprovalOptions);
 router.post("/:id/approve", approveRequest);
 router.post("/:id/observe", observeRequest);
 router.post("/:id/return", returnRequest);

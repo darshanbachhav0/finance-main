@@ -17,6 +17,7 @@ import "./cecoMaster.test.js";
 import "./frontendBackendAlignment.test.js";
 import "./sireExportContracts.test.js";
 import "./slaContracts.test.js";
+import "./approvalFlexibleChainContracts.test.js";
 
 import "./uiCleanup.test.js";
 import "./managementPortal.test.js";

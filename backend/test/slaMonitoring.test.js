@@ -7,6 +7,7 @@ import Notification from "../src/models/Notification.js";
 import AuditLog from "../src/models/AuditLog.js";
 import { checkApprovalSlas, approvalSlaCycle } from "../src/services/slaMonitoringService.js";
 import { classifyApprovalSla } from "../src/services/slaPolicy.js";
+import { addWorkingDays } from "../src/services/businessCalendarService.js";
 import { recordAudit } from "../src/services/auditService.js";
 import { transitionRequest } from "../src/services/workflowService.js";
 
@@ -14,18 +15,20 @@ test("SLA notifications, escalation, retries and immutable audit", { timeout: 12
   const database = `erp_sla_test_${process.pid}_${Date.now()}`;
   await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`);
   const now = new Date("2026-09-18T12:00:00Z");
-  const config = { dueSoonHours: 4, escalationHours: 24, pollMs: 60000 };
+  const config = { dueSoonHours: 4, escalationWorkingDays: 1, pollMs: 60000 };
   const oid = () => new mongoose.Types.ObjectId();
   try {
     await Promise.all([Notification.init(), AuditLog.init()]);
-    const director = { _id: oid(), name: "Director", role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", area: "Operations", active: true };
-    const vice = { ...director, _id: oid(), name: "Vice Rector", role: "ViceRector", approvalLevel: "VICE_RECTOR" };
-    const other = { ...director, _id: oid(), area: "Other" };
+    const viceId = oid();
+    // The Director reports to the Vice Rector: escalation goes to the approver's own jefe.
+    const director = { _id: oid(), name: "Director", role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", area: "Operations", active: true, jefe: viceId };
+    const vice = { ...director, _id: viceId, jefe: null, name: "Vice Rector", role: "ViceRector", approvalLevel: "VICE_RECTOR" };
+    const other = { ...director, _id: oid(), area: "Other", jefe: null };
     const manager = { _id: oid(), name: "Management", role: "Management", active: true };
     await User.collection.insertMany([director, vice, other, manager].map((user, i) => ({ ...user, email: `sla${i}@test.local`, passwordHash: "unused" })));
-    const id = oid(), stepId = oid();
+    const id = oid(), stepId = oid(), requesterId = oid();
     const dueAt = new Date(now.getTime() + 3600000);
-    await FinancialRequest.collection.insertOne({ _id: id, requestNumber: "SLA-TEST", requester: oid(), status: "PENDIENTE_APROBACION", requesterArea: "Operations", approvalStage: "AREA_DIRECTOR", approvalDueAt: dueAt,
+    await FinancialRequest.collection.insertOne({ _id: id, requestNumber: "SLA-TEST", requester: requesterId, status: "PENDIENTE_APROBACION", requesterArea: "Operations", approvalStage: "AREA_DIRECTOR", approvalDueAt: dueAt,
       approvalRouteSnapshot: [{ _id: stepId, sequence: 1, role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", required: true, status: "PENDING", startedAt: new Date(now.getTime() - 23 * 3600000), dueAt }] });
     const scan = at => checkApprovalSlas({ now: at || now, config });
 
@@ -40,16 +43,28 @@ test("SLA notifications, escalation, retries and immutable audit", { timeout: 12
       const at = new Date(dueAt.getTime() + 1000);
       await scan(at);
       assert.equal(await Notification.countDocuments({ type: "SLA_DUE_SOON", resolvedAt: null }), 0);
-      const alert = await Notification.findOne({ type: "SLA_OVERDUE" });
+      const alert = await Notification.findOne({ type: "SLA_OVERDUE", user: director._id });
       alert.readAt = now; await alert.save();
       await Promise.all([scan(at), scan(at)]);
-      assert.equal(await Notification.countDocuments({ type: "SLA_OVERDUE" }), 1);
+      assert.equal(await Notification.countDocuments({ type: "SLA_OVERDUE", user: director._id }), 1);
       assert.ok((await Notification.findById(alert._id)).readAt);
+      // The requester is told once that their approval is overdue.
+      assert.equal(await Notification.countDocuments({ type: "SLA_OVERDUE", user: requesterId }), 1);
     });
-    await t.test("long overdue escalates once to approver and Management with one immutable audit", async () => {
-      const at = new Date(dueAt.getTime() + 25 * 3600000);
+    await t.test("escalation counts working days: a Friday deadline does not escalate over the weekend", async () => {
+      // Due Friday 2026-09-18; Saturday and Sunday are not working days.
+      assert.equal(classifyApprovalSla(dueAt, new Date(dueAt.getTime() + 25 * 3600000), config).alert, "SLA_OVERDUE");
+      assert.equal(classifyApprovalSla(dueAt, new Date(dueAt.getTime() + 49 * 3600000), config).alert, "SLA_OVERDUE");
+      assert.equal(classifyApprovalSla(dueAt, addWorkingDays(dueAt, 1), config).alert, "SLA_ESCALATION");
+    });
+    await t.test("long overdue escalates once to the approver and the approver's own jefe with one immutable audit", async () => {
+      const at = new Date(addWorkingDays(dueAt, 1).getTime() + 1000);
       await Promise.all([scan(at), scan(at)]);
       assert.equal(await Notification.countDocuments({ type: "SLA_ESCALATION" }), 2);
+      assert.equal(await Notification.countDocuments({ type: "SLA_ESCALATION", user: director._id }), 1);
+      assert.equal(await Notification.countDocuments({ type: "SLA_ESCALATION", user: vice._id }), 1, "the Director's jefe");
+      assert.equal(await Notification.countDocuments({ type: "SLA_ESCALATION", user: manager._id }), 0, "no blanket Management escalation");
+      assert.equal(await Notification.countDocuments({ type: "SLA_OVERDUE", user: requesterId, resolvedAt: null }), 1);
       assert.equal(await AuditLog.countDocuments({ action: "SLA_ESCALATION" }), 1);
       const audit = await AuditLog.findOne({ action: "SLA_ESCALATION" });
       assert.equal(audit.statusFrom, "PENDIENTE_APROBACION");
