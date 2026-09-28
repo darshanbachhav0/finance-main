@@ -5,6 +5,7 @@ import XmlValidationAttempt from "../models/XmlValidationAttempt.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { moneyEquals } from "../utils/money.js";
+import { canonicalSeriesNumber, canonicalVoucherType } from "../utils/voucherIdentity.js";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -90,15 +91,33 @@ export async function parseInvoiceXml(filePath) {
   } catch {
     throw new AppError(422, "The uploaded XML could not be parsed safely.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }
+  const rootName = parsed.Invoice ? "Invoice" : parsed.CreditNote ? "CreditNote" : parsed.DebitNote ? "DebitNote" : "";
   const root = parsed.Invoice || parsed.CreditNote || parsed.DebitNote || parsed;
   const supplierParty = findSection(root, "AccountingSupplierParty") || findSection(root, "SupplierParty") || root;
-  const legalTotal = findSection(root, "LegalMonetaryTotal") || root;
+  // UBL debit notes carry their totals in RequestedMonetaryTotal instead of LegalMonetaryTotal.
+  const legalTotal = findSection(root, "LegalMonetaryTotal") || findSection(root, "RequestedMonetaryTotal") || root;
   const taxTotal = findSection(root, "TaxTotal") || root;
   const taxSubtotal = findSection(root, "TaxSubtotal") || root;
+  // SUNAT Tabla 10: Invoice carries InvoiceTypeCode (01 factura, 03 boleta); credit/debit notes are 07/08.
+  const invoiceTypeCode = String(localValue(root.InvoiceTypeCode) ?? "").trim();
+  const documentTypeCode = rootName === "CreditNote" ? "07" : rootName === "DebitNote" ? "08" : invoiceTypeCode || (rootName === "Invoice" ? "01" : "");
+  const billingReference = findSection(root, "BillingReference");
+  const referencedDocument = billingReference ? (findSection(billingReference, "InvoiceDocumentReference") || billingReference) : null;
+  const reference = referencedDocument ? {
+    seriesNumber: canonicalSeriesNumber(normalizeVoucher(findFirstValue(referencedDocument, ["ID"]))),
+    documentTypeCode: String(findFirstValue(referencedDocument, ["DocumentTypeCode"]) || "").trim(),
+    voucherType: canonicalVoucherType(findFirstValue(referencedDocument, ["DocumentTypeCode"]) || "01")
+  } : undefined;
+  // The document's own ID is a direct child of the root; searching the whole tree first could pick
+  // up the ID of a BillingReference or signature block.
+  const ownId = localValue(root.ID) ?? findFirstValue(root, ["ID"]);
   return {
     ruc: normalizeIdentifier(findFirstValue(supplierParty, ["CompanyID", "ID"])),
     supplierName: String(findFirstValue(supplierParty, ["RegistrationName", "Name"]) || "").trim(),
-    invoiceNumber: normalizeVoucher(findFirstValue(root, ["ID"])),
+    invoiceNumber: normalizeVoucher(ownId),
+    documentTypeCode,
+    voucherType: canonicalVoucherType(documentTypeCode || "01"),
+    reference: reference?.seriesNumber ? reference : undefined,
     issueDate: dateOnly(findFirstValue(root, ["IssueDate"])),
     currency: String(findFirstValue(root, ["DocumentCurrencyCode"]) || "").trim().toUpperCase(),
     netAmount: toNumber(findFirstValue(legalTotal, ["LineExtensionAmount", "TaxExclusiveAmount"])) ?? toNumber(findFirstValue(taxSubtotal, ["TaxableAmount"])),
@@ -116,7 +135,8 @@ export async function buildXmlValidationResult(filePath, requestData) {
   const comparisons = {
     currencyMatch: Boolean(data.currency && data.currency === requestData.currency),
     supplierMatch: Boolean(expectedIdentifier && data.ruc && expectedIdentifier === data.ruc),
-    documentNumberMatch: expectedDocument ? Boolean(data.invoiceNumber && expectedDocument === data.invoiceNumber) : null,
+    // F001-00001234 and F001-1234 are the same SUNAT correlative.
+    documentNumberMatch: expectedDocument ? Boolean(data.invoiceNumber && canonicalSeriesNumber(expectedDocument) === canonicalSeriesNumber(data.invoiceNumber)) : null,
     dateMatch: expectedDate ? Boolean(data.issueDate && dateOnly(expectedDate) === data.issueDate) : null,
     netMatch: data.netAmount !== undefined && moneyEquals(data.netAmount, requestData.totalNet ?? requestData.netAmount),
     igvMatch: data.igvAmount !== undefined && moneyEquals(data.igvAmount, requestData.totalIGV ?? requestData.igvAmount),

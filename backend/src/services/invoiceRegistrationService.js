@@ -1,8 +1,12 @@
-import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
+﻿import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SunatVoucher from "../models/SunatVoucher.js";
-import { createAccountsPayableFromVoucher } from "./accountingService.js";
+import InvoiceObservation from "../models/InvoiceObservation.js";
+import { createAccountsPayableFromVoucher, invoicePostingPeriod } from "./accountingService.js";
+import { applyAdjustmentNote, registerAdjustmentNote } from "./adjustmentNoteService.js";
+import { retryInvoiceObservation } from "./batchInvoiceService.js";
+import { guardAccountingPeriod } from "./periodService.js";
 import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { executeBudgetAmount } from "./budgetService.js";
@@ -14,12 +18,16 @@ import {
 } from "./purchaseOrderMatchingService.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import {
+  applyManualSunatOverride,
   createSunatVoucher,
   findDuplicateVoucher,
+  hasManualSunatException,
+  manualExceptionEvidence,
   splitVoucherNumber,
   validateVoucherWithSunat,
   voucherIdentity
 } from "./sunatVoucherService.js";
+import { isAdjustmentNote } from "../utils/voucherIdentity.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { fileChecksum, parseInvoiceXml } from "./xmlValidationService.js";
 import { transitionRequest } from "./workflowService.js";
@@ -155,7 +163,144 @@ async function recordObservation({ request, purchaseOrder, voucher, status, requ
   return { request, sunatVoucher: storedVoucher, observed: true, sunatResult };
 }
 
-export async function registerA1Invoice({ requestId, files, user, req }) {
+// Posts one validated (or manually excepted) A1 invoice: consumes the PO balance, stores the
+// SUNAT evidence and creates the CXP with its provision in the invoice date's period.
+async function provisionA1Voucher({ request, purchaseOrder, voucher, data, sunatResult, xmlFile, pdfFile, evidenceFiles, user, req }) {
+  const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
+  const parts = { series: voucher.series, number: voucher.number };
+  let consumedWithoutTransaction = false;
+  let createdVoucherId;
+  try {
+    const result = await runFinancialOperation(async (session) => {
+      const currentRequest = await FinancialRequest.findById(request._id).select("+attachments.path").populate("supplier").session(session || null);
+      const currentPurchaseOrder = await PurchaseOrder.findById(purchaseOrder._id).session(session || null);
+      if (!currentRequest || !currentPurchaseOrder) throw new AppError(404, "Request or Purchase Order no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
+      await assertPostingAllowed(currentRequest, { user, req });
+      const duplicateCheck = await reusablePlaceholder(voucher, currentRequest._id, session);
+      if (duplicateCheck.duplicate && !duplicateCheck.placeholder) {
+        throw new AppError(409, "The supplier voucher is already registered.", { voucher: duplicateCheck.duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
+      }
+      await assertPurchaseOrderInvoiceFits(currentPurchaseOrder._id, data.totalAmount, { currency: voucher.currency, session });
+      await consumePurchaseOrderBalance(currentPurchaseOrder._id, data.totalAmount, { session });
+      if (!session) consumedWithoutTransaction = true;
+
+      let sunatVoucher = duplicateCheck.placeholder ? await SunatVoucher.findById(duplicateCheck.placeholder._id).session(session || null) : null;
+      if (!sunatVoucher) {
+        sunatVoucher = await createSunatVoucher({
+          request: currentRequest,
+          purchaseOrder: currentPurchaseOrder,
+          supplier: currentRequest.supplier,
+          voucher,
+          flowType: FLOW_TYPE.A1,
+          validationStatus: "VALID",
+          sunatResult,
+          xmlFile,
+          pdfFile,
+          user,
+          session
+        });
+        createdVoucherId = sunatVoucher._id;
+      } else {
+        const identity = voucherIdentity(voucher);
+        const manual = hasManualSunatException(sunatVoucher);
+        sunatVoucher.set({
+          rucIssuer: identity.rucIssuer,
+          voucherType: identity.voucherType,
+          series: identity.series,
+          number: identity.number,
+          seriesNumber: `${identity.series}-${identity.number}`,
+          issueDate: voucher.issueDate,
+          currency: voucher.currency,
+          netAmount: voucher.netAmount,
+          igvAmount: voucher.igvAmount,
+          xmlAmount: voucher.totalAmount,
+          // An approved manual exception stays visible as such; it is never relabelled VALID.
+          validationStatus: manual ? "MANUAL_EXCEPTION" : "VALID",
+          observationDetail: manual ? sunatVoucher.observationDetail : "",
+          sunatStatus: sunatResult.status || sunatResult.fiscal?.status,
+          taxpayerStatus: sunatResult.taxpayer?.condition || sunatResult.taxpayer?.status,
+          sunatProvider: sunatResult.fiscal?.source || sunatResult.taxpayer?.source,
+          xmlPath: xmlFile?.path || sunatVoucher.xmlPath,
+          xmlUrl: xmlFile?.url || sunatVoucher.xmlUrl,
+          xmlChecksum: xmlFile?.checksum || sunatVoucher.xmlChecksum,
+          pdfPath: pdfFile?.path || sunatVoucher.pdfPath,
+          pdfUrl: pdfFile?.url || sunatVoucher.pdfUrl,
+          validatedAt: new Date(),
+          validatedBy: user._id
+        });
+        await sunatVoucher.save({ session });
+      }
+
+      const accountsPayable = await createAccountsPayableFromVoucher({
+        request: currentRequest,
+        supplier: currentRequest.supplier,
+        voucher,
+        purchaseOrder: currentPurchaseOrder,
+        sunatVoucher,
+        user,
+        flowType: FLOW_TYPE.A1,
+        session
+      });
+      sunatVoucher.accountsPayable = accountsPayable._id;
+      sunatVoucher.provisionedAt = new Date();
+      await sunatVoucher.save({ session });
+      if (!accountsPayable.budgetExecutedAt) {
+        await executeBudgetAmount(currentRequest, user._id, accountsPayable.penEquivalent, {
+          session,
+          comments: `Track A1 invoice ${data.invoiceNumber} provisioned against ${currentPurchaseOrder.poNumber}.`
+        });
+        accountsPayable.budgetExecutedAt = new Date();
+        await accountsPayable.save({ session });
+      }
+
+      if (evidenceFiles) addAttemptAttachments(currentRequest, evidenceFiles, user._id);
+      currentRequest.fiscalData = {
+        supplierIdentifierNormalized: expectedRuc,
+        voucherType: voucher.voucherType,
+        documentType: voucher.voucherType,
+        series: parts.series,
+        number: parts.number,
+        documentDate: data.issueDate,
+        accountingDate: new Date(),
+        // The invoice is booked in the period of its own date, not the request's creation month.
+        fiscalPeriod: invoicePostingPeriod(data.issueDate),
+        processedAt: new Date(),
+        processedBy: user._id,
+        comments: hasManualSunatException(sunatVoucher) ? "A1 invoice matched to Purchase Order under an approved manual SUNAT exception." : "A1 invoice matched to Purchase Order and SUNAT."
+      };
+      currentRequest.observation = undefined;
+      await syncFinancialProgress({ request: currentRequest, user, req, session, action: "A1_INVOICE_PROVISIONED" });
+      return { request: currentRequest, sunatVoucher, accountsPayable };
+    });
+    await recordAudit({
+      entityType: "SunatVoucher",
+      entity: result.sunatVoucher,
+      requestId: result.request._id,
+      action: "A1_PROVISIONED",
+      user,
+      req,
+      module: "ACCOUNTING",
+      newValues: { accountsPayable: result.accountsPayable._id, purchaseOrder: purchaseOrder._id, amount: data.totalAmount, validationStatus: result.sunatVoucher.validationStatus }
+    });
+    await notifyRoles({
+      roles: [ROLES.TREASURY],
+      eventKey: `request:${result.request._id}:treasury:${result.accountsPayable._id}`,
+      type: "TREASURY_PAYMENT",
+      title: "CXP ready for payment",
+      message: `${result.request.requestNumber} invoice ${data.invoiceNumber} is ready for Treasury.`,
+      path: "/treasury",
+      entityType: "AccountsPayable",
+      entityId: result.accountsPayable._id
+    });
+    return { ...result, observed: false };
+  } catch (error) {
+    if (consumedWithoutTransaction) await restorePurchaseOrderBalance(purchaseOrder._id, data.totalAmount).catch(() => undefined);
+    if (createdVoucherId) await SunatVoucher.deleteOne({ _id: createdVoucherId, accountsPayable: { $exists: false } }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function registerA1Invoice({ requestId, files, originalVoucherId, user, req }) {
   const request = await FinancialRequest.findById(requestId).select("+attachments.path").populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   if (request.flowType !== FLOW_TYPE.A1) {
@@ -187,14 +332,24 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
     if (!xmlFile?.path) throw new AppError(422, "Invoice XML is required before accounting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
     xmlFile.checksum ||= await fileChecksum(xmlFile.path);
     const data = await parseInvoiceXml(xmlFile.path);
+    // The XML's own document type decides the path: a credit/debit note adjusts its original
+    // invoice (linked from the XML reference or chosen by the user) instead of creating a payable.
+    if (isAdjustmentNote(data.voucherType)) {
+      const result = await registerAdjustmentNote({ xmlFile, pdfFile, originalVoucherId, requestId: request._id, user, req });
+      evidenceAdopted = true;
+      const refreshed = await FinancialRequest.findById(request._id).populate("supplier");
+      return { request: refreshed, sunatVoucher: result.note || result.sunatVoucher, accountsPayable: result.accountsPayable, supplierCredit: result.supplierCredit, observed: result.observed, adjustment: true };
+    }
     const parts = splitVoucherNumber(data.invoiceNumber);
     const voucher = {
       ...data,
-      voucherType: "FACTURA",
+      voucherType: data.voucherType || "FACTURA",
       series: parts.series,
       number: parts.number,
       currency: data.currency || request.currency
     };
+    // Guard the period the invoice actually lands in (its document date).
+    await guardAccountingPeriod({ period: invoicePostingPeriod(data.issueDate), action: "POST", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
     const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
     const { duplicate, placeholder } = await reusablePlaceholder(voucher, request._id);
 
@@ -216,7 +371,7 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
       sunatResult = await validateVoucherWithSunat(voucher, { request, user });
     } catch (error) {
       const detail = error.code === ERROR_CODES.INTEGRATION_NOT_CONFIGURED
-        ? "Automated SUNAT validation is not configured. Configure the production gateway or use MOCK mode only in development."
+        ? `${error.message || "Automated SUNAT validation is not configured."} Accounting can approve a manual SUNAT exception for this invoice.`
         : error.message;
       const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "OBSERVADO_SUNAT", detail, xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
       evidenceAdopted = true;
@@ -236,136 +391,65 @@ export async function registerA1Invoice({ requestId, files, user, req }) {
       return result;
     }
 
-    let consumedWithoutTransaction = false;
-    let createdVoucherId;
-    try {
-      const result = await runFinancialOperation(async (session) => {
-        const currentRequest = await FinancialRequest.findById(request._id).select("+attachments.path").populate("supplier").session(session || null);
-        const currentPurchaseOrder = await PurchaseOrder.findById(purchaseOrder._id).session(session || null);
-        if (!currentRequest || !currentPurchaseOrder) throw new AppError(404, "Request or Purchase Order no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
-        await assertPostingAllowed(currentRequest, { user, req });
-        const duplicateCheck = await reusablePlaceholder(voucher, currentRequest._id, session);
-        if (duplicateCheck.duplicate && !duplicateCheck.placeholder) {
-          throw new AppError(409, "The supplier voucher is already registered.", { voucher: duplicateCheck.duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
-        }
-        await assertPurchaseOrderInvoiceFits(currentPurchaseOrder._id, data.totalAmount, { currency: voucher.currency, session });
-        await consumePurchaseOrderBalance(currentPurchaseOrder._id, data.totalAmount, { session });
-        if (!session) consumedWithoutTransaction = true;
-
-        let sunatVoucher = duplicateCheck.placeholder ? await SunatVoucher.findById(duplicateCheck.placeholder._id).session(session || null) : null;
-        if (!sunatVoucher) {
-          sunatVoucher = await createSunatVoucher({
-            request: currentRequest,
-            purchaseOrder: currentPurchaseOrder,
-            supplier: currentRequest.supplier,
-            voucher,
-            flowType: FLOW_TYPE.A1,
-            validationStatus: "VALID",
-            sunatResult,
-            xmlFile,
-            pdfFile,
-            user,
-            session
-          });
-          createdVoucherId = sunatVoucher._id;
-        } else {
-          const identity = voucherIdentity(voucher);
-          sunatVoucher.set({
-            rucIssuer: identity.rucIssuer,
-            voucherType: identity.voucherType,
-            series: identity.series,
-            number: identity.number,
-            seriesNumber: `${identity.series}-${identity.number}`,
-            issueDate: voucher.issueDate,
-            currency: voucher.currency,
-            netAmount: voucher.netAmount,
-            igvAmount: voucher.igvAmount,
-            xmlAmount: voucher.totalAmount,
-            validationStatus: "VALID",
-            observationDetail: "",
-            sunatStatus: sunatResult.status || sunatResult.fiscal?.status,
-            taxpayerStatus: sunatResult.taxpayer?.condition || sunatResult.taxpayer?.status,
-            sunatProvider: sunatResult.fiscal?.source || sunatResult.taxpayer?.source,
-            xmlPath: xmlFile.path,
-            xmlUrl: xmlFile.url,
-            xmlChecksum: xmlFile.checksum,
-            pdfPath: pdfFile.path,
-            pdfUrl: pdfFile.url,
-            validatedAt: new Date(),
-            validatedBy: user._id
-          });
-          await sunatVoucher.save({ session });
-        }
-
-        const accountsPayable = await createAccountsPayableFromVoucher({
-          request: currentRequest,
-          supplier: currentRequest.supplier,
-          voucher,
-          purchaseOrder: currentPurchaseOrder,
-          sunatVoucher,
-          user,
-          flowType: FLOW_TYPE.A1,
-          session
-        });
-        sunatVoucher.accountsPayable = accountsPayable._id;
-        sunatVoucher.provisionedAt = new Date();
-        await sunatVoucher.save({ session });
-        if (!accountsPayable.budgetExecutedAt) {
-          await executeBudgetAmount(currentRequest, user._id, accountsPayable.penEquivalent, {
-            session,
-            comments: `Track A1 invoice ${data.invoiceNumber} provisioned against ${currentPurchaseOrder.poNumber}.`
-          });
-          accountsPayable.budgetExecutedAt = new Date();
-          await accountsPayable.save({ session });
-        }
-
-        addAttemptAttachments(currentRequest, evidenceFiles, user._id);
-        currentRequest.fiscalData = {
-          supplierIdentifierNormalized: expectedRuc,
-          voucherType: "FACTURA",
-          documentType: "FACTURA",
-          series: parts.series,
-          number: parts.number,
-          documentDate: data.issueDate,
-          accountingDate: new Date(),
-          fiscalPeriod: currentRequest.accountingPeriod,
-          processedAt: new Date(),
-          processedBy: user._id,
-          comments: "A1 invoice matched to Purchase Order and SUNAT."
-        };
-        currentRequest.observation = undefined;
-        await syncFinancialProgress({ request: currentRequest, user, req, session, action: "A1_INVOICE_PROVISIONED" });
-        return { request: currentRequest, sunatVoucher, accountsPayable };
-      });
-      evidenceAdopted = true;
-      await recordAudit({
-        entityType: "SunatVoucher",
-        entity: result.sunatVoucher,
-        requestId: result.request._id,
-        action: "A1_PROVISIONED",
-        user,
-        req,
-        module: "ACCOUNTING",
-        newValues: { accountsPayable: result.accountsPayable._id, purchaseOrder: purchaseOrder._id, amount: data.totalAmount }
-      });
-      await notifyRoles({
-        roles: [ROLES.TREASURY],
-        eventKey: `request:${result.request._id}:treasury:${result.accountsPayable._id}`,
-        type: "TREASURY_PAYMENT",
-        title: "CXP ready for payment",
-        message: `${result.request.requestNumber} invoice ${data.invoiceNumber} is ready for Treasury.`,
-        path: "/treasury",
-        entityType: "AccountsPayable",
-        entityId: result.accountsPayable._id
-      });
-      return { ...result, observed: false };
-    } catch (error) {
-      if (consumedWithoutTransaction) await restorePurchaseOrderBalance(purchaseOrder._id, data.totalAmount).catch(() => undefined);
-      if (createdVoucherId) await SunatVoucher.deleteOne({ _id: createdVoucherId, accountsPayable: { $exists: false } }).catch(() => undefined);
-      throw error;
-    }
+    const result = await provisionA1Voucher({ request, purchaseOrder, voucher, data, sunatResult, xmlFile, pdfFile, evidenceFiles, user, req });
+    evidenceAdopted = true;
+    return result;
   } catch (error) {
     if (persisted && !evidenceAdopted) await cleanupUploadedFiles(persisted).catch(() => undefined);
     throw error;
   }
 }
+
+/**
+ * Accounting approves a manual SUNAT exception on an observed invoice (SUNAT down, or PADRON-only
+ * mode which can never verify a CPE). One Accounting user is enough. The exception is audited and
+ * the invoice is posted immediately when it can be: A1 invoices are provisioned to CXP, A2 batch
+ * observations are revalidated, adjustment notes are applied. Track B and manually processed
+ * requests post on their next processing attempt, which now accepts the exception.
+ */
+export async function approveManualSunatException({ requestId, voucherId, reason, evidenceReference, user, req }) {
+  const request = await FinancialRequest.findById(requestId).populate("supplier");
+  if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
+  const voucher = await applyManualSunatOverride({ request, voucherId, reason, evidenceReference, user, req });
+  const outcome = { voucher, provisioned: false };
+  if (isAdjustmentNote(voucher.voucherType)) {
+    if (voucher.adjustmentAppliedAt) return outcome;
+    try {
+      const applied = await applyAdjustmentNote({ noteVoucherId: voucher._id, user, req });
+      return { ...outcome, provisioned: true, accountsPayable: applied.accountsPayable, supplierCredit: applied.supplierCredit };
+    } catch (error) {
+      return { ...outcome, detail: error.message };
+    }
+  }
+  if (voucher.accountsPayable) return { ...outcome, provisioned: true };
+  try {
+    if (voucher.batch) {
+      const observation = await InvoiceObservation.findOne({ voucher: voucher._id, resolutionStatus: "OPEN" });
+      if (!observation) return outcome;
+      const result = await retryInvoiceObservation({ observationId: observation._id, user, req });
+      return { ...outcome, voucher: result.voucher, provisioned: true, accountsPayable: result.accountsPayable };
+    }
+    if (voucher.flowType === FLOW_TYPE.A1 && request.flowType === FLOW_TYPE.A1) {
+      const purchaseOrder = await PurchaseOrder.findOne({ request: request._id });
+      if (!purchaseOrder) return { ...outcome, detail: "Purchase Order is required for Track A1 invoice matching." };
+      const stored = await SunatVoucher.findById(voucher._id).select("+xmlPath +pdfPath");
+      if (!stored.xmlPath) return { ...outcome, detail: "The observed invoice has no stored XML." };
+      const data = await parseInvoiceXml(stored.xmlPath);
+      const parts = splitVoucherNumber(data.invoiceNumber);
+      const invoice = { ...data, voucherType: data.voucherType || stored.voucherType, series: parts.series, number: parts.number, currency: data.currency || request.currency };
+      const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
+      if (data.ruc !== expectedRuc) return { ...outcome, detail: "The XML issuer RUC does not match the approved supplier." };
+      await guardAccountingPeriod({ period: invoicePostingPeriod(data.issueDate), action: "POST", user, req, module: "ACCOUNTING", entityType: "SunatVoucher", entityId: stored._id, requestId: request._id });
+      await assertPurchaseOrderInvoiceFits(purchaseOrder._id, data.totalAmount, { currency: invoice.currency });
+      const xmlFile = { path: stored.xmlPath, url: stored.xmlUrl, checksum: stored.xmlChecksum };
+      const pdfFile = stored.pdfPath ? { path: stored.pdfPath, url: stored.pdfUrl } : undefined;
+      const result = await provisionA1Voucher({ request, purchaseOrder, voucher: invoice, data, sunatResult: manualExceptionEvidence(stored), xmlFile, pdfFile, user, req });
+      return { ...outcome, voucher: result.sunatVoucher, provisioned: true, accountsPayable: result.accountsPayable, request: result.request };
+    }
+  } catch (error) {
+    // The exception itself is recorded; posting can be retried once the blocker is resolved.
+    return { ...outcome, detail: error.message };
+  }
+  return outcome;
+}
+

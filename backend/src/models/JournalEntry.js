@@ -22,7 +22,7 @@ const journalEntrySchema = new mongoose.Schema(
     request: { type: mongoose.Schema.Types.ObjectId, ref: "FinancialRequest", required: true },
     accountsPayable: { type: mongoose.Schema.Types.ObjectId, ref: "AccountsPayable" },
     period: { type: String, required: true, match: /^\d{4}-\d{2}$/ },
-    entryType: { type: String, enum: ["PROVISION", "PAYMENT", "ADVANCE", "RENDITION", "RENDITION_SETTLEMENT", "REVERSAL"], required: true },
+    entryType: { type: String, enum: ["PROVISION", "PAYMENT", "ADVANCE", "RENDITION", "RENDITION_SETTLEMENT", "REVERSAL", "CREDIT_NOTE", "DEBIT_NOTE", "SUPPLIER_CREDIT_APPLICATION", "SUPPLIER_CREDIT_RECOVERY"], required: true },
     sourceTransaction: { type: String, required: true, trim: true },
     currency: { type: String, enum: CURRENCY, required: true },
     originalAmount: { type: Number, required: true, min: 0 },

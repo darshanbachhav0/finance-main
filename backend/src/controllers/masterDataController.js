@@ -119,7 +119,7 @@ export const costCenters = resourceController({
 export const expenseTypes = resourceController({
   Model: ExpenseType,
   label: "ExpenseType",
-  fields: ["code", "name", "category", "accountingClass", "accountNumber", "permittedRequestTypes", "permittedExpenseNatures", "deductible", "spotCategoryCode", "active"],
+  fields: ["code", "name", "category", "accountingClass", "accountNumber", "permittedRequestTypes", "permittedExpenseNatures", "deductible", "igvDeductible", "spotCategoryCode", "active"],
   searchFields: ["code", "name", "accountNumber"],
   sortFields: ["code", "name", "accountNumber", "category", "active"],
   defaultSort: { code: 1 }

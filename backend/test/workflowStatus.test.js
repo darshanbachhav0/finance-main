@@ -338,32 +338,47 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await assert.rejects(() => closeAccountingPeriod({ id: period._id, comments: "Attempt close", force: true, overrideReason: "Emergency", user: admin, req }), /Forced period closure/);
       assert.equal((await AccountingPeriod.findById(period._id)).status, "OPEN");
     });
-    await t.test("closed periods stop A1 entry and queued A2 workers before processing evidence", async () => {
-      const request = await makeRequest({ accountingPeriod: "2026-07" });
-      await assert.rejects(() => registerA1Invoice({ requestId: request._id, files: {}, user: admin, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
-      const inserted = await PurchaseOrder.collection.insertOne({ request: request._id, status: "ISSUED", remainingAmount: 118, amount: 118 });
-      await assert.rejects(() => createMassUploadBatch({ purchaseOrderId: inserted.insertedId, files: { batchFile: [{ originalname: "closed.zip" }] }, user: admin, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
-      const batch = await MassUploadBatch.create({ batchCode: "CLOSED-PERIOD", request: request._id, purchaseOrder: inserted.insertedId, uploadedBy: admin._id, inputType: "ZIP", inputFile: { originalName: "closed.zip", filename: "closed.zip", path: "must-not-read.zip", url: "/unused", size: 1 }, status: "QUEUED" });
-      await assert.rejects(() => processMassUploadBatch(batch._id), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
+    // Product-owner decision: the period is the invoice's (document date) period, not the request's
+    // creation month. These tests previously asserted that a closed request month blocked posting.
+    await t.test("closed invoice periods stop A1 entry and A2 workers before posting", async () => {
+      const request = await makeRequest({ accountingPeriod: "2026-07", attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
+      await reserveBudget(request, admin._id);
+      const inserted = await PurchaseOrder.collection.insertOne({ poNumber: "CLOSED-PO", request: request._id, supplier: supplier._id, status: "ISSUED", remainingAmount: 118, amount: 118, originalAmount: 118, currency: "PEN", generatedBy: admin._id });
+      await fs.mkdir(tempUploadDir, { recursive: true });
+      const closedVoucher = { ruc: supplier.rucDni, series: "F077", number: "1", issueDate: "2026-07-20", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
+      const xmlPath = path.join(tempUploadDir, `${request._id}-closed.xml`); files.push(xmlPath);
+      await fs.writeFile(xmlPath, invoiceXml(closedVoucher));
+      const pdfPath = path.join(tempUploadDir, `${request._id}-closed.pdf`); files.push(pdfPath);
+      await fs.writeFile(pdfPath, "%PDF-1.4 test");
+      await assert.rejects(() => registerA1Invoice({ requestId: request._id, files: { xml: [{ path: xmlPath, filename: path.basename(xmlPath), originalname: "closed.xml", mimetype: "application/xml", size: 100 }], pdf: [{ path: pdfPath, filename: path.basename(pdfPath), originalname: "closed.pdf", mimetype: "application/pdf", size: 10 }] }, user: admin, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
+      const zipPath = path.join(tempUploadDir, `${request._id}-closed.zip`); files.push(zipPath);
+      await fs.writeFile(zipPath, invoiceZip({ "closed.xml": invoiceXml(closedVoucher), "closed.pdf": "%PDF-1.4 test" }));
+      const batch = await MassUploadBatch.create({ batchCode: "CLOSED-PERIOD", request: request._id, purchaseOrder: inserted.insertedId, uploadedBy: admin._id, inputType: "ZIP", inputFile: { originalName: "closed.zip", filename: "closed.zip", path: zipPath, url: "/unused", size: 1 }, status: "QUEUED" });
+      await processMassUploadBatch(batch._id);
+      const saved = await MassUploadBatch.findById(batch._id);
+      assert.equal(saved.processedSuccess, 0);
+      assert.match(saved.items[0].errorDetail, /closed/i);
       assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0);
       assert.equal(await JournalEntry.countDocuments({ request: request._id }), 0);
       assert.equal((await PurchaseOrder.findById(inserted.insertedId)).remainingAmount, 118);
+      await fs.rm(path.resolve(uploadRoot, "requests", String(request._id)), { recursive: true, force: true });
     });
-    await t.test("A1, additional invoices and A2 posting cannot bypass a closed period", async () => {
-      for (const flowType of ["A1", "A2", "B", "C"]) {
+    await t.test("A1, A2 and B invoices dated in a closed period cannot post; the request month does not matter", async () => {
+      for (const flowType of ["A1", "A2", "B"]) {
         const request = await makeRequest();
-        const before = await AccountsPayable.countDocuments({ request: request._id });
-        request.accountingPeriod = "2026-07"; await request.save();
-        await assert.rejects(() => payable(request, flowType), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
-        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), before);
+        await reserveBudget(request, admin._id);
+        const voucher = { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F071", number: String(++sequence), issueDate: "2026-07-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
+        const evidence = await fiscalFixture(request, supplier, voucher, admin, files);
+        await assert.rejects(() => createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence.stored, flowType, user: admin }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
+        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0);
         assert.equal(await JournalEntry.countDocuments({ request: request._id }), 0);
         await assert.rejects(() => transitionRequest({ request, targetStatus: "CONTABILIZADO", skipControls: true, user: admin, req }));
       }
-      const request = await makeRequest();
-      await payable(request);
-      request.accountingPeriod = "2026-07"; await request.save();
-      await assert.rejects(() => payable(request), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
-      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
+      // A request created in the closed month can still post an invoice dated in an open month.
+      const request = await makeRequest({ accountingPeriod: "2026-07" });
+      const ap = await payable(request);
+      assert.equal(ap.accountingPeriod, "2026-08");
+      assert.equal((await JournalEntry.findById(ap.provisionJournal)).period, "2026-08");
     });
     await t.test("closing a request invoiced below its PO releases the PO remainder and the matching commitment", async () => {
       const BudgetCommitment = mongoose.model("BudgetCommitment");

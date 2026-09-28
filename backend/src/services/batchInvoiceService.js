@@ -26,6 +26,9 @@ import { configureBatchInvoiceRunner, enqueueBatch } from "../queues/batchInvoic
 import { AppError } from "../utils/AppError.js";
 import { readZipFile } from "../utils/zipReader.js";
 import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { canonicalSeries, canonicalSeriesNumber, canonicalVoucherNumber, canonicalVoucherType, isAdjustmentNote } from "../utils/voucherIdentity.js";
+import { registerAdjustmentNote } from "./adjustmentNoteService.js";
+import { hasManualSunatException } from "./sunatVoucherService.js";
 
 const OBSERVED_STATUSES = new Set(["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH"]);
 const RETRYABLE_OBSERVATION_STATUSES = new Set([...OBSERVED_STATUSES, "FAILED"]);
@@ -145,9 +148,10 @@ function normalizeVoucher(candidate = {}) {
   const voucher = { ...(candidate.voucher || {}) };
   const split = splitVoucherNumber(voucher.invoiceNumber || `${voucher.series || ""}-${voucher.number || ""}`);
   voucher.ruc = String(voucher.ruc || "").replace(/\D/g, "");
-  voucher.voucherType = String(voucher.voucherType || "FACTURA").trim().toUpperCase();
-  voucher.series = String(voucher.series || split.series || "").trim().toUpperCase();
-  voucher.number = String(voucher.number || split.number || "").trim().toUpperCase();
+  // Canonical identity: Tabla 10 codes ("01") map to FACTURA and F001-00001234 === F001-1234.
+  voucher.voucherType = canonicalVoucherType(voucher.voucherType || "FACTURA");
+  voucher.series = canonicalSeries(voucher.series || split.series || "");
+  voucher.number = canonicalVoucherNumber(voucher.number || split.number || "");
   voucher.issueDate = voucher.issueDate ? dateValue(voucher.issueDate) || voucher.issueDate : undefined;
   voucher.currency = String(voucher.currency || "PEN").trim().toUpperCase();
   voucher.netAmount = numberValue(voucher.netAmount);
@@ -259,10 +263,13 @@ function assertSafeZipEntries(entries) {
     throw new AppError(422, "ZIP contains too many files.", { count: entries.length, limit: ZIP_ENTRY_LIMIT }, ERROR_CODES.BATCH_UPLOAD_INVALID);
   }
   let total = 0;
+  if (entries.filter((entry) => path.extname(entry.entryName).toLowerCase() === ".xlsx").length > 1) {
+    throw new AppError(422, "A ZIP batch may contain at most one XLSX invoice list.", undefined, ERROR_CODES.BATCH_UPLOAD_INVALID);
+  }
   for (const entry of entries) {
     const extension = path.extname(entry.entryName).toLowerCase();
-    if (![".xml", ".pdf"].includes(extension)) {
-      throw new AppError(422, "ZIP may contain only XML and PDF files.", { file: entry.entryName }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+    if (![".xml", ".pdf", ".xlsx"].includes(extension)) {
+      throw new AppError(422, "ZIP may contain only XML and PDF files, plus an optional XLSX invoice list.", { file: entry.entryName }, ERROR_CODES.BATCH_UPLOAD_INVALID);
     }
     if (entry.header?.flags & 1) {
       throw new AppError(422, "Encrypted ZIP entries are not supported.", { file: entry.entryName }, ERROR_CODES.BATCH_UPLOAD_INVALID);
@@ -364,46 +371,74 @@ async function zipCandidates(batch) {
     }
     candidates.push({ sourceName: xmlName, xmlFile, pdfFile, voucher, parseError });
   }
+  const manifestEntry = entries.find((value) => path.extname(value.entryName).toLowerCase() === ".xlsx");
+  if (manifestEntry) {
+    const rows = await manifestRows(manifestEntry, directory);
+    matchManifestRows(rows, candidates);
+  }
   return { candidates, totalFiles: entries.length };
 }
 
-async function excelCandidates(batch) {
+function rowVoucher(row) {
+  const invoiceNumber = rowValue(row, ["serie_numero", "serie numero", "comprobante", "numero_comprobante"]);
+  const split = splitVoucherNumber(invoiceNumber);
+  return {
+    ruc: String(rowValue(row, ["ruc_emisor", "ruc", "ruc proveedor"]) || "").replace(/\D/g, ""),
+    voucherType: canonicalVoucherType(rowValue(row, ["tipo_comprobante", "tipo", "document type"]) || "FACTURA"),
+    series: canonicalSeries(rowValue(row, ["serie"]) || split.series || ""),
+    number: canonicalVoucherNumber(rowValue(row, ["numero", "número"]) || split.number || ""),
+    issueDate: dateValue(rowValue(row, ["fecha_emision", "fecha", "issue date"])),
+    currency: String(rowValue(row, ["moneda", "currency"]) || "PEN").toUpperCase(),
+    netAmount: numberValue(rowValue(row, ["monto_neto", "neto", "net amount"])),
+    igvAmount: numberValue(rowValue(row, ["monto_igv", "igv", "tax"])) || 0,
+    totalAmount: numberValue(rowValue(row, ["monto_total", "total", "importe_total"]))
+  };
+}
+
+// The optional XLSX inside a ZIP batch is an invoice list. Every row must be backed by an XML in
+// the same ZIP (only an XML can be validated and posted); a row without its XML, or whose values
+// disagree with the XML, is isolated as an observation instead of being posted.
+async function manifestRows(entry, directory) {
+  const workbookPath = path.join(directory, `${crypto.randomUUID()}-invoice-list.xlsx`);
+  await fs.writeFile(workbookPath, entry.getData(ZIP_ENTRY_BYTES));
   let rows;
   try {
-    const entries = assertSafeSpreadsheetEntries(await readZipFile(batch.inputFile.path));
-    rows = xlsxRows(entries);
+    rows = xlsxRows(assertSafeSpreadsheetEntries(await readZipFile(workbookPath)));
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw new AppError(422, "The uploaded Excel workbook cannot be opened.", { reason: error.message }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+    throw new AppError(422, "The XLSX invoice list inside the ZIP cannot be opened.", { reason: error.message }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+  } finally {
+    await fs.rm(workbookPath, { force: true }).catch(() => undefined);
   }
   if (rows.length > EXCEL_ROW_LIMIT) {
     throw new AppError(422, "Excel batch contains too many invoice rows.", { count: rows.length, limit: EXCEL_ROW_LIMIT }, ERROR_CODES.BATCH_UPLOAD_INVALID);
   }
-  return {
-    totalFiles: 1,
-    candidates: rows.map((row, index) => {
-      const invoiceNumber = rowValue(row, ["serie_numero", "serie numero", "comprobante", "numero_comprobante"]);
-      const split = splitVoucherNumber(invoiceNumber);
-      return {
-        sourceName: `Excel row ${index + 2}`,
-        voucher: {
-          ruc: String(rowValue(row, ["ruc_emisor", "ruc", "ruc proveedor"]) || "").replace(/\D/g, ""),
-          voucherType: String(rowValue(row, ["tipo_comprobante", "tipo", "document type"]) || "FACTURA").toUpperCase(),
-          series: String(rowValue(row, ["serie"]) || split.series || "").toUpperCase(),
-          number: String(rowValue(row, ["numero", "número"]) || split.number || "").toUpperCase(),
-          issueDate: dateValue(rowValue(row, ["fecha_emision", "fecha", "issue date"])),
-          currency: String(rowValue(row, ["moneda", "currency"]) || "PEN").toUpperCase(),
-          netAmount: numberValue(rowValue(row, ["monto_neto", "neto", "net amount"])),
-          igvAmount: numberValue(rowValue(row, ["monto_igv", "igv", "tax"])) || 0,
-          totalAmount: numberValue(rowValue(row, ["monto_total", "total", "importe_total"]))
-        }
-      };
-    })
-  };
+  return rows.map((row, index) => ({ sourceName: `Excel row ${index + 2}`, voucher: rowVoucher(row) }));
+}
+
+function matchManifestRows(rows, candidates) {
+  const byNumber = new Map(candidates.filter((candidate) => candidate.voucher?.invoiceNumber).map((candidate) => [canonicalSeriesNumber(candidate.voucher.invoiceNumber), candidate]));
+  for (const row of rows) {
+    const key = canonicalSeriesNumber(`${row.voucher.series}-${row.voucher.number}`);
+    const candidate = byNumber.get(key);
+    if (candidate) candidate.manifestRow = row;
+    else candidates.push({ sourceName: row.sourceName, voucher: row.voucher, missingXml: true });
+  }
+}
+
+function manifestMismatch(row, voucher) {
+  const differences = [];
+  if (row.ruc && row.ruc !== voucher.ruc) differences.push("RUC");
+  if (row.currency && voucher.currency && row.currency !== voucher.currency) differences.push("currency");
+  if (row.totalAmount !== undefined && voucher.totalAmount !== undefined && Math.round(row.totalAmount * 100) !== Math.round(voucher.totalAmount * 100)) differences.push("total");
+  return differences;
 }
 
 async function loadCandidates(batch) {
-  return batch.inputType === "ZIP" ? zipCandidates(batch) : excelCandidates(batch);
+  if (batch.inputType !== "ZIP") {
+    throw new AppError(422, "Standalone XLSX batches cannot post invoices because they carry no XML. Upload a ZIP with one XML (and PDF) per invoice; an XLSX invoice list may be included in the ZIP.", { inputType: batch.inputType }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+  }
+  return zipCandidates(batch);
 }
 
 function itemFor(batch, candidate) {
@@ -482,8 +517,11 @@ async function provisionCandidate({ request, purchaseOrder, batch, item, candida
         storedVoucher.netAmount = voucher.netAmount;
         storedVoucher.igvAmount = voucher.igvAmount;
         storedVoucher.xmlAmount = voucher.totalAmount;
-        storedVoucher.validationStatus = "VALID";
-        storedVoucher.observationDetail = "";
+        // An approved manual SUNAT exception stays visible as such; it is never relabelled VALID.
+        if (!hasManualSunatException(storedVoucher)) {
+          storedVoucher.validationStatus = "VALID";
+          storedVoucher.observationDetail = "";
+        }
         storedVoucher.sunatStatus = sunatResult?.status || sunatResult?.fiscal?.status;
         storedVoucher.taxpayerStatus = sunatResult?.taxpayer?.condition || sunatResult?.taxpayer?.status;
         storedVoucher.sunatProvider = sunatResult?.fiscal?.source || sunatResult?.taxpayer?.source;
@@ -571,6 +609,31 @@ async function processCandidate({ batch, request, purchaseOrder, candidate, item
   item.errorDetail = undefined;
   item.processedAt = undefined;
 
+  if (candidate.missingXml) {
+    const voucher = normalizeVoucher(candidate);
+    applyVoucherToItem(item, voucher);
+    return markCandidateObserved({ batch, item, request, purchaseOrder, candidate, voucher, status: "OBSERVED_BATCH", errorCode: "XML_MISSING", detail: `The XLSX invoice list includes ${voucher.series}-${voucher.number} but the ZIP has no matching XML. Only an XML invoice can be validated and posted.`, user });
+  }
+  if (!candidate.parseError && candidate.voucher && isAdjustmentNote(candidate.voucher.voucherType)) {
+    // A credit/debit note in the batch adjusts the invoice it references instead of creating a CXP.
+    const voucher = normalizeVoucher(candidate);
+    applyVoucherToItem(item, voucher);
+    try {
+      const result = await registerAdjustmentNote({ xmlFile: candidate.xmlFile, pdfFile: candidate.pdfFile, requestId: request._id, user });
+      if (result.observed) {
+        return markCandidateObserved({ batch, item, request, purchaseOrder, candidate, voucher, status: "OBSERVED_SUNAT", errorCode: "NOTE_OBSERVED", detail: result.detail || "SUNAT could not validate the note.", storedVoucher: result.sunatVoucher, user });
+      }
+      item.status = "PROVISIONED";
+      item.voucher = result.note?._id;
+      item.accountsPayable = result.accountsPayable?._id;
+      item.observation = undefined;
+      item.processedAt = new Date();
+      return result;
+    } catch (error) {
+      return markCandidateObserved({ batch, item, request, purchaseOrder, candidate, voucher, status: "OBSERVED_BATCH", errorCode: error.code || "NOTE_NOT_APPLIED", detail: error.message, user });
+    }
+  }
+
   const documentResult = validateDocumentRequirements(request, invoiceRequirements, [
     ...(candidate.xmlFile ? [{ kind: "XML" }] : []),
     ...(candidate.pdfFile ? [{ kind: "PDF" }] : [])
@@ -598,6 +661,13 @@ async function processCandidate({ batch, request, purchaseOrder, candidate, item
   const identity = itemIdentity(voucher);
   if (!identity.rucIssuer || !identity.series || !identity.number || !(voucher.totalAmount > 0) || !voucher.currency) {
     return markCandidateObserved({ batch, item, request, purchaseOrder, candidate, voucher, status: "OBSERVED_BATCH", errorCode: "INVALID_DATA", detail: "RUC, voucher type, series, number, currency, and a positive total amount are required.", user });
+  }
+
+  if (candidate.manifestRow) {
+    const differences = manifestMismatch(candidate.manifestRow.voucher, voucher);
+    if (differences.length) {
+      return markCandidateObserved({ batch, item, request, purchaseOrder, candidate, voucher, status: "OBSERVED_BATCH", errorCode: "LIST_XML_MISMATCH", detail: `The XLSX invoice list disagrees with the XML (${differences.join(", ")}). The XML is the fiscal source; correct the list or the invoice.`, user });
+    }
   }
 
   const supplierRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
@@ -687,9 +757,12 @@ async function updateRequestAfterBatch({ request, batch, user }) {
 
 export async function createMassUploadBatch({ purchaseOrderId, files, user, req }) {
   const batchFile = files?.batchFile?.[0];
-  if (!batchFile) throw new AppError(422, "Upload a ZIP or XLSX batch file.", { field: "batchFile" }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+  if (!batchFile) throw new AppError(422, "Upload a ZIP batch file.", { field: "batchFile" }, ERROR_CODES.BATCH_UPLOAD_INVALID);
   const extension = path.extname(batchFile.originalname).toLowerCase();
-  if (![".zip", ".xlsx"].includes(extension)) throw new AppError(422, "Batch file must be ZIP or XLSX.", { extension }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+  // A standalone XLSX has no XML per invoice, so none of its rows could ever be validated and
+  // posted. The XLSX is accepted only inside the ZIP, as an invoice list checked against the XMLs.
+  if (extension === ".xlsx") throw new AppError(422, "An XLSX on its own cannot post invoices. Upload a ZIP containing one XML (and PDF) per invoice; you may include the XLSX invoice list inside the ZIP.", { extension }, ERROR_CODES.BATCH_UPLOAD_INVALID);
+  if (extension !== ".zip") throw new AppError(422, "Batch file must be a ZIP.", { extension }, ERROR_CODES.BATCH_UPLOAD_INVALID);
   const purchaseOrder = await PurchaseOrder.findById(purchaseOrderId).populate({ path: "request", populate: "supplier" });
   if (!purchaseOrder) throw new AppError(404, "Purchase Order not found.", { purchaseOrderId }, ERROR_CODES.NOT_FOUND);
   if (!["ISSUED", "PARTIALLY_LIQUIDATED"].includes(purchaseOrder.status) || Number(purchaseOrder.remainingAmount ?? purchaseOrder.amount) <= 0) {
@@ -714,7 +787,7 @@ export async function createMassUploadBatch({ purchaseOrderId, files, user, req 
       request: request._id,
       purchaseOrder: purchaseOrder._id,
       uploadedBy: user._id,
-      inputType: extension === ".zip" ? "ZIP" : "EXCEL",
+      inputType: "ZIP",
       inputFile: { originalName: file.originalname, filename: file.filename, path: file.path, url: file.url, mimetype: file.mimetype, size: file.size, checksum: file.checksum },
       status: "QUEUED"
     });

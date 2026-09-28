@@ -61,6 +61,8 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     ]);
 
     await AccountingPeriod.create({ period: "2026-08", status: "OPEN" });
+    // Invoices post in their own document-date period (the 2026-09-01 invoice below lands in 2026-09).
+    await AccountingPeriod.create({ period: "2026-09", status: "OPEN" });
     const center = await CostCenter.create({ code: "CC-PH5-100", name: "Health Sciences", area: "Health Sciences", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
     const expense = await ExpenseType.create({ code: "PH5-GOODS", name: "Medical supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
     const users = {
@@ -282,6 +284,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(loaded.paymentTermsSnapshot.source, "PURCHASE_ORDER");
       assert.equal(loaded.paymentTermsSnapshot.creditDays, 15);
       assert.equal(loaded.dueDate.toISOString().slice(0, 10), "2026-09-16");
+      assert.equal(loaded.accountingPeriod, "2026-09", "the invoice date, not the request month, sets the period");
       const repeated = await createAccountsPayableFromVoucher({ ...args, dueDate: "2026-12-01" });
       assert.equal(String(repeated._id), String(payable._id));
       assert.equal(repeated.dueDate.toISOString().slice(0, 10), "2026-09-16");

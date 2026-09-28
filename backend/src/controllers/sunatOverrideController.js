@@ -1,27 +1,19 @@
-import FinancialRequest from "../models/FinancialRequest.js";
-import { applyManualSunatOverride } from "../services/sunatVoucherService.js";
+import { approveManualSunatException } from "../services/invoiceRegistrationService.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES } from "../utils/constants.js";
 
-// Dedicated, separately-authorized manual-exception action (Admin/Accounting only - see
-// sunatOverrideRoutes.js). It is distinct from, and never blended into, the automatic SUNAT
-// validation path (getSunatProvider() / sunatService.js): it requires a human-supplied reason
-// and evidence reference, records who acted and when, and marks the voucher with the explicit
-// non-authoritative MANUAL_EXCEPTION status rather than VALID. See sunatVoucherService.js
-// (applyManualSunatOverride) for the audited state change.
+// Dedicated, separately-authorized manual SUNAT exception (Admin/Accounting only - see
+// sunatOverrideRoutes.js). It is never part of the automatic validation path: one Accounting user
+// records a mandatory reason (evidence reference optional), the voucher is marked with the explicit
+// non-authoritative MANUAL_EXCEPTION status, and the decision is audited. The invoice is then
+// posted when possible (see approveManualSunatException).
 export const manualSunatOverride = asyncHandler(async (req, res) => {
-  const request = await FinancialRequest.findById(req.params.id);
-  if (!request) {
-    throw new AppError(404, "Financial request not found.", { requestId: req.params.id }, ERROR_CODES.NOT_FOUND);
-  }
-  const voucher = await applyManualSunatOverride({
-    request,
+  const result = await approveManualSunatException({
+    requestId: req.params.id,
     voucherId: req.params.voucherId,
     reason: req.body?.reason,
     evidenceReference: req.body?.evidenceReference,
     user: req.user,
     req
   });
-  res.json({ data: voucher });
+  res.json({ data: result.voucher, provisioned: result.provisioned, accountsPayable: result.accountsPayable, supplierCredit: result.supplierCredit, detail: result.detail });
 });

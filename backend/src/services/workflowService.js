@@ -104,8 +104,12 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
   }
 }
 
+// Milestones derived from posted financial evidence. Each posting behind them guards the period it
+// lands in (invoice date, payment date), so the request's creation month must not block them.
+const FINANCIAL_EVIDENCE_MILESTONES = new Set(["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "PAGO_REBOTADO"]);
+
 async function assertTransitionControls(request, targetStatus, context = {}) {
-  await ensurePeriodOpen(request.accountingPeriod, {
+  if (!FINANCIAL_EVIDENCE_MILESTONES.has(canonicalRequestStatus(targetStatus))) await ensurePeriodOpen(request.accountingPeriod, {
     action: context.periodAction || "UPDATE", user: context.user, req: context.req, module: "WORKFLOW",
     entityType: "FinancialRequest", entityId: request._id, requestId: request._id
   });
@@ -150,7 +154,7 @@ export async function transitionRequest({ request, targetStatus, user, req, acti
   if (!canTransition(from, targetStatus)) throw new AppError(409, `Invalid request status transition from ${from} to ${targetStatus}.`, { from, to: targetStatus, allowed: allowedTransitions(from) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason, skipRoleCheck });
   // Period and financial evidence are mandatory, including internal recovery/batch calls.
-  await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
+  if (!FINANCIAL_EVIDENCE_MILESTONES.has(targetStatus)) await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
   if (targetStatus === "CONTABILIZADO") await assertPostingAllowed(request, { user, req });
   if (["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"].includes(targetStatus)) {
     const progress = await getFinancialProgress(request, { session });
