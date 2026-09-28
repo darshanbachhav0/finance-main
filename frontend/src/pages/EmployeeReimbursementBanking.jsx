@@ -34,6 +34,9 @@ export default function EmployeeReimbursementBanking() {
   const [confirm, setConfirm] = useState(null);
   const canManage = ["Admin", "Solicitor"].includes(user.role);
   const canReview = ["Admin", "Accounting"].includes(user.role);
+  // Segregation of duties: a reviewer never verifies the account they are paid into or bank details they entered.
+  const ownReviewConflict = (row) => String(row.user?._id || row.user || "") === String(user._id) || String(row.createdBy?._id || row.createdBy || "") === String(user._id);
+  const canReviewRow = (row) => canReview && !ownReviewConflict(row);
   const draft = useWorkDraft({ scope: "employee-bank", recordId: editing?._id || "new", title: "Reimbursement bank profile", enabled: drawer && canManage, value: form, restore: setForm, sourceVersion: editing?.updatedAt });
   useDraftResume("employee-bank", async id => { if (!canManage) return; if (id === "new") openForm(); else { const response = await api.get("/employee-bank-accounts"); const row = response.data.data.find(item => item._id === id); if (row) openForm(row); else setError("The original bank profile is no longer available."); } });
 
@@ -87,9 +90,9 @@ export default function EmployeeReimbursementBanking() {
     const items = [];
     if (canManage && row.active) items.push({ label: "Edit bank facts", icon: Pencil, onClick: () => openForm(row) });
     if (canManage && row.active && !row.preferred) items.push({ label: "Make preferred", icon: Star, onClick: () => setConfirm({ action: "preferred", row, title: "Make this account preferred?", description: "The previous preferred account remains in history and is no longer selected for new reimbursements.", confirmLabel: "Make preferred", success: "Preferred reimbursement account updated." }) });
-    if (canReview && row.active && row.verificationStatus !== "VERIFIED") items.push({ label: "Verify manually", icon: BadgeCheck, onClick: () => setConfirm({ action: "VERIFIED", row, title: "Verify this employee bank profile?", description: "This records an authorized manual UMA Finance review. It is not external bank verification.", confirmLabel: "Verify profile", inputLabel: "Review comments", success: "Employee reimbursement bank profile verified." }) });
-    if (canReview && row.active) items.push({ label: "Observe", icon: Pencil, onClick: () => setConfirm({ action: "OBSERVED", row, title: "Observe this employee bank profile?", description: "Return the banking facts for correction with mandatory Finance comments.", confirmLabel: "Observe profile", inputLabel: "Observation comments", inputRequired: true, success: "Employee bank profile observed." }) });
-    if (canReview && row.active) items.push({ label: "Reject", icon: Power, destructive: true, onClick: () => setConfirm({ action: "REJECTED", row, title: "Reject this employee bank profile?", description: "The profile stays in history and cannot be used for reimbursement.", confirmLabel: "Reject profile", inputLabel: "Rejection comments", inputRequired: true, tone: "danger", success: "Employee bank profile rejected." }) });
+    if (canReviewRow(row) && row.active && row.verificationStatus !== "VERIFIED") items.push({ label: "Verify manually", icon: BadgeCheck, onClick: () => setConfirm({ action: "VERIFIED", row, title: "Verify this employee bank profile?", description: "This records an authorized manual UMA Finance review. It is not external bank verification.", confirmLabel: "Verify profile", inputLabel: "Review comments", success: "Employee reimbursement bank profile verified." }) });
+    if (canReviewRow(row) && row.active) items.push({ label: "Observe", icon: Pencil, onClick: () => setConfirm({ action: "OBSERVED", row, title: "Observe this employee bank profile?", description: "Return the banking facts for correction with mandatory Finance comments.", confirmLabel: "Observe profile", inputLabel: "Observation comments", inputRequired: true, success: "Employee bank profile observed." }) });
+    if (canReviewRow(row) && row.active) items.push({ label: "Reject", icon: Power, destructive: true, onClick: () => setConfirm({ action: "REJECTED", row, title: "Reject this employee bank profile?", description: "The profile stays in history and cannot be used for reimbursement.", confirmLabel: "Reject profile", inputLabel: "Rejection comments", inputRequired: true, tone: "danger", success: "Employee bank profile rejected." }) });
     if (canManage && row.active) items.push({ label: "Deactivate", icon: Power, destructive: true, onClick: () => setConfirm({ action: "deactivate", row, title: "Deactivate this employee bank profile?", description: "The profile remains in history and cannot remain preferred.", confirmLabel: "Deactivate profile", tone: "danger", success: "Employee reimbursement bank profile deactivated." }) });
     return items;
   };
@@ -105,7 +108,7 @@ export default function EmployeeReimbursementBanking() {
         { key: "currency", label: "Currency" },
         { key: "accountNumberMasked", label: "Account Number", render: (row) => <span className="mono-reference">{row.accountNumberMasked || "-"}</span> },
         { key: "cciMasked", label: "CCI", render: (row) => <span className="mono-reference">{row.cciMasked || "-"}</span> },
-        { key: "verificationStatus", label: "Verification", render: (row) => <div><StatusBadge status={row.verificationStatus} />{row.verificationComments && <p>{row.verificationComments}</p>}</div> },
+        { key: "verificationStatus", label: "Verification", render: (row) => <div><StatusBadge status={row.verificationStatus} />{row.verificationComments && <p>{row.verificationComments}</p>}{canReview && row.active && row.verificationStatus !== "VERIFIED" && ownReviewConflict(row) && <small className="field-hint">{t("Another Accounting reviewer must verify this account.")}</small>}</div> },
         { key: "preferred", label: "Preferred", render: (row) => row.preferred ? <Star size={16} className="text-warning" /> : "-" },
         { key: "active", label: "Status", render: (row) => <StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} /> },
         { key: "validFrom", label: "Valid From", render: (row) => row.validFrom?.slice(0, 10) || "-" }

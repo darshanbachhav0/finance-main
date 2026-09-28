@@ -678,7 +678,7 @@ async function seedPeriodsAndRates(admin) {
     behavior: "INFORMATION",
     effectiveTo: null,
     active: true,
-    description: "Días calendario permitidos para rendir un anticipo (Track C) antes de bloquear nuevos anticipos al colaborador.",
+    description: "Días hábiles (sin fines de semana ni feriados) permitidos para rendir un anticipo (Track C) desde su pago; una rendición vencida y no presentada bloquea nuevos anticipos.",
     source: "Configuración Finanzas - Rendición de Gastos",
     createdBy: admin._id,
     updatedBy: admin._id

@@ -227,6 +227,14 @@ export async function reviewEmployeeReimbursementBankAccount({ accountId, payloa
   const account = await EmployeeReimbursementBankAccount.findById(accountId).select(accountSelector());
   if (!account) throw new AppError(404, "Employee bank profile was not found.", { accountId }, ERROR_CODES.NOT_FOUND);
   if (!account.active) throw new AppError(409, "Inactive accounts cannot be verified.", undefined, ERROR_CODES.CONFLICT);
+  // Segregation of duties: nobody reviews the account their own reimbursements are paid
+  // into, nor bank details they keyed in themselves (e.g. an Admin entering them for someone).
+  if (String(account.user?._id || account.user) === String(user._id)) {
+    throw new AppError(403, "You cannot review your own reimbursement bank account. Another Accounting reviewer must verify it.", { segregationOfDuties: true }, ERROR_CODES.FORBIDDEN);
+  }
+  if (account.createdBy && String(account.createdBy?._id || account.createdBy) === String(user._id)) {
+    throw new AppError(403, "You entered these bank details, so another Accounting reviewer must verify them.", { segregationOfDuties: true }, ERROR_CODES.FORBIDDEN);
+  }
   const result = String(payload.result || "").toUpperCase();
   if (!["VERIFIED", "OBSERVED", "REJECTED"].includes(result)) {
     throw new AppError(422, "Select VERIFIED, OBSERVED, or REJECTED.", { result }, ERROR_CODES.VALIDATION_ERROR);

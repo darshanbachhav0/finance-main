@@ -106,11 +106,14 @@ function parseBoolean(value) {
 }
 
 const A1_B_EXPENDITURE_CLASSIFICATIONS = new Set([REQUEST_TYPE.OPEX, REQUEST_TYPE.CAPEX]);
+const TRACK_C_REQUEST_TYPES = new Set([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
 
 export function normalizeRequestTypeForTrack(flowType, requestType) {
   const normalizedFlow = flowType || FLOW_TYPE.A1;
 
-  if (normalizedFlow === FLOW_TYPE.C) return REQUEST_TYPE.ENTREGA_RENDIR;
+  // Track C carries two request types: an advance to render (the default) and an
+  // undocumented reimbursement of money the employee already spent.
+  if (normalizedFlow === FLOW_TYPE.C) return TRACK_C_REQUEST_TYPES.has(requestType) ? requestType : REQUEST_TYPE.ENTREGA_RENDIR;
 
   if ([FLOW_TYPE.A1, FLOW_TYPE.B].includes(normalizedFlow) && !A1_B_EXPENDITURE_CLASSIFICATIONS.has(requestType)) {
     throw new AppError(
@@ -564,14 +567,21 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       throw new AppError(422, "Track A2 is created from an approved Purchase Order through the batch-invoice workspace, not as a new request.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
     }
     if (request.flowType === FLOW_TYPE.C) {
-      const overdue = await FinancialRequest.findOne({
-        _id: { $ne: request._id },
-        requester: request.requester,
-        flowType: FLOW_TYPE.C,
-        "rendition.dueAt": { $lt: new Date() },
-        "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }
-      }).select("requestNumber rendition.dueAt");
-      if (overdue) throw new AppError(409, "A new advance is blocked because the employee has a rendition overdue past its configured deadline.", { overdueRequest: overdue.requestNumber, dueAt: overdue.rendition?.dueAt }, ERROR_CODES.OVERDUE_RENDITION);
+      // Several advances may be open at once. Only a rendition that is past its deadline
+      // and still not submitted blocks a new advance: PENDING (never sent) or OBSERVED
+      // (returned to the employee, so not currently submitted). A rendition submitted on
+      // time and waiting for Accounting (SUBMITTED) never blocks.
+      if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
+        const overdue = await FinancialRequest.findOne({
+          _id: { $ne: request._id },
+          requester: request.requester,
+          flowType: FLOW_TYPE.C,
+          requestType: REQUEST_TYPE.ENTREGA_RENDIR,
+          "rendition.dueAt": { $lt: new Date() },
+          "rendition.status": { $in: ["PENDING", "OBSERVED"] }
+        }).select("requestNumber rendition.dueAt rendition.status");
+        if (overdue) throw new AppError(409, "A new advance is blocked because the employee has an overdue rendition that has not been submitted.", { overdueRequest: overdue.requestNumber, dueAt: overdue.rendition?.dueAt, renditionStatus: overdue.rendition?.status }, ERROR_CODES.OVERDUE_RENDITION);
+      }
     } else if (request.flowType === FLOW_TYPE.A1) {
       if (officialRequest) assertOfficialRequestFields(request);
       assertSupplierEligibleForRequestReview(supplier);
@@ -741,7 +751,7 @@ export async function getRequestProcurementReadiness(id, user) {
 }
 
 export async function createFinancialRequest({ payload, files, user, req }) {
-  const requestedFlow = payload.flowType || (payload.requestType === REQUEST_TYPE.ENTREGA_RENDIR ? FLOW_TYPE.C : FLOW_TYPE.A1);
+  const requestedFlow = payload.flowType || (TRACK_C_REQUEST_TYPES.has(payload.requestType) ? FLOW_TYPE.C : FLOW_TYPE.A1);
   if (requestedFlow === FLOW_TYPE.A2) {
     throw new AppError(422, "Track A2 starts from an existing approved Purchase Order in the batch-invoice workspace.", { flowType: requestedFlow }, ERROR_CODES.VALIDATION_ERROR);
   }

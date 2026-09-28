@@ -37,7 +37,9 @@ export function defaultDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBM
     ? [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")] : [];
   if (flowType === FLOW_TYPE.A2) return phase === DOCUMENT_PHASE.INVOICE_REGISTRATION
     ? [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")] : [];
-  if (flowType === FLOW_TYPE.C) return phase === DOCUMENT_PHASE.RENDITION
+  // An undocumented reimbursement (REEMBOLSO_SIN_SUSTENTO) is, by definition, backed by
+  // the signed declaration rather than receipts, so no default rendition file is required.
+  if (flowType === FLOW_TYPE.C) return phase === DOCUMENT_PHASE.RENDITION && canonicalType(request.requestType) !== "REEMBOLSO_SIN_SUSTENTO"
     ? [requirement("RENDITION", "rendition supporting documents")] : [];
   if (nature === EXPENSE_NATURE.PROFESSIONAL_FEES) {
     if (phase === DOCUMENT_PHASE.SUBMISSION) return [requirement("CONTRACT", "contract or service agreement")];

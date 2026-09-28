@@ -17,6 +17,8 @@ import SunatVoucher from "../models/SunatVoucher.js";
 import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/index.js";
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
+import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import { markBudgetPaidAmount } from "./budgetService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
@@ -34,10 +36,22 @@ import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 
-async function renditionDueDate(fromDate) {
-  const configuration = await getEffectiveFinanceConfiguration(FINANCE_CONFIGURATION_KEYS.RENDITION_OVERDUE_DAYS, fromDate);
-  const days = configuration ? Number(configuration.numericValue) : DEFAULT_RENDITION_OVERDUE_DAYS;
-  return new Date(new Date(fromDate).getTime() + days * 24 * 60 * 60 * 1000);
+// A payment date typed as "YYYY-MM-DD" is a Lima calendar date, not UTC midnight
+// (which would be the previous evening in Lima).
+function limaPaymentInstant(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00-05:00`) : new Date(value);
+}
+
+// RENDITION_OVERDUE_DAYS counts working days (no weekends, Peruvian holidays or
+// UMA_EXTRA_HOLIDAYS) from the actual payment date. The employee has the whole due
+// day, so the deadline is the end of that Lima working day.
+export async function renditionDueDate(fromDate) {
+  const paidAt = limaPaymentInstant(fromDate);
+  const configuration = await getEffectiveFinanceConfiguration(FINANCE_CONFIGURATION_KEYS.RENDITION_OVERDUE_DAYS, paidAt);
+  const configured = configuration ? Number(configuration.numericValue) : DEFAULT_RENDITION_OVERDUE_DAYS;
+  const days = Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_RENDITION_OVERDUE_DAYS;
+  const dueDay = days > 0 ? addWorkingDays(paidAt, days) : nextWorkingDay(paidAt);
+  return new Date(`${limaDateKey(dueDay)}T23:59:59.999-05:00`);
 }
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
 
@@ -623,7 +637,9 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
       await batch.save({ session });
     }
 
-    if (fullyPaid && (accountsPayable.flowType === FLOW_TYPE.C || request.flowType === FLOW_TYPE.C)) {
+    // Only an advance opens a rendition when paid; an undocumented reimbursement
+    // (REEMBOLSO_SIN_SUSTENTO) was already declared and validated before payment.
+    if (fullyPaid && (accountsPayable.flowType === FLOW_TYPE.C || request.flowType === FLOW_TYPE.C) && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
       request.rendition ||= {};
       request.rendition.status = "PENDING";
       request.rendition.amountAdvanced = accountsPayable.originalAmount;
@@ -649,8 +665,10 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   if (!(await AccountsPayable.exists({ request: request._id, status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } }))) await resolveNotification(`request:${request._id}:payment-confirmation`);
   await resolveNotification(`request:${request._id}:payment-confirmation:${accountsPayable._id}`);
   await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: "Payment ready for reconciliation", message: `${request.requestNumber}: reconcile the confirmed invoice payment.`, path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
-  if (request.flowType === FLOW_TYPE.C) {
-    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: "Rendition pending", message: `${request.requestNumber} was paid. Rendition is due within 10 days.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+  const advanceFullyPaid = request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && result.accountsPayable.status === AP_STATUS.PAID;
+  if (advanceFullyPaid) {
+    const dueLabel = request.rendition?.dueAt ? limaDateKey(request.rendition.dueAt).split("-").reverse().join("/") : "";
+    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: "Rendition pending", message: `${request.requestNumber} was paid. Submit the rendition by ${dueLabel} (working days, Lima time).`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   } else {
     await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:paid:${accountsPayable._id}`, type: "PAYMENT_CONFIRMED", title: "Payment confirmed", message: `${request.requestNumber} CXP was paid with operation ${operationNumber}.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   }

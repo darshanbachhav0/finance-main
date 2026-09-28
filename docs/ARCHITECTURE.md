@@ -110,12 +110,19 @@ the actual child records before allowing it).
   rejected outright; there is no free choice or hardcoded fallback threshold. When eligible, the
   invoice/XML is validated up front and the request auto-provisions to Treasury on approval.
 - **C — advances (`ENTREGA_RENDIR`) and undocumented reimbursements
-  (`REEMBOLSO_SIN_SUSTENTO`).** Pays out first (an advance against Account 14), then requires the
-  employee to submit a rendition (accounting for how the advance was spent) within a configurable
-  deadline (default 10 calendar days, `FinanceConfiguration` key `RENDITION_OVERDUE_DAYS`) before a
-  new advance can be requested. A rendition can be `OBSERVED` (correctable, resubmit) or terminally
-  `REJECTED` (the full advance becomes a recovery obligation — see §3.1 — resolved via
-  reimbursement or payroll deduction, `POST /requests/:id/rendition/recover`).
+  (`REEMBOLSO_SIN_SUSTENTO`).** An advance pays out first (against Account 14), then requires the
+  employee to submit a rendition within a configurable deadline counted in **working days** from
+  the actual payment date (default 10, `FinanceConfiguration` key `RENDITION_OVERDUE_DAYS`;
+  weekends, Peruvian holidays and `UMA_EXTRA_HOLIDAYS` excluded; the deadline ends at the close of
+  that Lima working day). Several advances may be open at once; a new advance is blocked only while
+  the employee has a rendition past its deadline that is not submitted (`PENDING`, or `OBSERVED`
+  and returned for correction). A rendition submitted and awaiting Accounting never blocks. A
+  rendition can be `OBSERVED` (correctable, resubmit) or terminally `REJECTED`: the advance minus
+  what the employee already returned becomes a recovery obligation (see §3.1), settled via
+  reimbursement (bank operation number, date and amount) or payroll deduction,
+  `POST /requests/:id/rendition/recover`. An undocumented reimbursement pays nothing up front: after
+  approval the budget is committed, the employee submits the signed declaration with a verified
+  reimbursement account, Accounting's approval provisions the payable, and Treasury pays it.
 
 ### 3.3 Approval routing
 
