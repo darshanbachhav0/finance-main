@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/client.js";
 import { initialTableQuery } from "../utils/initialTableQuery.js";
 import { buildRemoteTableParams } from "../utils/tableQuery.js";
@@ -12,13 +12,16 @@ export default function usePaginatedResource(endpoint, {
   initialPageSize = 10,
   persistKey,
   enabled = true,
-  debounceMs = 220
+  debounceMs = 220,
+  // True while fixedParams carry a notification deep link (?record= / ?request=): the table then
+  // starts from page 1 without the saved search/filters, which could hide the linked record.
+  deepLink = false
 } = {}) {
   const storageKey = `erp_table_query:${persistKey || endpoint}`;
   const [query, setQuery] = useState(() => {
     const options = { initialFilters, initialSearch, initialPageSize };
     try {
-      return initialTableQuery(JSON.parse(sessionStorage.getItem(storageKey) || "null"), options);
+      return initialTableQuery(deepLink ? null : JSON.parse(sessionStorage.getItem(storageKey) || "null"), options);
     } catch {
       return initialTableQuery(null, options);
     }
@@ -31,6 +34,17 @@ export default function usePaginatedResource(endpoint, {
   const [revision, setRevision] = useState(0);
   const fixedParamsKey = JSON.stringify(fixedParams);
   const requestParams = useMemo(() => buildRemoteTableParams(query, fixedParams), [query, fixedParamsKey]);
+
+  // A changed fixed filter (another currency, a new or cleared deep link) restarts at page 1: the
+  // old page number may not exist in the new result.
+  const previousFixedParams = useRef(fixedParamsKey);
+  useEffect(() => {
+    if (previousFixedParams.current === fixedParamsKey) return;
+    previousFixedParams.current = fixedParamsKey;
+    setQuery((current) => deepLink
+      ? { ...current, page: 1, search: "", filters: { ...initialFilters } }
+      : current.page === 1 ? current : { ...current, page: 1 });
+  }, [fixedParamsKey]);
 
   useEffect(() => {
     sessionStorage.setItem(storageKey, JSON.stringify(query));

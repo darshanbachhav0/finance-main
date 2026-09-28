@@ -10,7 +10,7 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import { publicRequestPayload } from "../services/requestService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
-import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
+import { deepLinkFilter, escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { budgetAllocationRows, budgetOverview, budgetPeriodFilter } from "../services/budgetReportingService.js";
 import { adjustBudgetPlan, carryOverOpenCommitments, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
 import mongoose from "mongoose";
@@ -59,14 +59,17 @@ export const listBudgetCommitments = asyncHandler(async (req, res) => {
 export const listBudgetExceptions = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination(req.query);
   const clauses = [];
-  // Deep links (?record=<id>) open one exception regardless of the selected budget period.
+  // Deep links (?record=<exception id> or ?request=<request id>) open that exception, or the
+  // request's exceptions, regardless of the selected budget period.
   if (req.query.record) {
     if (!mongoose.isValidObjectId(req.query.record)) throw new AppError(422, "Select a valid budget exception.", undefined, ERROR_CODES.VALIDATION_ERROR);
     clauses.push({ _id: req.query.record });
   }
+  const linkedRequest = deepLinkFilter(req.query, { request: "request" });
+  if (linkedRequest.request) clauses.push(linkedRequest);
   if (req.query.status) clauses.push({ status: req.query.status });
   if (req.query.strategy) clauses.push({ strategy: req.query.strategy });
-  if (req.query.period && !req.query.record) {
+  if (req.query.period && !req.query.record && !linkedRequest.request) {
     const requestIds = await FinancialRequest.find({ accountingPeriod: budgetPeriodFilter(req.query.period) }).distinct("_id");
     clauses.push({ request: { $in: requestIds } });
   }

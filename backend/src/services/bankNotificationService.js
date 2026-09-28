@@ -1,4 +1,4 @@
-import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { ROLES } from "../utils/constants.js";
 
 const reviewKey = (account) => `employee-bank:${account._id}:review`;
@@ -10,8 +10,8 @@ const reference = (account) => ({
 export async function notifyEmployeeBankReview(account) {
   return notifyRoles({
     roles: [ROLES.ACCOUNTING, ROLES.ADMIN], eventKey: reviewKey(account),
-    type: "EMPLOYEE_BANK_REVIEW", title: "Reimbursement bank profile awaiting review",
-    message: `${account.bank} / ${account.currency}: a reimbursement bank profile needs Accounting verification.`,
+    type: "EMPLOYEE_BANK_REVIEW", title: notificationText("Reimbursement bank profile awaiting review"),
+    message: notificationText("{bank} / {currency}: a reimbursement bank profile needs Accounting verification.", { bank: account.bank, currency: account.currency }),
     ...reference(account)
   });
 }
@@ -29,9 +29,9 @@ export async function notifyBouncedAccountReview({ flagged, requestNumber }) {
     roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
     eventKey: `${employee ? "employee-bank" : "supplier-bank"}:${flagged.accountId}:bounced-review`,
     type: employee ? "EMPLOYEE_BANK_REVIEW" : "SUPPLIER_BANK_REVIEW",
-    title: "Bank account needs re-verification",
-    message: `${requestNumber}: the bank rejected a payment for incorrect or changed account details. Re-verify the account before it is used again.`,
-    path: employee ? `/reimbursement-bank?record=${flagged.accountId}` : "/suppliers",
+    title: notificationText("Bank account needs re-verification"),
+    message: notificationText("{requestNumber}: the bank rejected a payment for incorrect or changed account details. Re-verify the account before it is used again.", { requestNumber }),
+    path: employee ? `/reimbursement-bank?record=${flagged.accountId}` : flagged.supplierId ? `/suppliers?record=${flagged.supplierId}` : "/suppliers",
     entityType: employee ? "EmployeeReimbursementBankAccount" : "SupplierBankAccount",
     entityId: flagged.accountId
   });
@@ -42,8 +42,8 @@ export async function notifyEmployeeBankDecision(account) {
   return notifyUser({
     userId: account.user?._id || account.user,
     eventKey: `employee-bank:${account._id}:decision:${account.verifiedAt.toISOString()}`,
-    type: "EMPLOYEE_BANK_DECISION", title: "Reimbursement bank profile reviewed",
-    message: `${account.bank} / ${account.currency}: ${account.verificationStatus}. Open the profile to see the review.`,
+    type: "EMPLOYEE_BANK_DECISION", title: notificationText("Reimbursement bank profile reviewed"),
+    message: notificationText("{bank} / {currency}: {verificationStatus}. Open the profile to see the review.", { bank: account.bank, currency: account.currency, verificationStatus: account.verificationStatus }),
     ...reference(account)
   });
 }

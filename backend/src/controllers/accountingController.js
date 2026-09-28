@@ -13,7 +13,7 @@ import { applySupplierCredit, listSupplierCredits, recoverSupplierCredit, regist
 import { sunatService } from "../services/sunatService.js";
 import { cancelAccountsPayable, getConsolidation, processAccountsPayable } from "../services/accountingService.js";
 import { flattenConsolidationRow, persistReportFile, toCsv } from "../services/exportService.js";
-import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
+import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "../services/queryService.js";
 import { publicRequestPayload, requestPopulate } from "../services/requestService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
@@ -117,6 +117,7 @@ export const listAccountsPayable = asyncHandler(async (req, res) => {
       { paymentBatch: { $in: batchIds } }
     ];
   }
+  withDeepLink(query, req.query);
   const { page, pageSize, skip } = parsePagination(req.query);
   const sort = parseSort(req.query, ["dueDate", "originalAmount", "outstandingAmount", "currency", "createdAt", "status"], { createdAt: -1 });
   const [data, total, summaryRows] = await Promise.all([

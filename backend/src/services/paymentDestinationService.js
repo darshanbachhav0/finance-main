@@ -150,7 +150,7 @@ export async function flagBouncedDestination(accountsPayable, { reason, user, se
   }
   if (snapshot?.bankAccountId) {
     await SupplierBankAccount.updateOne({ _id: snapshot.bankAccountId }, { $set: { verificationStatus: "OBSERVED", verificationComments: comments, changedBy: user?._id } }, { session });
-    return { sourceType: "SUPPLIER", accountId: snapshot.bankAccountId };
+    return { sourceType: "SUPPLIER", accountId: snapshot.bankAccountId, supplierId: accountsPayable.supplier?._id || accountsPayable.supplier };
   }
   return null;
 }

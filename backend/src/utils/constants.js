@@ -282,6 +282,12 @@ export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "O
 export const CAPEX_ASSET_CATEGORIES = Object.freeze(["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]);
 export const OPEX_EXPENSE_FREQUENCIES = Object.freeze(["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);
 export const PAYBACK_UNITS = Object.freeze(["MONTHS", "YEARS"]);
+
+// A required approval step is satisfied once it is APPROVED, or SKIPPED because a manager-chain
+// approver who already approved holds that policy stage's authority (finalizeChainApproval).
+export function hasOpenRequiredApprovalStep(route = []) {
+  return (route || []).some((step) => step.required !== false && !["APPROVED", "SKIPPED"].includes(step.status));
+}
 export const RENDITION_LINE_TYPES = Object.freeze(["GOODS", "SERVICES"]);
 export const ACKNOWLEDGMENT_TYPES = Object.freeze(["AUTHENTICATED_ELECTRONIC_SIGN_OFF", "PHYSICAL_DOCUMENT"]);
 

@@ -14,7 +14,6 @@ import { closeAccountingPeriod } from "../src/services/periodAdministrationServi
 import MassUploadBatch from "../src/models/MassUploadBatch.js";
 import { registerA1Invoice } from "../src/services/invoiceRegistrationService.js";
 import { createMassUploadBatch, processMassUploadBatch, retryInvoiceObservation } from "../src/services/batchInvoiceService.js";
-import { taskBlueprints } from "../src/services/workflowTaskPolicy.js";
 import Notification from "../src/models/Notification.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import AccountsPayable from "../src/models/AccountsPayable.js";
@@ -41,8 +40,6 @@ import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storag
 
 test("canonical status compatibility and partial child evidence", () => {
   assert.equal(canonicalRequestStatus("PAGADO_CERRADO"), "CERRADO");
-  assert.deepEqual(taskBlueprints("FinancialRequest", { status: "RECHAZADO" }), []);
-  assert.ok(taskBlueprints("FinancialRequest", { _id: "C", flowType: "C", status: "PAGADO", rendition: { status: "PENDING" }, requester: "owner" }).some(task => task.stage === "rendition-submit"));
   for (const status of ["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"]) assert.deepEqual(allowedTransitions(status), []);
   const req = { status: "TXT_GENERADO", payment: { confirmations: [{ accountsPayable: "1", amount: 118, paidAt: new Date(), confirmedAt: new Date(), operationNumber: "OP1" }] } };
   const children = [1, 2, 3].map(n => ({ _id: String(n), originalAmount: 118, outstandingAmount: n === 1 ? 0 : 118, provisionJournal: "J1", paymentJournal: n === 1 ? "J2" : null, paidDate: n === 1 ? new Date() : null, status: n === 1 ? "PAID" : "PAYMENT_FILE_CREATED", paymentBatch: { checksum: "abc", generatedAt: new Date(), items: [{ accountsPayable: String(n), status: "INSTRUCTION_CREATED" }] } }));

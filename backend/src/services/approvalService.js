@@ -21,9 +21,9 @@ import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { commitUndocumentedReimbursementBudget } from "./renditionService.js";
 import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
-import { notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
 import { assertSupplierUsable } from "./supplierService.js";
-import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
+import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { requestListPopulate, requestListSelect, requestPopulate } from "./requestService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
@@ -161,6 +161,9 @@ export async function listApprovalInbox(queryParams, user) {
       { solicitor: { $in: userIds } }
     ] }];
   }
+  // /approvals?request=<id> (approval notifications) narrows the inbox to that request; the
+  // visibility clauses above still apply, so a link never exposes someone else's approval.
+  withDeepLink(query, queryParams, { request: "_id" });
   const { page, pageSize, skip } = parsePagination(queryParams);
   const sort = parseSort(queryParams, ["requestNumber", "requestType", "priority", "approvalStage", "status", "totalPENEquivalent", "approvalDueAt", "createdAt"], { approvalDueAt: 1, createdAt: 1 });
   const [requests, total, summaryRows] = await Promise.all([
@@ -227,8 +230,8 @@ export async function resolveBudgetCommitmentFailure({ request, error, user, req
       userId: request.requester?._id || request.requester || request.solicitor,
       eventKey: `request:${request._id}:budget-rejected:${Date.now()}`,
       type: "BUDGET_REJECTED",
-      title: "Request rejected at the budget gate",
-      message: `${request.requestNumber}: ${error.message}`,
+      title: notificationText("Request rejected at the budget gate"),
+      message: notificationText("{requestNumber}: {detail}", { requestNumber: request.requestNumber, detail: error.message }),
       path: `/requests/${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
@@ -263,7 +266,7 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
       await provisionTrackCAdvance({ request, user, req, session });
       return request;
     });
-    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: "Track C advance ready", message: `${request.requestNumber} is ready for priority advance payment.`, path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
+    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: notificationText("Track C advance ready"), message: notificationText("{requestNumber} is ready for priority advance payment.", { requestNumber: request.requestNumber }), path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
     return result;
   }
 
@@ -277,8 +280,8 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
         userId: request.requester?._id || request.requester || request.solicitor,
         eventKey: `request:${request._id}:direct-payment-observed:${Date.now()}`,
         type: "REQUEST_OBSERVED",
-        title: "Direct-payment invoice observed",
-        message: `${request.requestNumber}: ${directPaymentPreflight.detail}`,
+        title: notificationText("Direct-payment invoice observed"),
+        message: notificationText("{requestNumber}: {detail}", { requestNumber: request.requestNumber, detail: directPaymentPreflight.detail }),
         path: `/requests/${request._id}/edit`,
         entityType: "FinancialRequest",
         entityId: request._id
@@ -298,9 +301,11 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.PROCUREMENT],
     eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,
     type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "PROCUREMENT_ORDER",
-    title: request.flowType === FLOW_TYPE.B ? "Priority payment ready" : "Purchase order required",
-    message: request.flowType === FLOW_TYPE.B ? `${request.requestNumber} was auto-provisioned and is ready for priority Treasury payment.` : `${request.requestNumber} is budget committed and ready for Procurement to issue the order.`,
-    path: request.flowType === FLOW_TYPE.B ? "/treasury" : `/requests/${request._id}`,
+    title: request.flowType === FLOW_TYPE.B ? notificationText("Priority payment ready") : notificationText("Purchase order required"),
+    message: request.flowType === FLOW_TYPE.B
+      ? notificationText("{requestNumber} was auto-provisioned and is ready for priority Treasury payment.", { requestNumber: request.requestNumber })
+      : notificationText("{requestNumber} is budget committed and ready for Procurement to issue the order.", { requestNumber: request.requestNumber }),
+    path: request.flowType === FLOW_TYPE.B ? `/treasury?tab=prepare&request=${request._id}` : `/requests/${request._id}`,
     entityType: "FinancialRequest",
     entityId: request._id
   });
@@ -361,8 +366,9 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       userId: request.requester?._id || request.requester || request.solicitor,
       eventKey: `request:${request._id}:${decision}:${Date.now()}`,
       type: `REQUEST_${decision}`,
-      title: `Request ${decision.toLowerCase()}`,
-      message: `${request.requestNumber} requires your attention: ${comments}`,
+      // decision is OBSERVE / RETURN / REJECT; "Request observe" read wrongly in English.
+      title: { OBSERVE: notificationText("Request observed"), RETURN: notificationText("Request returned"), REJECT: notificationText("Request rejected") }[decision],
+      message: notificationText("{requestNumber} requires your attention: {comments}", { requestNumber: request.requestNumber, comments }),
       path: `/requests/${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
@@ -469,8 +475,8 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       userId: request.requester?._id || request.requester || request.solicitor,
       eventKey: `request:${request._id}:approved`,
       type: "REQUEST_APPROVED",
-      title: "Request approved",
-      message: `${request.requestNumber} completed its approval route.`,
+      title: notificationText("Request approved"),
+      message: notificationText("{requestNumber} completed its approval route.", { requestNumber: request.requestNumber }),
       path: `/requests/${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
@@ -485,9 +491,9 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       roles: [ROLES.BUDGET, ROLES.ADMIN],
       eventKey: `request:${request._id}:budget-exception`,
       type: "BUDGET_EXCEPTION",
-      title: "Budget exception pending",
-      message: `${request.requestNumber} cannot be committed until its budget exception is resolved.`,
-      path: "/budget",
+      title: notificationText("Budget exception pending"),
+      message: notificationText("{requestNumber} cannot be committed until its budget exception is resolved.", { requestNumber: request.requestNumber }),
+      path: `/budget?tab=exceptions&request=${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
     });
@@ -502,9 +508,9 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       roles: [ROLES.BUDGET, ROLES.ADMIN],
       eventKey: `request:${request._id}:budget-commitment`,
       type: "BUDGET_COMMITMENT",
-      title: "Budget commitment required",
-      message: `${request.requestNumber} completed its approval route, but the automatic budget commitment could not run: ${budgetDeferred.message}`,
-      path: "/budget",
+      title: notificationText("Budget commitment required"),
+      message: notificationText("{requestNumber} completed its approval route, but the automatic budget commitment could not run: {detail}", { requestNumber: request.requestNumber, detail: budgetDeferred.message }),
+      path: `/requests/${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
     });
@@ -565,7 +571,9 @@ export async function reassignPendingApprovalsFor(absentUserId, { actor, req, re
     if (!approver) {
       summary.unassigned += 1;
       await recordAudit({ entityType: "FinancialRequest", entity: request, action: "APPROVAL_REASSIGNMENT_FAILED", user: systemActor, req, module: "APPROVALS", comments: `No available supervisor above ${step.approverSnapshot?.name || "the approver"} (${reason}).`, oldValues: { approverUser: step.approverUser, approvalStage: step.approvalLevel } });
-      await notifyRoles({ roles: [ROLES.ADMIN], eventKey: `request:${request._id}:approval-unassigned:${step._id}`, type: "APPROVAL_UNASSIGNED", title: "Approval without an available approver", message: `${request.requestNumber} waits on ${step.approverSnapshot?.name || "an unavailable approver"} and no supervisor above them is available. Update the organizational roster.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+      await notifyRoles({ roles: [ROLES.ADMIN], eventKey: `request:${request._id}:approval-unassigned:${step._id}`, type: "APPROVAL_UNASSIGNED", title: notificationText("Approval without an available approver"), message: step.approverSnapshot?.name
+        ? notificationText("{requestNumber} waits on {approverName} and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber, approverName: step.approverSnapshot.name })
+        : notificationText("{requestNumber} waits on an unavailable approver and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
       continue;
     }
     const oldNotificationKey = `request:${request._id}:approval:${step.approvalLevel}`;

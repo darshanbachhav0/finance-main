@@ -15,7 +15,8 @@ import {
   ERROR_CODES,
   EXPENSE_NATURE,
   REQUEST_STATUS,
-  REQUEST_TYPE
+  REQUEST_TYPE,
+  hasOpenRequiredApprovalStep
 } from "../utils/constants.js";
 
 const purchaseNatures = new Set([
@@ -142,7 +143,7 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
   const orderKind = orderKindForRequest(request);
   const applicable = true;
   const issues = [];
-  if (!approvalCompleteStatuses.has(request.status) || (request.approvalRouteSnapshot || []).some((step) => step.required !== false && step.status !== "APPROVED")) {
+  if (!approvalCompleteStatuses.has(request.status) || hasOpenRequiredApprovalStep(request.approvalRouteSnapshot)) {
     issues.push(issue(ERROR_CODES.REQUEST_APPROVAL_PENDING, "All configured request approvals must be complete.", { status: request.status, approvalStage: request.approvalStage }));
   }
   if (terminalBlockedStatuses.has(request.status)) {
@@ -196,7 +197,7 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
       supplierCode: supplier.supplierCode
     } : null,
     approval: {
-      complete: approvalCompleteStatuses.has(request.status) && !(request.approvalRouteSnapshot || []).some((step) => step.required !== false && step.status !== "APPROVED"),
+      complete: approvalCompleteStatuses.has(request.status) && !hasOpenRequiredApprovalStep(request.approvalRouteSnapshot),
       stage: request.approvalStage,
       status: request.status
     },
