@@ -1,4 +1,4 @@
-import { CheckCircle2, CornerUpLeft, Eye, MessageSquareWarning, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle2, CornerUpLeft, Eye, Forward, MessageSquareWarning, RefreshCw, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/client.js";
@@ -37,8 +37,11 @@ export default function ApprovalInbox() {
     const steps = [...(row.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
     return steps.find((step) => step.required !== false && step.status === "PENDING") || null;
   }
-  const canForward = row => (row.approvalRouteSnapshot || []).some(step => step.sequence > activeStepOf(row)?.sequence && step.required !== false && step.status !== "APPROVED");
+  // The server decides whether "Send to my jefe" is possible: only while the
+  // current approver has an active jefe who is not on leave.
+  const canForward = row => Boolean(row.approvalOptions?.canForward);
   const isChainRow = (row) => activeStepOf(row)?.source === "MANAGER_CHAIN";
+  const forwardName = row => row.approvalOptions?.forwardTo?.name || "";
 
   async function decide(comments) {
     setProcessing(true);
@@ -46,7 +49,8 @@ export default function ApprovalInbox() {
       const body = confirm.type === "approve" && typeof confirm.forward === "boolean" ? { comments, forward: confirm.forward } : { comments };
       const response = await api.post(`/approvals/${confirm.row._id}/${confirm.type}`, body);
       const messages = {
-        approve: confirm.row.approvalStage === "AREA_DIRECTOR" ? "Director electronic sign-off recorded." : "Approval electronic sign-off recorded.",
+        approve: confirm.forward === true ? "Approval recorded and sent to your jefe."
+          : confirm.row.approvalStage === "AREA_DIRECTOR" ? "Director electronic sign-off recorded." : "Approval electronic sign-off recorded.",
         observe: "Request observed and returned for correction.",
         return: "Request returned to the requester with comments.",
         reject: "Request rejected with a preserved decision record."
@@ -70,19 +74,25 @@ export default function ApprovalInbox() {
     const chainRow = isChainRow(row);
     const definitions = {
       approve: chainRow ? (forward ? {
-        title: "Approve and forward this request?",
-        description: "This records your approval and sends it to the next manager in the chain for a further decision.",
-        confirmLabel: "Approve and forward",
+        title: "Approve and send to your jefe?",
+        description: forwardName(row)
+          ? `${t("This records your approval and sends the request to your jefe for a further decision:")} ${forwardName(row)}.`
+          : "This records your approval and sends the request to your jefe for a further decision.",
+        confirmLabel: "Send to my jefe",
         tone: "success",
         inputLabel: "Approval comments",
-        result: "This step is marked approved and the request moves to the next manager in the chain."
+        result: "This step is marked approved and your jefe decides next: finalize, or send it to their own jefe."
       } : {
         title: "Approve this request and finalize?",
-        description: "This records your approval as final. No further manager will review it — the request moves directly into the budget/accounting pipeline.",
+        description: row.approvalOptions?.remainingPolicyStages?.length
+          ? "This records your approval as final for the manager chain. The configured approval stages that still apply follow next."
+          : "This records your approval as final. No further manager will review it and the budget commitment runs automatically.",
         confirmLabel: "Approve and finalize",
         tone: "success",
         inputLabel: "Approval comments",
-        result: "The approval chain is closed and budget commitment begins."
+        result: row.approvalOptions?.remainingPolicyStages?.length
+          ? `${t("Remaining configured stages:")} ${row.approvalOptions.remainingPolicyStages.map((stage) => t(stage)).join(", ")}`
+          : "The approval chain is closed and the budget is committed automatically."
       }) : {
         title: "Approve this request?",
         description: directorStage
@@ -151,8 +161,8 @@ export default function ApprovalInbox() {
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
 
-            { label: "Approve", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE") || (isChainRow(row) && canForward(row)), onClick: () => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
-            { label: "Approve and forward", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE") || !isChainRow(row) || !canForward(row), onClick: () => openDecision(row, "approve", true) },
+            { label: isChainRow(row) ? "Approve and finalize" : "Approve", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE"), onClick: () => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
+            { label: "Send to my jefe", icon: Forward, hidden: !hasAction(row, "APPROVE") || !isChainRow(row) || !canForward(row), onClick: () => openDecision(row, "approve", true) },
             { label: "Observe", icon: MessageSquareWarning, hidden: !hasAction(row, "OBSERVE"), onClick: () => openDecision(row, "observe") },
             { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") },
             { label: "Reject", icon: XCircle, tone: "danger", hidden: !hasAction(row, "REJECT"), onClick: () => openDecision(row, "reject") }
@@ -164,7 +174,7 @@ export default function ApprovalInbox() {
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
             { key: "approvalDueAt", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? formatDateTime(row.approvalDueAt) : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
-            { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
+            { key: "decision", primary: true, label: "Actions", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "APPROVE") && isChainRow(row) && canForward(row) && <button type="button" className="secondary-button decision-button" title={forwardName(row) ? `${t("Send to my jefe")}: ${forwardName(row)}` : t("Send to my jefe")} onClick={() => openDecision(row, "approve", true)}><Forward size={17} /><span>{t("Send to my jefe")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />
       </div>

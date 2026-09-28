@@ -31,7 +31,7 @@ The platform separates requesting, authorization, budget control, accounting, an
 
 There are **ten stored roles, one per operational profile**. Area Director and Vice-Rector are separate roles (`AreaDirector`, `ViceRector`) rather than a single Approver role distinguished only by approval level; they hold identical permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
 
-**Area Director and Vice-Rector.** These are the platform's two sequential approval roles. Their only functional difference is directional: an Area Director deciding a manager-chain approval may choose to forward it to the next manager in the request's frozen chain — typically the Vice-Rector, given how the organizational hierarchy is seeded — instead of finalizing it themselves; the Vice-Rector, sitting at the top of that pair, has no further chain position to forward to and cannot forward back to an Area Director. See the Area Director and Vice Rector sections below for the mechanics. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is implied by the role itself and set automatically by the backend the moment Admin assigns that role on the Users screen — it is not a separate field Admin chooses, unlike Management's approval level (RECTORATE or GENERAL_MANAGEMENT), which remains admin-editable.
+**Area Director and Vice-Rector.** These are the platform's two sequential approval roles. On a manager-chain request (the requester's real organizational chain) every approver, whatever their role, chooses at their step either to **approve and finalize** or to **send it to their own jefe**; the next jefe chooses the same way, up the chain. "Send to my jefe" is offered only while the approver has an active jefe who is not on leave. See "Manager-chain approval" under the approval rules below. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is implied by the role itself and set automatically by the backend the moment Admin assigns that role on the Users screen — it is not a separate field Admin chooses, unlike Management's approval level (RECTORATE or GENERAL_MANAGEMENT), which remains admin-editable.
 
 ManagementViewer is the platform's only strictly read-only profile: every permission it holds is a view/report/audit token, and it never appears in an `authorize()`/`authorizePermission()` check on a POST, PUT, PATCH or DELETE route.
 
@@ -260,6 +260,7 @@ The dedicated Budget and Management Reports modules are unavailable. Authorized 
 ### What the requester can do
 
 - Create A1 procurement requests, Track B direct-payment requests, and Track C advances/renditions supported by the form; enter items, quotations and required supporting documents. Track B is not a free choice: submission is only accepted when an active Track B eligibility rule (matching area, expense nature and PEN-equivalent amount, configured by Admin) covers the request; otherwise the requester must use Track A1 instead.
+- Withdraw an owned submitted request back to draft while no approver has approved it yet (Withdraw, in the request detail or the requests list).
 - Edit and resubmit owned draft, rejected, returned, observed, budget-observed, SUNAT-observed, amount-exceeded-observed, or batch-observed requests. Delete only owned draft or rejected requests.
 - Propose a supplier; correct a proposal they created while pending validation or observed; add bank facts and supporting documents for that eligible proposal.
 - Register an owned A1 invoice after the PO/budget stage, with XML, PDF and conformity evidence. Upload batches against an eligible owned order and follow progress.
@@ -295,7 +296,7 @@ The Requests list/detail is broader than the Director's approval authority: it p
 
 - Approve the currently pending Area Director step when the route assigns it to AreaDirector and the request belongs to an allowed area.
 - Observe a request for correction, return it, or reject it at that active step. These three decisions require comments.
-- When deciding a manager-chain approval (the requester's actual organizational chain, not a fixed role/area route), choose to approve and finalize it, or approve and forward it to the next manager already frozen into that request's chain — typically the Vice-Rector, given how the organizational hierarchy is seeded. Forwarding never looks up a manager live; it only activates the next pre-determined position.
+- When deciding a manager-chain approval (the requester's actual organizational chain, not a fixed role/area route), choose to approve and finalize it at this level, or send it to their own jefe (their nearest active, not-on-leave supervisor, resolved at that moment).
 - Read budget availability and commitments, compare suppliers and payment terms, examine supporting evidence, and export permitted management reports.
 
 Allowed areas are the user's area plus approvalAreas. A wildcard grants all-area approval scope. Viewing a request or obtaining its ID does not grant permission to decide another level or another area.
@@ -329,7 +330,7 @@ The general Requests view is not limited to the Vice Rector's current inbox. Tha
 ### What the Vice Rector can do
 
 - Approve a request when its active step is VICE_RECTOR and the step's required role is ViceRector.
-- When the active step is a manager-chain step forwarded by an Area Director (or reached directly, if the Vice-Rector is the requester's actual supervisor), finalize the approval — there is no further pre-determined position to forward to; attempting to forward raises an error.
+- When the active step is a manager-chain step assigned to them, approve and finalize it, or send it to their own jefe when they have an available one (at the top of the hierarchy only finalizing is possible).
 - Observe, return or reject at that stage, with required comments for those decisions.
 - Review the prior approval trail, item totals, quotations, payment terms, budget information and evidence.
 - View/export the reports allowed to Area Director and Vice-Rector users.
@@ -436,7 +437,7 @@ Budget does not have Supplier Master, full employee banking, Accounting, Treasur
 
 - Create annual budget plans, set the permitted monthly structure/control mode, and post supported adjustments with reasons and an audit trail.
 - Maintain budget rules and allocations; review insufficient-budget cases and prepare or mark reviewed a supported exception outcome. Budget cannot itself approve or reject the exception — only Management may decide it.
-- Commit the approved request's budget after all required approvals are complete, or after a budget observation has been resolved. This commitment is what makes the request eligible for Procurement to issue the order next; Budget's own involvement ends here.
+- Every fully approved request now commits its budget automatically at final approval (rule-based, manager-chain and Management-final routes alike). Budget commits manually only to retry after a budget observation or exception has been resolved, or when the automatic commitment could not run. This commitment is what makes the request eligible for Procurement to issue the order next; Budget's own involvement ends here.
 - Read project reference data and Finance configurations available to Budget.
 
 ### Limitations
@@ -564,7 +565,19 @@ SOURCES S01 S02 S03 S16 S18 S26 S27
 
 Approval routes are selected using active rules, request area, request type, flow type and PEN-equivalent amount. amountFrom and amountTo are inclusive. Matching exact-flow rules take precedence over wildcard-flow rules. Required steps are processed by sequence and captured on the request.
 
-For A1 and other ordinary flows with no matching rules, the fallback route is Area Director then Vice Rector, normally 24 hours per step. Track B uses an explicitly configured B route or an express Area Director fallback of four hours. A due date or overdue indicator is an SLA signal, not automatic approval or a new permission.
+For A1 and other ordinary flows with no matching rules, the fallback route is Area Director then Vice Rector, normally one working day per step. Track B uses an explicitly configured B route or an express Area Director fallback of four hours. A due date or overdue indicator is an SLA signal, not automatic approval or a new permission.
+
+SLAs count Peruvian working days: weekends, national holidays and any `UMA_EXTRA_HOLIDAYS` are excluded. `APPROVAL_SLA_WORKING_DAYS` (default 1) sets a manager-chain step's SLA, and a rule's hours are read as 24 per working day. A step still overdue after `SLA_ESCALATION_WORKING_DAYS` (default 1) further working days escalates to the approver's own jefe (Management only when there is nobody above), and the requester is notified that the approval is overdue.
+
+### Manager-chain approval
+
+When the requester has a jefe in the organizational roster, the route starts with their nearest available jefe (inactive or on-leave managers are skipped; if nobody is available, submission is refused with a message to contact the Admin). At each step the jefe either **approves and finalizes** — the chain is complete at that level — or **sends it to their own jefe**, who then chooses the same way. Managers who were never asked do not appear on the route. Configured approval rules that match the request still follow the chain, unless someone who approved in the chain already holds that role and approval level.
+
+- **Absence.** Admin can mark a user *On leave* (a user can also record their own leave). Putting an approver on leave, or deactivating them, moves every pending chain approval waiting on them to their nearest available jefe; each move is audited and the new approver is notified.
+- **Observe, return, reject.** An approver can always observe, return or reject, even when the request fails a submission check that would block approval.
+- **Resubmission** after an observation or return resolves a new route for the request as it is now (amount, track, area, roster) and restarts at the first approver; the previous route remains in the audit history.
+- **Withdrawal.** The requester can withdraw a submitted request back to draft until their first approver approves it; the approver's pending task is closed.
+- **My Team.** A manager with active direct reports sees their team and the requests the team has submitted — never team members' drafts. A team request links to its detail page only when the manager may open it (for example, it is on their approval route). Admin sees only its own team there, not every request.
 
 Track B eligibility is gated separately from its approval route: a request can only be submitted as Track B when an active Track B eligibility rule — matching area, expense nature and PEN-equivalent amount, configured by Admin — covers it. This check runs at submission (not at draft save), and a request with no matching rule is rejected before any route is even selected; the requester must resubmit through Track A1 instead.
 

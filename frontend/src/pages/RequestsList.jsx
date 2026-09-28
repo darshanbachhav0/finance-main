@@ -1,5 +1,5 @@
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client.js";
@@ -28,6 +28,8 @@ export default function RequestsList() {
   const [deleteRow, setDeleteRow] = useState(null);
   const [actionError, setActionError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [withdrawRow, setWithdrawRow] = useState(null);
+  const [withdrawing, setWithdrawing] = useState(false);
   // Solicitors see "My Requests": only their own. Their reports' requests are on My Team.
   const ownScope = user.role === "Solicitor";
   const requestsTable = usePaginatedResource("/requests", {
@@ -83,6 +85,22 @@ export default function RequestsList() {
     }
   }
 
+  async function withdrawRequest(comments) {
+    setWithdrawing(true);
+    try {
+      await api.post(`/requests/${withdrawRow._id}/withdraw`, { comments });
+      notify("Request withdrawn to draft. Edit it and submit it again when ready.");
+      setWithdrawRow(null);
+      setActionError("");
+      requestsTable.reload();
+    } catch (err) {
+      setActionError(err.message);
+      notify(err.message, "error");
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
   return (
     <section>
       <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
@@ -121,6 +139,7 @@ export default function RequestsList() {
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
             { label: "Open full details", icon: Eye, onClick: () => navigate(`/requests/${row._id}`) },
             { label: "Edit request", icon: Pencil, hidden: !canModify(row), onClick: () => navigate(`/requests/${row._id}/edit`) },
+            { label: "Withdraw", icon: Undo2, hidden: !(row.allowedActions || []).includes("WITHDRAW"), onClick: () => setWithdrawRow(row) },
             { label: "Delete permanently", icon: Trash2, tone: "danger", hidden: !canDelete(row), onClick: () => setDeleteRow(row) }
           ]}
           columns={[
@@ -150,6 +169,18 @@ export default function RequestsList() {
         loading={deleting}
         onClose={() => setDeleteRow(null)}
         onConfirm={removeRequest}
+      />
+      <ConfirmDialog
+        open={Boolean(withdrawRow)}
+        title="Withdraw this request?"
+        description="Your first approver has not approved it yet. Withdrawing returns it to draft so you can edit it and submit it again; the approval restarts from the first approver."
+        details={withdrawRow ? [{ label: "Request", value: withdrawRow.requestNumber }, { label: "Result", value: "Status changes to BORRADOR and the pending approval task is closed." }] : []}
+        confirmLabel="Withdraw request"
+        inputLabel="Reason (optional)"
+        tone="danger"
+        loading={withdrawing}
+        onClose={() => !withdrawing && setWithdrawRow(null)}
+        onConfirm={withdrawRequest}
       />
     </section>
   );
