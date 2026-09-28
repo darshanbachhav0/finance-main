@@ -21,7 +21,7 @@ import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
 import { markBudgetPaidAmount } from "./budgetService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import {
   bouncedDestinationStillVerified,
   flagBouncedDestination,
@@ -33,7 +33,7 @@ import {
 import { ensureDetraction, pendingDetractionAmount, resolveSupplierDetractionAccount } from "./detractionService.js";
 import { notifyBouncedAccountReview } from "./bankNotificationService.js";
 import { isPaymentCycleDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
-import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
+import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { nextPaymentBatchNumber } from "./sequenceService.js";
 import { cleanupUploadedFiles, generatedRoot, persistUploadedFiles } from "./storageService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -412,6 +412,7 @@ export async function listTreasuryQueue(queryParams) {
       { request: { $in: requestIds } }
     ] }];
   }
+  withDeepLink(query, queryParams);
   const { page, pageSize, skip } = parsePagination(queryParams);
   const sort = parseSort(queryParams, ["dueDate", "outstandingAmount", "currency", "createdAt", "status", "paymentPriority", "flowType"], { paymentPriority: -1, dueDate: 1, createdAt: 1 });
   const [records, total, totalsByCurrency, missingBankDetails] = await Promise.all([
@@ -684,9 +685,9 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         roles: ["Treasury"],
         eventKey: `request:${item.request._id}:payment-confirmation:${item.accountsPayable._id}`,
         type: "PAYMENT_CONFIRMATION",
-        title: "Payment confirmation required",
-        message: `${item.requestNumber} is in ${batchNumber}; confirm it only after bank execution.`,
-        path: "/treasury",
+        title: notificationText("Payment confirmation required"),
+        message: notificationText("{requestNumber} is in {batchNumber}; confirm it only after bank execution.", { requestNumber: item.requestNumber, batchNumber }),
+        path: `/treasury?tab=confirm&record=${item.accountsPayable._id}`,
         entityType: "FinancialRequest",
         entityId: item.request._id
       });
@@ -806,13 +807,13 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
 
   if (!(await AccountsPayable.exists({ request: request._id, status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } }))) await resolveNotification(`request:${request._id}:payment-confirmation`);
   await resolveNotification(`request:${request._id}:payment-confirmation:${accountsPayable._id}`);
-  await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: "Payment ready for reconciliation", message: `${request.requestNumber}: reconcile the confirmed invoice payment.`, path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
+  await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: notificationText("Payment ready for reconciliation"), message: notificationText("{requestNumber}: reconcile the confirmed invoice payment.", { requestNumber: request.requestNumber }), path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
   const advanceFullyPaid = request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && result.accountsPayable.status === AP_STATUS.PAID;
   if (advanceFullyPaid) {
     const dueLabel = request.rendition?.dueAt ? limaDateKey(request.rendition.dueAt).split("-").reverse().join("/") : "";
-    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: "Rendition pending", message: `${request.requestNumber} was paid. Submit the rendition by ${dueLabel} (working days, Lima time).`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: notificationText("Rendition pending"), message: notificationText("{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time).", { requestNumber: request.requestNumber, dueDate: dueLabel }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   } else {
-    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:paid:${accountsPayable._id}`, type: "PAYMENT_CONFIRMED", title: "Payment confirmed", message: `${request.requestNumber} CXP was paid with operation ${operationNumber}.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:paid:${accountsPayable._id}`, type: "PAYMENT_CONFIRMED", title: notificationText("Payment confirmed"), message: notificationText("{requestNumber} CXP was paid with operation {operationNumber}.", { requestNumber: request.requestNumber, operationNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   }
   return result;
 }
@@ -879,10 +880,10 @@ export async function markPaymentBounced({ accountsPayableId, payload, user, req
   await resolveNotification(`request:${request._id}:payment-confirmation:${accountsPayable._id}`);
   if (flagged) await notifyBouncedAccountReview({ flagged, requestNumber: request.requestNumber });
   await notifyUser({
-    userId: request.requester || request.solicitor, eventKey: `request:${request._id}:payment-bounced:${accountsPayable._id}`, type: "PAYMENT_BOUNCED", title: "Bank payment rejected",
+    userId: request.requester || request.solicitor, eventKey: `request:${request._id}:payment-bounced:${accountsPayable._id}`, type: "PAYMENT_BOUNCED", title: notificationText("Bank payment rejected"),
     message: reasonCategory === "BANK_DETAILS"
-      ? `${request.requestNumber}: the bank rejected the beneficiary's account details. Provide a signed CCI letter so Treasury can reprogram the payment.`
-      : `${request.requestNumber}: the bank rejected the transfer for a technical reason. Treasury will retry it; no action is needed from you.`,
+      ? notificationText("{requestNumber}: the bank rejected the beneficiary's account details. Provide a signed CCI letter so Treasury can reprogram the payment.", { requestNumber: request.requestNumber })
+      : notificationText("{requestNumber}: the bank rejected the transfer for a technical reason. Treasury will retry it; no action is needed from you.", { requestNumber: request.requestNumber }),
     path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
   });
   return result;
@@ -978,9 +979,11 @@ export async function reprogramBouncedPayment({ accountsPayableId, payload, file
       roles: [ROLES.TREASURY],
       eventKey: `request:${request._id}:payment-reprogrammed:${accountsPayable._id}`,
       type: "PAYMENT_REPROGRAMMED",
-      title: "Payment ready to reprogram",
-      message: `${request.requestNumber} is back in the Treasury queue${attachment ? " with updated signed CCI evidence" : " for a retry"}.`,
-      path: "/treasury",
+      title: notificationText("Payment ready to reprogram"),
+      message: attachment
+        ? notificationText("{requestNumber} is back in the Treasury queue with updated signed CCI evidence.", { requestNumber: request.requestNumber })
+        : notificationText("{requestNumber} is back in the Treasury queue for a retry.", { requestNumber: request.requestNumber }),
+      path: `/treasury?tab=prepare&record=${accountsPayable._id}`,
       entityType: "AccountsPayable",
       entityId: accountsPayable._id
     });
@@ -1133,7 +1136,7 @@ export async function recordDetractionDeposit({ accountsPayableId, payload = {},
     return { request, accountsPayable, journal };
   });
   if (result.accountsPayable.status === AP_STATUS.PAID) {
-    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: "Payment ready for reconciliation", message: `${request.requestNumber}: reconcile the confirmed invoice payment and its detraccion deposit.`, path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
+    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:reconcile:${accountsPayable._id}`, type: "PAYMENT_RECONCILIATION", title: notificationText("Payment ready for reconciliation"), message: notificationText("{requestNumber}: reconcile the confirmed invoice payment and its detraccion deposit.", { requestNumber: request.requestNumber }), path: "/treasury", entityType: "AccountsPayable", entityId: accountsPayable._id });
   }
   return result;
 }
@@ -1142,6 +1145,7 @@ export async function listDetractionQueue(queryParams = {}) {
   const { page, pageSize, skip } = parsePagination(queryParams);
   const query = { "detraction.status": queryParams.detractionStatus || "PENDING", status: { $nin: [AP_STATUS.CANCELLED] } };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   const [records, total] = await Promise.all([
     AccountsPayable.find(query).populate({ path: "request", select: "requestNumber currency status" }).populate("supplier", "name legalName rucDni detractionAccount")
       .sort({ dueDate: 1, createdAt: 1 }).skip(skip).limit(pageSize),
@@ -1204,7 +1208,7 @@ export async function reconcilePayment({ requestId, accountsPayableId, payload, 
   for (const ap of payables) await resolveNotification(`request:${request._id}:reconcile:${ap._id}`);
   if (request.status === REQUEST_STATUS.RECONCILED) await notifyRoles({
     roles: ["Accounting"], eventKey: `request:${request._id}:close`, type: "ACCOUNTING_CLOSE",
-    title: "Request ready for closure review", message: `${request.requestNumber}: all payments reconciled; review remaining closure conditions.`,
+    title: notificationText("Request ready for closure review"), message: notificationText("{requestNumber}: all payments reconciled; review remaining closure conditions.", { requestNumber: request.requestNumber }),
     path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
   });
   return result;
@@ -1235,6 +1239,7 @@ export async function listPaymentConfirmationQueue(queryParams = {}) {
     ? { status: queryParams.status }
     : { status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] }, paymentBatch: { $ne: null } };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.paymentPriority) query.paymentPriority = queryParams.paymentPriority;
   if (queryParams.search) {
@@ -1270,6 +1275,7 @@ export async function listBouncedPayments(queryParams = {}) {
   const { page, pageSize, skip } = parsePagination(queryParams);
   const query = { status: AP_STATUS.PAYMENT_BOUNCED };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.search) {
     const search = new RegExp(escapedRegex(queryParams.search), "i");
@@ -1318,6 +1324,7 @@ export async function listReconciliationQueue(queryParams = {}) {
   const ids = await FinancialRequest.distinct("_id", requestQuery);
   const query = { status: AP_STATUS.PAID, reconciliation: null, _id: { $nin: excluded }, request: { $in: ids } };
   if (queryParams.currency) query.currency = queryParams.currency;
+  withDeepLink(query, queryParams);
   const [records, total] = await Promise.all([
     AccountsPayable.find(query).populate({ path: "request", populate: { path: "supplier" } }).sort({ paidDate: 1 }).skip(skip).limit(pageSize),
     AccountsPayable.countDocuments(query)

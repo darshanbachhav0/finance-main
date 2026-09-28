@@ -7,6 +7,10 @@ const notificationSchema = new mongoose.Schema(
     type: { type: String, required: true, trim: true },
     title: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
+    // Translatable copy: English templates with {placeholders} and their values.
+    titleKey: String,
+    messageKey: String,
+    params: { type: mongoose.Schema.Types.Mixed },
     path: { type: String, trim: true },
     entityType: String,
     entityId: mongoose.Schema.Types.ObjectId,

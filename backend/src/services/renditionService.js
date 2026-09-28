@@ -11,7 +11,7 @@ import { clientIp, recordAudit, workflowEvent } from "./auditService.js";
 import { executeBudget, executeDeferredBudget, assertRenditionBudgetAvailable, reserveBudget } from "./budgetService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { guardAccountingPeriod } from "./periodService.js";
-import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { parseRequestLines, requestPopulate } from "./requestService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
@@ -235,7 +235,7 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
       unsupportedLimit: unsupportedResult, beneficiaryAcknowledgmentReference: submissionEvent.signature, bankSnapshotCaptured: Boolean(bankSnapshot)
     } });
     await resolveNotification(`request:${request._id}:rendition`);
-    await notifyRoles({ roles: [ROLES.ACCOUNTING], eventKey: `request:${request._id}:rendition-review`, type: "RENDITION_REVIEW", title: "Rendition ready for review", message: `${request.requestNumber} has submitted official rendition details.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    await notifyRoles({ roles: [ROLES.ACCOUNTING], eventKey: `request:${request._id}:rendition-review`, type: "RENDITION_REVIEW", title: notificationText("Rendition ready for review"), message: notificationText("{requestNumber} has submitted official rendition details.", { requestNumber: request.requestNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     await request.populate(requestPopulate);
     return request;
   } catch (error) {
@@ -275,7 +275,7 @@ export async function commitUndocumentedReimbursementBudget({ request, user, req
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);
-  await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: "Reimbursement declaration pending", message: `${request.requestNumber} was approved. Submit the undocumented-expense declaration so Accounting can review it.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+  await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: notificationText("Reimbursement declaration pending"), message: notificationText("{requestNumber} was approved. Submit the undocumented-expense declaration so Accounting can review it.", { requestNumber: request.requestNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   return result;
 }
 
@@ -311,7 +311,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     request.approvalHistory.push(workflowEvent({ action: "RENDITION_OBSERVED", from: request.status, to: request.status, user, req, comments: reviewComments, request }));
     await request.save();
     await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_OBSERVED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "OBSERVED" } });
-    await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-observed:${Date.now()}`, type: "RENDITION_OBSERVED", title: "Rendition observed", message: `${request.requestNumber}: ${reviewComments}`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-observed:${Date.now()}`, type: "RENDITION_OBSERVED", title: notificationText("Rendition observed"), message: notificationText("{requestNumber}: {comments}", { requestNumber: request.requestNumber, comments: reviewComments }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     await request.populate(requestPopulate);
     return request;
   }
@@ -342,9 +342,9 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       await request.save({ session });
       await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_REJECTED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "REJECTED", renditionStatus: "REJECTED", advanceAmount, returnedAmount, recoveryOutstanding: outstandingAmount, returnJournal: returnJournal?.entryNumber }, session });
     });
-    await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-rejected:${Date.now()}`, type: "RENDITION_REJECTED", title: "Rendition rejected", message: `${request.requestNumber}: ${reviewComments}`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-rejected:${Date.now()}`, type: "RENDITION_REJECTED", title: notificationText("Rendition rejected"), message: notificationText("{requestNumber}: {comments}", { requestNumber: request.requestNumber, comments: reviewComments }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     if (outstandingAmount > 0) {
-      await notifyRoles({ roles: [ROLES.ACCOUNTING, ROLES.TREASURY], eventKey: `request:${request._id}:rendition-recovery`, type: "RENDITION_RECOVERY_REQUIRED", title: "Advance recovery required", message: `${request.requestNumber}: rendition rejected, ${outstandingAmount.toFixed(2)} must be recovered from the beneficiary.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+      await notifyRoles({ roles: [ROLES.ACCOUNTING, ROLES.TREASURY], eventKey: `request:${request._id}:rendition-recovery`, type: "RENDITION_RECOVERY_REQUIRED", title: notificationText("Advance recovery required"), message: notificationText("{requestNumber}: rendition rejected, {amount} must be recovered from the beneficiary.", { requestNumber: request.requestNumber, amount: outstandingAmount.toFixed(2) }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     }
     await request.populate(requestPopulate);
     return request;
@@ -403,11 +403,11 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       return { request, journal, accountsPayable: reimbursementPayable || undefined };
     });
     if (provisionsReimbursement) {
-      await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: "Employee reimbursement ready", message: `${request.requestNumber}: undocumented reimbursement approved and ready to pay to the employee's verified account.`, path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
+      await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: notificationText("Employee reimbursement ready"), message: notificationText("{requestNumber}: undocumented reimbursement approved and ready to pay to the employee's verified account.", { requestNumber: request.requestNumber }), path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
     }
     if (nonDeductibleOutstanding > 0) {
-      await notifyRoles({ roles: [ROLES.ACCOUNTING], eventKey: `request:${request._id}:non-deductible`, type: "RENDITION_NON_DEDUCTIBLE", title: "Non-deductible balance pending", message: `${request.requestNumber} keeps ${nonDeductibleOutstanding.toFixed(2)} in Account 14 pending reimbursement or payroll deduction.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
-      await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:non-deductible-owner`, type: "RENDITION_NON_DEDUCTIBLE", title: "Rendition balance pending", message: `${request.requestNumber} has a non-deductible balance of ${nonDeductibleOutstanding.toFixed(2)} pending regularization.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+      await notifyRoles({ roles: [ROLES.ACCOUNTING], eventKey: `request:${request._id}:non-deductible`, type: "RENDITION_NON_DEDUCTIBLE", title: notificationText("Non-deductible balance pending"), message: notificationText("{requestNumber} keeps {amount} in Account 14 pending reimbursement or payroll deduction.", { requestNumber: request.requestNumber, amount: nonDeductibleOutstanding.toFixed(2) }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+      await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:non-deductible-owner`, type: "RENDITION_NON_DEDUCTIBLE", title: notificationText("Rendition balance pending"), message: notificationText("{requestNumber} has a non-deductible balance of {amount} pending regularization.", { requestNumber: request.requestNumber, amount: nonDeductibleOutstanding.toFixed(2) }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     }
     return result;
   } catch (error) {
@@ -418,7 +418,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       await observed.save();
       await recordAudit({ entityType: "FinancialRequest", entity: observed, user, req, module: "RENDITION", action: "RENDITION_BUDGET_OBSERVED", comments: error.message });
     }
-    await notifyRoles({ roles: [ROLES.BUDGET, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: "Rendition budget adjustment required", message: `${request.requestNumber} cannot execute its final expense budget until the budget is adjusted.`, path: "/budget", entityType: "FinancialRequest", entityId: request._id });
+    await notifyRoles({ roles: [ROLES.BUDGET, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: "/budget", entityType: "FinancialRequest", entityId: request._id });
     throw new AppError(409, "Rendition observed due to insufficient budget. Adjust the budget and retry approval.", error.details, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
 }
@@ -451,7 +451,7 @@ export async function settleNonDeductibleRendition({ requestId, amount, method, 
     return { request, journal };
   });
   await resolveNotification(`request:${request._id}:non-deductible`);
-  await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:non-deductible-settled:${Date.now()}`, type: "RENDITION_SETTLEMENT", title: "Rendition balance updated", message: `${request.requestNumber}: ${settlementAmount.toFixed(2)} regularized; ${result.request.rendition.nonDeductibleOutstanding.toFixed(2)} remains.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+  await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:non-deductible-settled:${Date.now()}`, type: "RENDITION_SETTLEMENT", title: notificationText("Rendition balance updated"), message: notificationText("{requestNumber}: {amount} regularized; {remaining} remains.", { requestNumber: request.requestNumber, amount: settlementAmount.toFixed(2), remaining: result.request.rendition.nonDeductibleOutstanding.toFixed(2) }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   return result;
 }
 
@@ -506,7 +506,7 @@ export async function recoverRejectedRendition({ requestId, amount, method, refe
     await request.populate(requestPopulate);
     return { request, journal };
   });
-  await notifyUser({ userId: requestOwnerId(result.request), eventKey: `request:${request._id}:rendition-recovery-settled:${Date.now()}`, type: "RENDITION_RECOVERY_SETTLED", title: "Rendition recovery recorded", message: `${request.requestNumber}: ${settlementAmount.toFixed(2)} recovered; ${result.request.rendition.recovery.outstandingAmount.toFixed(2)} remains.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+  await notifyUser({ userId: requestOwnerId(result.request), eventKey: `request:${request._id}:rendition-recovery-settled:${Date.now()}`, type: "RENDITION_RECOVERY_SETTLED", title: notificationText("Rendition recovery recorded"), message: notificationText("{requestNumber}: {amount} recovered; {remaining} remains.", { requestNumber: request.requestNumber, amount: settlementAmount.toFixed(2), remaining: result.request.rendition.recovery.outstandingAmount.toFixed(2) }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   return result;
 }
 

@@ -78,6 +78,19 @@ function BankFormatCertificationPanel({ rows, reload }) {
 const requestTypeOptions = ["*", ...requestTypes].map((value) => ({ value, label: requestTypeLabels[value] || value }));
 const natureOptions = ["*", ...expenseNatures].map((value) => ({ value, label: expenseNatureLabels[value] || value }));
 const flowOptions = ["*", ...flowTypes].map((value) => ({ value, label: flowTypeLabels[value] || value }));
+const anyCurrencyOptions = [{ value: "*", label: "Any currency" }, ...currencies.map((value) => ({ value, label: value }))];
+// Every AccountingMapping.purpose value in backend/src/models/AccountingMapping.js.
+export const accountingMappingPurposes = [
+  { value: "ACCOUNTS_PAYABLE", label: "Accounts payable (CXP)" },
+  { value: "BANK", label: "Bank" },
+  { value: "ADVANCE_TRANSIT", label: "Advance in transit" },
+  { value: "IGV", label: "IGV (VAT) credit" },
+  { value: "RETURN_RECEIVABLE", label: "Return receivable" },
+  { value: "SUPPLIER_CREDIT", label: "Supplier credit" },
+  { value: "EXCHANGE_GAIN", label: "Exchange gain" },
+  { value: "EXCHANGE_LOSS", label: "Exchange loss" }
+];
+const purposeLabel = (value) => accountingMappingPurposes.find((item) => item.value === value)?.label || value;
 
 export default function MasterConfiguration() {
   const { resource = "approval-rules" } = useParams();
@@ -158,6 +171,21 @@ export default function MasterConfiguration() {
         { name: "project", label: "Project" }, { name: "assignedAmount", label: "Assigned amount", type: "number", min: 0, step: "0.01", required: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
       columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
+    },
+    "accounting-mappings": {
+      label: "Accounting Mappings", roles: ["Admin", "Accounting"], endpoint: "/accounting-mappings",
+      description: "GL accounts used by automatic postings that expense types do not cover: accounts payable, bank, advances in transit, IGV, returns, supplier credits and exchange differences. The most specific active mapping for the request type, expense nature, bank and currency wins; * matches any value. Every change is audited.",
+      fields: [
+        { type: "section", label: "Mapping" }, { name: "code", label: "Code", required: true, placeholder: "AP-PEN" }, { name: "name", label: "Name", required: true },
+        { name: "purpose", label: "Purpose", type: "select", required: true, options: accountingMappingPurposes },
+        { type: "section", label: "Account" }, { name: "accountNumber", label: "Account number", required: true, placeholder: "4212" }, { name: "subAccount", label: "Sub-account", defaultValue: "" },
+        { type: "section", label: "Applies to" }, { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions },
+        { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
+        { name: "bank", label: "Bank", defaultValue: "*", hint: "Bank code such as BBVA or BCP, or * for any bank." },
+        { name: "currency", label: "Currency", type: "select", defaultValue: "*", options: anyCurrencyOptions },
+        { name: "active", label: "Active", type: "checkbox", defaultValue: true }
+      ],
+      columns: [{ key: "code", label: "Code" }, { key: "name", label: "Name" }, { key: "purpose", label: "Purpose", render: (row) => t(purposeLabel(row.purpose)) }, { key: "accountNumber", label: "Account", render: (row) => [row.accountNumber, row.subAccount].filter(Boolean).join(" / ") }, { key: "requestType", label: "Request type", render: (row) => row.requestType === "*" ? t("All") : t(requestTypeLabels[row.requestType] || row.requestType) }, { key: "expenseNature", label: "Expense nature", render: (row) => row.expenseNature === "*" ? t("All") : t(expenseNatureLabels[row.expenseNature] || row.expenseNature) }, { key: "bank", label: "Bank", render: (row) => row.bank === "*" ? t("All") : row.bank }, { key: "currency", label: "Currency", render: (row) => row.currency === "*" ? t("All") : row.currency }, { key: "active", label: "Status" }]
     },
     "bank-formats": {
       // Treasury can see this section to use the certification panel below, but only Admin may

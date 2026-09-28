@@ -19,7 +19,7 @@ export function slaConfiguration() {
   return {
     dueSoonHours: setting("SLA_DUE_SOON_HOURS", 4, 0),
     escalationWorkingDays,
-    // Calendar-hour approximation kept for aggregate dashboard counters only.
+    // Legacy calendar-hour value; counters use isApprovalEscalated (working days) instead.
     escalationHours: escalationWorkingDays * 24,
     approvalWorkingDays: approvalSlaWorkingDays(),
     pollMs: setting("SLA_POLL_MS", 60000, 1000)
@@ -32,6 +32,19 @@ function escalationWorkingDaysOf(config) {
 }
 export function escalationDueAt(dueAt, config = slaConfiguration()) {
   return addWorkingDays(dueAt, escalationWorkingDaysOf(config));
+}
+// The escalation rule classifyApprovalSla applies (overdue, and at least N further working days
+// past the due date), for counters that only need a yes/no.
+export function isApprovalEscalated(dueAt, now = new Date(), config = slaConfiguration()) {
+  const due = dueAt ? new Date(dueAt) : null;
+  if (!due || !Number.isFinite(due.getTime()) || due.getTime() >= now.getTime()) return false;
+  return now.getTime() >= escalationDueAt(due, config).getTime();
+}
+// Adding N working days always moves a date forward at least N calendar days, so a step due
+// after this cutoff cannot have escalated yet. Counters use it as an indexed pre-filter and then
+// apply isApprovalEscalated to the few remaining candidates.
+export function escalationCandidateCutoff(now = new Date(), config = slaConfiguration()) {
+  return new Date(now.getTime() - escalationWorkingDaysOf(config) * 24 * HOUR);
 }
 export function classifyApprovalSla(dueAt, now = new Date(), config = slaConfiguration()) {
   const remainingMs = dueAt ? new Date(dueAt).getTime() - now.getTime() : NaN;

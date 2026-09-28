@@ -11,6 +11,7 @@ import { deriveFinancialProgress, canonicalRequestStatus, isTerminalRequest, ren
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { AppError } from "../utils/AppError.js";
+import { hasOpenRequiredApprovalStep } from "../utils/constants.js";
 
 export function assertRequestActive(request) {
   if (isTerminalRequest(request.status)) throw new AppError(409, "This request is terminal and cannot be changed.", { status: request.status }, "INVALID_STATUS_TRANSITION");
@@ -91,7 +92,7 @@ export async function assertClosureAllowed(request, { session } = {}) {
     BudgetException.exists({ request: request._id, status: "PENDING" }).session(session || null)
   ]);
   if (invoiceObservation || budgetException) throw new AppError(409, "Resolve pending invoice and budget observations before closure.");
-  if (request.approvalRouteSnapshot?.some(step => step.required !== false && step.status !== "APPROVED")) throw new AppError(409, "Required approvals are incomplete.");
+  if (hasOpenRequiredApprovalStep(request.approvalRouteSnapshot)) throw new AppError(409, "Required approvals are incomplete.");
   if (request.observation?.code && !request.observation?.resolvedAt) throw new AppError(409, "Resolve the open observation before closure.");
   // Same rule as workflowService's closure control: a validated rendition, or full recovery of a
   // rejected rendition's advance.

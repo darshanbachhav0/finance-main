@@ -4,12 +4,20 @@ import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { activeApprovalStep, nearestAvailableSupervisor } from "./approvalRuleService.js";
 import { allowedRequestActions } from "./requestActionPolicy.js";
-import { classifyApprovalSla, slaConfiguration } from "./slaPolicy.js";
+import { classifyApprovalSla, escalationCandidateCutoff, isApprovalEscalated, slaConfiguration } from "./slaPolicy.js";
 import { recordAudit } from "./auditService.js";
+import { notificationFields, notificationText } from "./notificationService.js";
 
 export const SLA_TYPES = ["SLA_DUE_SOON", "SLA_OVERDUE", "SLA_ESCALATION"];
 const ACTIVE_STATUSES = ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR"];
-const titles = { SLA_DUE_SOON: "Approval due soon", SLA_OVERDUE: "Approval overdue", SLA_ESCALATION: "Approval escalated" };
+const titles = { SLA_DUE_SOON: notificationText("Approval due soon"), SLA_OVERDUE: notificationText("Approval overdue"), SLA_ESCALATION: notificationText("Approval escalated") };
+
+// Requests matching `query` whose approval (approvalDueAt) has escalated under the working-day
+// rule the SLA worker uses. Dashboard and management-portal counters share this.
+export async function countEscalatedApprovals(query = {}, { now = new Date(), config = slaConfiguration() } = {}) {
+  const candidates = await FinancialRequest.find({ $and: [query, { approvalDueAt: { $lte: escalationCandidateCutoff(now, config) } }] }).select("approvalDueAt").lean();
+  return candidates.filter((request) => isApprovalEscalated(request.approvalDueAt, now, config)).length;
+}
 
 export function approvalSlaCycle(request) {
   if (!ACTIVE_STATUSES.includes(request.status) || request.approvalStage === "COMPLETE") return null;
@@ -26,7 +34,7 @@ export function approvalSlaCycle(request) {
 async function deliverOnce({ userId, eventKey, type, title, message, request }) {
   try {
     const result = await Notification.updateOne({ user: userId, eventKey }, { $setOnInsert: {
-      user: userId, eventKey, type, title, message,
+      user: userId, eventKey, type, ...notificationFields({ title, message }),
       path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
     } }, { upsert: true });
     return result.upsertedCount || 0;
@@ -76,17 +84,17 @@ export async function checkApprovalSlas({ now = new Date(), config = slaConfigur
     const escalationTargets = alert === "SLA_ESCALATION" ? await escalationRecipients(request, approvers, users) : [];
     const deliveries = [
       ...approvers.map(user => ({ user, title: titles[alert] })),
-      ...escalationTargets.filter(target => !approvers.some(user => String(user._id) === String(target._id))).map(user => ({ user, title: "Approval escalated to you" }))
+      ...escalationTargets.filter(target => !approvers.some(user => String(user._id) === String(target._id))).map(user => ({ user, title: notificationText("Approval escalated to you") }))
     ];
     liveEvents.set(eventKey, new Set(deliveries.map(({ user }) => String(user._id))));
-    const message = `${request.requestNumber}: ${cycle.stage}, due ${new Date(cycle.dueAt).toISOString()}.`;
+    const message = notificationText("{requestNumber}: {stage}, due {dueAt}.", { requestNumber: request.requestNumber, stage: cycle.stage, dueAt: new Date(cycle.dueAt).toISOString() });
     for (const { user, title } of deliveries) summary.delivered += await deliverOnce({ userId: user._id, eventKey, type: alert, title, message, request });
     // The requester learns their approval is overdue (one alert per step cycle).
     const requesterId = request.requester || request.solicitor;
     if (requesterId && alert !== "SLA_DUE_SOON") {
       const requesterKey = `${cycle.key}:REQUESTER_OVERDUE`;
       liveEvents.set(requesterKey, new Set([String(requesterId)]));
-      summary.delivered += await deliverOnce({ userId: requesterId, eventKey: requesterKey, type: "SLA_OVERDUE", title: "Your request's approval is overdue", message: `${request.requestNumber} is still waiting for ${cycle.stage}; it was due ${new Date(cycle.dueAt).toISOString()}.`, request });
+      summary.delivered += await deliverOnce({ userId: requesterId, eventKey: requesterKey, type: "SLA_OVERDUE", title: notificationText("Your request's approval is overdue"), message: notificationText("{requestNumber} is still waiting for {stage}; it was due {dueAt}.", { requestNumber: request.requestNumber, stage: cycle.stage, dueAt: new Date(cycle.dueAt).toISOString() }), request });
     }
     const recipients = deliveries.map(({ user }) => user);
     if (alert === "SLA_ESCALATION") {

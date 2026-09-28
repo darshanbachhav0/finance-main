@@ -59,8 +59,8 @@ services:
         value: "true"
       - key: SLA_DUE_SOON_HOURS
         value: 4
-      - key: SLA_ESCALATION_HOURS
-        value: 24
+      - key: SLA_ESCALATION_WORKING_DAYS
+        value: 1
       - key: SLA_POLL_MS
         value: 60000
       - key: SUNAT_PADRON_WORKER_ENABLED

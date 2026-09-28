@@ -5,7 +5,7 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { recordAudit } from "./auditService.js";
 import { applyBudgetExceptionIncrease } from "./budgetPlanService.js";
-import { notifyRoles, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
 import { runFinancialOperation } from "./transactionService.js";
 
 // Configurable, per-dimension authority: Budget/Admin always prepare an
@@ -73,8 +73,8 @@ async function notifyAfterDecision(exception, request, action) {
       roles: [ROLES.MANAGEMENT],
       eventKey: `budget-exception:${exception._id}:decision`,
       type: "BUDGET_EXCEPTION",
-      title: "Budget exception ready for decision",
-      message: `${label}: Budget reviewed the exception; Management must approve or reject it.`,
+      title: notificationText("Budget exception ready for decision"),
+      message: notificationText("{requestNumber}: Budget reviewed the exception; Management must approve or reject it.", { requestNumber: label }),
       path: budgetExceptionPath(exception),
       entityType: "BudgetException",
       entityId: exception._id
@@ -86,10 +86,12 @@ async function notifyAfterDecision(exception, request, action) {
     roles: [ROLES.BUDGET, ROLES.ADMIN],
     eventKey: `budget-exception:${exception._id}:${action.toLowerCase()}`,
     type: "BUDGET_EXCEPTION",
-    title: action === "APPROVED" ? "Budget exception approved" : "Budget exception rejected",
-    message: action === "APPROVED"
-      ? `${label}: Management approved the exception${exception.appliedIncrease?.amount ? ` and the budget was increased by PEN ${Number(exception.appliedIncrease.amount).toFixed(2)}` : ""}. The budget commitment can proceed.`
-      : `${label}: Management rejected the exception. The request stays observed until it is corrected and resubmitted.`,
+    title: action === "APPROVED" ? notificationText("Budget exception approved") : notificationText("Budget exception rejected"),
+    message: action !== "APPROVED"
+      ? notificationText("{requestNumber}: Management rejected the exception. The request stays observed until it is corrected and resubmitted.", { requestNumber: label })
+      : exception.appliedIncrease?.amount
+        ? notificationText("{requestNumber}: Management approved the exception and the budget was increased by PEN {amount}. The budget commitment can proceed.", { requestNumber: label, amount: Number(exception.appliedIncrease.amount).toFixed(2) })
+        : notificationText("{requestNumber}: Management approved the exception. The budget commitment can proceed.", { requestNumber: label }),
     path: budgetExceptionPath(exception),
     entityType: "BudgetException",
     entityId: exception._id

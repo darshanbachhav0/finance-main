@@ -13,9 +13,9 @@ import { createAccountsPayableFromVoucher } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { configuredDocumentRequirements, validateDocumentRequirements } from "./documentRuleService.js";
 import { executeBudgetAmount } from "./budgetService.js";
-import { notifyRoles } from "./notificationService.js";
+import { notificationText, notifyRoles } from "./notificationService.js";
 import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance, restorePurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
-import { escapedRegex, paginatedPayload, parsePagination } from "./queryService.js";
+import { escapedRegex, paginatedPayload, parsePagination, withDeepLink } from "./queryService.js";
 import { nextMassUploadBatchNumber } from "./sequenceService.js";
 import { cleanupUploadedFiles, persistUploadedFiles, uploadRoot } from "./storageService.js";
 import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat, voucherIdentity } from "./sunatVoucherService.js";
@@ -847,9 +847,9 @@ export async function processMassUploadBatch(batchId) {
       roles: [ROLES.ACCOUNTING],
       eventKey: `batch:${batch._id}:complete:${batch.updatedAt?.getTime?.() || Date.now()}`,
       type: "BATCH_COMPLETE",
-      title: "Batch invoice processing complete",
-      message: `${batch.batchCode}: ${batch.processedSuccess} provisioned, ${batch.observed + batch.failed} observed/failed.`,
-      path: "/accounting/invoice-observations",
+      title: notificationText("Batch invoice processing complete"),
+      message: notificationText("{batchCode}: {provisioned} provisioned, {observedOrFailed} observed/failed.", { batchCode: batch.batchCode, provisioned: batch.processedSuccess, observedOrFailed: batch.observed + batch.failed }),
+      path: batch.observed + batch.failed > 0 ? `/accounting/invoice-observations?batch=${batch._id}` : `/batch-invoices?batch=${batch._id}`,
       entityType: "MassUploadBatch",
       entityId: batch._id
     });
@@ -891,6 +891,7 @@ export async function listMassUploadBatches(query = {}, user) {
   if (user?.role === ROLES.SOLICITOR) filter.uploadedBy = user._id;
   if (query.status) filter.status = query.status;
   if (query.purchaseOrder) filter.purchaseOrder = query.purchaseOrder;
+  withDeepLink(filter, query, { record: "_id", batch: "_id", request: "request" });
   const { page, pageSize, skip } = parsePagination(query);
   const [data, total] = await Promise.all([
     MassUploadBatch.find(filter).select("-inputFile.path").populate("purchaseOrder", "poNumber amount remainingAmount currency status").populate("request", "requestNumber status").sort({ createdAt: -1 }).skip(skip).limit(pageSize),
@@ -928,10 +929,12 @@ function publicObservation(observation) {
 }
 
 export async function listInvoiceObservations(query = {}) {
-  const filter = { resolutionStatus: query.resolutionStatus || "OPEN" };
+  // A deep link to one observation (?record=<id>) shows it even after it was resolved, so the
+  // notification still opens the record it names.
+  const filter = query.record && !query.resolutionStatus ? {} : { resolutionStatus: query.resolutionStatus || "OPEN" };
   if (query.status) filter.status = query.status;
-  if (query.batch) filter.batch = query.batch;
   if (query.purchaseOrder) filter.purchaseOrder = query.purchaseOrder;
+  withDeepLink(filter, query, { record: "_id", batch: "batch", request: "request" });
   if (query.search) {
     const search = new RegExp(escapedRegex(query.search), "i");
     filter.$or = [{ rucIssuer: search }, { seriesNumber: search }, { errorDetail: search }, { sourceName: search }];
