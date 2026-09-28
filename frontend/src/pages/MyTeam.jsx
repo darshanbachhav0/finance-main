@@ -37,7 +37,7 @@ export default function MyTeam() {
           loading={loadingTeam}
           caption="Team members"
           columns={[
-            { key: "name", primary: true, label: "Name", render: (row) => <strong>{row.name}</strong> },
+            { key: "name", primary: true, label: "Name", render: (row) => <div className="primary-cell"><strong>{row.name}</strong>{row.onLeave && <span className="muted-text">{t("On leave")}</span>}</div> },
             { key: "jobTitle", label: "Role / title", render: (row) => row.jobTitle || t(row.role) },
             { key: "area", label: "Area" },
             { key: "costCenter", label: "Cost center", sortable: false, render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" },
@@ -54,7 +54,9 @@ export default function MyTeam() {
           caption="Requests from your team"
           searchPlaceholder="Search request, supplier, or requester..."
           columns={[
-            { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
+            // Listing a team request does not grant opening it: only rows the server marks
+            // viewable (e.g. this user is on the approval route) link to the detail page.
+            { key: "requestNumber", label: "Request", render: (row) => row.canView ? <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> : <span title={t("You can open a team request only while it is on your approval route.")}>{row.requestNumber}</span> },
             { key: "solicitor", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
             { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
             { key: "totalAmount", sortKey: "totalPENEquivalent", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },

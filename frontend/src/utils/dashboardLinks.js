@@ -1,6 +1,10 @@
 import { canAccessNavigation } from "./navigationAccess.js";
 
-// Links open the related workspace. Only single-status metrics apply an exact filter.
+// Track A1 requests with committed budget and no Purchase Order yet (backend status alias).
+export const AWAITING_PURCHASE_ORDER_PATH = "/requests?status=PENDIENTE_OC";
+
+// Links open the related workspace, filtered to the statuses the metric counts. A comma-separated
+// status list selects any of them (see listRequestsPage in the backend request service).
 export function dashboardMetricLink(role, key) {
   let destination;
   if (role === "Budget" || ["budget", "available", "assigned", "committed", "executed", "paid"].includes(key)) {
@@ -23,6 +27,9 @@ export function dashboardMetricLink(role, key) {
       capex: ["/requests?requestType=CAPEX", "View requests"],
       opex: ["/requests?requestType=OPEX", "View requests"],
       drafts: ["/requests?status=BORRADOR", "View drafts"],
+      returned: ["/requests?status=DEVUELTO%2COBSERVADO", "View returned requests"],
+      pending: ["/requests?status=PENDIENTE_APROBACION%2CAPROBADO_DIRECTOR%2CAPROBADO_VICERRECTOR", "View pending approvals"],
+      awaitingOrder: [AWAITING_PURCHASE_ORDER_PATH, "View requests awaiting a PO"],
       rendition: ["/requests?renditionStatus=PENDING%2CSUBMITTED%2COBSERVED", "View pending renditions"],
       closed: ["/requests?status=CERRADO", "View requests"]
     }[key] || ["/requests", "View requests"];

@@ -4,7 +4,10 @@ import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWor
 import DraftPanel from "../components/DraftPanel.jsx";
 import {
   AlertTriangle,
+  Ban,
+  CalendarClock,
   CircleCheckBig,
+  Landmark,
   Download,
   Eye,
   FileDown,
@@ -26,6 +29,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
+import { isPaymentCycleDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
 import StatCard from "../components/StatCard.jsx";
@@ -38,6 +42,9 @@ import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.
 const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 
 const amountOf = (row) => Number(row.accountsPayable?.outstandingAmount ?? row.outstandingAmount ?? row.totalAmount ?? 0);
+// What goes to the supplier through BBVA: outstanding minus a pending SPOT detraccion.
+const netAmountOf = (row) => Number(row.accountsPayable?.netPayableAmount ?? amountOf(row));
+const onPaymentCycle = (dateKey) => Boolean(dateKey) && isPaymentCycleDate(new Date(`${dateKey}T12:00:00.000Z`));
 const requestIdOf = (row) => row.requestId || row.request?._id || row._id;
 const payableIdOf = (row) => row.accountsPayable?._id || row._id;
 
@@ -50,7 +57,11 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const [accountSelections, setAccountSelections] = useState({});
   const [bank, setBank] = useState("BBVA");
   const [currency, setCurrency] = useState("PEN");
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  // Payments follow the university cycle (15th / 30th): default to the next cycle date.
+  const todayKey = limaDateKey(new Date());
+  const [paymentDate, setPaymentDate] = useState(() => nextPaymentCycleDate(new Date()));
+  const [paymentDateReason, setPaymentDateReason] = useState("");
+  const offCycle = !onPaymentCycle(paymentDate);
   const [quickViewId, setQuickViewId] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [result, setResult] = useState(null);
@@ -59,11 +70,15 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const [paymentRow, setPaymentRow] = useState(null);
   const [paymentForm, setPaymentForm] = useState({ operationNumber: "", paidAt: new Date().toISOString().slice(0, 10), confirmedAmount: "", comments: "" });
   const [bounceRow, setBounceRow] = useState(null);
-  const [bounceForm, setBounceForm] = useState({ reason: "", bankReference: "" });
+  const [bounceForm, setBounceForm] = useState({ reason: "", reasonCategory: "", bankReference: "" });
   const [reprogramRow, setReprogramRow] = useState(null);
   const [reprogramForm, setReprogramForm] = useState({ comments: "", cciLetter: null });
   const [reconciliationRow, setReconciliationRow] = useState(null);
   const [reconciliationForm, setReconciliationForm] = useState({ bankReference: "", statementAmount: "", comments: "" });
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [detractionRow, setDetractionRow] = useState(null);
+  const [detractionForm, setDetractionForm] = useState({ constancyNumber: "", depositDate: "", amount: "" });
 
   const paymentDraft = useWorkDraft({ scope: "payment-confirmation", recordId: paymentRow ? String(payableIdOf(paymentRow)) : "new", title: "Payment confirmation", enabled: Boolean(paymentRow), value: paymentForm, restore: setPaymentForm, sourceVersion: paymentRow?.updatedAt });
   useDraftResume("payment-confirmation", id => resumeDraftRecord("/treasury/payment-confirmations", id, payableIdOf, openPaymentConfirmation, setActionError));
@@ -79,9 +94,10 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const confirmationTable = usePaginatedResource("/treasury/payment-confirmations");
   const bouncedTable = usePaginatedResource("/treasury/bounced-payments");
   const reconciliationTable = usePaginatedResource("/treasury/reconciliation");
+  const detractionTable = usePaginatedResource("/treasury/detractions");
   const rows = queueTable.rows;
-  const loading = queueTable.loading || historyTable.loading || confirmationTable.loading || bouncedTable.loading || reconciliationTable.loading;
-  const resourceError = queueTable.error || historyTable.error || confirmationTable.error || bouncedTable.error || reconciliationTable.error;
+  const loading = queueTable.loading || historyTable.loading || confirmationTable.loading || bouncedTable.loading || reconciliationTable.loading || detractionTable.loading;
+  const resourceError = queueTable.error || historyTable.error || confirmationTable.error || bouncedTable.error || reconciliationTable.error || detractionTable.error;
 
   function reloadAll() {
     queueTable.reload();
@@ -89,6 +105,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     confirmationTable.reload();
     bouncedTable.reload();
     reconciliationTable.reload();
+    detractionTable.reload();
   }
 
   useEffect(() => {
@@ -130,7 +147,8 @@ export default function TreasuryQueue({ historyOnly = false }) {
     return "";
   };
   const selectedRows = rows.filter((row) => selected.includes(String(payableIdOf(row))));
-  const selectedTotal = useMemo(() => selectedRows.reduce((sum, row) => sum + amountOf(row), 0), [selectedRows]);
+  const selectedTotal = useMemo(() => selectedRows.reduce((sum, row) => sum + netAmountOf(row), 0), [selectedRows]);
+  const paymentCycles = queueTable.payload.summary?.paymentCycles || [];
   const queueTotals = useMemo(() => Object.fromEntries(Object.entries(queueTable.payload.summary?.totalsByCurrency || {}).map(([key, value]) => [key, Number(value.total || 0)])), [queueTable.payload.summary]);
   const missingBank = Number(queueTable.payload.summary?.missingBankDetails || 0);
 
@@ -154,6 +172,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
         bank,
         currency,
         paymentDate,
+        paymentDateReason: offCycle ? paymentDateReason : undefined,
         accountSelections: selectedAccounts
       });
       setResult(response.data);
@@ -176,7 +195,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     setPaymentForm({
       operationNumber: "",
       paidAt: new Date().toISOString().slice(0, 10),
-      confirmedAmount: String(amountOf(row)),
+      confirmedAmount: String(netAmountOf(row)),
       comments: ""
     });
   }
@@ -209,7 +228,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       await bounceDraft.complete();
       notify("The rejected transfer was reopened as PAGO_REBOTADO.");
       setBounceRow(null);
-      setBounceForm({ reason: "", bankReference: "" });
+      setBounceForm({ reason: "", reasonCategory: "", bankReference: "" });
       setActionError("");
       reloadAll();
     } catch (error) {
@@ -227,10 +246,10 @@ export default function TreasuryQueue({ historyOnly = false }) {
     try {
       const data = new FormData();
       data.append("comments", reprogramForm.comments);
-      data.append("cciLetter", reprogramForm.cciLetter);
+      if (reprogramForm.cciLetter) data.append("cciLetter", reprogramForm.cciLetter);
       await api.post(`/treasury/payables/${payableIdOf(reprogramRow)}/reprogram`, data);
       await reprogramDraft.complete();
-      notify("Signed CCI evidence stored. The CXP is available for Treasury scheduling again.");
+      notify(reprogramForm.cciLetter ? "Signed CCI evidence stored. The CXP is available for Treasury scheduling again." : "The CXP is back in the payment queue for a retry.");
       setReprogramRow(null);
       setReprogramForm({ comments: "", cciLetter: null });
       setActionError("");
@@ -245,8 +264,56 @@ export default function TreasuryQueue({ historyOnly = false }) {
 
   function openReconciliation(row) {
     setReconciliationRow(row);
-    setReconciliationForm({ bankReference: row.payment?.operationNumber || "", statementAmount: String(row.payment?.confirmedAmount ?? ""), comments: "" });
+    // The statement amount must be typed from the bank statement: pre-filling it with the system
+    // amount would make the check compare the system with itself.
+    setReconciliationForm({ bankReference: "", statementAmount: "", comments: "" });
   }
+
+  async function cancelFile(event) {
+    event.preventDefault();
+    setProcessing(true);
+    try {
+      await api.post(`/treasury/bank-files/${cancelTarget.batchId}/cancel`, { reason: cancelReason, accountsPayableIds: cancelTarget.accountsPayableId ? [cancelTarget.accountsPayableId] : undefined });
+      notify(cancelTarget.accountsPayableId ? "The CXP was removed from the bank file and is back in the payment queue." : "Bank file cancelled. Its CXP records are back in the payment queue.");
+      setCancelTarget(null);
+      setCancelReason("");
+      setActionError("");
+      reloadAll();
+    } catch (error) {
+      setActionError(error.message);
+      notify(error.message, "error");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function openDetraction(row) {
+    setDetractionRow(row);
+    setDetractionForm({ constancyNumber: "", depositDate: todayKey, amount: "" });
+  }
+
+  async function depositDetraction(event) {
+    event.preventDefault();
+    setProcessing(true);
+    try {
+      await api.post(`/treasury/payables/${payableIdOf(detractionRow)}/detraction-deposit`, detractionForm);
+      notify("Detraction deposit recorded.");
+      setDetractionRow(null);
+      setActionError("");
+      reloadAll();
+    } catch (error) {
+      setActionError(error.message);
+      notify(error.message, "error");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  const detractionCell = (row) => {
+    const detraction = row.accountsPayable?.detraction || row.detraction;
+    if (!detraction || detraction.status === "NOT_APPLICABLE" || !detraction.status) return <span className="field-hint">{t("Not subject to SPOT")}</span>;
+    return <div className="primary-cell"><strong>{money("PEN", detraction.amountPen)} · {detraction.rate}%</strong><span><StatusBadge status={detraction.status === "DEPOSITED" ? "DETRACTION_DEPOSITED" : "DETRACTION_PENDING"} /> {detraction.categoryCode}</span></div>;
+  };
 
   async function reconcile(event) {
     event.preventDefault(); if (!reconciliationDraft.ready || reconciliationDraft.status === "conflict") return;
@@ -266,6 +333,8 @@ export default function TreasuryQueue({ historyOnly = false }) {
       setProcessing(false);
     }
   }
+
+  const reprogramLetterRequired = reprogramRow?.accountsPayable?.bouncedPayment?.reasonCategory !== "TECHNICAL";
 
   const queueColumns = [
     { key: "select", label: "", sortable: false, render: (row) => <input type="checkbox" aria-label={t("Select CXP")} checked={selected.includes(String(payableIdOf(row)))} disabled={!matchingAccounts(row).length} onChange={() => toggleRow(row)} /> },
@@ -287,7 +356,9 @@ export default function TreasuryQueue({ historyOnly = false }) {
       return <label className="table-account-select" onClick={(event) => event.stopPropagation()}><span className="sr-only">{t("Treasury Account Selection")}</span><select value={selectedId || ""} onChange={(event) => setAccountSelections((current) => ({ ...current, [payableId]: event.target.value }))}>{accounts.map((account) => <option key={account._id} value={account._id}>{account.preferred ? `${t("Preferred account")} - ` : ""}{account.bank} - {account.cci || account.accountNumber}</option>)}</select><small>{selectedAccount?.preferred ? <><Star size={11} />{t("Preferred account")}</> : t("Only verified eligible current accounts are listed.")}</small></label>;
     } },
     { key: "status", label: "CXP status", getValue: (row) => row.accountsPayable?.status, render: (row) => <StatusBadge status={row.accountsPayable?.status} /> },
-    { key: "amount", sortKey: "outstandingAmount", label: "Outstanding", align: "right", getValue: amountOf, render: (row) => <strong>{money(row.currency || row.accountsPayable?.currency, amountOf(row))}</strong> },
+    { key: "paymentCycle", label: "Payment cycle", sortable: false, getValue: (row) => row.accountsPayable?.paymentCycleDate, render: (row) => row.accountsPayable?.paymentCycleDate ? <span className="primary-cell"><strong>{formatDate(`${row.accountsPayable.paymentCycleDate}T12:00:00Z`)}</strong>{row.accountsPayable?.scheduleOverride?.reason && <small>{t("Off-cycle")}: {row.accountsPayable.scheduleOverride.reason}</small>}</span> : "-" },
+    { key: "amount", sortKey: "outstandingAmount", label: "Outstanding", align: "right", getValue: amountOf, render: (row) => <div className="primary-cell"><strong>{money(row.accountsPayable?.currency || row.currency, amountOf(row))}</strong>{netAmountOf(row) !== amountOf(row) && <small>{t("Net transfer")}: {money(row.accountsPayable?.currency || row.currency, netAmountOf(row))}</small>}</div> },
+    { key: "detraction", label: "Detraction (SPOT)", sortable: false, render: detractionCell },
     { key: "paymentTerms", label: "Payment Terms", sortable: false, getValue: (row) => paymentTermsSummary(row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot || {}, t), render: (row) => <PaymentTermsSummary terms={row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot} showAmounts={false} /> },
     { key: "dueDate", label: "Due date", getValue: (row) => row.accountsPayable?.dueDate, render: (row) => row.accountsPayable?.dueDate ? formatDate(row.accountsPayable.dueDate) : row.accountsPayable?.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-" }
   ];
@@ -300,29 +371,39 @@ export default function TreasuryQueue({ historyOnly = false }) {
 
     {missingBank > 0 && <div className="alert-strip error"><AlertTriangle size={20} /><div><strong>{t("Some payments are blocked")}</strong><p>{t("A payment needs a verified eligible current account, or the immutable employee reimbursement destination, before file generation.")}</p></div></div>}
 
-    <nav className="focus-tabs" aria-label={t("Payment stages")}>{!historyOnly && [["prepare", "Pending payments"], ["confirm", "Confirm payments"], ["reconcile", "Reconciliation"], ["returned", "Returned payments"]].map(([key, label]) => <button type="button" key={key} aria-pressed={paymentView === key} onClick={() => setPaymentView(key)}>{t(label)}</button>)}<Link to={historyOnly ? "/treasury" : "/treasury/history"}>{t(historyOnly ? "Payments" : "Payment History")}</Link></nav>
+    <nav className="focus-tabs" aria-label={t("Payment stages")}>{!historyOnly && [["prepare", "Pending payments"], ["confirm", "Confirm payments"], ["detractions", "Detractions"], ["reconcile", "Reconciliation"], ["returned", "Returned payments"]].map(([key, label]) => <button type="button" key={key} aria-pressed={paymentView === key} onClick={() => setPaymentView(key)}>{t(label)}</button>)}<Link to={historyOnly ? "/treasury" : "/treasury/history"}>{t(historyOnly ? "Payments" : "Payment History")}</Link></nav>
     <div hidden={historyOnly || paymentView !== "prepare"}>
-    <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3>{t("Bank file preparation")}</h3><p>{t("Select invoices to include in the BBVA payment file.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("UMA source bank")}</span><input value={bank} readOnly aria-readonly="true" /><small className="field-hint">{t("New payment files use BBVA. Beneficiary accounts may use another bank through CCI.")}</small></label><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected([]); }}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field"><span>{t("Payment date")}</span><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label></div></div>
+    <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3>{t("Bank file preparation")}</h3><p>{t("Select invoices to include in the BBVA payment file.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("UMA source bank")}</span><input value={bank} readOnly aria-readonly="true" /><small className="field-hint">{t("New payment files use BBVA. Beneficiary accounts may use another bank through CCI.")}</small></label><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected([]); }}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field"><span>{t("Payment date")}</span><input type="date" min={todayKey} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /><small className="field-hint">{t("Payments run on the 15th and the 30th of each month.")}</small></label>{offCycle && <label className="field"><span>{t("Reason for paying off the payment cycle")} *</span><input required value={paymentDateReason} onChange={(event) => setPaymentDateReason(event.target.value)} /></label>}</div>{paymentCycles.length > 0 && <div className="filter-row" aria-label={t("Payment cycles")}>{paymentCycles.map((group) => <span key={group.date} className="badge badge-blue"><CalendarClock size={12} />{formatDate(`${group.date}T12:00:00Z`)} · {group.count} · {Object.entries(group.totals).map(([code, value]) => money(code, value)).join(" / ")}</span>)}</div>}</div>
 
-    {selected.length > 0 && <div className="selection-bar" role="status"><div><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{money(currency, selectedTotal)}</span></div><button type="button" className="primary-button" onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Generate BBVA TXT")}</span></button></div>}
+    {selected.length > 0 && <div className="selection-bar" role="status"><div><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{money(currency, selectedTotal)}</span></div><button type="button" className="primary-button" disabled={offCycle && !paymentDateReason.trim()} onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Generate BBVA TXT")}</span></button></div>}
     {result && <div className="success-result" role="status"><div><strong>{t("Bank instruction generated")}</strong><span>{result.fileName} · {result.notice}</span></div>{result.url && <ProtectedAssetButton className="secondary-button" resourcePath={result.url} fileName={result.fileName}><Download size={16} />{t("Download")}</ProtectedAssetButton>}</div>}
 
     <div className="workspace-panel section-spacer"><DataTable rows={rows} loading={queueTable.loading} remote={queueTable.remote} filters={[{ key: "requestType", label: "types", allLabel: "All types", options: requestTypes }, { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes }, { key: "paymentPriority", label: "priorities", allLabel: "All priorities", options: ["NORMAL", "PRIORITY"] }]} searchPlaceholder="Search request, supplier, voucher, or cost center..." rowActions={(row) => [{ label: "Open request", icon: Eye, onClick: () => setQuickViewId(requestIdOf(row)) }]} columns={queueColumns} /></div>
 
     </div>
-    <div hidden={historyOnly || paymentView !== "confirm"} id="treasury-confirm" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Payment confirmation")}</h3><p>{t("Confirm the item or report the bank rejection. A rejected item becomes PAGO_REBOTADO without cancelling other invoices in the same request.")}</p></div><span className="section-count">{confirmationTable.pagination.total}</span></div><DataTable rows={confirmationTable.rows} loading={confirmationTable.loading} remote={confirmationTable.remote} rowActions={(row) => [{ label: "Confirm payment", icon: CircleCheckBig, onClick: () => openPaymentConfirmation(row) }, { label: "Report bounced payment", icon: XCircle, onClick: () => { setBounceRow(row); setBounceForm({ reason: "", bankReference: "" }); } }]} columns={[
+    <div hidden={historyOnly || paymentView !== "confirm"} id="treasury-confirm" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Payment confirmation")}</h3><p>{t("Confirm the item or report the bank rejection. A rejected item becomes PAGO_REBOTADO without cancelling other invoices in the same request.")}</p></div><span className="section-count">{confirmationTable.pagination.total}</span></div><DataTable rows={confirmationTable.rows} loading={confirmationTable.loading} remote={confirmationTable.remote} rowActions={(row) => [{ label: "Confirm payment", icon: CircleCheckBig, onClick: () => openPaymentConfirmation(row) }, { label: "Report bounced payment", icon: XCircle, onClick: () => { setBounceRow(row); setBounceForm({ reason: "", reasonCategory: "", bankReference: "" }); } }, { label: "Remove from bank file", icon: Ban, hidden: row.accountsPayable?.status !== "PAYMENT_FILE_CREATED", onClick: () => { setCancelTarget({ batchId: row.accountsPayable?.paymentBatch?._id, batchNumber: row.accountsPayable?.paymentBatch?.batchNumber, accountsPayableId: payableIdOf(row) }); setCancelReason(""); } }]} columns={[
       { key: "requestNumber", label: "Request", sortable: false, render: (row) => <Link to={`/requests/${requestIdOf(row)}`}>{row.requestNumber}</Link> },
       { key: "supplier", label: "Supplier", sortable: false, render: (row) => row.supplier?.legalName || row.supplier?.name || row.requester?.name || "UMA collaborator" },
       { key: "flowType", label: "Track", render: (row) => <StatusBadge status={row.accountsPayable?.flowType || row.flowType} /> },
       { key: "batch", label: "Bank batch", sortable: false, render: (row) => `${row.accountsPayable?.paymentBatch?.batchNumber || "-"} / ${row.accountsPayable?.paymentBatch?.bank || "-"}` },
       { key: "status", label: "CXP status", render: (row) => <StatusBadge status={row.accountsPayable?.status} /> },
-      { key: "amount", label: "Amount", align: "right", getValue: amountOf, render: (row) => <strong>{money(row.currency, amountOf(row))}</strong> }
+      { key: "amount", label: "Amount", align: "right", getValue: netAmountOf, render: (row) => <strong>{money(row.accountsPayable?.currency || row.currency, netAmountOf(row))}</strong> },
+      { key: "detraction", label: "Detraction (SPOT)", sortable: false, render: detractionCell }
     ]} /></div>
 
-    <div hidden={historyOnly || paymentView !== "returned"} id="treasury-returned" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Bounced payment reprogramming")}</h3><p>{t("A signed CCI letter is mandatory before the CXP returns to the payment queue.")}</p></div><span className="section-count">{bouncedTable.pagination.total}</span></div><DataTable rows={bouncedTable.rows} loading={bouncedTable.loading} remote={bouncedTable.remote} rowActions={(row) => [{ label: "Upload CCI letter and reprogram", icon: RotateCcw, onClick: () => { setReprogramRow(row); setReprogramForm({ comments: "", cciLetter: null }); } }]} columns={[
+    <div hidden={historyOnly || paymentView !== "detractions"} id="treasury-detractions" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Detraction deposits")}</h3><p>{t("Deposit the SPOT detraction in the supplier's Banco de la Nación account and record the constancia. The CXP is fully paid only after the net transfer and this deposit.")}</p></div><span className="section-count">{detractionTable.pagination.total}</span></div><DataTable rows={detractionTable.rows} loading={detractionTable.loading} remote={detractionTable.remote} rowActions={(row) => [{ label: "Record detraction deposit", icon: Landmark, disabled: !row.detractionAccountRegistered, disabledReason: row.detractionAccountRegistered ? undefined : "The supplier has no Banco de la Nación detracciones account.", onClick: () => openDetraction(row) }]} columns={[
+      { key: "requestNumber", label: "Request", sortable: false, render: (row) => <Link to={`/requests/${row.requestId}`}>{row.requestNumber}</Link> },
+      { key: "supplier", label: "Supplier", sortable: false, render: (row) => row.supplier?.legalName || row.supplier?.name || "-" },
+      { key: "category", label: "SPOT category", sortable: false, render: (row) => `${row.detraction?.categoryCode || "-"} · ${row.detraction?.rate ?? "-"}%` },
+      { key: "account", label: "Banco de la Nación account", sortable: false, render: (row) => row.detractionAccountRegistered ? `****${row.detractionAccountLast4}` : <span className="blocked-inline"><AlertTriangle size={14} />{t("Missing")}</span> },
+      { key: "netTransfer", label: "Net transfer pending", align: "right", sortable: false, render: (row) => money(row.currency, row.netTransferPending) },
+      { key: "amount", label: "Detraction", align: "right", sortable: false, render: (row) => <strong>{money("PEN", row.detraction?.amountPen)}</strong> }
+    ]} /></div>
+
+    <div hidden={historyOnly || paymentView !== "returned"} id="treasury-returned" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Bounced payment reprogramming")}</h3><p>{t("A signed CCI letter is required when the bank rejected the beneficiary's bank details. A technical rejection on a verified account can be retried without a new letter.")}</p></div><span className="section-count">{bouncedTable.pagination.total}</span></div><DataTable rows={bouncedTable.rows} loading={bouncedTable.loading} remote={bouncedTable.remote} rowActions={(row) => [{ label: row.accountsPayable?.bouncedPayment?.reasonCategory === "TECHNICAL" ? "Retry payment" : "Upload CCI letter and reprogram", icon: RotateCcw, onClick: () => { setReprogramRow(row); setReprogramForm({ comments: "", cciLetter: null }); } }]} columns={[
       { key: "requestNumber", label: "Request", sortable: false, render: (row) => <Link to={`/requests/${requestIdOf(row)}`}>{row.requestNumber}</Link> },
       { key: "supplier", label: "Supplier", sortable: false, render: (row) => row.supplier?.legalName || row.supplier?.name || row.requester?.name || "UMA collaborator" },
-      { key: "reason", label: "Bank rejection", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.accountsPayable?.bouncedPayment?.reason || "-"}</strong><span>{row.accountsPayable?.bouncedPayment?.bankReference || "-"}</span></div> },
+      { key: "reason", label: "Bank rejection", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.accountsPayable?.bouncedPayment?.reason || "-"}</strong><span>{t(row.accountsPayable?.bouncedPayment?.reasonCategory || "BANK_DETAILS")} · {row.accountsPayable?.bouncedPayment?.bankReference || "-"}</span></div> },
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.accountsPayable?.status || "PAYMENT_BOUNCED"} /> },
       { key: "amount", label: "Outstanding", align: "right", render: (row) => <strong>{money(row.currency, amountOf(row))}</strong> }
     ]} /></div>
@@ -337,7 +418,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       { key: "amount", label: "Confirmed", align: "right", render: (row) => <strong>{money(row.currency, row.payment?.confirmedAmount)}</strong> }
     ]} /></div>
 
-    <div hidden={!historyOnly} id="treasury-history" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Generated bank-file history")}</h3><p>{t("Download previously generated payment files.")}</p></div></div><DataTable rows={historyTable.rows} loading={historyTable.loading} remote={historyTable.remote} filters={[{ key: "bank", label: "banks", allLabel: "All banks", options: historicalSourceBanks }, { key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
+    <div hidden={!historyOnly} id="treasury-history" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Generated bank-file history")}</h3><p>{t("Download previously generated payment files.")}</p></div></div><DataTable rows={historyTable.rows} loading={historyTable.loading} remote={historyTable.remote} rowActions={(row) => [{ label: "Cancel bank file", icon: Ban, hidden: row.status !== "GENERATED" || (row.items || []).some((item) => ["CONFIRMED", "PARTIALLY_CONFIRMED"].includes(item.status)), onClick: () => { setCancelTarget({ batchId: row._id, batchNumber: row.batchNumber }); setCancelReason(""); } }]} filters={[{ key: "bank", label: "banks", allLabel: "All banks", options: historicalSourceBanks }, { key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
       { key: "batchNumber", label: "Batch" },
       { key: "fileName", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
       { key: "bank", label: "Bank" },
@@ -350,14 +431,18 @@ export default function TreasuryQueue({ historyOnly = false }) {
     ]} /></div>
 
     <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
-    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, { label: "Total", value: money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
+    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, ...(offCycle ? [{ label: "Reason for paying off the payment cycle", value: paymentDateReason }] : []), { label: "Total", value: money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
 
     <Drawer open={Boolean(paymentRow)} title="Confirm actual bank payment" description={paymentRow ? `${paymentRow.requestNumber} - ${paymentRow.supplier?.legalName || paymentRow.supplier?.name || "UMA collaborator"}` : ""} onClose={() => !processing && setPaymentRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setPaymentRow(null)}>{t("Cancel")}</button><button type="submit" form="payment-confirmation-form" className="primary-button" disabled={processing}><CircleCheckBig size={16} />{t(processing ? "Processing..." : "Confirm payment")}</button></>}><div className="document-requirement required"><AlertTriangle size={20} /><div><strong>{t("This settles the selected Accounts Payable record")}</strong><p>{t("Confirmation posts the payment journal and does not infer payment from a downloaded TXT. Enter less than the outstanding amount to record a partial payment; the remaining balance stays open for a later confirmation.")}</p></div></div><DraftPanel busy={processing} draft={paymentDraft} onDiscard={() => setPaymentRow(null)}><form id="payment-confirmation-form" className="form-grid" onSubmit={confirmPayment}><label className="field"><span>{t("Operation number")} *</span><input required value={paymentForm.operationNumber} onChange={(event) => setPaymentForm({ ...paymentForm, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Actual payment date")} *</span><input required type="date" value={paymentForm.paidAt} onChange={(event) => setPaymentForm({ ...paymentForm, paidAt: event.target.value })} /></label><label className="field"><span>{t("Confirmed amount")} *</span><input required type="number" min="0.01" max={paymentRow ? amountOf(paymentRow) : undefined} step="0.01" value={paymentForm.confirmedAmount} onChange={(event) => setPaymentForm({ ...paymentForm, confirmedAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={paymentForm.comments} onChange={(event) => setPaymentForm({ ...paymentForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(bounceRow)} title="Report bounced payment" description={bounceRow?.requestNumber || ""} onClose={() => !processing && setBounceRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setBounceRow(null)}>{t("Cancel")}</button><button type="submit" form="bounce-payment-form" className="danger-button" disabled={processing}><XCircle size={16} />{t("Mark PAGO_REBOTADO")}</button></>}><DraftPanel busy={processing} draft={bounceDraft} onDiscard={() => setBounceRow(null)}><form id="bounce-payment-form" className="form-grid" onSubmit={reportBounce}><label className="field"><span>{t("Bank rejection reason")} *</span><textarea required rows="4" value={bounceForm.reason} onChange={(event) => setBounceForm({ ...bounceForm, reason: event.target.value })} /></label><label className="field"><span>{t("Bank reference")}</span><input value={bounceForm.bankReference} onChange={(event) => setBounceForm({ ...bounceForm, bankReference: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(bounceRow)} title="Report bounced payment" description={bounceRow?.requestNumber || ""} onClose={() => !processing && setBounceRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setBounceRow(null)}>{t("Cancel")}</button><button type="submit" form="bounce-payment-form" className="danger-button" disabled={processing}><XCircle size={16} />{t("Mark PAGO_REBOTADO")}</button></>}><DraftPanel busy={processing} draft={bounceDraft} onDiscard={() => setBounceRow(null)}><form id="bounce-payment-form" className="form-grid" onSubmit={reportBounce}><label className="field"><span>{t("Rejection type")} *</span><select required value={bounceForm.reasonCategory} onChange={(event) => setBounceForm({ ...bounceForm, reasonCategory: event.target.value })}><option value="">{t("Select")}</option><option value="BANK_DETAILS">{t("Incorrect, invalid, changed or unverified bank details")}</option><option value="TECHNICAL">{t("Technical or temporary bank problem")}</option></select><small className="field-hint">{t("Bank-details rejections flag the account until Accounting re-verifies it and need a signed CCI letter.")}</small></label><label className="field"><span>{t("Bank rejection reason")} *</span><textarea required rows="4" value={bounceForm.reason} onChange={(event) => setBounceForm({ ...bounceForm, reason: event.target.value })} /></label><label className="field"><span>{t("Bank reference")}</span><input value={bounceForm.bankReference} onChange={(event) => setBounceForm({ ...bounceForm, bankReference: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(reprogramRow)} title="Reprogram bounced payment" description={reprogramRow?.requestNumber || ""} onClose={() => !processing && setReprogramRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReprogramRow(null)}>{t("Cancel")}</button><button type="submit" form="reprogram-payment-form" className="primary-button" disabled={processing || !reprogramForm.cciLetter}><RotateCcw size={16} />{t("Reprogram")}</button></>}><div className="document-requirement required"><UploadCloud size={20} /><div><strong>{t("Signed CCI letter required")}</strong><p>{t("The previous payment destination remains auditable; the replacement evidence is stored before reopening the CXP.")}</p></div></div><DraftPanel busy={processing} draft={reprogramDraft} onDiscard={() => setReprogramRow(null)}><form id="reprogram-payment-form" className="form-grid" onSubmit={reprogramPayment}><label className="field"><span>{t("Signed CCI letter")} * {reprogramForm.cciLetter?.name}</span><input required={!reprogramForm.cciLetter} type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(event) => setReprogramForm({ ...reprogramForm, cciLetter: event.target.files?.[0] || null })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reprogramForm.comments} onChange={(event) => setReprogramForm({ ...reprogramForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(reprogramRow)} title="Reprogram bounced payment" description={reprogramRow?.requestNumber || ""} onClose={() => !processing && setReprogramRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReprogramRow(null)}>{t("Cancel")}</button><button type="submit" form="reprogram-payment-form" className="primary-button" disabled={processing || (reprogramLetterRequired && !reprogramForm.cciLetter)}><RotateCcw size={16} />{t("Reprogram")}</button></>}><div className={`document-requirement${reprogramLetterRequired ? " required" : ""}`}><UploadCloud size={20} /><div><strong>{t(reprogramLetterRequired ? "Signed CCI letter required" : "Retry on the verified account")}</strong><p>{t(reprogramLetterRequired ? "The previous payment destination remains auditable; the replacement evidence is stored before reopening the CXP." : "The bank rejected the transfer for a technical reason. No new CCI letter is needed while the account stays verified.")}</p></div></div><DraftPanel busy={processing} draft={reprogramDraft} onDiscard={() => setReprogramRow(null)}><form id="reprogram-payment-form" className="form-grid" onSubmit={reprogramPayment}><label className="field"><span>{t("Signed CCI letter")}{reprogramLetterRequired ? " *" : ""} {reprogramForm.cciLetter?.name}</span><input required={reprogramLetterRequired && !reprogramForm.cciLetter} type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(event) => setReprogramForm({ ...reprogramForm, cciLetter: event.target.files?.[0] || null })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reprogramForm.comments} onChange={(event) => setReprogramForm({ ...reprogramForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(reconciliationRow)} title="Reconcile bank payment" description={reconciliationRow?.requestNumber || ""} onClose={() => !processing && setReconciliationRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReconciliationRow(null)}>{t("Cancel")}</button><button type="submit" form="reconciliation-form" className="primary-button" disabled={processing}><Scale size={16} />{t(processing ? "Processing..." : "Reconcile")}</button></>}><DraftPanel busy={processing} draft={reconciliationDraft} onDiscard={() => setReconciliationRow(null)}><form id="reconciliation-form" className="form-grid" onSubmit={reconcile}><label className="field"><span>{t("Bank reference")} *</span><input required value={reconciliationForm.bankReference} onChange={(event) => setReconciliationForm({ ...reconciliationForm, bankReference: event.target.value })} /></label><label className="field"><span>{t("Statement amount")} *</span><input required type="number" min="0.01" step="0.01" value={reconciliationForm.statementAmount} onChange={(event) => setReconciliationForm({ ...reconciliationForm, statementAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reconciliationForm.comments} onChange={(event) => setReconciliationForm({ ...reconciliationForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(reconciliationRow)} title="Reconcile bank payment" description={reconciliationRow?.requestNumber || ""} onClose={() => !processing && setReconciliationRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReconciliationRow(null)}>{t("Cancel")}</button><button type="submit" form="reconciliation-form" className="primary-button" disabled={processing}><Scale size={16} />{t(processing ? "Processing..." : "Reconcile")}</button></>}><DraftPanel busy={processing} draft={reconciliationDraft} onDiscard={() => setReconciliationRow(null)}><form id="reconciliation-form" className="form-grid" onSubmit={reconcile}><label className="field"><span>{t("Bank reference")} *</span><input required value={reconciliationForm.bankReference} onChange={(event) => setReconciliationForm({ ...reconciliationForm, bankReference: event.target.value })} /></label><label className="field"><span>{t("Statement amount")} *</span><small className="field-hint">{t("Type the amount shown on the bank statement.")}</small><input required type="number" min="0.01" step="0.01" value={reconciliationForm.statementAmount} onChange={(event) => setReconciliationForm({ ...reconciliationForm, statementAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reconciliationForm.comments} onChange={(event) => setReconciliationForm({ ...reconciliationForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
+
+    <Drawer open={Boolean(cancelTarget)} title={cancelTarget?.accountsPayableId ? "Remove from bank file" : "Cancel bank file"} description={cancelTarget?.batchNumber || ""} onClose={() => !processing && setCancelTarget(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCancelTarget(null)}>{t("Close")}</button><button type="submit" form="cancel-bank-file-form" className="danger-button" disabled={processing || !cancelReason.trim()}><Ban size={16} />{t("Confirm cancellation")}</button></>}><div className="document-requirement"><AlertTriangle size={20} /><div><strong>{t("Only before any payment is confirmed")}</strong><p>{t("The CXP records return to the payment queue. This is not a bounce and needs no CCI letter; do not upload the cancelled file to the bank.")}</p></div></div><form id="cancel-bank-file-form" className="form-grid" onSubmit={cancelFile}><label className="field"><span>{t("Cancellation reason")} *</span><textarea required rows="3" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label></form></Drawer>
+
+    <Drawer open={Boolean(detractionRow)} title="Record detraction deposit" description={detractionRow ? `${detractionRow.requestNumber} - ${money("PEN", detractionRow.detraction?.amountPen)}` : ""} onClose={() => !processing && setDetractionRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setDetractionRow(null)}>{t("Cancel")}</button><button type="submit" form="detraction-deposit-form" className="primary-button" disabled={processing}><Landmark size={16} />{t("Record deposit")}</button></>}><form id="detraction-deposit-form" className="form-grid" onSubmit={depositDetraction}><label className="field"><span>{t("Constancia number")} *</span><input required value={detractionForm.constancyNumber} onChange={(event) => setDetractionForm({ ...detractionForm, constancyNumber: event.target.value })} /></label><label className="field"><span>{t("Deposit date")} *</span><input required type="date" max={todayKey} value={detractionForm.depositDate} onChange={(event) => setDetractionForm({ ...detractionForm, depositDate: event.target.value })} /></label><label className="field"><span>{t("Deposited amount (PEN)")} *</span><input required type="number" min="1" step="1" value={detractionForm.amount} onChange={(event) => setDetractionForm({ ...detractionForm, amount: event.target.value })} /></label></form></Drawer>
   </section>;
 }

@@ -85,10 +85,15 @@ export const ROLE_PERMISSIONS = Object.freeze({
   [ROLES.BUDGET]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.BUDGET_MANAGE, PERMISSIONS.REPORT_VIEW],
   [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.SUPPLIER_BANK_VIEW, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
   [ROLES.MANAGEMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
-  // Strictly read-only: internal dashboards, reports, and audit history, never a mutation
-  // endpoint. Kept deliberately short - do not add a write-capable permission here.
-  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.AUDIT_VIEW]
+  // Management portal only: the aggregate /api/management/v1 API and nothing internal (no
+  // Reports, dashboards, audit or request data). Enforced for custom grants too - see
+  // MANAGEMENT_VIEWER_PERMISSIONS below. Do not add permissions here.
+  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]
 });
+
+// The only permissions a ManagementViewer account may ever hold, including per-user extras.
+// User validation rejects anything else and permissionsFor() ignores it for legacy records.
+export const MANAGEMENT_VIEWER_PERMISSIONS = Object.freeze([PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
 
 export const REQUEST_TYPE = Object.freeze({
   OPEX: "OPEX",
@@ -271,7 +276,8 @@ export const BATCH_UPLOAD_STATUSES = Object.freeze(["QUEUED", "PROCESSING", "COM
 // MANUAL_EXCEPTION is a distinct, explicitly non-authoritative status: a human (Admin/Accounting)
 // recorded and audited override of automated SUNAT validation. It is never equivalent to VALID and
 // must never be produced by the automatic validation path (see ManualSunatProvider / getSunatProvider).
-export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION"]);
+// ANNULLED marks the evidence of a cancelled CXP so the same or a corrected voucher can be registered again.
+export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "MANUAL_EXCEPTION", "ANNULLED"]);
 
 export const CAPEX_ASSET_CATEGORIES = Object.freeze(["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]);
 export const OPEX_EXPENSE_FREQUENCIES = Object.freeze(["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);

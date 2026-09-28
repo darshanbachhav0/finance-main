@@ -1,6 +1,6 @@
 import { issueProcurementOrder } from "../src/services/purchaseOrderService.js";
 import { fiscalFixture } from "./fiscalFixtures.js";
-import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
+import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 import { inspectBbvaFile } from "../src/integrations/banks/BbvaBankFileAdapter.js";
 import { deferBudget } from "../src/services/budgetService.js";
 import assert from "node:assert/strict";
@@ -307,7 +307,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     await t.test("26-27. bank TXT batch persists but does not mark CXP paid", async () => {
       await installBbvaTestConfiguration();
       await AccountingMapping.create({code:"TEST-BBVA-BANK",name:"BBVA source",purpose:"BANK",bank:"BBVA",currency:"PEN",accountNumber:"104102",active:true});
-      const attempts = await Promise.allSettled([1,2].map(()=>generatePaymentBatch({ requestIds: [request._id.toString()], bank: "BBVA", currency: "PEN", paymentDate: issueDate, user: users.treasury, req })));
+      const attempts = await Promise.allSettled([1,2].map(()=>generatePaymentBatch({ requestIds: [request._id.toString()], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: users.treasury, req })));
       assert.equal(attempts.filter(item=>item.status==="fulfilled").length,1);
       assert.equal(attempts.filter(item=>item.status==="rejected").length,1);
       const result = attempts.find(item=>item.status==="fulfilled").value;
@@ -325,7 +325,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.equal(audit.newValues.specificationVersion,batch.specificationVersion);
       assert.equal(audit.newValues.itemCount,1);
       const before = await PaymentBatch.countDocuments();
-      await assert.rejects(()=>generatePaymentBatch({requestIds:[String(request._id)],bank:"BBVA",currency:"PEN",paymentDate:issueDate,user:users.treasury,req}));
+      await assert.rejects(()=>generatePaymentBatch({requestIds:[String(request._id)],bank:"BBVA",currency:"PEN",paymentDate: upcomingPaymentDate(),user:users.treasury,req}));
       assert.equal(await PaymentBatch.countDocuments(),before);
       assert.equal(await AuditLog.countDocuments({action:"GENERATED_BBVA_BANK_FILE"}),1);
       assert.deepEqual(await fs.readFile(path.join(generatedRoot,"bank-files",batch.fileName)),result.content);

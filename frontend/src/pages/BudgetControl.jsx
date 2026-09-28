@@ -1,8 +1,8 @@
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import { useDraftResume } from "../hooks/useWorkDraft.js";
-import { AlertTriangle, CheckCircle2, RefreshCw, RotateCw, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, RefreshCw, RotateCw, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -19,8 +19,16 @@ import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
+const TAB_VIEWS = { budget: "Budget", exceptions: "Exceptions", commitments: "Commitments" };
+
 export default function BudgetControl() {
-  const [focusView, setFocusView] = useState("Budget");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Deep links from notifications, tasks and the dashboard: ?record=<exception id> or
+  // ?tab=exceptions (optionally with exceptionStatus=PENDING) open the Exceptions view directly.
+  const recordId = searchParams.get("record") || "";
+  const tabParam = String(searchParams.get("tab") || "").toLowerCase();
+  const exceptionStatus = searchParams.get("exceptionStatus") || "";
+  const [focusView, setFocusView] = useState(() => recordId ? "Exceptions" : TAB_VIEWS[tabParam] || "Budget");
   const { user } = useAuth();
   const { t, language } = useLanguage();
   const money = (value) => value === null || value === undefined ? "—" : formatCurrency(value, "PEN", language);
@@ -39,7 +47,18 @@ export default function BudgetControl() {
   useDraftResume("budget-plan", () => { if (canDecide) setWorkspace({ planId: null }); });
   useDraftResume("budget-adjustment", id => { if (canDecide) setWorkspace({ planId: id }); });
   const allocationTable = usePaginatedResource("/budget/allocations", { fixedParams: { period } });
-  const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: { period } });
+  const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: recordId ? { record: recordId } : { period }, initialFilters: exceptionStatus ? { status: exceptionStatus } : {} });
+  useEffect(() => {
+    if (recordId) setFocusView("Exceptions");
+    else if (TAB_VIEWS[tabParam]) setFocusView(TAB_VIEWS[tabParam]);
+  }, [recordId, tabParam]);
+
+  function showAllExceptions() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("record");
+    next.set("tab", "exceptions");
+    setSearchParams(next, { replace: true });
+  }
   const commitmentTable = usePaginatedResource("/budget/commitments", { fixedParams: { period } });
 
   async function load() {
@@ -81,8 +100,13 @@ export default function BudgetControl() {
     setProcessing(true);
     try {
       if (confirm.kind === "decision") {
-        await api.post(`/budget/exceptions/${confirm.row._id}/decision`, { status: confirm.status, comments });
-        notify(confirm.status === "REVIEWED" ? "Budget review saved for Management." : confirm.status === "APPROVED" ? "Budget exception approved." : "Budget exception rejected.");
+        const response = await api.post(`/budget/exceptions/${confirm.row._id}/decision`, { status: confirm.status, comments });
+        const increase = response.data?.data?.appliedIncrease?.amount;
+        notify(confirm.status === "REVIEWED" ? "Budget review saved for Management." : confirm.status === "APPROVED" ? (increase > 0 ? t("Budget exception approved. The budget was increased by {amount}.").replace("{amount}", money(increase)) : "Budget exception approved.") : "Budget exception rejected.");
+      } else if (confirm.kind === "carryOver") {
+        const response = await api.post("/budget/year-end/carry-over", { year: confirm.year });
+        const summary = response.data.data;
+        notify(t("{count} open commitments carried over to {year} ({amount}).").replace("{count}", summary.carriedCommitments).replace("{year}", summary.toYear).replace("{amount}", money(summary.carriedAmount)));
       } else {
         await api.post(`/budget/requests/${confirm.row.request._id}/commit`);
         notify("Budget commitment completed and sent to Accounting.");
@@ -98,19 +122,20 @@ export default function BudgetControl() {
   function exceptionActions(row) {
     if (row.status === "PENDING" && canDecide) return [{ label: "Prepare / review", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "REVIEWED", title: "Review budget exception", description: "Record your recommendation for Management. This does not authorize an overrun.", confirmLabel: "Save review", inputLabel: "Recommendation", inputRequired: true }) }];
     const id = value => String(value?._id || value || "");
-    const canApprove = user.role === "Management" && ![row.requestedBy, row.preparedBy, row.request?.requester, row.request?.solicitor].some(value => value && id(value) === id(user._id));
+    // Budget reviews first; Management can decide only an exception Budget has reviewed.
+    const canApprove = user.role === "Management" && Boolean(row.preparedAt) && ![row.requestedBy, row.preparedBy, row.request?.requester, row.request?.solicitor].some(value => value && id(value) === id(user._id));
     if (row.status === "PENDING" && !canApprove) return [];
     if (row.status === "PENDING") return [
-      { label: "Approve exception", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "APPROVED", title: "Approve budget exception?", description: "This records an audited exception decision. A budget-increase strategy still requires sufficient allocation before commitment.", confirmLabel: "Approve exception", inputLabel: "Decision comments", inputRequired: true }) },
+      { label: "Approve exception", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "APPROVED", title: "Approve budget exception?", description: row.strategy === "REQUEST_BUDGET_INCREASE" ? "This records an audited decision and automatically adds the shortfall to the budget, so the commitment can proceed." : "This records an audited exception decision that authorizes the overrun for this request.", confirmLabel: "Approve exception", inputLabel: "Decision comments", inputRequired: true }) },
       { label: "Reject exception", icon: XCircle, tone: "danger", onClick: () => setConfirm({ kind: "decision", row, status: "REJECTED", title: "Reject budget exception?", description: "The request will remain blocked from budget commitment.", confirmLabel: "Reject exception", inputLabel: "Decision comments", inputRequired: true, tone: "danger" }) }
     ];
-    if (row.status === "APPROVED" && canDecide) return [{ label: "Retry budget commitment", icon: RotateCw, onClick: () => setConfirm({ kind: "commit", row, title: "Retry budget commitment?", description: "The backend will re-check current dimensional availability and the approved exception strategy.", confirmLabel: "Commit budget" }) }];
+    if (row.status === "APPROVED" && canDecide && row.request?.status === "OBSERVADO_PRESUPUESTO") return [{ label: "Retry budget commitment", icon: RotateCw, onClick: () => setConfirm({ kind: "commit", row, title: "Retry budget commitment?", description: "The backend will re-check current dimensional availability and the approved exception strategy.", confirmLabel: "Commit budget" }) }];
     return [];
   }
 
   return <section>
     <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
-      <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
+      <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
     <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error}</Message>
     <div className="period-toolbar budget-period-toolbar">
       <div className="budget-view-switch" role="group" aria-label={t("Budget view")}><button type="button" aria-pressed={view === "ANNUAL"} onClick={() => changeView("ANNUAL")}>{t("Annual view")}</button><button type="button" aria-pressed={view === "MONTHLY"} onClick={() => changeView("MONTHLY")}>{t("Monthly view")}</button></div>
@@ -121,6 +146,7 @@ export default function BudgetControl() {
     {data.hasUndatedLegacy && <Message>{t("Legacy Cost Center balances have no budget year and are excluded from selected-period totals.")}</Message>}
     {data.hasAnnualOnlyActivity && <Message>{t("Annual-only plans show monthly activity without a monthly limit. View their annual plan for available budget.")}</Message>}
     <div className="stats-grid budget-stats"><StatCard label="Assigned budget" value={money(data.totals.assigned)} tone="navy" /><StatCard label="Committed budget" value={money(data.totals.committed)} tone="amber" /><StatCard label="Executed budget" value={money(data.totals.executed)} tone="teal" /><StatCard label="Paid budget" value={money(data.totals.paid)} tone="green" /><StatCard label="Available balance" value={money(data.totals.available)} tone="neutral" /></div>
+    {data.totals?.transitional?.committed > 0 && <Message>{t("Committed includes {amount} of informational (transitional) commitments, which do not reduce the available balance.").replace("{amount}", money(data.totals.transitional.committed))}</Message>}
     {data.warnings?.length > 0 && <div className="alert-strip warning"><AlertTriangle size={20} /><div><strong>{t("Budget attention required")}</strong><p>{t("One or more dimensions have low availability or over-execution.")}</p></div></div>}
 
     <nav className="focus-tabs" aria-label={t("Sections")}>{["Budget", "Exceptions", "Commitments"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
@@ -134,9 +160,9 @@ export default function BudgetControl() {
       { key: "paidAmount", label: "Paid", align: "right", render: (row) => money(row.paidAmount) }, { key: "availableAmount", label: "Available", sortable: false, align: "right", render: (row) => <strong className={row.availableAmount < 0 ? "text-danger" : ""}>{money(row.availableAmount)}</strong> }
     ]} /></div>
 
-    <div hidden={focusView !== "Exceptions"} className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget exceptions")}</h3><p>{t("Insufficient-budget branches require an explicit decision and remain auditable.")}</p></div><span className="section-count">{exceptionTable.pagination.total}</span></div><DataTable rows={exceptionTable.rows} loading={exceptionTable.loading} remote={exceptionTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED"] }]} rowActions={exceptionActions} columns={[
+    <div hidden={focusView !== "Exceptions"} className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget exceptions")}</h3><p>{t("Insufficient-budget branches require an explicit decision and remain auditable.")}</p></div><span className="section-count">{exceptionTable.pagination.total}</span></div>{recordId && <div className="alert-strip"><div><strong>{t("Showing one budget exception")}</strong><p>{t("Opened from a notification or task.")}</p></div><button type="button" className="secondary-button" onClick={showAllExceptions}>{t("Show all exceptions")}</button></div>}<DataTable rows={exceptionTable.rows} loading={exceptionTable.loading} remote={exceptionTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED", "RESOLVED"] }]} rowActions={exceptionActions} columns={[
       { key: "request", label: "Request", sortable: false, getValue: (row) => row.request?.requestNumber, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
-      { key: "preparationComments", label: "Budget review", render: row => row.preparationComments || "Pending review" },
+      { key: "preparationComments", label: "Budget review", render: row => row.preparationComments || t(row.status === "PENDING" ? "Pending Budget review" : "Not reviewed") },
       { key: "strategy", label: "Strategy" }, { key: "costCenter", label: "Cost center", sortable: false, render: (row) => row.costCenter?.code || "-" }, { key: "expenseType", label: "Expense type", sortable: false, render: (row) => row.expenseType?.accountNumber || "-" },
       { key: "budgetLimits", label: "Annual / monthly limits", sortable: false, render: (row) => row.budgetLimits?.planningMode ? <BudgetLimitSummary line={row.budgetLimits} /> : "—" },
       { key: "availableAmount", label: "Available", align: "right", render: (row) => money(row.availableAmount) }, { key: "requestedAmount", label: "Requested", align: "right", render: (row) => <strong>{money(row.requestedAmount)}</strong> }, { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }
@@ -149,6 +175,6 @@ export default function BudgetControl() {
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }, { key: "totalAmount", label: "Committed amount", align: "right", render: (row) => <strong>{money(row.totalAmount)}</strong> }, { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) }
     ]} /></div>
     <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canDecide} onClose={() => setWorkspace(null)} onSaved={planSaved} />
-    <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm ? [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
+    <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm?.kind === "carryOver" ? [{ label: "From budget year", value: confirm.year }, { label: "To budget year", value: String(Number(confirm.year) + 1) }, { label: "Result", value: t("Open commitments move to January of the next year.") }] : confirm ? [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
   </section>;
 }

@@ -12,7 +12,8 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { budgetAllocationRows, budgetOverview, budgetPeriodFilter } from "../services/budgetReportingService.js";
-import { adjustBudgetPlan, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
+import { adjustBudgetPlan, carryOverOpenCommitments, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
+import mongoose from "mongoose";
 
 export const getBudgetOverview = asyncHandler(async (req, res) => {
   res.json({ data: await budgetOverview(req.query) });
@@ -58,9 +59,14 @@ export const listBudgetCommitments = asyncHandler(async (req, res) => {
 export const listBudgetExceptions = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination(req.query);
   const clauses = [];
+  // Deep links (?record=<id>) open one exception regardless of the selected budget period.
+  if (req.query.record) {
+    if (!mongoose.isValidObjectId(req.query.record)) throw new AppError(422, "Select a valid budget exception.", undefined, ERROR_CODES.VALIDATION_ERROR);
+    clauses.push({ _id: req.query.record });
+  }
   if (req.query.status) clauses.push({ status: req.query.status });
   if (req.query.strategy) clauses.push({ strategy: req.query.strategy });
-  if (req.query.period) {
+  if (req.query.period && !req.query.record) {
     const requestIds = await FinancialRequest.find({ accountingPeriod: budgetPeriodFilter(req.query.period) }).distinct("_id");
     clauses.push({ request: { $in: requestIds } });
   }
@@ -96,6 +102,10 @@ export const listBudgetExceptions = asyncHandler(async (req, res) => {
 export const decideBudgetException = asyncHandler(async (req, res) => {
   const exception = await recordBudgetExceptionDecision(req.params.id, String(req.body.status || "").toUpperCase(), req.body.comments, req.user, req);
   res.json({ data: exception });
+});
+
+export const runYearEndCarryOver = asyncHandler(async (req, res) => {
+  res.json({ data: await carryOverOpenCommitments({ year: req.body.year, user: req.user, req }) });
 });
 
 export const commitRequestBudget = asyncHandler(async (req, res) => {

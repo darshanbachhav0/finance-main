@@ -53,7 +53,9 @@ export default function AdminUsers() {
         { name: "approvalLevel", label: "Approval level", type: "toggle-group", defaultValue: "AREA_DIRECTOR", options: approvalLevels },
         { name: "approvalAreas", label: "Approval areas", type: "tags", placeholder: "Area, or * for all", getValue: (row) => row.approvalAreas || [] },
         { name: "permissions", label: "Additional permissions", type: "toggle-list", defaultValue: [], options: permissions, getValue: (row) => row.permissions || [] },
-        { name: "active", label: "Active", type: "checkbox", defaultValue: true },
+        { name: "active", label: "Active", type: "checkbox", defaultValue: true, hint: "Deactivating moves this user's pending approvals to their nearest available jefe." },
+        { name: "onLeave", label: "On leave", type: "checkbox", defaultValue: false, hint: "While on leave, pending approvals move to this user's nearest available jefe and new requests route past them." },
+        { name: "leaveUntil", label: "On leave until", type: "date" },
         { type: "section", label: "Cost centers" },
         { name: "costCenter", label: "Default Cost Center", type: "select", options: centerOptions, getValue: (row) => row.costCenter?._id || row.costCenter, wide: true },
         { name: "authorizedCostCenters", label: "Authorized Cost Centers", type: "multiselect", defaultValue: [], options: centerOptions, getValue: (row) => (row.authorizedCostCenters || []).map((item) => item._id || item) }
@@ -63,12 +65,13 @@ export default function AdminUsers() {
         { key: "approvalLevel", label: "Approval level", render: (row) => ["AreaDirector", "ViceRector", "Management"].includes(row.role) ? t(row.approvalLevel) : "-" },
         { key: "costCenter", label: "Default Cost Center", render: (row) => row.costCenter ? <div className="primary-cell"><strong>{row.costCenter.code} - {row.costCenter.name}</strong><span>{row.costCenter.organizationalUnitCode ? `${row.costCenter.organizationalUnitCode} · ${row.costCenter.organizationalUnit}` : row.area}</span></div> : t("Manual review") },
         { key: "authorizedCostCenters", label: "Authorized CeCos", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.authorizedCostCenters?.length || 0}</strong><span>{(row.authorizedCostCenters || []).slice(0, 3).map((item) => item.code || item).join(", ") || t("No additional CeCos")}{row.authorizedCostCenters?.length > 3 ? "…" : ""}</span></div> },
-        { key: "active", label: "Status", render: (row) => <StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} /> }
+        { key: "active", label: "Status", render: (row) => <div className="primary-cell"><StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} />{row.onLeave && <span>{t("On leave")}{row.leaveUntil ? ` · ${String(row.leaveUntil).slice(0, 10)}` : ""}</span>}</div> }
       ]}
       transformSubmit={(form) => {
         const payload = { ...form, jefe: form.jefe || null };
         if (!payload.password) delete payload.password;
         if (!payload.costCenter) delete payload.costCenter;
+        if (!payload.onLeave || !payload.leaveUntil) payload.leaveUntil = null;
         return payload;
       }}
     />

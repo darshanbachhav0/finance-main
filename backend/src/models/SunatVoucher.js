@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { CURRENCY, FLOW_TYPES, VOUCHER_VALIDATION_STATUSES } from "../utils/constants.js";
+import { canonicalSeries, canonicalVoucherNumber, canonicalVoucherType, sunatDocumentTypeCode } from "../utils/voucherIdentity.js";
 
 const sunatVoucherSchema = new mongoose.Schema(
   {
@@ -45,17 +46,35 @@ const sunatVoucherSchema = new mongoose.Schema(
       evidenceReference: String,
       overriddenBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       overriddenAt: Date,
-      previousValidationStatus: String
-    }
+      previousValidationStatus: String,
+      // Taxpayer status could not be confirmed because SUNAT/Padrón was unavailable.
+      taxpayerUnverified: Boolean
+    },
+    // SUNAT Tabla 10 code of voucherType ("01" factura, "03" boleta, "07" credit note, "08" debit note).
+    documentTypeCode: { type: String, trim: true },
+    // Credit/debit notes: the invoice they modify, from the XML BillingReference or chosen by the user.
+    referencedVoucher: { type: mongoose.Schema.Types.ObjectId, ref: "SunatVoucher", index: true },
+    referenceVoucherType: { type: String, trim: true, uppercase: true },
+    referenceSeriesNumber: { type: String, trim: true, uppercase: true },
+    adjustmentAppliedAt: Date,
+    // Set when the CXP backed by this voucher is cancelled; the identity can then be registered again.
+    annulment: {
+      reason: String,
+      accountsPayable: { type: mongoose.Schema.Types.ObjectId, ref: "AccountsPayable" },
+      at: Date,
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
+    annulmentHistory: [mongoose.Schema.Types.Mixed]
   },
   { timestamps: true }
 );
 
 sunatVoucherSchema.pre("validate", function normalizeIdentity() {
   this.rucIssuer = String(this.rucIssuer || "").replace(/\D/g, "");
-  this.voucherType = String(this.voucherType || "FACTURA").trim().toUpperCase();
-  this.series = String(this.series || "").trim().toUpperCase();
-  this.number = String(this.number || "").trim().toUpperCase();
+  this.voucherType = canonicalVoucherType(this.voucherType);
+  this.documentTypeCode = sunatDocumentTypeCode(this.voucherType) || this.documentTypeCode;
+  this.series = canonicalSeries(this.series);
+  this.number = canonicalVoucherNumber(this.number);
   this.seriesNumber = `${this.series}-${this.number}`;
 });
 

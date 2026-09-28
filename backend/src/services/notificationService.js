@@ -20,9 +20,13 @@ export async function notifyUser({ userId, eventKey, type, title, message, path,
   if (!userId) return null;
   return Notification.findOneAndUpdate(
     { user: userId, eventKey },
+    // A re-sent notification (same event key, e.g. an approval that comes back to
+    // the same approver after a resubmission) must reach the bell again as unread
+    // with its current wording, not stay hidden under an old read timestamp.
     {
-      $setOnInsert: { user: userId, eventKey, type, title, message, path, entityType, entityId },
-      $set: { resolvedAt: null }
+      $setOnInsert: { user: userId, eventKey, entityType, entityId },
+      $set: { ...Object.fromEntries(Object.entries({ type, title, message, path }).filter(([, value]) => value !== undefined)), resolvedAt: null },
+      $unset: { readAt: 1 }
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
@@ -34,6 +38,14 @@ export async function notifyRoles({ roles, eventKey, type, title, message, path,
   if (areas?.length) query.$or = [{ area: { $in: areas } }, { approvalAreas: { $in: [...areas, "*"] } }];
   const users = await User.find(query).select("_id");
   return Promise.all(users.map((user) => notifyUser({ userId: user._id, eventKey, type, title, message, path, entityType, entityId })));
+}
+
+// Closes every open approval task and SLA alert of a request (e.g. on withdrawal).
+export async function resolveApprovalNotifications(requestId) {
+  return Notification.updateMany(
+    { entityType: "FinancialRequest", entityId: requestId, type: { $in: ["APPROVAL_PENDING", "SLA_DUE_SOON", "SLA_OVERDUE", "SLA_ESCALATION"] }, resolvedAt: null },
+    { $set: { resolvedAt: new Date() } }
+  );
 }
 
 export async function resolveNotification(eventKey) {

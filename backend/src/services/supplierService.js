@@ -327,6 +327,7 @@ function serializeSupplierBase(supplier, user) {
     ...value,
     bankAccount: maskBankValue(value.bankAccount),
     cci: maskBankValue(value.cci),
+    detractionAccount: value.detractionAccount ? { ...value.detractionAccount, accountNumber: maskBankValue(value.detractionAccount.accountNumber) } : value.detractionAccount,
     bankHistory: (value.bankHistory || []).map((item) => ({
       ...item,
       bankAccount: maskBankValue(item.bankAccount),
@@ -782,6 +783,10 @@ export async function verifySupplierBankAccount({ supplierId, accountId, payload
   }
   if (!["NOT_REVIEWED", "MATCH", "MISMATCH", "MANUAL_ACCEPTED"].includes(ownershipResult)) {
     throw new AppError(422, "A valid bank-ownership decision is required.", { ownershipResult }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  // Segregation of duties: whoever registered the account cannot be the one who verifies it.
+  if (verificationStatus === "VERIFIED" && account.createdBy && String(account.createdBy) === String(user._id)) {
+    throw new AppError(403, "You registered this bank account, so another authorized user must verify it.", { accountId: account._id }, ERROR_CODES.FORBIDDEN);
   }
   const comments = String(payload.comments || payload.verificationComments || "").trim();
   if ((ownershipResult === "MANUAL_ACCEPTED" || ownershipResult === "MISMATCH" || verificationStatus !== "VERIFIED") && !comments) {
@@ -1335,34 +1340,6 @@ export async function replaceActiveBankAccount(supplier, payload, userId) {
     changedBy: userId
   });
   return { account, warnings: await reusedBankWarnings({ supplierId: supplier._id, accountNumber, cci }) };
-}
-
-export async function addVerifiedSupplierBankAccount({ supplier, payload, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can verify supplier bank accounts.");
-  const added = await addSupplierBankAccount({ supplierId: supplier._id, payload: {
-    bank: payload.bank || payload.bankName,
-    currency: payload.currency,
-    accountType: payload.accountType,
-    accountHolderName: payload.accountHolderName,
-    accountNumber: payload.accountNumber || payload.bankAccount,
-    cci: payload.cci
-  }, user, req });
-  const account = await verifySupplierBankAccount({
-    supplierId: supplier._id,
-    accountId: added.account._id,
-    payload: {
-      verificationStatus: "VERIFIED",
-      ownershipResult: payload.ownershipResult,
-      comments: payload.verificationComments,
-      verificationDocument: payload.verificationDocument
-    },
-    user,
-    req
-  });
-  if (parseBoolean(payload.preferred)) {
-    await setPreferredSupplierBankAccount({ supplierId: supplier._id, accountId: account._id, user, req });
-  }
-  return { account, warnings: added.warnings };
 }
 
 export async function updateAndReviewSupplier({ supplierId, payload, files = {}, user, req }) {

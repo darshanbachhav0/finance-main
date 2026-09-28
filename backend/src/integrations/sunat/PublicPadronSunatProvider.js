@@ -1,7 +1,25 @@
 import { AppError } from "../../utils/AppError.js";
 import { ERROR_CODES } from "../../utils/constants.js";
-import { lookupSunatPadronRuc } from "../../services/sunatPadronService.js";
+import { getSunatPadronStatus, lookupSunatPadronRuc } from "../../services/sunatPadronService.js";
 import { SunatProvider } from "./SunatProvider.js";
+
+export const PADRON_NEVER_DOWNLOADED_MESSAGE =
+  "The SUNAT public Padrón has never been downloaded on this server, so taxpayer status cannot be checked. Start the padrón sync worker (npm run sunat:padron:worker) or run a one-off sync; meanwhile Accounting can approve a manual SUNAT exception on the invoice.";
+
+// The generic lookup error ("being prepared or refreshed") is misleading when no dataset was ever
+// downloaded; tell the user what is actually wrong.
+async function lookupPadronOrExplain(ruc) {
+  try {
+    return await lookupSunatPadronRuc(ruc);
+  } catch (error) {
+    if (error?.statusCode !== 503) throw error;
+    const status = await getSunatPadronStatus().catch(() => null);
+    if (status && !status.ready && !status.manifest?.generatedAt) {
+      throw new AppError(503, PADRON_NEVER_DOWNLOADED_MESSAGE, { padron: "NEVER_DOWNLOADED" }, ERROR_CODES.INTEGRATION_NOT_CONFIGURED);
+    }
+    throw error;
+  }
+}
 
 function digits(value) {
   return String(
@@ -105,7 +123,7 @@ export class PublicPadronSunatProvider extends SunatProvider {
     }
 
     const lookup =
-      await lookupSunatPadronRuc(
+      await lookupPadronOrExplain(
         ruc
       );
 

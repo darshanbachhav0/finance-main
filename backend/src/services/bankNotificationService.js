@@ -20,6 +20,23 @@ export async function resolveEmployeeBankReview(account) {
   return resolveNotification(reviewKey(account));
 }
 
+// A BANK_DETAILS bounce flags the destination account OBSERVED; Accounting must re-verify it (or
+// verify a replacement) before Treasury can pay that beneficiary again.
+export async function notifyBouncedAccountReview({ flagged, requestNumber }) {
+  if (!flagged?.accountId) return null;
+  const employee = flagged.sourceType === "EMPLOYEE_REIMBURSEMENT";
+  return notifyRoles({
+    roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
+    eventKey: `${employee ? "employee-bank" : "supplier-bank"}:${flagged.accountId}:bounced-review`,
+    type: employee ? "EMPLOYEE_BANK_REVIEW" : "SUPPLIER_BANK_REVIEW",
+    title: "Bank account needs re-verification",
+    message: `${requestNumber}: the bank rejected a payment for incorrect or changed account details. Re-verify the account before it is used again.`,
+    path: employee ? `/reimbursement-bank?record=${flagged.accountId}` : "/suppliers",
+    entityType: employee ? "EmployeeReimbursementBankAccount" : "SupplierBankAccount",
+    entityId: flagged.accountId
+  });
+}
+
 export async function notifyEmployeeBankDecision(account) {
   await resolveEmployeeBankReview(account);
   return notifyUser({

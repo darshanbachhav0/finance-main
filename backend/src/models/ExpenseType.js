@@ -16,6 +16,11 @@ const expenseTypeSchema = new mongoose.Schema(
     permittedRequestTypes: [{ type: String, enum: REQUEST_TYPES }],
     permittedExpenseNatures: [{ type: String, enum: EXPENSE_NATURES }],
     deductible: { type: Boolean, default: true },
+    // SPOT (detraccion) category code from the SpotCategory table; empty when not subject to SPOT.
+    spotCategoryCode: { type: String, trim: true, default: "", match: /^(\d{3})?$/ },
+    // Whether the IGV on this expense can be claimed as tax credit. When false the gross amount
+    // (net + IGV) is booked to the expense/asset account instead of recoverable IGV.
+    igvDeductible: { type: Boolean, default: true },
     active: { type: Boolean, default: true }
   },
   { timestamps: true }

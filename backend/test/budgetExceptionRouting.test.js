@@ -31,6 +31,7 @@ test("Budget exception authority is configurable per dimension and amount, defau
       const exception = await makeException();
       assert.equal(await resolveExceptionApproverRole(exception), ROLES.MANAGEMENT);
       await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Trying as Admin", rectorate, {}), (error) => error.statusCode === 403);
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
       const decided = await recordBudgetExceptionDecision(exception._id, "APPROVED", "Management authorizes", management, {});
       assert.equal(decided.status, "APPROVED");
     });
@@ -46,6 +47,7 @@ test("Budget exception authority is configurable per dimension and amount, defau
       const exception = await makeException({ costCenter: center._id, requestedAmount: 500 });
       assert.equal(await resolveExceptionApproverRole(exception), ROLES.MANAGEMENT);
       await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Trying as Admin", rectorate, {}), (error) => error.statusCode === 403);
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
       const decided = await recordBudgetExceptionDecision(exception._id, "APPROVED", "Management authorizes", management, {});
       assert.equal(decided.status, "APPROVED");
     });
@@ -74,6 +76,7 @@ test("Budget exception authority is configurable per dimension and amount, defau
       const aboveThreshold = await makeException({ costCenter: center._id, expenseType: expenseType._id, requestedAmount: 5000 });
       assert.equal(await resolveExceptionApproverRole(aboveThreshold), ROLES.MANAGEMENT);
       await assert.rejects(() => recordBudgetExceptionDecision(aboveThreshold._id, "APPROVED", "Trying as Admin", rectorate, {}), (error) => error.statusCode === 403);
+      await recordBudgetExceptionDecision(aboveThreshold._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
       const decided = await recordBudgetExceptionDecision(aboveThreshold._id, "APPROVED", "Management approves", management, {});
       assert.equal(decided.status, "APPROVED");
     });

@@ -41,13 +41,19 @@ test("production control regressions", { timeout: 60000 }, async t => {
     const root = await User.create({ name: "Senior manager", role: "Solicitor", passwordHash: "unused" });
     manager.jefe = root._id; await manager.save();
     let stored;
-    await t.test("a complete two-level chain persists in the real request schema", async () => {
+    // Flexible chain (product decision): only the first jefe is on the route at
+    // submission; forwarding adds the next level, and any level may finalize.
+    await t.test("a forwarded chain persists in the real request schema and any level may finalize", async () => {
       stored = new FinancialRequest({ supplier: new mongoose.Types.ObjectId(), requestType: "OPEX", flowType: "A1", description: "Saved hierarchy regression", issueDate: "2026-09-01", accountingPeriod: "2026-09", currency: "PEN", requester: owner._id, solicitor: owner._id, status: "PENDIENTE_APROBACION", lines: [{ costCenter: new mongoose.Types.ObjectId(), expenseType: new mongoose.Types.ObjectId(), netAmount: 100, igvAmount: 18, totalAmount: 118 }] });
       await initializeApprovalRoute(stored); await stored.save();
       const reloaded = await FinancialRequest.findById(stored._id);
-      assert.equal(reloaded.approvalRouteSnapshot[1].status, "NOT_REACHED");
-      assert.throws(() => finalizeChainApproval(reloaded, activeApprovalStep(reloaded), manager), /Required approvals/);
+      assert.equal(reloaded.approvalRouteSnapshot.length, 1);
       assert.equal(reloaded.approvalRouteSnapshot[0].approverSnapshot.dni, undefined);
+      const forwarded = await activateNextChainStep(reloaded, activeApprovalStep(reloaded), manager);
+      assert.equal(String(forwarded.next.approverUser), String(root._id));
+      await reloaded.validate();
+      assert.deepEqual(reloaded.approvalRouteSnapshot.map(step => step.status), ["APPROVED", "PENDING"]);
+      assert.equal((await finalizeChainApproval(reloaded, activeApprovalStep(reloaded), root)).complete, true);
     });
     await t.test("manager identity receives the bell alert and SLA regardless of Solicitor role", async () => {
       await notifyApprovalStep(stored); await notifyApprovalStep(stored);
@@ -57,23 +63,26 @@ test("production control regressions", { timeout: 60000 }, async t => {
       await checkApprovalSlas({ now }); await checkApprovalSlas({ now });
       assert.equal(await Notification.countDocuments({ user: manager._id, type: "SLA_OVERDUE" }), 1);
     });
-    await t.test("hierarchy changes cannot rewrite the saved route and cycles/inactive managers are rejected", async () => {
+    await t.test("forwarding follows the approver's current jefe; cycles/inactive managers are rejected", async () => {
       await assert.rejects(validateSupervisor(root._id, owner._id), /cycle/);
       manager.jefe = null; await manager.save();
       const route = await FinancialRequest.findById(stored._id);
-      const next = activateNextChainStep(route, activeApprovalStep(route), manager);
-      assert.equal(String(next.next.approverUser), String(root._id));
+      await initializeApprovalRoute(route);
+      // With no jefe above the approver, "send to my jefe" is not possible: finalize instead.
+      await assert.rejects(activateNextChainStep(route, activeApprovalStep(route), manager), error => error.statusCode === 422);
       root.active = false; await root.save();
       await assert.rejects(validateSupervisor(owner._id, root._id), /active/);
       root.active = true; await root.save();
     });
-    await t.test("a historical optional first step does not leave resubmission without an approver or SLA", async () => {
-      const request = { approvalRoutingMode: "MANAGER_CHAIN", approvalRouteSnapshot: [
+    await t.test("a resubmission re-resolves the route from the first approver instead of reusing the old one", async () => {
+      const request = { requester: owner._id, approvalRoutingMode: "MANAGER_CHAIN", approvalRouteSnapshot: [
         { sequence: 1, required: false, source: "MANAGER_CHAIN", status: "SKIPPED", slaHours: 4 },
         { sequence: 2, required: true, source: "MANAGER_CHAIN", approverUser: root._id, status: "RETURNED", approvalLevel: "Manager", slaHours: 4 }
       ] };
       await initializeApprovalRoute(request);
-      assert.equal(activeApprovalStep(request).sequence, 2);
+      assert.equal(request.approvalRouteSnapshot.length, 1);
+      assert.equal(activeApprovalStep(request).sequence, 1);
+      assert.equal(String(activeApprovalStep(request).approverUser), String(manager._id));
       assert.ok(request.approvalDueAt instanceof Date);
     });
     await t.test("configured management authority is added after hierarchy and cannot be skipped", async () => {
@@ -81,7 +90,9 @@ test("production control regressions", { timeout: 60000 }, async t => {
       const request = { requester: owner._id, flowType: "A1", requestType: "OPEX", totalAmount: 118 };
       await initializeApprovalRoute(request);
       assert.equal(request.approvalRouteSnapshot.at(-1).approvalLevel, "RECTORATE");
-      const next = activateNextChainStep(request, activeApprovalStep(request), manager);
+      // Finalizing the chain at the first level still leaves the configured stage.
+      const next = await finalizeChainApproval(request, activeApprovalStep(request), manager);
+      assert.equal(next.complete, false);
       assert.equal(next.next.source, "RULE_BASED");
       assert.equal(advanceApprovalRoute(request, root._id).complete, true);
     });

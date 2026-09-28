@@ -2,14 +2,14 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
-import { activeApprovalStep } from "./approvalRuleService.js";
+import { activeApprovalStep, nearestAvailableSupervisor } from "./approvalRuleService.js";
 import { allowedRequestActions } from "./requestActionPolicy.js";
 import { classifyApprovalSla, slaConfiguration } from "./slaPolicy.js";
 import { recordAudit } from "./auditService.js";
 
 export const SLA_TYPES = ["SLA_DUE_SOON", "SLA_OVERDUE", "SLA_ESCALATION"];
 const ACTIVE_STATUSES = ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR"];
-const titles = { SLA_DUE_SOON: "Approval due soon", SLA_OVERDUE: "Approval overdue", SLA_ESCALATION: "Approval escalated to Management" };
+const titles = { SLA_DUE_SOON: "Approval due soon", SLA_OVERDUE: "Approval overdue", SLA_ESCALATION: "Approval escalated" };
 
 export function approvalSlaCycle(request) {
   if (!ACTIVE_STATUSES.includes(request.status) || request.approvalStage === "COMPLETE") return null;
@@ -19,6 +19,40 @@ export function approvalSlaCycle(request) {
   if (!dueAt || !Number.isFinite(new Date(dueAt).getTime())) return null;
   const stage = step?.approvalLevel || request.approvalStage;
   return { dueAt, stage, key: `sla:${request._id}:${step?._id || stage}:${new Date(dueAt).toISOString()}:${step?.startedAt ? new Date(step.startedAt).toISOString() : "legacy"}` };
+}
+
+// Idempotent delivery: one notification per user and SLA event; a retry or a
+// second worker replica never duplicates it or resets its read state.
+async function deliverOnce({ userId, eventKey, type, title, message, request }) {
+  try {
+    const result = await Notification.updateOne({ user: userId, eventKey }, { $setOnInsert: {
+      user: userId, eventKey, type, title, message,
+      path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
+    } }, { upsert: true });
+    return result.upsertedCount || 0;
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    return 0;
+  }
+}
+
+// Escalation goes up the organization, consistent with approver absence: to each
+// current approver's own nearest available jefe (inactive / on-leave managers
+// skipped). A manager-chain step escalates from its assigned approver. Management
+// is only the fallback when no approver has anyone above them.
+async function escalationRecipients(request, approvers, users) {
+  const step = activeApprovalStep(request);
+  const requesterId = request.requester || request.solicitor;
+  const sources = step?.approverUser ? [step.approverUser] : approvers.map(user => user._id);
+  const targets = new Map();
+  for (const source of sources) {
+    try {
+      const { approver } = await nearestAvailableSupervisor(source, { exclude: [requesterId] });
+      if (approver) targets.set(String(approver._id), approver);
+    } catch { /* A broken roster must not stop the scan; the fallback below applies. */ }
+  }
+  if (targets.size) return [...targets.values()];
+  return users.filter(user => user.role === "Management");
 }
 
 export async function checkApprovalSlas({ now = new Date(), config = slaConfiguration() } = {}) {
@@ -38,26 +72,30 @@ export async function checkApprovalSlas({ now = new Date(), config = slaConfigur
     const { alert } = classifyApprovalSla(cycle.dueAt, now, config);
     if (!alert) continue;
     const eventKey = `${cycle.key}:${alert}`;
-    const recipients = users.filter(user => (allowedRequestActions(request, user).includes("APPROVE") && (user.role !== "Admin" || activeApprovalStep(request)?.role === "Admin"))
-      || (alert === "SLA_ESCALATION" && user.role === "Management"));
-    liveEvents.set(eventKey, new Set(recipients.map(user => String(user._id))));
-    for (const user of recipients) {
-      try {
-        const result = await Notification.updateOne({ user: user._id, eventKey }, { $setOnInsert: {
-          user: user._id, eventKey, type: alert, title: titles[alert],
-          message: `${request.requestNumber}: ${cycle.stage}, due ${new Date(cycle.dueAt).toISOString()}.`,
-          path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
-        } }, { upsert: true });
-        summary.delivered += result.upsertedCount || 0;
-      } catch (error) { if (error.code !== 11000) throw error; }
+    const approvers = users.filter(user => allowedRequestActions(request, user).includes("APPROVE") && (user.role !== "Admin" || activeApprovalStep(request)?.role === "Admin"));
+    const escalationTargets = alert === "SLA_ESCALATION" ? await escalationRecipients(request, approvers, users) : [];
+    const deliveries = [
+      ...approvers.map(user => ({ user, title: titles[alert] })),
+      ...escalationTargets.filter(target => !approvers.some(user => String(user._id) === String(target._id))).map(user => ({ user, title: "Approval escalated to you" }))
+    ];
+    liveEvents.set(eventKey, new Set(deliveries.map(({ user }) => String(user._id))));
+    const message = `${request.requestNumber}: ${cycle.stage}, due ${new Date(cycle.dueAt).toISOString()}.`;
+    for (const { user, title } of deliveries) summary.delivered += await deliverOnce({ userId: user._id, eventKey, type: alert, title, message, request });
+    // The requester learns their approval is overdue (one alert per step cycle).
+    const requesterId = request.requester || request.solicitor;
+    if (requesterId && alert !== "SLA_DUE_SOON") {
+      const requesterKey = `${cycle.key}:REQUESTER_OVERDUE`;
+      liveEvents.set(requesterKey, new Set([String(requesterId)]));
+      summary.delivered += await deliverOnce({ userId: requesterId, eventKey: requesterKey, type: "SLA_OVERDUE", title: "Your request's approval is overdue", message: `${request.requestNumber} is still waiting for ${cycle.stage}; it was due ${new Date(cycle.dueAt).toISOString()}.`, request });
     }
+    const recipients = deliveries.map(({ user }) => user);
     if (alert === "SLA_ESCALATION") {
       // Immutable unique audit key handles retries and concurrent worker replicas.
       if (!(await AuditLog.exists({ eventKey }))) {
         try {
           await recordAudit({ entityType: "FinancialRequest", entity: request, action: alert,
             user: { name: "SLA worker", role: "SYSTEM" }, module: "SLA", eventKey,
-            comments: `Approval overdue by at least ${config.escalationHours} hours.`,
+            comments: `Approval overdue by at least ${config.escalationWorkingDays || Math.ceil((config.escalationHours || 24) / 24)} working day(s); escalated to the approver's jefe.`,
             oldValues: { status: request.status, approvalStage: cycle.stage, dueAt: cycle.dueAt },
             newValues: { status: request.status, approvalStage: cycle.stage, dueAt: cycle.dueAt, recipients: recipients.map(user => user._id) } });
           summary.escalations++;

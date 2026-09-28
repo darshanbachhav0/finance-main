@@ -1,5 +1,10 @@
 import fs from "node:fs/promises";
 import BankFormatConfiguration from "../src/models/BankFormatConfiguration.js";
+import { nextPaymentCycleDate } from "../../shared/businessCalendar.mjs";
+
+// Treasury schedules on the 15th/30th cycle and never in the past, so tests use the next
+// cycle date relative to the real clock.
+export const upcomingPaymentDate = () => nextPaymentCycleDate(new Date());
 
 // Sample-derived TEST configuration. Never installed in the operational database.
 export async function bbvaSample(currency) {

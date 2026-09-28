@@ -30,6 +30,7 @@ import { formatCurrency, formatDate, formatDateTime } from "../../utils/formatte
 const today = () => new Date().toISOString().slice(0, 10);
 const key = () => `${Date.now()}-${Math.random()}`;
 const emptyMobility = () => ({ clientId: key(), date: today(), origin: "", destination: "", servicePurpose: "", amount: "" });
+const emptyRecovery = () => ({ method: "REIMBURSEMENT", amount: "", operationNumber: "", operationDate: today(), reference: "" });
 const emptyUnsupported = () => ({ clientId: key(), date: today(), description: "", goodsServiceType: "SERVICES", grossAmount: "" });
 
 function asAccountingLine(line) {
@@ -91,6 +92,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
   const [processing, setProcessing] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [settlement, setSettlement] = useState({ amount: "", method: "REIMBURSEMENT", reference: "" });
+  const [recovery, setRecovery] = useState(emptyRecovery());
 
   const ownerId = request.requester?._id || request.solicitor?._id || request.requester || request.solicitor;
   const owner = String(ownerId) === String(user._id);
@@ -107,6 +109,12 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     && isAdvance
     && request.rendition?.status === "VALIDATED"
     && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0;
+  const recoveryRecord = request.rendition?.recovery || {};
+  const recoveryOutstanding = Number(recoveryRecord.outstandingAmount || 0);
+  const canRecover = ["Admin", "Accounting", "Treasury"].includes(user.role)
+    && isAdvance
+    && request.rendition?.status === "REJECTED"
+    && recoveryRecord.status === "PENDING";
 
   useEffect(() => {
     setAccountingLines((request.rendition?.lines?.length ? request.rendition.lines : request.lines || []).map(asAccountingLine));
@@ -213,12 +221,32 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     }
   }
 
+  async function recordRecovery(event) {
+    event.preventDefault();
+    setProcessing(true);
+    setError("");
+    const payload = recovery.method === "REIMBURSEMENT"
+      ? { method: recovery.method, amount: recovery.amount, operationNumber: recovery.operationNumber, operationDate: recovery.operationDate, reference: recovery.reference }
+      : { method: recovery.method, amount: recovery.amount, reference: recovery.reference, operationDate: recovery.operationDate || undefined };
+    try {
+      await api.post(`/requests/${request._id}/rendition/recover`, payload);
+      notify("Advance recovery recorded.");
+      setRecovery(emptyRecovery());
+      await onReload();
+    } catch (err) {
+      setError(err.message);
+      notify(err.message, "error");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
   const editable = canSubmit && draft.ready && draft.status !== "conflict";
   return <div className="workspace-panel detail-section official-rendition-workspace">
-    <div className="section-heading"><div><h3>{t("Expense Rendition")}</h3><p>{t(isAdvance ? "Settle the paid advance with official detail while existing Accounting lines remain authoritative." : "Document the exceptional unsupported reimbursement before existing Accounting processing.")}</p></div><div className="rendition-heading-status"><strong>{request.rendition?.number || t("Assigned on submission")}</strong><StatusBadge status={request.rendition?.financeReview?.result || request.rendition?.status || "PENDING"} /></div></div>
+    <div className="section-heading"><div><h3>{t("Expense Rendition")}</h3><p>{t(isAdvance ? "Settle the paid advance with official detail while existing Accounting lines remain authoritative." : "Declare the expenses you already paid without a fiscal receipt. Accounting reviews the declaration before Treasury reimburses your verified account.")}</p></div><div className="rendition-heading-status"><strong>{request.rendition?.number || t("Assigned on submission")}</strong><StatusBadge status={request.rendition?.financeReview?.result || request.rendition?.status || "PENDING"} /></div></div>
     <Message type="error">{error}</Message>
     {canSubmit && <DraftPanel busy={processing} draft={draft} onDiscard={() => { draft.separateCopy(); window.location.reload(); }} />}
-    {isAdvance && dueAt && <div className={`rendition-deadline-card${renditionOverdue ? " overdue" : ""}`}><AlertTriangle size={18} /><div><strong>{t(renditionOverdue ? "Rendition overdue" : "Rendition deadline")}</strong><p>{t("Supporting documents must be submitted within 10 days after the advance payment.")} {t("Due")}: {formatDate(dueAt)}</p></div><StatusBadge status={renditionOverdue ? "OVERDUE" : request.rendition?.status || "PENDING"} /></div>}
+    {isAdvance && dueAt && <div className={`rendition-deadline-card${renditionOverdue ? " overdue" : ""}`}><AlertTriangle size={18} /><div><strong>{t(renditionOverdue ? "Rendition overdue" : "Rendition deadline")}</strong><p>{t("The deadline counts working days from the advance payment (weekends and holidays excluded). Only an overdue rendition that has not been submitted blocks new advances.")} {t("Due")}: {formatDate(dueAt)}</p></div><StatusBadge status={renditionOverdue ? "OVERDUE" : request.rendition?.status || "PENDING"} /></div>}
 
     <fieldset className="work-draft-fields" disabled={processing}>
     <Section icon={BadgeCheck} title="Employee Information" description="Identity and CECO come from the authenticated employee and parent request.">
@@ -257,6 +285,12 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
       {canSettle && <DraftPanel busy={processing} draft={settlementDraft}><form className="non-deductible-settlement-form" onSubmit={settleNonDeductible}><label className="field"><span>{t("Settlement method")} *</span><select required value={settlement.method} onChange={(event) => setSettlement({ ...settlement, method: event.target.value })}><option value="REIMBURSEMENT">{t("Employee reimbursement")}</option><option value="PAYROLL_DEDUCTION">{t("Payroll deduction")}</option></select></label><label className="field"><span>{t("Amount")} *</span><input required type="number" min="0.01" max={nonDeductibleOutstanding} step="0.01" value={settlement.amount} onChange={(event) => setSettlement({ ...settlement, amount: event.target.value })} /></label><label className="field"><span>{t("Receipt / payroll reference")} *</span><input required value={settlement.reference} onChange={(event) => setSettlement({ ...settlement, reference: event.target.value })} /></label><button type="submit" className="primary-button" disabled={processing}><CheckCircle2 size={16} />{t(processing ? "Processing..." : "Regularize balance")}</button></form></DraftPanel>}
     </Section>}
 
+    {isAdvance && request.rendition?.status === "REJECTED" && recoveryRecord.status && recoveryRecord.status !== "NOT_APPLICABLE" && <Section icon={Landmark} title="Advance Recovery" description="Only the advance the employee still holds is recovered: amounts already returned are deducted and never recovered twice.">
+      <div className="non-deductible-summary"><div><span>{t("Amount advanced")}</span><strong>{formatCurrency(recoveryRecord.advanceAmount || request.rendition?.amountAdvanced || 0, "PEN", language)}</strong></div><div><span>{t("Already returned")}</span><strong>{formatCurrency(recoveryRecord.returnedAmount || 0, "PEN", language)}</strong></div><div><span>{t("Outstanding recovery")}</span><strong className={recoveryOutstanding > 0 ? "text-warning" : "text-success"}>{formatCurrency(recoveryOutstanding, "PEN", language)}</strong></div><div><span>{t("Recovery status")}</span><StatusBadge status={recoveryRecord.status} /></div></div>
+      {(recoveryRecord.settlements || []).length > 0 && <div className="compact-lines">{recoveryRecord.settlements.map((item, index) => <div key={item._id || `${item.method}-${item.settledAt}-${index}`}><span>{item.operationDate ? formatDate(item.operationDate) : formatDateTime(item.settledAt)} · {t(item.method === "PAYROLL_DEDUCTION" ? "Payroll deduction" : "Employee reimbursement")} · {item.operationNumber || item.reference}</span><strong>{formatCurrency(item.amount || 0, "PEN", language)}</strong></div>)}</div>}
+      {canRecover && <form className="non-deductible-settlement-form" onSubmit={recordRecovery}><label className="field"><span>{t("Recovery method")} *</span><select required value={recovery.method} onChange={(event) => setRecovery({ ...recovery, method: event.target.value })}><option value="REIMBURSEMENT">{t("Employee reimbursement")}</option><option value="PAYROLL_DEDUCTION">{t("Payroll deduction")}</option></select></label><label className="field"><span>{t("Amount")} *</span><input required type="number" min="0.01" max={recoveryOutstanding} step="0.01" value={recovery.amount} onChange={(event) => setRecovery({ ...recovery, amount: event.target.value })} /></label>{recovery.method === "REIMBURSEMENT" ? <><label className="field"><span>{t("Bank operation number")} *</span><input required value={recovery.operationNumber} onChange={(event) => setRecovery({ ...recovery, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Operation date")} *</span><input required type="date" max={today()} value={recovery.operationDate} onChange={(event) => setRecovery({ ...recovery, operationDate: event.target.value })} /></label></> : <label className="field"><span>{t("Payroll reference")} *</span><input required value={recovery.reference} onChange={(event) => setRecovery({ ...recovery, reference: event.target.value })} /></label>}<button type="submit" className="primary-button" disabled={processing}><CheckCircle2 size={16} />{t(processing ? "Processing..." : "Record recovery")}</button></form>}
+    </Section>}
+
     {(editable || unsupportedLines.length > 0 || request.rendition?.unsupportedExpenseLines?.length > 0) && <Section icon={FileSignature} title="Exceptional Use Declaration" description="This is the employee declaration, not Finance approval.">
       {editable ? <><label className="checkbox-row"><input type="checkbox" checked={exceptionalUse} onChange={(event) => setExceptionalUse(event.target.checked)} /><span>{t("I confirm these expenses belong to the exceptional process where valid supporting documents were unavailable.")}</span></label><label className="field"><span>{t("Declaration comments")}</span><textarea rows="2" value={exceptionalComments} onChange={(event) => setExceptionalComments(event.target.value)} /></label></> : <dl className="detail-grid"><div><dt>{t("Declaration")}</dt><dd>{request.rendition?.unsupportedExpenseDeclaration?.confirmedExceptionalUse ? t("Confirmed") : t("Not confirmed")}</dd></div><div><dt>{t("Declared")}</dt><dd>{request.rendition?.unsupportedExpenseDeclaration?.declaredAt ? formatDateTime(request.rendition.unsupportedExpenseDeclaration.declaredAt) : "-"}</dd></div><div className="wide"><dt>{t("Comments")}</dt><dd>{request.rendition?.unsupportedExpenseDeclaration?.comments || "-"}</dd></div></dl>}
     </Section>}
@@ -268,7 +302,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     {editable && <form className="rendition-submit-bar" onSubmit={submit}><label className="field"><span>{files.map(file => file.name).join(", ")} {t("Rendition evidence")}{isAdvance ? " *" : ""}</span><input type="file" multiple required={isAdvance && !files.length && !request.attachments?.some((item) => item.kind === "RENDITION")} onChange={(event) => setFiles(Array.from(event.target.files || []))} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="2" value={comments} onChange={(event) => setComments(event.target.value)} /></label><button type="submit" className="primary-button" disabled={processing || !acknowledged || Math.abs(difference) >= 0.01 || Math.abs(balance) >= 0.01 || (unsupportedLines.length > 0 && !exceptionalUse) || (isReimbursement && !selectedBank)}><Send size={16} />{t(processing ? "Submitting..." : "Submit rendition")}</button></form>}
 
     <Section icon={CheckCircle2} title="Finance Review" description="Accounting/Admin owns the review result and timestamp.">
-      <div className="finance-review-row"><div><span>{t("Result")}</span><StatusBadge status={request.rendition?.financeReview?.result || "PENDING"} /></div><div><span>{t("Reviewed")}</span><strong>{request.rendition?.financeReview?.reviewedAt ? formatDateTime(request.rendition.financeReview.reviewedAt) : "-"}</strong></div><div><span>{t("Comments")}</span><strong>{request.rendition?.financeReview?.comments || "-"}</strong></div>{canReview && <div className="action-buttons"><button type="button" className="primary-button" onClick={() => setConfirm({ action: "approve", title: "Approve rendition?", description: isAdvance ? "Finance approval posts the existing rendition journal and clears the advance transit account." : "Finance approval permits the existing non-deductible Accounting process; it does not execute payment.", confirmLabel: "Approve rendition" })}><CheckCircle2 size={16} />{t("Approve")}</button><button type="button" className="secondary-button" onClick={() => setConfirm({ action: "observe", title: "Observe rendition?", description: "Return the official details for correction while preserving the RG and history.", confirmLabel: "Observe rendition", inputLabel: "Observation comments", inputRequired: true })}><MessageSquareWarning size={16} />{t("Observe")}</button><button type="button" className="danger-button subtle" onClick={() => setConfirm({ action: "reject", title: "Reject rendition?", description: "Reject the Finance review and preserve a distinct audited result.", confirmLabel: "Reject rendition", inputLabel: "Rejection comments", inputRequired: true, tone: "danger" })}><XCircle size={16} />{t("Reject")}</button></div>}</div>
+      <div className="finance-review-row"><div><span>{t("Result")}</span><StatusBadge status={request.rendition?.financeReview?.result || "PENDING"} /></div><div><span>{t("Reviewed")}</span><strong>{request.rendition?.financeReview?.reviewedAt ? formatDateTime(request.rendition.financeReview.reviewedAt) : "-"}</strong></div><div><span>{t("Comments")}</span><strong>{request.rendition?.financeReview?.comments || "-"}</strong></div>{canReview && <div className="action-buttons"><button type="button" className="primary-button" onClick={() => setConfirm({ action: "approve", title: "Approve rendition?", description: isAdvance ? "Finance approval posts the existing rendition journal and clears the advance transit account." : "Finance approval provisions the non-deductible expense and the employee payable; Treasury then pays the verified reimbursement account.", confirmLabel: "Approve rendition" })}><CheckCircle2 size={16} />{t("Approve")}</button><button type="button" className="secondary-button" onClick={() => setConfirm({ action: "observe", title: "Observe rendition?", description: "Return the official details for correction while preserving the RG and history.", confirmLabel: "Observe rendition", inputLabel: "Observation comments", inputRequired: true })}><MessageSquareWarning size={16} />{t("Observe")}</button><button type="button" className="danger-button subtle" onClick={() => setConfirm({ action: "reject", title: "Reject rendition?", description: "Reject the Finance review and preserve a distinct audited result.", confirmLabel: "Reject rendition", inputLabel: "Rejection comments", inputRequired: true, tone: "danger" })}><XCircle size={16} />{t("Reject")}</button></div>}</div>
     </Section>
     </fieldset>
     <ConfirmDialog open={Boolean(confirm)} {...confirm} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={(reviewComments) => review(confirm.action, reviewComments)} />

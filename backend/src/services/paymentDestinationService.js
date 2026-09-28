@@ -1,4 +1,6 @@
+import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBankAccount.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
+import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_TYPE } from "../utils/constants.js";
 
@@ -9,10 +11,9 @@ const reimbursementTypes = new Set([
 ]);
 
 export function isEligibleSupplierPaymentAccount(account, { bank, currency } = {}) {
-  // Fix 3: DETRACTION accounts are intentionally excluded from outbound payment selection. There is no
-  // complete detraccion (SUNAT withholding-to-Banco de la Nacion) payment workflow implemented yet, so
-  // only CURRENT accounts are ever eligible destinations. Existing DETRACTION records are preserved for
-  // read-only/legacy purposes; this exclusion should be revisited once a real detraccion flow ships.
+  // DETRACTION accounts are never a BBVA transfer destination: the SPOT deposit to Banco de la Nacion
+  // is a separate Treasury step (recordDetractionDeposit), so only CURRENT accounts are eligible here.
+  // An account flagged after a BANK_DETAILS bounce is OBSERVED and stays ineligible until re-verified.
   if (!account?.active || account.accountType !== "CURRENT") return false;
   if (bank && account.bank !== bank) return false;
   if (currency && account.currency !== currency) return false;
@@ -121,4 +122,55 @@ export async function resolvePaymentDestination({ request, accountsPayable, bank
     );
   }
   return { snapshot: supplierPaymentSnapshot(account), account, sourceType: "SUPPLIER" };
+}
+
+// After a bounce: is the destination that bounced still a verified, eligible account? Used to
+// decide whether a TECHNICAL bounce may be retried without a new signed CCI letter.
+export async function bouncedDestinationStillVerified(accountsPayable, { session } = {}) {
+  const snapshot = accountsPayable.bankAccountSnapshot;
+  if (!snapshot?.bank) return false;
+  if (snapshot.sourceType === "EMPLOYEE_REIMBURSEMENT") {
+    if (!snapshot.employeeBankAccountId) return false;
+    const account = await EmployeeReimbursementBankAccount.findById(snapshot.employeeBankAccountId).session(session || null).lean();
+    return Boolean(account?.active && account.verificationStatus === "VERIFIED");
+  }
+  if (!snapshot.bankAccountId) return false;
+  const account = await SupplierBankAccount.findById(snapshot.bankAccountId).session(session || null).lean();
+  return isEligibleSupplierPaymentAccount(account, { currency: snapshot.currency });
+}
+
+// Flags the account a BANK_DETAILS bounce went to, so neither eligible[0] nor the employee snapshot
+// can pick it again until Accounting re-verifies it. Returns what was flagged.
+export async function flagBouncedDestination(accountsPayable, { reason, user, session } = {}) {
+  const snapshot = accountsPayable.bankAccountSnapshot;
+  const comments = `Payment bounced (bank details): ${reason}`.slice(0, 500);
+  if (snapshot?.sourceType === "EMPLOYEE_REIMBURSEMENT" && snapshot.employeeBankAccountId) {
+    await EmployeeReimbursementBankAccount.updateOne({ _id: snapshot.employeeBankAccountId }, { $set: { verificationStatus: "OBSERVED", verificationComments: comments, changedBy: user?._id } }, { session });
+    return { sourceType: "EMPLOYEE_REIMBURSEMENT", accountId: snapshot.employeeBankAccountId };
+  }
+  if (snapshot?.bankAccountId) {
+    await SupplierBankAccount.updateOne({ _id: snapshot.bankAccountId }, { $set: { verificationStatus: "OBSERVED", verificationComments: comments, changedBy: user?._id } }, { session });
+    return { sourceType: "SUPPLIER", accountId: snapshot.bankAccountId };
+  }
+  return null;
+}
+
+// Track C / reimbursements: the frozen employee destination is re-read from the employee's current
+// verified profile. Without one, the snapshot records the profile's real status so scheduling stays
+// blocked (never a stale VERIFIED copy of an account that bounced).
+export async function refreshEmployeeDestination(request, accountsPayable, { session } = {}) {
+  if (!usesEmployeeReimbursementDestination(request)) return null;
+  const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
+  const currency = accountsPayable.currency || request.currency || "PEN";
+  const profile = await getVerifiedEmployeeReimbursementBankAccount({ userId: ownerId, currency, session });
+  if (profile) {
+    request.rendition.reimbursementBankSnapshot = {
+      profile: profile._id, bank: profile.bank, currency: profile.currency, accountHolderName: profile.accountHolderName,
+      accountNumber: profile.accountNumber, cci: profile.cci, verificationStatus: profile.verificationStatus, capturedAt: new Date()
+    };
+    return request.rendition.reimbursementBankSnapshot;
+  }
+  const current = await EmployeeReimbursementBankAccount.findById(request.rendition.reimbursementBankSnapshot.profile).select("verificationStatus active").session(session || null).lean();
+  request.rendition.reimbursementBankSnapshot.verificationStatus = current?.active ? current.verificationStatus : "REJECTED";
+  return request.rendition.reimbursementBankSnapshot;
 }

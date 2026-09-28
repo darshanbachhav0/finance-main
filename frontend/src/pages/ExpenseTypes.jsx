@@ -1,4 +1,5 @@
 import ResourceManager from "../components/ResourceManager.jsx";
+import { SPOT_CATEGORY_OPTIONS } from "../../../shared/spotCategories.mjs";
 import { expenseNatureLabels, expenseNatures, requestTypeLabels, requestTypes } from "../utils/options.js";
 
 const requestTypeOptions = requestTypes.map((value) => ({ value, label: requestTypeLabels[value] || value }));
@@ -19,6 +20,9 @@ export default function ExpenseTypes() {
         { name: "accountingClass", label: "Accounting class", type: "select", required: true, options: ["CLASS_6", "CLASS_3", "NON_DEDUCTIBLE"] },
         { name: "accountNumber", label: "Account number", required: true },
         { name: "deductible", label: "Deductible", type: "checkbox", defaultValue: true },
+        { name: "igvDeductible", label: "IGV deductible (tax credit)", type: "checkbox", defaultValue: true, hint: "Clear it when the IGV of this expense cannot be claimed as tax credit: the gross amount is then booked as cost, or as asset cost for CAPEX." },
+        { type: "section", label: "Detraction (SPOT)" },
+        { name: "spotCategoryCode", label: "SPOT category", type: "select", options: SPOT_CATEGORY_OPTIONS, defaultValue: "", hint: "Leave empty when the good or service is not subject to SPOT." },
         { type: "section", label: "Where it can be used" },
         { name: "permittedRequestTypes", label: "Permitted request types", type: "multiselect", options: requestTypeOptions, getValue: (row) => row.permittedRequestTypes || [] },
         { name: "permittedExpenseNatures", label: "Permitted expense natures", type: "multiselect", options: expenseNatureOptions, getValue: (row) => row.permittedExpenseNatures || [] },
@@ -30,6 +34,8 @@ export default function ExpenseTypes() {
         { key: "category", label: "Category" },
         { key: "accountingClass", label: "Class" },
         { key: "accountNumber", label: "Account" },
+        { key: "igvDeductible", label: "IGV deductible", render: (row) => (row.igvDeductible === false ? "No" : "Yes") },
+        { key: "spotCategoryCode", label: "SPOT" },
         { key: "active", label: "Status" }
       ]}
     />

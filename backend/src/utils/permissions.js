@@ -1,6 +1,6 @@
-import { isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
-import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
+import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
 export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
@@ -8,7 +8,10 @@ export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
 export function permissionsFor(userOrRole) {
   const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
   const rolePermissions = ROLE_PERMISSIONS[role] || [];
-  const customPermissions = typeof userOrRole === "object" ? userOrRole.permissions || [] : [];
+  let customPermissions = typeof userOrRole === "object" ? userOrRole.permissions || [] : [];
+  // ManagementViewer is portal-only: a stored extra grant (e.g. from before this rule) never
+  // widens it.
+  if (role === ROLES.MANAGEMENT_VIEWER) customPermissions = customPermissions.filter((permission) => MANAGEMENT_VIEWER_PERMISSIONS.includes(permission));
   return [...new Set([...rolePermissions, ...customPermissions])];
 }
 
@@ -46,6 +49,16 @@ export function canModifyRequest(request, user) {
 
 function requesterIdOf(request) {
   return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
+}
+
+// The requester may withdraw a submitted request back to draft until the first
+// approver decides: only while it is still PENDIENTE_APROBACION and no step of
+// its current approval route has been APPROVED.
+export function canWithdrawRequest(request, user) {
+  if (!request || !user || user.active === false) return false;
+  if (requesterIdOf(request) !== String(user._id)) return false;
+  if (canonicalRequestStatus(request.status) !== REQUEST_STATUS.PENDING_APPROVAL) return false;
+  return !(request.approvalRouteSnapshot || []).some((step) => step.status === "APPROVED");
 }
 
 // Visibility is identity-based for the manager chain: a plain Solicitor (which

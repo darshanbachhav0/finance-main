@@ -46,7 +46,14 @@ const purchaseOrderSchema = new mongoose.Schema(
     liquidatedInvoiceCount: { type: Number, default: 0, min: 0 },
     currency: { type: String, enum: CURRENCY, required: true },
     issueDate: { type: Date, required: true, default: Date.now },
-    status: { type: String, enum: ["DRAFT", "ISSUED", "PARTIALLY_LIQUIDATED", "LIQUIDATED", "CANCELLED"], default: "ISSUED", index: true },
+    // CLOSED: the request was closed (invoicing complete) while part of the order was never
+    // invoiced; that remainder is cancelled (cancelledAmount) and its budget released.
+    // CANCELLED: the request was voided; the whole uninvoiced order is cancelled.
+    status: { type: String, enum: ["DRAFT", "ISSUED", "PARTIALLY_LIQUIDATED", "LIQUIDATED", "CLOSED", "CANCELLED"], default: "ISSUED", index: true },
+    cancelledAmount: { type: Number, default: 0, min: 0 },
+    closedAt: Date,
+    closedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    closureReason: String,
     generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     fileName: String,
     url: String
@@ -57,10 +64,11 @@ const purchaseOrderSchema = new mongoose.Schema(
 purchaseOrderSchema.pre("validate", function maintainBalances() {
   const original = Number(this.originalAmount ?? this.amount ?? 0);
   const consumed = Number(this.consumedAmount || 0);
+  const cancelled = Number(this.cancelledAmount || 0);
   this.originalAmount = original;
   this.amount = original;
-  this.remainingAmount = Math.max(0, Number((original - consumed).toFixed(2)));
-  if (this.status !== "CANCELLED" && this.status !== "DRAFT") {
+  this.remainingAmount = Math.max(0, Number((original - consumed - cancelled).toFixed(2)));
+  if (!["CANCELLED", "CLOSED", "DRAFT"].includes(this.status)) {
     this.status = this.remainingAmount <= 0 ? "LIQUIDATED" : consumed > 0 ? "PARTIALLY_LIQUIDATED" : "ISSUED";
   }
 });

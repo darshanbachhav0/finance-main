@@ -37,8 +37,10 @@ test("allowedActions follows role, approval stage, route role and ownership", ()
   assert.deepEqual(allowedRequestActions(request, director), ["APPROVE", "OBSERVE", "RETURN", "REJECT"]);
   assert.deepEqual(allowedRequestActions(request, vice), []);
   assert.deepEqual(allowedRequestActions(request, accounting), []);
-  assert.deepEqual(allowedRequestActions(request, owner), []);
-  assert.deepEqual(allowedRequestActions({ ...request, requester: director._id }, director), []);
+  // The owner may only withdraw while no approver has approved yet.
+  assert.deepEqual(allowedRequestActions(request, owner), ["WITHDRAW"]);
+  assert.deepEqual(allowedRequestActions({ ...request, approvalRouteSnapshot: [{ ...request.approvalRouteSnapshot[0], status: "APPROVED" }] }, owner), []);
+  assert.deepEqual(allowedRequestActions({ ...request, requester: director._id }, director), ["WITHDRAW"]);
   assert.deepEqual(allowedRequestActions({ ...request, approvalRouteSnapshot: [{ ...request.approvalRouteSnapshot[0], role: "Management" }] }, director), []);
 });
 

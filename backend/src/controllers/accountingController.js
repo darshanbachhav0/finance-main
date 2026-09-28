@@ -7,7 +7,10 @@ import GeneratedFile from "../models/GeneratedFile.js";
 import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Supplier from "../models/Supplier.js";
+import SunatVoucher from "../models/SunatVoucher.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
+import { applySupplierCredit, listSupplierCredits, recoverSupplierCredit, registerAdjustmentNote } from "../services/adjustmentNoteService.js";
+import { sunatService } from "../services/sunatService.js";
 import { cancelAccountsPayable, getConsolidation, processAccountsPayable } from "../services/accountingService.js";
 import { flattenConsolidationRow, persistReportFile, toCsv } from "../services/exportService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
@@ -52,7 +55,41 @@ export const processPayable = asyncHandler(async (req, res) => {
 
 export const cancelPayable = asyncHandler(async (req, res) => {
   const result = await cancelAccountsPayable({ accountsPayableId: req.params.id, reason: req.body.reason, user: req.user, req });
-  res.json({ data: result.accountsPayable, journal: result.reversalJournal });
+  res.json({ data: result.accountsPayable, journal: result.reversalJournal, purchaseOrder: result.purchaseOrder, voucher: result.voucher });
+});
+
+// Invoices SUNAT could not validate (SUNAT down or PADRON-only mode), awaiting Accounting's
+// manual exception decision.
+export const listSunatObservations = asyncHandler(async (req, res) => {
+  const query = { validationStatus: "OBSERVED_SUNAT", supersededBy: null, provisionedAt: null };
+  if (req.query.search) {
+    const search = new RegExp(escapedRegex(req.query.search), "i");
+    const requestIds = await FinancialRequest.distinct("_id", { requestNumber: search });
+    query.$or = [{ seriesNumber: search }, { rucIssuer: search }, { request: { $in: requestIds } }];
+  }
+  const { page, pageSize, skip } = parsePagination(req.query);
+  const [data, total] = await Promise.all([
+    SunatVoucher.find(query).populate("request", "requestNumber status flowType").populate("supplier", "legalName name rucDni").sort({ updatedAt: -1 }).skip(skip).limit(pageSize),
+    SunatVoucher.countDocuments(query)
+  ]);
+  res.json({ ...paginatedPayload(data, total, page, pageSize), sunat: sunatService.status() });
+});
+
+export const registerNote = asyncHandler(async (req, res) => {
+  const result = await registerAdjustmentNote({ files: req.files, originalVoucherId: req.body.originalVoucherId || undefined, requestId: req.body.requestId || undefined, user: req.user, req });
+  res.status(result.observed ? 202 : 201).json({ data: result.note || result.sunatVoucher, observed: result.observed, detail: result.detail, accountsPayable: result.accountsPayable, supplierCredit: result.supplierCredit, journal: result.journal });
+});
+
+export const supplierCredits = asyncHandler(async (req, res) => res.json(await listSupplierCredits(req.query)));
+
+export const applyCredit = asyncHandler(async (req, res) => {
+  const result = await applySupplierCredit({ supplierCreditId: req.params.id, accountsPayableId: req.body.accountsPayableId, amount: req.body.amount || undefined, user: req.user, req });
+  res.json({ data: result.supplierCredit, accountsPayable: result.accountsPayable, journal: result.journal });
+});
+
+export const recoverCredit = asyncHandler(async (req, res) => {
+  const result = await recoverSupplierCredit({ supplierCreditId: req.params.id, amount: req.body.amount || undefined, bank: req.body.bank, date: req.body.date, reference: req.body.reference, user: req.user, req });
+  res.json({ data: result.supplierCredit, journal: result.journal });
 });
 
 export const listAccountsPayable = asyncHandler(async (req, res) => {
@@ -87,7 +124,7 @@ export const listAccountsPayable = asyncHandler(async (req, res) => {
       .populate("request", "requestNumber requestType flowType status accountingPeriod requesterArea")
       .populate("supplier", "name legalName rucDni paymentTerms")
       .populate("purchaseOrder", "poNumber originalAmount consumedAmount remainingAmount status")
-      .populate("sunatVoucher", "rucIssuer voucherType series number seriesNumber xmlAmount validationStatus sunatStatus")
+      .populate("sunatVoucher", "rucIssuer voucherType documentTypeCode series number seriesNumber xmlAmount validationStatus sunatStatus manualOverride observationDetail annulment")
       .populate("sourceBatch", "batchCode status")
       .populate("provisionJournal paymentJournal")
       .populate("paymentBatch", "batchNumber bank currency paymentDate status")

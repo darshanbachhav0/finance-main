@@ -4,11 +4,14 @@ import { budgetAllocationRows } from "./budgetReportingService.js";
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
+import { openPayableAmountPENExpression, openPayableMatch } from "../../../shared/openPayables.mjs";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED, "PAGADO_CERRADO", "LIQUIDADO_CERRADO"];
 const approvalStatuses = [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED];
 const observedStatuses = [REQUEST_STATUS.OBSERVED, REQUEST_STATUS.OBSERVED_BUDGET, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.OBSERVED_BATCH, REQUEST_STATUS.RETURNED];
-const openPayableStatuses = [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PAYMENT_BOUNCED];
+// "Pending payment" follows the shared open-payables rule (same as internal Reports):
+// outstanding balance, PARTIALLY_PAID at its outstanding amount, PAYMENT_BOUNCED still owed.
+const openPayables = openPayableMatch();
 const cache = new Map();
 
 const forbiddenPayloadKeys = new Set([
@@ -85,18 +88,16 @@ async function overview(filters) {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const match = requestMatch(filters);
-  const [requestRows, payableRows, overdueApprovals, observedRequests, paidThisMonth, budgetRows] = await Promise.all([
+  const [requestRows, openPayableRows, overdueApprovals, observedRequests, paidThisMonth, budgetRows] = await Promise.all([
     FinancialRequest.aggregate([{ $match: match }, { $group: { _id: "$status", count: { $sum: 1 }, amountPEN: { $sum: "$totalPENEquivalent" } } }]),
-    AccountsPayable.aggregate(payablePipeline(filters, [{ $group: { _id: "$status", count: { $sum: 1 }, amountPEN: { $sum: "$penEquivalent" } } }])),
+    AccountsPayable.aggregate(payablePipeline(filters, [{ $match: openPayables }, { $group: { _id: null, count: { $sum: 1 }, amountPEN: { $sum: openPayableAmountPENExpression } } }])),
     FinancialRequest.countDocuments({ ...match, status: { $in: approvalStatuses }, approvalDueAt: { $lt: now } }),
     FinancialRequest.countDocuments({ ...match, status: { $in: observedStatuses } }),
     AccountsPayable.aggregate(payablePipeline(filters, [{ $match: { status: AP_STATUS.PAID, paidDate: { $gte: monthStart } } }, { $group: { _id: null, count: { $sum: 1 }, amountPEN: { $sum: "$penEquivalent" } } }])),
     budgetAllocationRows({ period: filters.period })
   ]);
   const requestSummary = grouped(requestRows, true);
-  const payableSummary = grouped(payableRows);
   const requestCount = (statuses) => requestSummary.filter((row) => statuses.includes(row.key)).reduce((sum, row) => sum + row.count, 0);
-  const payableAmount = (statuses) => payableSummary.filter((row) => statuses.includes(row.key)).reduce((sum, row) => sum + row.amountPEN, 0);
   const scopedBudget = budgetRows.filter((row) => !filters.area || row.costCenter?.area === filters.area).filter((row) => !["UNDATED_LEGACY", "ANNUAL_FALLBACK"].includes(row.reportingScope));
   const budget = scopedBudget.reduce((total, row) => ({
     assignedPEN: number(total.assignedPEN + Number(row.assignedAmount || 0)),
@@ -108,8 +109,8 @@ async function overview(filters) {
     pendingApprovals: requestCount(approvalStatuses),
     observedRequests,
     overdueApprovals,
-    pendingPayments: payableSummary.filter((row) => openPayableStatuses.includes(row.key)).reduce((sum, row) => sum + row.count, 0),
-    pendingPaymentAmountPEN: number(payableAmount(openPayableStatuses)),
+    pendingPayments: openPayableRows[0]?.count || 0,
+    pendingPaymentAmountPEN: number(openPayableRows[0]?.amountPEN),
     paidThisMonth: { count: paidThisMonth[0]?.count || 0, amountPEN: number(paidThisMonth[0]?.amountPEN) },
     closedRequests: requestCount([REQUEST_STATUS.CLOSED]),
     budget
@@ -152,10 +153,10 @@ async function payments(filters) {
   const inSevenDays = new Date(now.getTime() + 7 * 86400000);
   const [byStatus, schedule, paidByMonth, reconciliation, ageing] = await Promise.all([
     AccountsPayable.aggregate(payablePipeline(filters, [{ $group: { _id: "$status", count: { $sum: 1 }, amountPEN: { $sum: "$penEquivalent" } } }])),
-    AccountsPayable.aggregate(payablePipeline(filters, [{ $match: { status: { $in: openPayableStatuses }, scheduledFor: { $gte: now, $lte: inSevenDays } } }, { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$scheduledFor" } }, count: { $sum: 1 }, amountPEN: { $sum: "$penEquivalent" } } }, { $sort: { _id: 1 } }])),
+    AccountsPayable.aggregate(payablePipeline(filters, [{ $match: { ...openPayables, scheduledFor: { $gte: now, $lte: inSevenDays } } }, { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$scheduledFor" } }, count: { $sum: 1 }, amountPEN: { $sum: openPayableAmountPENExpression } } }, { $sort: { _id: 1 } }])),
     AccountsPayable.aggregate(payablePipeline(filters, [{ $match: { status: AP_STATUS.PAID, paidDate: { $ne: null } } }, { $group: { _id: { $dateToString: { format: "%Y-%m", date: "$paidDate" } }, count: { $sum: 1 }, amountPEN: { $sum: "$penEquivalent" } } }, { $sort: { _id: -1 } }, { $limit: 24 }])),
     AccountsPayable.aggregate(payablePipeline(filters, [{ $match: { status: AP_STATUS.PAID } }, { $group: { _id: { $cond: [{ $ne: [{ $ifNull: ["$reconciliation", null] }, null] }, "RECONCILED", "PENDING"] }, count: { $sum: 1 }, amountPEN: { $sum: "$penEquivalent" } } }])),
-    AccountsPayable.aggregate(payablePipeline(filters, [{ $match: { status: { $in: openPayableStatuses } } }, { $project: { amountPEN: "$penEquivalent", bucket: { $switch: { branches: [
+    AccountsPayable.aggregate(payablePipeline(filters, [{ $match: openPayables }, { $project: { amountPEN: openPayableAmountPENExpression, bucket: { $switch: { branches: [
       { case: { $eq: [{ $ifNull: ["$dueDate", null] }, null] }, then: "NO_DUE_DATE" },
       { case: { $gte: ["$dueDate", now] }, then: "CURRENT" },
       { case: { $gte: ["$dueDate", new Date(now.getTime() - 30 * 86400000)] }, then: "1_30_DAYS" },

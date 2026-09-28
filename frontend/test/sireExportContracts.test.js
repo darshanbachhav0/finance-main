@@ -23,7 +23,9 @@ for (const field of [
   "fiscalValidationStatus",
   "exportStatus"
 ]) assert.ok(page.includes(field), `SIRE screen is missing ${field}`);
-assert.ok(page.includes('options: ["PENDING", "EXPORTED", "MANUAL_REVIEW"]'));
-assert.ok(page.includes("Only individually validated vouchers are included in the CSV"));
+assert.ok(page.includes('options: ["PENDING", "EXPORTED", "MANUAL_REVIEW", "EXCLUDED"]'));
+assert.ok(page.includes("Only individually validated vouchers are written to the SUNAT TXT"));
+assert.ok(page.includes("format: \"txt\""), "SIRE export must request SUNAT's official TXT format");
+assert.ok(page.includes("summary.fileName"), "SIRE screen must show the official SUNAT file name");
 
 console.log("PASS SIRE/RCE frontend shows voucher, supplier, request, CXP, period, validation and export status");

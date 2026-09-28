@@ -1,3 +1,9 @@
+# Production layout: ONE web service. Render persistent disks cannot be shared between services,
+# so everything that touches files (uploaded evidence read by the A2 batch-invoice worker, the
+# SUNAT Padron dataset) runs inside this service, next to its disk. The batch-invoice worker,
+# the SLA escalation worker and the Padron refresh are started in-process by backend/server.js;
+# each can be switched off with its *_WORKER_ENABLED flag below. See docs/OPERATIONS.md section 4.
+# Keep a single instance (no horizontal scaling): the disk can only attach to one instance.
 services:
   - type: web
     name: uma-finance
@@ -40,64 +46,23 @@ services:
         value: PRODUCTION
       - key: BATCH_INVOICE_INLINE_PROCESSING
         value: "false"
-
-  - type: worker
-    name: uma-finance-sla-worker
-    runtime: node
-    plan: 0.5c-512mb
-    repo: https://github.com/darshanbachhav0/finance-main.git
-    branch: main
-    buildCommand: npm ci
-    startCommand: npm run worker:sla --workspace backend
-    autoDeployTrigger: commit
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: MONGODB_URI
-        sync: false
-      - key: SLA_DUE_SOON_HOURS
-        value: 4
-      - key: SLA_ESCALATION_HOURS
-        value: 24
-      - key: SLA_POLL_MS
-        value: 60000
-
-  - type: worker
-    name: uma-finance-batch-invoice-worker
-    runtime: node
-    plan: 0.5c-512mb
-    repo: https://github.com/darshanbachhav0/finance-main.git
-    branch: main
-    buildCommand: npm ci
-    startCommand: npm run worker:batch --workspace backend
-    autoDeployTrigger: commit
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: MONGODB_URI
-        sync: false
+      # In-process background workers (backend/src/workers/inProcessWorkers.js).
+      - key: BATCH_INVOICE_WORKER_ENABLED
+        value: "true"
       - key: BATCH_INVOICE_POLL_MS
         value: 5000
       - key: BATCH_INVOICE_STALE_MINUTES
         value: 15
       - key: BATCH_INVOICE_WORKER_CONCURRENCY
         value: 3
+      - key: SLA_WORKER_ENABLED
+        value: "true"
+      - key: SLA_DUE_SOON_HOURS
+        value: 4
+      - key: SLA_ESCALATION_HOURS
+        value: 24
+      - key: SLA_POLL_MS
+        value: 60000
+      - key: SUNAT_PADRON_WORKER_ENABLED
+        value: "true"
 
-  - type: worker
-    name: uma-finance-padron-worker
-    runtime: node
-    plan: 0.5c-512mb
-    repo: https://github.com/darshanbachhav0/finance-main.git
-    branch: main
-    buildCommand: npm ci
-    startCommand: npm run sunat:padron:worker --workspace backend
-    autoDeployTrigger: commit
-    disk:
-      name: uma-finance-padron-data
-      mountPath: /var/data
-      sizeGB: 10
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: SUNAT_PADRON_DATA_DIR
-        value: /var/data/sunat-padron

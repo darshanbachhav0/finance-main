@@ -25,8 +25,17 @@ export const expenditureClassificationLabels = {
   CAPEX: "CAPEX - Capital expenditure"
 };
 
+// Track C covers an advance to render (the default) and an undocumented reimbursement
+// of money the employee already spent without a fiscal receipt.
+export const trackCRequestTypes = ["ENTREGA_RENDIR", "REEMBOLSO_SIN_SUSTENTO"];
+
+export const trackCRequestTypeLabels = {
+  ENTREGA_RENDIR: "Advance to render (paid before the expense)",
+  REEMBOLSO_SIN_SUSTENTO: "Undocumented reimbursement (expense already paid, no receipt)"
+};
+
 export function requestTypeForFlow(flowType, currentRequestType = "OPEX") {
-  if (flowType === "C") return "ENTREGA_RENDIR";
+  if (flowType === "C") return trackCRequestTypes.includes(currentRequestType) ? currentRequestType : "ENTREGA_RENDIR";
   if (["A1", "B"].includes(flowType)) {
     return requestCreationClassifications.includes(currentRequestType)
       ? currentRequestType
@@ -129,7 +138,7 @@ export const requestTypeLabels = {
   CAPEX: "CAPEX",
   ENTREGA_RENDIR: "Advance to account",
   REEMBOLSO_CON_SUSTENTO: "Supported reimbursement",
-  REEMBOLSO_SIN_SUSTENTO: "Unsupported reimbursement",
+  REEMBOLSO_SIN_SUSTENTO: "Undocumented reimbursement",
   PAGO_CON_COTIZACION: "Quotation-based payment"
 };
 
