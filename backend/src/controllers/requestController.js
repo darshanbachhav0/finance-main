@@ -14,7 +14,8 @@ import {
   requestFormPolicy,
   submitFinancialRequest,
   updateFinancialRequest,
-  voidFinancialRequest
+  voidFinancialRequest,
+  withdrawFinancialRequest
 } from "../services/requestService.js";
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
 import { registerA1Invoice } from "../services/invoiceRegistrationService.js";
@@ -103,6 +104,11 @@ export const submitRequest = asyncHandler(async (req, res) => {
   res.json({ data: publicRequestPayload(request, req.user) });
 });
 
+export const withdrawRequest = asyncHandler(async (req, res) => {
+  const request = await withdrawFinancialRequest({ id: req.params.id, user: req.user, req, comments: req.body.comments });
+  res.json({ data: publicRequestPayload(request, req.user) });
+});
+
 export const closeRequest = asyncHandler(async (req, res) => {
   const request = await closeFinancialRequest({ id: req.params.id, user: req.user, req, comments: req.body.comments });
   res.json({ data: publicRequestPayload(request, req.user) });
@@ -143,7 +149,7 @@ export const settleRenditionBalance = asyncHandler(async (req, res) => {
 });
 
 export const recoverRendition = asyncHandler(async (req, res) => {
-  const result = await recoverRejectedRendition({ requestId: req.params.id, amount: req.body.amount, method: req.body.method, reference: req.body.reference, user: req.user, req });
+  const result = await recoverRejectedRendition({ requestId: req.params.id, amount: req.body.amount, method: req.body.method, reference: req.body.reference, operationNumber: req.body.operationNumber, operationDate: req.body.operationDate, user: req.user, req });
   res.json({ data: publicRequestPayload(result.request, req.user), journal: result.journal });
 });
 

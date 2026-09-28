@@ -1,7 +1,8 @@
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import AccountsPayable from "../models/AccountsPayable.js";
-import BudgetException from "../models/BudgetException.js";
+import BudgetException, { LEGACY_EXCEPTION_INDEX } from "../models/BudgetException.js";
 import BudgetRule from "../models/BudgetRule.js";
+import { recordAudit } from "./auditService.js";
 import CostCenter from "../models/CostCenter.js";
 import { AppError } from "../utils/AppError.js";
 import { BUDGET_STATUS, ERROR_CODES } from "../utils/constants.js";
@@ -131,6 +132,100 @@ function insufficientBudgetError(label, available, required, strategy, limits) {
   );
 }
 
+// A previous exception for the same request dimension can only be reused while it is still
+// PENDING, or when it is an APPROVED extraordinary overrun at least as large as today's need.
+// A REJECTED exception, an APPROVED one that is now exceeded, or an approved budget increase
+// that was consumed elsewhere is stale: the resubmission gets a fresh exception instead.
+function exceptionStillUsable(exception, strategy, amount) {
+  if (exception.status === "PENDING") return true;
+  return exception.status === "APPROVED" && exception.strategy === "EXTRAORDINARY_APPROVAL"
+    && strategy === "EXTRAORDINARY_APPROVAL" && roundMoney(amount) <= roundMoney(exception.requestedAmount);
+}
+
+let legacyExceptionIndexChecked = false;
+async function dropLegacyExceptionIndex() {
+  if (legacyExceptionIndexChecked) return;
+  const indexes = await BudgetException.collection.indexes().catch(() => []);
+  if (indexes.some((index) => index.name === LEGACY_EXCEPTION_INDEX)) await BudgetException.collection.dropIndex(LEGACY_EXCEPTION_INDEX);
+  legacyExceptionIndexChecked = true;
+}
+
+export async function findOrOpenBudgetException({ request, key, line, strategy, available, amount, limits, userId, comments, session }) {
+  const latest = await BudgetException.findOne({ request: request._id, dimensionKey: key }).sort({ createdAt: -1, _id: -1 }).session(session || null);
+  if (latest && exceptionStillUsable(latest, strategy, amount)) return latest;
+  if (latest) await dropLegacyExceptionIndex();
+  const values = {
+    request: request._id,
+    dimensionKey: key,
+    costCenter: line.costCenter,
+    expenseType: line.expenseType,
+    budgetItem: line.budgetItem,
+    project: line.project,
+    strategy,
+    availableAmount: available,
+    requestedAmount: amount,
+    budgetLimits: limits || undefined,
+    requestedBy: userId,
+    supersedes: latest?._id,
+    history: [{ action: "CREATED", by: userId, comments: latest ? `${comments} Supersedes the ${latest.status} exception ${latest._id}.` : comments }]
+  };
+  try {
+    const [created] = await BudgetException.create([values], session ? { session } : undefined);
+    return created;
+  } catch (error) {
+    // A concurrent attempt opened the same PENDING exception first.
+    if (error?.code !== 11000) throw error;
+    const open = await BudgetException.findOne({ request: request._id, dimensionKey: key, status: "PENDING" }).session(session || null);
+    if (!open) throw error;
+    return open;
+  }
+}
+
+// A PENDING exception becomes moot once the commitment succeeds within budget (or the request is
+// voided and its budget released). Resolving it keeps it from blocking closure or inflating the
+// "budget exceptions pending" counters, while preserving it as audited history.
+export async function resolveMootBudgetExceptions(requestId, userId, reason, { session } = {}) {
+  const pending = await BudgetException.find({ request: requestId, status: "PENDING" }).session(session || null);
+  if (!pending.length) return 0;
+  const at = new Date();
+  await BudgetException.updateMany(
+    { _id: { $in: pending.map((item) => item._id) }, status: "PENDING" },
+    { $set: { status: "RESOLVED", resolvedAt: at, resolutionReason: reason }, $inc: { __v: 1 }, $push: { history: { action: "AUTO_RESOLVED", by: userId, at, comments: reason } } },
+    { session }
+  );
+  for (const exception of pending) {
+    await recordAudit({ entityType: "BudgetException", entity: exception, requestId, action: "AUTO_RESOLVED", user: userId ? { _id: userId } : undefined, module: "BUDGET", comments: reason, oldValues: { status: "PENDING" }, newValues: { status: "RESOLVED" }, session });
+  }
+  return pending.length;
+}
+
+// TRANSITIONAL (Phase 1) commitments are informational and must never block: a larger invoice
+// (for example a USD invoice booked at a higher exchange rate) simply grows the informational
+// commitment, without touching any pooled Cost Center or allocation balance.
+function isInformationalCommitment(commitment) {
+  return Boolean(commitment?.lines?.length) && commitment.lines.every((line) => line.mode !== "ACTIVE");
+}
+
+async function adjustInformationalCommitment(commitment, additionalAmount, userId, { session, exchangeRateEvidence, comments } = {}) {
+  const amount = roundMoney(additionalAmount);
+  if (!(amount > 0)) return commitment;
+  const weight = sumMoney(commitment.lines.map((line) => line.amount));
+  const previousTotal = roundMoney(commitment.totalAmount || 0);
+  let assigned = 0;
+  commitment.lines.forEach((line, index) => {
+    const isLast = index === commitment.lines.length - 1;
+    const share = isLast ? subtractMoney(amount, assigned) : weight > 0 ? Math.floor(amount * 100 * line.amount / weight) / 100 : 0;
+    line.amount = addMoney(line.amount, share);
+    assigned = addMoney(assigned, share);
+  });
+  commitment.totalAmount = addMoney(previousTotal, amount);
+  commitment.adjustments.push({ reason: "INFORMATIONAL_TOP_UP", mode: "TRANSITIONAL", at: new Date(), by: userId, previousTotal, amount, exchangeRateEvidence });
+  commitment.status = deriveCommitmentStatus(commitment);
+  commitment.history.push({ status: commitment.status, amount, by: userId, comments: comments || "Informational (TRANSITIONAL) commitment adjusted to the invoiced amount; no funds are enforced." });
+  await commitment.save({ session });
+  return commitment;
+}
+
 async function releaseApplied(applied, session) {
   if (session) return; // The enclosing transaction aborts all its writes together.
   for (const item of [...applied].reverse()) {
@@ -146,6 +241,9 @@ async function releaseApplied(applied, session) {
 export async function reserveBudget(request, userId, { session, additionalAmount = 0, exchangeRateEvidence } = {}) {
   const existing = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
   if (existing && existing.status !== BUDGET_STATUS.NO_BUDGET && !(additionalAmount > 0)) return existing;
+  if (additionalAmount > 0 && existing && ![BUDGET_STATUS.RELEASED, BUDGET_STATUS.CLOSED, BUDGET_STATUS.DEFERRED].includes(existing.status) && isInformationalCommitment(existing)) {
+    return adjustInformationalCommitment(existing, additionalAmount, userId, { session, exchangeRateEvidence, comments: "Informational (TRANSITIONAL) commitment increased for the invoice exchange-rate difference; no funds are enforced." });
+  }
   if (additionalAmount > 0 && (!existing || [BUDGET_STATUS.RELEASED, BUDGET_STATUS.CLOSED, BUDGET_STATUS.NO_BUDGET, BUDGET_STATUS.DEFERRED].includes(existing.status))) throw new AppError(409, "This commitment cannot be increased for an exchange-rate variance.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
   if (existing?.status === BUDGET_STATUS.NO_BUDGET && (existing.executedAmount > 0 || existing.paidAmount > 0 || await AccountsPayable.exists({ request: request._id }).session(session || null))) {
     throw new AppError(409, "Historical unreserved budget already has financial postings; a controlled budget adjustment is required.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
@@ -203,23 +301,10 @@ export async function reserveBudget(request, userId, { session, additionalAmount
     }
     if (mode === "ACTIVE" && available < line.amount) {
       const key = dimensionKey(line, request.project) + (additionalAmount > 0 ? `|FX:${addMoney(existing.totalAmount, additionalAmount)}` : "");
-      budgetException = await BudgetException.findOne({ request: request._id, dimensionKey: key });
-      if (!budgetException) {
-        [budgetException] = await BudgetException.create([{
-          request: request._id,
-          dimensionKey: key,
-          costCenter: line.costCenter,
-          expenseType: line.expenseType,
-          budgetItem: line.budgetItem,
-          project: line.project,
-          strategy: exceptionStrategy,
-          availableAmount: available,
-          requestedAmount: line.amount,
-          budgetLimits: limits || undefined,
-          requestedBy: userId,
-          history: [{ action: "CREATED", by: userId, comments: "Insufficient budget detected before commitment." }]
-        }]);
-      }
+      budgetException = await findOrOpenBudgetException({
+        request, key, line, strategy: exceptionStrategy, available, amount: line.amount, limits, userId,
+        comments: "Insufficient budget detected before commitment."
+      });
       exceptionApproved = exceptionStrategy === "EXTRAORDINARY_APPROVAL" && budgetException.strategy === "EXTRAORDINARY_APPROVAL" && budgetException.status === "APPROVED" && line.amount <= budgetException.requestedAmount;
       if (!exceptionApproved) {
         throw new AppError(
@@ -287,16 +372,19 @@ export async function reserveBudget(request, userId, { session, additionalAmount
       existing.status = deriveCommitmentStatus(existing);
       existing.history.push({ status: existing.status, amount: additionalAmount, by: userId, comments: "Additional budget reserved for the invoice exchange-rate difference within the approved source-currency amount." });
       await existing.save({ session });
+      await resolveMootBudgetExceptions(request._id, userId, "The exchange-rate difference was reserved within available budget; the pending exception is no longer needed.", { session });
       return existing;
     }
+    let commitment = existing;
     if (existing) {
       const history = [...existing.history, ...values.history];
       const snapshot = existing.toObject();
       Object.assign(existing, values, { createdBy: existing.createdBy, history, legacyUnreservedSnapshot: snapshot });
       await existing.save({ session });
-      return existing;
+    } else {
+      [commitment] = await BudgetCommitment.create([values], session ? { session } : undefined);
     }
-    const [commitment] = await BudgetCommitment.create([values], session ? { session } : undefined);
+    await resolveMootBudgetExceptions(request._id, userId, "The budget commitment succeeded; the pending exception is no longer needed.", { session });
     return commitment;
   } catch (error) {
     await releaseApplied(applied, session);
@@ -308,12 +396,19 @@ export async function assertBudgetBeforePosting(request, { session, amount, user
   let commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
   // NO_BUDGET is retried once in case a real allocation/rule now applies; if it still resolves to
   // NO_BUDGET, that is Phase 1 (TRANSITIONAL) working as designed — informational, not a blocker.
-  if (commitment?.status === BUDGET_STATUS.NO_BUDGET && userId) commitment = await reserveBudget(request, userId, { session });
+  // Once the informational commitment already has financial postings it is kept as recorded
+  // (a retry would refuse to re-reserve it), so TRANSITIONAL mode can never block here.
+  if (commitment?.status === BUDGET_STATUS.NO_BUDGET && userId && !(commitment.executedAmount > 0 || commitment.paidAmount > 0 || await AccountsPayable.exists({ request: request._id }).session(session || null))) {
+    commitment = await reserveBudget(request, userId, { session });
+  }
   if (!commitment || commitment.status === BUDGET_STATUS.RELEASED || (commitment.status === BUDGET_STATUS.DEFERRED && request.flowType !== "C")) {
     throw new AppError(409, "A valid budget commitment is required before accounting.", { request: request._id }, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
   if (amount !== undefined && commitment.status !== BUDGET_STATUS.DEFERRED) {
     const remaining = subtractMoney(commitment.totalAmount, currentTrackedAmount(commitment, "executedAmount"));
+    if (roundMoney(amount) > remaining && isInformationalCommitment(commitment)) {
+      return adjustInformationalCommitment(commitment, subtractMoney(amount, remaining), userId, { session, exchangeRateEvidence });
+    }
     if (roundMoney(amount) > remaining) {
       if (allowFxTopUp && request.currency === "USD" && userId) return reserveBudget(request, userId, { session, additionalAmount: subtractMoney(amount, remaining), exchangeRateEvidence });
       throw new AppError(409, "Invoice exceeds the remaining budget commitment.", { remaining, required: amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
@@ -455,7 +550,7 @@ export async function reverseBudgetExecution(request, userId, amount, { session,
     commitment.status = deriveCommitmentStatus(commitment);
     commitment.history.push({
       status: commitment.status,
-      amount: -applied,
+      amount: applied, // history.amount has min 0; the reversal direction is in status/comments
       by: userId,
       comments: comments || "Budget execution reversed after an Accounts Payable cancellation."
     });
@@ -533,7 +628,46 @@ export async function releaseBudget(request, userId, reason, { session } = {}) {
     commitment.releaseReason = reason;
     commitment.history.push({ status: BUDGET_STATUS.RELEASED, amount: subtractMoney(commitment.totalAmount, currentTrackedAmount(commitment, "executedAmount")), by: userId, comments: reason });
     await commitment.save({ session });
+    await resolveMootBudgetExceptions(request._id, userId, `Budget released: ${reason}`, { session });
     return commitment;
+  } catch (error) {
+    await releaseApplied(appliedUsage, session);
+    throw error;
+  }
+}
+
+// Invoicing is complete (the request is closing): whatever part of the commitment was never
+// executed by an invoice is released back to its Cost Center / budget plan, and the commitment's
+// total is reduced to what was actually executed. A commitment that was never executed at all is
+// released outright. Returns the released amount so the caller can audit it.
+export async function releaseUnexecutedCommitment(request, userId, reason, { session } = {}) {
+  const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  if (!commitment || [BUDGET_STATUS.CLOSED, BUDGET_STATUS.RELEASED, BUDGET_STATUS.DEFERRED].includes(commitment.status)) return { commitment, releasedAmount: 0 };
+  const executed = currentTrackedAmount(commitment, "executedAmount");
+  const releasable = subtractMoney(commitment.totalAmount, executed);
+  if (releasable <= 0) return { commitment, releasedAmount: 0 };
+  if (executed <= 0) return { commitment: await releaseBudget(request, userId, reason, { session }), releasedAmount: releasable };
+
+  const appliedUsage = [];
+  try {
+    const previousLines = commitment.lines.map((line) => line.toObject ? line.toObject() : { ...line });
+    for (const line of commitment.lines) {
+      const lineExecuted = trackedLineAmount(line, "executedAmount");
+      const remaining = subtractMoney(line.amount, lineExecuted);
+      if (remaining <= 0) continue;
+      if (line.mode === "ACTIVE") await changeTrackedUsage(line, { committedAmount: -remaining }, session, appliedUsage);
+      line.amount = lineExecuted;
+    }
+    const previousTotal = roundMoney(commitment.totalAmount);
+    commitment.totalAmount = executed;
+    commitment.adjustments.push({ reason: "UNINVOICED_BALANCE_RELEASED", at: new Date(), by: userId, previousTotal, previousLines, amount: -releasable, comments: reason });
+    commitment.status = deriveCommitmentStatus(commitment);
+    commitment.releasedAt = new Date();
+    commitment.releasedBy = userId;
+    commitment.releaseReason = reason;
+    commitment.history.push({ status: commitment.status, amount: releasable, by: userId, comments: `Uninvoiced commitment released: ${reason}` });
+    await commitment.save({ session });
+    return { commitment, releasedAmount: releasable };
   } catch (error) {
     await releaseApplied(appliedUsage, session);
     throw error;
@@ -591,11 +725,10 @@ export async function assertRenditionBudgetAvailable(request, userId, lines, { s
     if (line.status !== "PENDING_VALIDATION" && available >= line.amount) continue;
     const key = dimensionKey(line, request.project);
     const strategy = line.exceptionStrategy === "EXTRAORDINARY_APPROVAL" ? "EXTRAORDINARY_APPROVAL" : "REQUEST_BUDGET_INCREASE";
-    const exception = await BudgetException.findOneAndUpdate({ request: request._id, dimensionKey: key }, { $setOnInsert: {
-      costCenter: line.costCenter, expenseType: line.expenseType, budgetItem: line.budgetItem, project: line.project,
-      strategy, availableAmount: available, requestedAmount: line.amount, requestedBy: userId,
-      history: [{ action: "CREATED", by: userId, comments: "Insufficient actual-expense budget detected before rendition posting." }]
-    } }, { upsert: true, new: true, runValidators: true });
+    const exception = await findOrOpenBudgetException({
+      request, key, line, strategy, available, amount: line.amount, userId, session,
+      comments: "Insufficient actual-expense budget detected before rendition posting."
+    });
     if (line.status !== "PENDING_VALIDATION" && strategy === "EXTRAORDINARY_APPROVAL" && exception.strategy === strategy && exception.status === "APPROVED" && exception.requestedAmount >= line.amount) continue;
     throw new AppError(409, "Rendition exceeds available budget; resolve the budget exception before accounting.", { budgetException: exception._id, available, required: line.amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
@@ -672,6 +805,7 @@ export async function executeDeferredBudget(request, userId, { session, lines } 
     commitment.history.push({ status: BUDGET_STATUS.EXECUTED, amount: commitment.totalAmount, by: userId, comments: "Track C eligible expense budget executed at rendition validation." });
     commitment.history.push({ status: BUDGET_STATUS.CLOSED, amount: commitment.totalAmount, by: userId, comments: "Track C eligible expense budget closed after rendition validation." });
     await commitment.save({ session });
+    await resolveMootBudgetExceptions(request._id, userId, "The rendition expense was executed within budget; the pending exception is no longer needed.", { session });
     return commitment;
   } catch (error) {
     await releaseApplied(appliedUsage, session);

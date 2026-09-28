@@ -1,9 +1,13 @@
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { decideApproval, listApprovalInbox } from "../services/approvalService.js";
+import { decideApproval, getApprovalDecisionOptions, listApprovalInbox } from "../services/approvalService.js";
 import { publicRequestPayload } from "../services/requestService.js";
 
 export const getApprovalInbox = asyncHandler(async (req, res) => {
   res.json(await listApprovalInbox(req.query, req.user));
+});
+
+export const getApprovalOptions = asyncHandler(async (req, res) => {
+  res.json({ data: await getApprovalDecisionOptions(req.params.id, req.user) });
 });
 
 function decisionHandler(action) {

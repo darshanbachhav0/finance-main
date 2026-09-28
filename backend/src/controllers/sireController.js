@@ -2,6 +2,8 @@ import GeneratedFile from "../models/GeneratedFile.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { buildSirePreview, exportSireFile } from "../services/sireService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
+import { AppError } from "../utils/AppError.js";
+import { ERROR_CODES } from "../utils/constants.js";
 
 export const listSireExports = asyncHandler(async (req, res) => {
   const query = { kind: "SIRE_CSV" };
@@ -19,19 +21,32 @@ export const listSireExports = asyncHandler(async (req, res) => {
   res.json(paginatedPayload(data, total, page, pageSize));
 });
 
+function previewPayload(preview) {
+  return { data: preview.rows, validations: preview.validations, summary: preview.summary };
+}
+
 export const previewSire = asyncHandler(async (req, res) => {
-  const preview = await buildSirePreview(req.query.period);
-  res.json({ data: preview.rows, validations: preview.validations, summary: preview.summary });
+  res.json(previewPayload(await buildSirePreview(req.query.period)));
 });
 
+// GET /sire/export?period=YYYY-MM                          -> validation preview (JSON)
+// GET /sire/export?period=YYYY-MM&format=txt               -> SUNAT RCE TXT attachment, official name
+// GET /sire/export?period=YYYY-MM&format=txt&delivery=json -> the same file as { fileName, content } (UI)
 export const exportSire = asyncHandler(async (req, res) => {
-  if ((req.query.format || "json") !== "csv") {
-    const preview = await buildSirePreview(req.query.period);
-    res.json({ data: preview.rows, validations: preview.validations, summary: preview.summary });
+  const format = String(req.query.format || "json").toLowerCase();
+  if (format === "json") {
+    res.json(previewPayload(await buildSirePreview(req.query.period)));
     return;
   }
+  if (format !== "txt") {
+    throw new AppError(422, "Unsupported SIRE export format. SUNAT's RCE is generated as TXT (format=txt).", { format }, ERROR_CODES.VALIDATION_ERROR);
+  }
   const result = await exportSireFile({ period: req.query.period, user: req.user });
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename=${result.history.fileName}`);
+  if (req.query.delivery === "json") {
+    res.json({ fileName: result.fileName, content: result.content, history: result.history, summary: result.preview.summary });
+    return;
+  }
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${result.fileName}"`);
   res.send(result.content);
 });

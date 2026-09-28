@@ -1,3 +1,6 @@
+# DEMO ONLY. Shares this PC's local copy of UMA Finance through a temporary Cloudflare Quick
+# Tunnel for presentations. Production runs on Render (render.yaml, docs/OPERATIONS.md) - never
+# point real users or real university data at this link.
 param(
   [ValidateSet("start", "status", "stop")]
   [string]$Action = "start"
@@ -10,7 +13,6 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $tempDirectory = Join-Path $projectRoot ".tmp"
 $stateFile = Join-Path $tempDirectory "cloudflare-share.json"
 $localUrl = "http://localhost:5174"
-$renderGatewayUrl = "https://uma-financial-access.onrender.com"
 
 function Get-FrontendAssetPaths {
   $indexFile = Join-Path $projectRoot "frontend\dist\index.html"
@@ -241,33 +243,6 @@ try {
   Pop-Location
 }
 
-$serverProcess = $null
-if (-not (Test-ErpServer)) {
-  $node = (Get-Command "node.exe" -ErrorAction SilentlyContinue).Source
-  if (-not $node) {
-    throw "Node.js was not found."
-  }
-
-  Write-Host "Starting the local ERP production server..." -ForegroundColor Cyan
-  $serverEntry = Join-Path $projectRoot "backend\public-server.js"
-  $serverProcess = Start-Process -FilePath $node -ArgumentList @($serverEntry) -WorkingDirectory (Join-Path $projectRoot "backend") -WindowStyle Hidden -PassThru
-  $serverDeadline = [DateTime]::UtcNow.AddSeconds(30)
-
-  while (-not (Test-ErpServer) -and [DateTime]::UtcNow -lt $serverDeadline) {
-    if ($serverProcess.HasExited) {
-      throw "The ERP server stopped before it became ready. Confirm that MongoDB is running and backend/.env is valid."
-    }
-    Start-Sleep -Milliseconds 500
-  }
-
-  if (-not (Test-ErpServer)) {
-    Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
-    throw "The ERP server did not become ready. Confirm that MongoDB is running."
-  }
-} else {
-  Write-Host "The local ERP production server is already running." -ForegroundColor DarkGreen
-}
-
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $tunnelLog = Join-Path $tempDirectory "cloudflared-$timestamp.log"
 $tunnelArguments = @(
@@ -306,6 +281,43 @@ if (-not $shareUrl) {
   throw "Cloudflare did not create a share link within 45 seconds."
 }
 
+$serverProcess = $null
+if (-not (Test-ErpServer)) {
+  $node = (Get-Command "node.exe" -ErrorAction SilentlyContinue).Source
+  if (-not $node) {
+    throw "Node.js was not found."
+  }
+
+  Write-Host "Starting the local ERP demo server (A2 batch and SLA workers run in-process)..." -ForegroundColor Cyan
+  # The started server inherits these: backend/src/workers/inProcessWorkers.js runs the A2 batch
+  # worker and the SLA escalation worker inside it. The Padron refresh stays with its own updater.
+  $env:BATCH_INVOICE_INLINE_PROCESSING = "false"
+  $env:BATCH_INVOICE_WORKER_ENABLED = "true"
+  $env:SLA_WORKER_ENABLED = "true"
+  if (-not $env:SUNAT_PADRON_WORKER_ENABLED) { $env:SUNAT_PADRON_WORKER_ENABLED = "false" }
+  # Same-origin POSTs through the tunnel carry its origin; allow it in CORS.
+  $env:PUBLIC_GATEWAY_URL = $shareUrl
+  $serverEntry = Join-Path $projectRoot "backend\public-server.js"
+  $serverProcess = Start-Process -FilePath $node -ArgumentList @($serverEntry) -WorkingDirectory (Join-Path $projectRoot "backend") -WindowStyle Hidden -PassThru
+  $serverDeadline = [DateTime]::UtcNow.AddSeconds(30)
+
+  while (-not (Test-ErpServer) -and [DateTime]::UtcNow -lt $serverDeadline) {
+    if ($serverProcess.HasExited) {
+      Stop-Process -Id $tunnelProcess.Id -Force -ErrorAction SilentlyContinue
+      throw "The ERP server stopped before it became ready. Confirm that MongoDB is running and backend/.env is valid."
+    }
+    Start-Sleep -Milliseconds 500
+  }
+
+  if (-not (Test-ErpServer)) {
+    Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+    Stop-Process -Id $tunnelProcess.Id -Force -ErrorAction SilentlyContinue
+    throw "The ERP server did not become ready. Confirm that MongoDB is running."
+  }
+} else {
+  Write-Host "The local ERP server is already running. It must list $shareUrl in CLIENT_URLS and run the batch/SLA workers (SLA_WORKER_ENABLED=true)." -ForegroundColor DarkYellow
+}
+
 $state = [PSCustomObject]@{
   url = $shareUrl
   tunnelPid = $tunnelProcess.Id
@@ -314,18 +326,6 @@ $state = [PSCustomObject]@{
   logFile = $tunnelLog
 }
 $state | ConvertTo-Json | Set-Content -LiteralPath $stateFile -Encoding UTF8
-
-$portalLinkFile = Join-Path $projectRoot "link-site\link.json"
-if (Test-Path -LiteralPath (Split-Path -Parent $portalLinkFile)) {
-  $portalConfiguration = [ordered]@{
-    url = $shareUrl
-    updatedAt = (Get-Date).ToString("o")
-    active = $true
-  }
-  $portalJson = $portalConfiguration | ConvertTo-Json
-  $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($portalLinkFile, "$portalJson`n", $utf8WithoutBom)
-}
 
 $publicReady = $false
 for ($attempt = 1; $attempt -le 20; $attempt++) {
@@ -343,18 +343,15 @@ if (-not $publicReady) {
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor DarkCyan
-Write-Host "NEW CLOUDFLARE SHARE LINK" -ForegroundColor Cyan
+Write-Host "NEW CLOUDFLARE DEMO LINK (DEMO ONLY - production runs on Render)" -ForegroundColor Cyan
 Write-Host $shareUrl -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor DarkCyan
 Write-Host "Public check: ready (HTML, CSS, JavaScript, and health endpoint verified)"
+Write-Host "Background workers: A2 batch + SLA escalation running inside the demo server"
 Write-Host "Show this link again: npm run share:status"
 Write-Host "Stop public sharing:  npm run share:stop"
-Write-Host "Publish this link to Render: npm run link:publish"
 Write-Host ""
-Write-Host "The Cloudflare URL above is the private gateway target and may be blocked by office DNS." -ForegroundColor DarkYellow
-Write-Host "After publishing, share only this stable address:" -ForegroundColor Cyan
-Write-Host $renderGatewayUrl -ForegroundColor Green
-Write-Host "Do not share localhost, port 5174, a 192.168.x.x address, or the temporary Cloudflare URL."
+Write-Host "This temporary link is for demos with demo data only. Some office DNS servers block trycloudflare.com." -ForegroundColor DarkYellow
 Write-Host ""
 Write-Host "Keep this PC, MongoDB, and the ERP server running." -ForegroundColor Yellow
 Write-Host "The login page is public. Share credentials only with authorized users." -ForegroundColor Yellow

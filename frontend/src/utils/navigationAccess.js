@@ -11,16 +11,36 @@ export const authenticatedRoles = [
   "ManagementViewer"
 ];
 
+// Every role except the portal-only ManagementViewer.
+export const internalRoles = authenticatedRoles.filter(role => role !== "ManagementViewer");
+
+// Master-configuration resources (/configuration/:resource) and who may open each one. Mirrors
+// the per-resource roles in pages/MasterConfiguration.jsx; the backend still decides writes.
+export const configurationAccess = Object.freeze({
+  "approval-rules": ["Admin"],
+  "direct-payment-eligibility": ["Admin"],
+  "finance-configurations": ["Admin", "Accounting"],
+  "budget-rules": ["Admin", "Budget"],
+  "budget-allocations": ["Admin", "Budget"],
+  "bank-formats": ["Admin", "Treasury"]
+});
+
+// Roles allowed to download a stored report file (generated/reports) - must match the "reports"
+// entry of generatedAccess in backend/src/services/fileAccessService.js.
+export const reportDownloadRoles = Object.freeze(["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Management"]);
+
+export const configurationRoles = [...new Set(Object.values(configurationAccess).flat())];
+
 export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
   "/management-view": ["Admin", "Management", "ManagementViewer"],
   "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
-  "/my-team": authenticatedRoles,
+  "/my-team": internalRoles,
   "/requests/new": ["Admin", "Solicitor"],
   "/administration": ["Admin"],
   "/treasury/history": ["Admin", "Treasury"],
   "/accounting/invoices": ["Admin", "Accounting"],
-  "/approvals": authenticatedRoles.filter(role => role !== "ManagementViewer"),
+  "/approvals": internalRoles,
   "/batch-invoices": ["Admin", "Solicitor", "Accounting"],
   "/accounting": ["Admin", "Accounting"],
   "/accounting/payables": ["Admin", "Accounting"],
@@ -30,22 +50,25 @@ export const navigationAccess = Object.freeze({
   "/budget": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Budget", "Management"],
   "/accounting/periods": ["Admin", "Accounting"],
   "/accounting/sire": ["Admin", "Accounting"],
-  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"],
+  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
   "/suppliers": ["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"],
   "/cost-centers": ["Admin", "Accounting"],
   "/expense-types": ["Admin", "Accounting"],
   "/exchange-rates": ["Admin", "Accounting"],
-  "/users": ["Admin"]
+  "/users": ["Admin"],
+  "/configuration/*": configurationRoles,
+  ...Object.fromEntries(Object.entries(configurationAccess).map(([resource, roles]) => [`/configuration/${resource}`, roles]))
 });
 
 export function canAccessNavigation(role, path, user) {
   if (path === "/my-team" && user?.hasTeam !== true) return false;
+  if (path?.startsWith("/configuration/") && !navigationAccess[path]) return Boolean(role && navigationAccess["/configuration/*"].includes(role));
   return Boolean(role && navigationAccess[path]?.includes(role));
 }
 
 export function visibleNavigationPaths(role, user) {
   return Object.entries(navigationAccess)
-    .filter(([path]) => canAccessNavigation(role, path, user))
+    .filter(([path]) => !path.endsWith("/*") && canAccessNavigation(role, path, user))
     .map(([path]) => path);
 }
 
@@ -62,9 +85,10 @@ export const roleNavigation = {
   ViceRector: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
   Budget: [["Dashboard", "/"], ["Budget Control", "/budget"], ["Requests", "/requests"]],
   Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],
-  Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["SIRE", "/accounting/sire"]],
-  Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"]],
+  Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["Invoice Observations", "/accounting/invoice-observations"], ["Suppliers", "/suppliers"], ["Accounting Periods", "/accounting/periods"], ["SIRE", "/accounting/sire"]],
+  Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"], ["Bank Formats", "/configuration/bank-formats"]],
   Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
-  ManagementViewer: [["Management Portal", "/management-view"], ["Reports", "/reports"]],
+  // Portal only: no internal Reports, dashboards or request data.
+  ManagementViewer: [["Management Portal", "/management-view"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
 };

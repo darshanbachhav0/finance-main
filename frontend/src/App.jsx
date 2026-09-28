@@ -4,6 +4,7 @@ import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
+import { configurationRoles } from "./utils/navigationAccess.js";
 
 const WorkspaceHub = lazy(() => import("./pages/WorkspaceHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
@@ -54,7 +55,7 @@ export default function App() {
           </Route>
           <Route path="administration" element={<ProtectedRoute roles={["Admin"]} />}><Route index element={<WorkspaceHub administration />} /></Route>
           <Route path="requests" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestsList />} /></Route>
-          <Route path="my-team" element={<ProtectedRoute requiresTeam roles={[...internalRoles, "ManagementViewer"]} />}><Route index element={<MyTeam />} /></Route>
+          <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
@@ -86,7 +87,7 @@ export default function App() {
           <Route path="budget" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Budget", "Management"]} />}>
             <Route index element={<BudgetControl />} />
           </Route>
-          <Route path="reports" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"]} />}>
+          <Route path="reports" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"]} />}>
             <Route index element={<ManagementReports />} />
           </Route>
           <Route path="suppliers" element={<ProtectedRoute roles={["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"]} />}>
@@ -104,7 +105,9 @@ export default function App() {
           <Route path="users" element={<ProtectedRoute roles={["Admin"]} />}>
             <Route index element={<AdminUsers />} />
           </Route>
-          <Route path="configuration/:resource" element={<ProtectedRoute roles={["Admin", "Accounting", "Budget"]} />}>
+          {/* Admin, Accounting, Budget and Treasury (bank-format certification); MasterConfiguration
+              narrows each resource to its own roles. */}
+          <Route path="configuration/:resource" element={<ProtectedRoute roles={configurationRoles} />}>
             <Route index element={<MasterConfiguration />} />
           </Route>
         </Route>

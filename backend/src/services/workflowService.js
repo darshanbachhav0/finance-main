@@ -27,7 +27,8 @@ const observationStates = [
 
 const transitionGraph = Object.freeze({
   BORRADOR: ["PENDIENTE_APROBACION", "ANULADO"],
-  PENDIENTE_APROBACION: ["APROBADO_DIRECTOR", "APROBADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
+  // BORRADOR: the requester withdraws before the first approver decides (canWithdrawRequest).
+  PENDIENTE_APROBACION: ["BORRADOR", "APROBADO_DIRECTOR", "APROBADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO_DIRECTOR: ["APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO_VICERRECTOR: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
   APROBADO: ["COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", ...observationStates, "DEVUELTO", "RECHAZADO", "ANULADO"],
@@ -44,6 +45,7 @@ const transitionGraph = Object.freeze({
 });
 
 const roleTargets = Object.freeze({
+  [REQUEST_STATUS.DRAFT]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.VALIDATION]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.SENT]: [ROLES.ADMIN, ROLES.SOLICITOR],
   [REQUEST_STATUS.PENDING_APPROVAL]: [ROLES.ADMIN, ROLES.SOLICITOR],
@@ -87,7 +89,7 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
   const allowedRoles = roleTargets[targetStatus] || [];
   if (!skipRoleCheck && !allowedRoles.includes(user.role)) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
 
-  if ([REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL].includes(targetStatus)) {
+  if ([REQUEST_STATUS.DRAFT, REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL].includes(targetStatus)) {
     if (user.role !== ROLES.ADMIN && requesterId(request) !== String(user._id)) throw new AppError(403, "Only the requester can submit this request.", undefined, ERROR_CODES.FORBIDDEN);
   }
 
@@ -102,8 +104,12 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
   }
 }
 
+// Milestones derived from posted financial evidence. Each posting behind them guards the period it
+// lands in (invoice date, payment date), so the request's creation month must not block them.
+const FINANCIAL_EVIDENCE_MILESTONES = new Set(["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "PAGO_REBOTADO"]);
+
 async function assertTransitionControls(request, targetStatus, context = {}) {
-  await ensurePeriodOpen(request.accountingPeriod, {
+  if (!FINANCIAL_EVIDENCE_MILESTONES.has(canonicalRequestStatus(targetStatus))) await ensurePeriodOpen(request.accountingPeriod, {
     action: context.periodAction || "UPDATE", user: context.user, req: context.req, module: "WORKFLOW",
     entityType: "FinancialRequest", entityId: request._id, requestId: request._id
   });
@@ -148,7 +154,7 @@ export async function transitionRequest({ request, targetStatus, user, req, acti
   if (!canTransition(from, targetStatus)) throw new AppError(409, `Invalid request status transition from ${from} to ${targetStatus}.`, { from, to: targetStatus, allowed: allowedTransitions(from) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason, skipRoleCheck });
   // Period and financial evidence are mandatory, including internal recovery/batch calls.
-  await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
+  if (!FINANCIAL_EVIDENCE_MILESTONES.has(targetStatus)) await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
   if (targetStatus === "CONTABILIZADO") await assertPostingAllowed(request, { user, req });
   if (["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"].includes(targetStatus)) {
     const progress = await getFinancialProgress(request, { session });

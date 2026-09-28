@@ -7,7 +7,7 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import Reconciliation from "../models/Reconciliation.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SunatVoucher from "../models/SunatVoucher.js";
-import { deriveFinancialProgress, canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { deriveFinancialProgress, canonicalRequestStatus, isTerminalRequest, renditionSettledForClosure } from "../../../shared/workflowStatus.mjs";
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { AppError } from "../utils/AppError.js";
@@ -15,12 +15,15 @@ import { AppError } from "../utils/AppError.js";
 export function assertRequestActive(request) {
   if (isTerminalRequest(request.status)) throw new AppError(409, "This request is terminal and cannot be changed.", { status: request.status }, "INVALID_STATUS_TRANSITION");
 }
+// The request's own creation month never decides where a posting lands: invoices post in their
+// document date's period and payments in the payment date's period. Callers pass the period the
+// posting lands in (createJournal in accountingService guards every journal's own period).
 export async function assertPostingAllowed(request, { user, req, period } = {}) {
   assertRequestActive(request);
-  const stored = await FinancialRequest.findById(request._id).select("status accountingPeriod fiscalData.fiscalPeriod").lean();
+  const stored = await FinancialRequest.findById(request._id).select("status").lean();
   if (stored) assertRequestActive(stored);
-  for (const value of new Set([request.accountingPeriod, request.fiscalData?.fiscalPeriod, stored?.accountingPeriod, stored?.fiscalData?.fiscalPeriod, period].filter(Boolean))) {
-    await guardAccountingPeriod({ period: value, action: "POST", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
+  if (period) {
+    await guardAccountingPeriod({ period, action: "POST", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   }
 }
 export async function getFinancialProgress(request, { session } = {}) {
@@ -52,13 +55,18 @@ export async function getFinancialProgressForRequests(requests) {
     return [key, deriveFinancialProgress(request, ap.get(key), rec.get(key), po.get(key)?.[0], voucher.get(key))];
   }));
 }
+const FINANCIAL_MILESTONES = new Set(["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "PAGO_REBOTADO"]);
+
+// Re-derives the parent status from its child obligations. This is not a posting, so it is not
+// tied to the request's creation-month period; each underlying posting guards its own period.
 export async function syncFinancialProgress({ request, user, req, session, action = "FINANCIAL_PROGRESS_UPDATED" }) {
   assertRequestActive(request);
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "UPDATE", user, req, module: "WORKFLOW", entityId: request._id, requestId: request._id });
   const progress = await getFinancialProgress(request, { session });
   const from = request.status;
-  // A pending invoice is not yet an accounted obligation.
-  const next = progress.status || (progress.counts.total && progress.unaccountedVouchers ? "COMPROMISO_PRESUPUESTAL" : null);
+  // A pending invoice is not yet an accounted obligation, and a request whose every payable was
+  // cancelled returns to its budget commitment so a corrected invoice can be registered.
+  const noActivePayable = !progress.counts.total && FINANCIAL_MILESTONES.has(canonicalRequestStatus(from));
+  const next = progress.status || ((progress.counts.total && progress.unaccountedVouchers) || noActivePayable ? "COMPROMISO_PRESUPUESTAL" : null);
   if (next && from !== next) {
     request.status = next;
     request.workflowVersion = 2;
@@ -75,7 +83,9 @@ export async function assertClosureAllowed(request, { session } = {}) {
   if (canonicalRequestStatus(request.status) !== "CONCILIADO" || progress.status !== "CONCILIADO") {
     throw new AppError(409, "Every active obligation must be paid and reconciled before closure.", progress, "INVALID_STATUS_TRANSITION");
   }
-  if (progress.orderOpen) throw new AppError(409, "The purchase order still has an unconsumed balance.");
+  // A remaining Purchase Order balance no longer blocks closure: closing the request is the
+  // point at which invoicing is complete, and settleProcurementAtClosure (purchaseOrderService)
+  // then cancels the uninvoiced order balance and releases the matching budget commitment.
   const [invoiceObservation, budgetException] = await Promise.all([
     InvoiceObservation.exists({ request: request._id, resolutionStatus: "OPEN" }).session(session || null),
     BudgetException.exists({ request: request._id, status: "PENDING" }).session(session || null)
@@ -83,9 +93,10 @@ export async function assertClosureAllowed(request, { session } = {}) {
   if (invoiceObservation || budgetException) throw new AppError(409, "Resolve pending invoice and budget observations before closure.");
   if (request.approvalRouteSnapshot?.some(step => step.required !== false && step.status !== "APPROVED")) throw new AppError(409, "Required approvals are incomplete.");
   if (request.observation?.code && !request.observation?.resolvedAt) throw new AppError(409, "Resolve the open observation before closure.");
-  if ((request.flowType === "C" || request.requestType === "ENTREGA_RENDIR") &&
-      (request.rendition?.status !== "VALIDATED" || Number(request.rendition?.balanceOutstanding || 0) !== 0)) {
-    throw new AppError(422, "The advance must be fully rendered/returned and the rendition validated.", undefined, "RENDITION_REQUIRED");
+  // Same rule as workflowService's closure control: a validated rendition, or full recovery of a
+  // rejected rendition's advance.
+  if (!renditionSettledForClosure(request)) {
+    throw new AppError(422, "The advance must be fully rendered/returned and the rendition validated, or a rejected rendition's advance fully recovered.", undefined, "RENDITION_REQUIRED");
   }
   if (Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Settle the outstanding rendition balance before closure.", undefined, "RENDITION_REQUIRED");
   return progress;

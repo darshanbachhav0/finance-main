@@ -23,10 +23,11 @@ import Project from "../models/Project.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import User from "../models/User.js";
-import { commitApprovedRequestBudget, decideApproval } from "../services/approvalService.js";
+import { approvalDecisionOptions, commitApprovedRequestBudget, decideApproval } from "../services/approvalService.js";
 import { processAccountsPayable } from "../services/accountingService.js";
 import { recordAudit, workflowEvent } from "../services/auditService.js";
 import { closeFinancialRequest, submitFinancialRequest } from "../services/requestService.js";
+import { defaultQuotationPolicy } from "../services/documentRuleService.js";
 import { reviewRendition, submitRendition } from "../services/renditionService.js";
 import { generatedRoot, uploadRoot } from "../services/storageService.js";
 import {
@@ -678,7 +679,7 @@ async function seedPeriodsAndRates(admin) {
     behavior: "INFORMATION",
     effectiveTo: null,
     active: true,
-    description: "Días calendario permitidos para rendir un anticipo (Track C) antes de bloquear nuevos anticipos al colaborador.",
+    description: "Días hábiles (sin fines de semana ni feriados) permitidos para rendir un anticipo (Track C) desde su pago; una rendición vencida y no presentada bloquea nuevos anticipos.",
     source: "Configuración Finanzas - Rendición de Gastos",
     createdBy: admin._id,
     updatedBy: admin._id
@@ -801,7 +802,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
   });
 
   const documentRules = [
-    ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 3, labelKey: "tres cotizaciones" }]],
+    ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 1, labelKey: "al menos una cotización" }]],
     ["DOC-A1-GOODS-INVOICE", FLOW_TYPE.A1, "INVOICE_REGISTRATION", "*", EXPENSE_NATURE.GOODS, [{ kind: "XML", minCount: 1, labelKey: "XML de factura" }, { kind: "PDF", minCount: 1, labelKey: "PDF de factura" }]],
     ["DOC-A1-GOODS-ACCOUNTING", FLOW_TYPE.A1, "ACCOUNTING", "*", EXPENSE_NATURE.GOODS, [{ kind: "CONFORMITY", minCount: 1, labelKey: "conformidad de bienes" }]],
     ["DOC-A1-SERVICES-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.SERVICES, [{ kind: "CONTRACT", minCount: 1, labelKey: "contrato o acuerdo de servicio" }]],
@@ -824,9 +825,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
       requirements,
       quotationPolicy: {
         enabled: Boolean(quotationRequirement),
-        minimumCount: quotationRequirement?.minCount || 3,
-        allowAuthorizedException: true,
-        exceptionReasonRequired: true
+        minimumCount: 1
       },
       active: true
     });
@@ -1049,6 +1048,16 @@ async function seedRequest({
     draftSavedAt: now
   });
   if (evidence !== "NONE") await addEvidenceProfile(request, evidence, supplier, requester, voucherNumber);
+  const needsQuotation = request.flowType !== FLOW_TYPE.C && defaultQuotationPolicy(request).enabled;
+  if (!competingSuppliers.length && needsQuotation && supplier && !request.attachments.some((attachment) => attachment.kind === "QUOTATION")) {
+    // Single-quotation purchase: at least one quotation is required and more are optional.
+    await addAttachment(request, "QUOTATION", `cotizacion-1-${request.requestNumber}.pdf`, minimalPdf(`Cotización 1 - ${request.requestNumber}`), requester);
+  }
+  if (!competingSuppliers.length && needsQuotation && supplier) {
+    const quotationAttachment = request.attachments.find((attachment) => attachment.kind === "QUOTATION");
+    request.quotations = [{ supplier: supplier._id, amount: total, currency, attachment: quotationAttachment?._id, recommended: true }];
+    request.supplierSelectionReason ||= "Proveedor seleccionado por mejor propuesta técnica y económica (DEMO).";
+  }
   if (competingSuppliers.length) {
     // The 3 QUOTATION-kind attachments were just pushed by addEvidenceProfile (in that order) -
     // build the structured comparison the quotation policy requires, referencing them by id.
@@ -1126,7 +1135,8 @@ async function approveNext(request, users) {
       id: current._id,
       action: "APPROVE",
       comments: `Aprobación electrónica DEMO - ${stage}.`,
-      forward: true,
+      // Walk the demo request up the chain while a jefe above exists, then finalize.
+      forward: (await approvalDecisionOptions(current)).canForward,
       user: actor,
       req: fakeReq
     });

@@ -15,6 +15,7 @@ import {
   Download,
   FileCheck2,
   FileText,
+  Forward,
   History as HistoryIcon,
   Landmark,
   MessageSquareWarning,
@@ -23,6 +24,7 @@ import {
   Send,
   ShoppingCart,
   Trash2,
+  Undo2,
   UploadCloud,
   WalletCards,
   XCircle
@@ -210,16 +212,27 @@ export default function RequestDetail() {
       canIssueOrder: actions.has("ISSUE_ORDER"),
       canRegisterInvoice: actions.has("REGISTER_INVOICE"),
       canClose: actions.has("CLOSE"),
-      canVoid: actions.has("CANCEL")
+      canVoid: actions.has("CANCEL"),
+      canWithdraw: actions.has("WITHDRAW")
     };
   }, [request]);
 
   const approvalSteps = useMemo(() => [...(request?.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0)), [request]);
   const activeApprovalStep = useMemo(() => approvalSteps.find((step) => step.required !== false && step.status === "PENDING") || null, [approvalSteps]);
   const isChainApprovalStep = activeApprovalStep?.source === "MANAGER_CHAIN";
-  // Whether forwarding is possible is decided by the request's own frozen route (was a further
-  // level pre-determined at submission time?), never by the current user's live jefe field.
-  const canForwardChain = isChainApprovalStep && approvalSteps.some((step) => step.required !== false && step.status !== "APPROVED" && step.sequence > activeApprovalStep.sequence);
+  // The server decides whether "Send to my jefe" is possible: only while the current
+  // approver has an active jefe who is not on leave (GET /approvals/:id/options).
+  const [approvalOptions, setApprovalOptions] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setApprovalOptions(null);
+    if (!permissions.canApprove || !isChainApprovalStep) return undefined;
+    api.get(`/approvals/${id}/options`).then((response) => { if (active) setApprovalOptions(response.data.data || null); }).catch(() => { if (active) setApprovalOptions(null); });
+    return () => { active = false; };
+  }, [id, permissions.canApprove, isChainApprovalStep, activeApprovalStep?._id]);
+  const canForwardChain = isChainApprovalStep && Boolean(approvalOptions?.canForward);
+  const forwardToName = approvalOptions?.forwardTo?.name || "";
+  const remainingPolicyStages = approvalOptions?.remainingPolicyStages || [];
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
@@ -261,6 +274,7 @@ export default function RequestDetail() {
       if (type === "order") await api.post(`/requests/${id}/procurement-order`);
       if (type === "close") await api.post(`/requests/${id}/close`, { comments });
       if (type === "void") await api.post(`/requests/${id}/void`, { comments });
+      if (type === "withdraw") await api.post(`/requests/${id}/withdraw`, { comments });
       if (type === "delete") {
         await api.delete(`/requests/${id}`);
         notify("Draft request permanently deleted.");
@@ -268,7 +282,8 @@ export default function RequestDetail() {
         return;
       }
       notify({
-        approve: "Electronic approval recorded.",
+        approve: forward === true ? "Approval recorded and sent to your jefe." : "Electronic approval recorded.",
+        withdraw: "Request withdrawn to draft. Edit it and submit it again when ready.",
         observe: "Request observed.",
         return: "Request returned for correction.",
         reject: "Request rejected.",
@@ -334,18 +349,22 @@ export default function RequestDetail() {
     const details = { label: "Request", value: request.requestNumber };
     const actions = {
       approve: isChainApprovalStep ? (forward ? {
-        title: "Approve and forward this request?",
-        description: `Record your approval and send it to ${activeApprovalStep?.approverSnapshot?.name ? "your manager" : "the next manager"} for a further decision.`,
-        confirmLabel: "Approve and forward",
+        title: "Approve and send to your jefe?",
+        description: "This records your approval and sends the request to your jefe for a further decision.",
+        confirmLabel: "Send to my jefe",
         inputLabel: "Approval comments",
-        details: [details, { label: "Result", value: "This step is marked approved and the request moves to the next manager in the chain." }]
+        details: [details, ...(forwardToName ? [{ label: "Next approver", value: forwardToName }] : []), { label: "Result", value: "This step is marked approved and your jefe decides next: finalize, or send it to their own jefe." }]
       } : {
         title: "Approve this request and finalize?",
-        description: "Record your approval as final. No further manager will review it — the request moves directly into the budget/accounting pipeline.",
+        description: remainingPolicyStages.length
+          ? "This records your approval as final for the manager chain. The configured approval stages that still apply follow next."
+          : "This records your approval as final. No further manager will review it and the budget commitment runs automatically.",
         confirmLabel: "Approve and finalize",
         tone: "success",
         inputLabel: "Approval comments",
-        details: [details, { label: "Result", value: "The approval chain is closed and budget commitment begins." }]
+        details: [details, remainingPolicyStages.length
+          ? { label: "Remaining configured stages:", value: remainingPolicyStages.map((stage) => t(stage)).join(", ") }
+          : { label: "Result", value: "The approval chain is closed and the budget is committed automatically." }]
       }) : {
         title: "Approve this request?",
         description: "Record an authenticated electronic sign-off and advance the configured route.",
@@ -370,6 +389,14 @@ export default function RequestDetail() {
         inputLabel: "Return comments",
         inputRequired: true,
         details: [details, { label: "Result", value: "Status changes to DEVUELTO." }]
+      },
+      withdraw: {
+        title: "Withdraw this request?",
+        description: "Your first approver has not approved it yet. Withdrawing returns it to draft so you can edit it and submit it again; the approval restarts from the first approver.",
+        confirmLabel: "Withdraw request",
+        tone: "danger",
+        inputLabel: "Reason (optional)",
+        details: [details, { label: "Result", value: "Status changes to BORRADOR and the pending approval task is closed." }]
       },
       reject: {
         title: "Reject this request?",
@@ -573,7 +600,7 @@ export default function RequestDetail() {
                 <div><span>{t("PRV status")}</span><StatusBadge status={supplier?.supplierCode ? "COMPLIANT" : "PENDING"} /></div>
               </div>
               <div className="responsibility-map">
-                <div><span>{t("School")}</span><strong>{t("Requirement, CECO, three quotations and conformity")}</strong></div>
+                <div><span>{t("School")}</span><strong>{t("Requirement, CECO, quotations and conformity")}</strong></div>
                 <div><span>{t("System")}</span><strong>{t("Budget, PO ceiling, SUNAT and duplicate controls")}</strong></div>
                 <div><span>{t("Accounting / Treasury")}</span><strong>{t("CXP provision and bank payment processing")}</strong></div>
               </div>
@@ -808,9 +835,15 @@ export default function RequestDetail() {
         </div>
 
         <aside className="request-detail-side" id="request-actions">
-          {(permissions.modifiable || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
+          {(permissions.modifiable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
               <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
+              {permissions.canWithdraw && (
+                <div className="action-item">
+                  <div><strong>{t("Withdraw request")}</strong><span>{t("Possible until your first approver approves it.")}</span></div>
+                  <button type="button" className="secondary-button" disabled={processing} onClick={() => decision("withdraw")}><Undo2 size={16} /><span>{t("Withdraw")}</span></button>
+                </div>
+              )}
               {permissions.modifiable && (
                 <div className="action-item">
                   <div><strong>{t("Submit for approval")}</strong><span>{missingDocuments.length ? t("Required documents are incomplete.") : t("Starts the configured approval route.")}</span></div>
@@ -821,8 +854,8 @@ export default function RequestDetail() {
                 <div className="action-buttons">
                   {permissions.canApprove && isChainApprovalStep && (
                     <>
-                      {!canForwardChain && <button type="button" className="primary-button approve-button" onClick={() => decision("approve", false)}><CheckCircle2 size={16} /><span>{t("Approve and finalize")}</span></button>}
-                      {canForwardChain && <button type="button" className="secondary-button" onClick={() => decision("approve", true)}><CheckCircle2 size={16} /><span>{t("Approve and forward")}</span></button>}
+                      <button type="button" className="primary-button approve-button" onClick={() => decision("approve", false)}><CheckCircle2 size={16} /><span>{t("Approve and finalize")}</span></button>
+                      {canForwardChain && <button type="button" className="secondary-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Send to my jefe")}</span></button>}
                     </>
                   )}
                   {permissions.canApprove && !isChainApprovalStep && <button type="button" className="primary-button" onClick={() => decision("approve")}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>}

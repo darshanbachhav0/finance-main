@@ -212,8 +212,8 @@ export async function runOfficialFormatsFoundationMigration({ db, apply = false,
   const documentRules = await db.collection("documentrules").find({ "requirements.kind": "QUOTATION" }).toArray();
   for (const rule of documentRules) {
     if (rule.quotationPolicy?.enabled === true) continue;
-    const minimumCount = Math.max(3, ...rule.requirements.filter((item) => item.kind === "QUOTATION").map((item) => Number(item.minCount || 1)));
-    const quotationPolicy = { enabled: true, minimumCount, allowAuthorizedException: true, exceptionReasonRequired: true };
+    // Product decision: at least one quotation is required; three quotations are not compulsory.
+    const quotationPolicy = { enabled: true, minimumCount: 1 };
     report.summary.documentRulesChanged += 1;
     report.changes.push({ entity: "DocumentRule", id: String(rule._id), set: { quotationPolicy } });
     if (apply) await db.collection("documentrules").updateOne({ _id: rule._id }, { $set: { quotationPolicy } });

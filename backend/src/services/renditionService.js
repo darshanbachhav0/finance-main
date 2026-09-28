@@ -4,10 +4,11 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import AccountsPayable from "../models/AccountsPayable.js";
 import CostCenter from "../models/CostCenter.js";
 import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBankAccount.js";
-import { createRenditionJournal, createRenditionSettlementJournal } from "./accountingService.js";
+import User from "../models/User.js";
+import { createAccountsPayableFromVoucher, createRenditionJournal, createRenditionSettlementJournal } from "./accountingService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { clientIp, recordAudit, workflowEvent } from "./auditService.js";
-import { executeDeferredBudget, assertRenditionBudgetAvailable } from "./budgetService.js";
+import { executeBudget, executeDeferredBudget, assertRenditionBudgetAvailable, reserveBudget } from "./budgetService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
@@ -15,11 +16,12 @@ import { parseRequestLines, requestPopulate } from "./requestService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { runFinancialOperation } from "./transactionService.js";
+import { transitionRequest } from "./workflowService.js";
 import { evaluateConfiguredMobilityLines, getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { nextRenditionNumber } from "./sequenceService.js";
 import { AppError } from "../utils/AppError.js";
-import { DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+import { APPROVAL_STAGES, DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 import { canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney, toMinorUnits } from "../utils/money.js";
 
@@ -251,6 +253,47 @@ function assertReviewable(request) {
   }
 }
 
+const isTrackCReimbursement = (request) => request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO;
+
+// On rejection only the part of the advance the employee still holds is recovered:
+// the paid advance minus what they already returned with the rendition.
+export function rejectionRecoveryAmounts(request) {
+  if (request.requestType !== REQUEST_TYPE.ENTREGA_RENDIR) return { advanceAmount: 0, returnedAmount: 0, outstandingAmount: 0 };
+  const advanceAmount = roundMoney(request.rendition?.amountAdvanced || 0);
+  const returnedAmount = Math.min(roundMoney(request.rendition?.amountReturned || 0), advanceAmount);
+  return { advanceAmount, returnedAmount, outstandingAmount: Math.max(0, subtractMoney(advanceAmount, returnedAmount)) };
+}
+
+// Track C undocumented reimbursement: once every approval is complete the budget is
+// committed and the employee submits the official declaration (no advance is paid).
+export async function commitUndocumentedReimbursementBudget({ request, user, req }) {
+  if (!isTrackCReimbursement(request)) throw new AppError(422, "Only a Track C undocumented reimbursement can use this budget handoff.", { flowType: request.flowType, requestType: request.requestType }, ERROR_CODES.VALIDATION_ERROR);
+  const result = await runFinancialOperation(async (session) => {
+    const commitment = await reserveBudget(request, user._id, { session });
+    request.budgetCommitment = commitment._id;
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed; budget committed for the undocumented reimbursement.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, session });
+    return request;
+  });
+  await resolveNotification(`request:${request._id}:budget-exception`);
+  await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: "Reimbursement declaration pending", message: `${request.requestNumber} was approved. Submit the undocumented-expense declaration so Accounting can review it.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+  return result;
+}
+
+// After Accounting approves the declaration, the employee payable is provisioned
+// against the expense lines and the budget executed; Treasury pays it to the verified
+// reimbursement account captured in the declaration.
+async function provisionUndocumentedReimbursement({ request, user, req, session }) {
+  const owner = await User.findById(requestOwnerId(request)).select("dni employeeCode").session(session || null);
+  const total = roundMoney(request.totalAmount);
+  const voucher = { ruc: owner?.dni || owner?.employeeCode || request.requestNumber, voucherType: "REEMBOLSO", series: "UMA", number: request.requestNumber, issueDate: new Date(), currency: request.currency, netAmount: total, igvAmount: 0, totalAmount: total };
+  const accountsPayable = await createAccountsPayableFromVoucher({ request, voucher, user, dueDate: new Date(), session });
+  await executeBudget(request, user._id, { session, comments: "Undocumented reimbursement executed when Accounting approved the declaration." });
+  accountsPayable.budgetExecutedAt = new Date();
+  await accountsPayable.save({ session });
+  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "REIMBURSEMENT_PROVISIONED", comments: "Undocumented reimbursement declaration approved and provisioned to the employee payable.", session, skipControls: true });
+  return accountsPayable;
+}
+
 export async function reviewRendition({ requestId, action, comments, user, req }) {
   const request = await FinancialRequest.findById(requestId).select("+attachments.path");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
@@ -273,23 +316,32 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     return request;
   }
   if (normalizedAction === "REJECT") {
-    const isAdvanceTrack = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR;
-    const outstandingAmount = isAdvanceTrack ? roundMoney(request.rendition.amountAdvanced || 0) : 0;
-    request.rendition.status = "REJECTED";
-    request.rendition.financeReview = { result: "REJECTED", reviewer: user._id, reviewedAt: new Date(), comments: reviewComments };
-    request.rendition.comments = reviewComments;
-    request.rendition.recovery = { status: outstandingAmount > 0 ? "PENDING" : "NOT_APPLICABLE", outstandingAmount, settlements: [] };
-    request.observation = {
-      code: "RENDITION_REJECTED",
-      detail: outstandingAmount > 0
-        ? `Rendition rejected. ${outstandingAmount.toFixed(2)} of the advance must be recovered from the beneficiary (reimbursement or payroll deduction) before this request can close.`
-        : "Rendition rejected. No payment has been disbursed for this request yet; it should be voided if the beneficiary cannot correct and resubmit.",
-      observedAt: new Date(),
-      observedBy: user._id
-    };
-    request.approvalHistory.push(workflowEvent({ action: "RENDITION_REJECTED", from: request.status, to: request.status, user, req, comments: reviewComments, request }));
-    await request.save();
-    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_REJECTED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "REJECTED", renditionStatus: "REJECTED", recoveryOutstanding: outstandingAmount } });
+    const { advanceAmount, returnedAmount, outstandingAmount } = rejectionRecoveryAmounts(request);
+    const returnPayable = returnedAmount > 0 ? await AccountsPayable.findOne({ request: request._id }).sort({ createdAt: 1 }) : null;
+    await runFinancialOperation(async (session) => {
+      // Funds the employee already handed back are booked now, so Account 14 only keeps
+      // the balance that still has to be recovered.
+      const returnJournal = returnPayable
+        ? await createRenditionSettlementJournal(request, returnPayable, { amount: returnedAmount, method: "REIMBURSEMENT", reference: "RETURNED-WITH-RENDITION" }, user._id, { session })
+        : null;
+      request.rendition.status = "REJECTED";
+      request.rendition.financeReview = { result: "REJECTED", reviewer: user._id, reviewedAt: new Date(), comments: reviewComments };
+      request.rendition.comments = reviewComments;
+      request.rendition.recovery = { status: outstandingAmount > 0 ? "PENDING" : "NOT_APPLICABLE", advanceAmount, returnedAmount, returnJournal: returnJournal?._id, outstandingAmount, settlements: [] };
+      request.observation = {
+        code: "RENDITION_REJECTED",
+        detail: outstandingAmount > 0
+          ? `Rendition rejected. ${outstandingAmount.toFixed(2)} of the advance must be recovered from the beneficiary (reimbursement or payroll deduction) before this request can close.${returnedAmount > 0 ? ` ${returnedAmount.toFixed(2)} already returned by the beneficiary was deducted.` : ""}`
+          : advanceAmount > 0
+            ? "Rendition rejected. The beneficiary already returned the full advance; nothing remains to recover."
+            : "Rendition rejected. No payment has been disbursed for this request yet; it should be voided if the beneficiary cannot correct and resubmit.",
+        observedAt: new Date(),
+        observedBy: user._id
+      };
+      request.approvalHistory.push(workflowEvent({ action: "RENDITION_REJECTED", from: request.status, to: request.status, user, req, comments: reviewComments, request }));
+      await request.save({ session });
+      await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_REJECTED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "REJECTED", renditionStatus: "REJECTED", advanceAmount, returnedAmount, recoveryOutstanding: outstandingAmount, returnJournal: returnJournal?.entryNumber }, session });
+    });
     await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-rejected:${Date.now()}`, type: "RENDITION_REJECTED", title: "Rendition rejected", message: `${request.requestNumber}: ${reviewComments}`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     if (outstandingAmount > 0) {
       await notifyRoles({ roles: [ROLES.ACCOUNTING, ROLES.TREASURY], eventKey: `request:${request._id}:rendition-recovery`, type: "RENDITION_RECOVERY_REQUIRED", title: "Advance recovery required", message: `${request.requestNumber}: rendition rejected, ${outstandingAmount.toFixed(2)} must be recovered from the beneficiary.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
@@ -317,6 +369,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     ? (request.rendition.lines || []).filter((line) => line.expenseType?.deductible !== false)
     : [];
   const accountsPayable = request.requestType === REQUEST_TYPE.ENTREGA_RENDIR ? await AccountsPayable.findOne({ request: request._id }) : null;
+  const provisionsReimbursement = isTrackCReimbursement(request);
 
   try {
     const result = await runFinancialOperation(async (session) => {
@@ -340,14 +393,18 @@ export async function reviewRendition({ requestId, action, comments, user, req }
         observedAt: new Date(),
         observedBy: user._id
       } : {};
-      request.approvalHistory.push(workflowEvent({ action: "RENDITION_APPROVED", from: request.status, to: request.status, user, req, comments: reviewComments || (journal ? "Rendition validated and eligible actual expense recognized." : "Official reimbursement detail approved for existing Accounting processing."), request }));
+      request.approvalHistory.push(workflowEvent({ action: "RENDITION_APPROVED", from: request.status, to: request.status, user, req, comments: reviewComments || (journal ? "Rendition validated and eligible actual expense recognized." : provisionsReimbursement ? "Undocumented reimbursement declaration approved; the employee payable is provisioned for Treasury." : "Official reimbursement detail approved for existing Accounting processing."), request }));
       await request.save({ session });
-      await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_APPROVED", user, req, module: "RENDITION", newValues: { financeReview: "APPROVED", journal: journal?.entryNumber, amountRendered: request.rendition.amountRendered, reimbursementTotal: request.rendition.reimbursementTotal, nonDeductibleOutstanding }, session });
+      const reimbursementPayable = provisionsReimbursement ? await provisionUndocumentedReimbursement({ request, user, req, session }) : null;
+      await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_APPROVED", user, req, module: "RENDITION", newValues: { financeReview: "APPROVED", journal: journal?.entryNumber, amountRendered: request.rendition.amountRendered, reimbursementTotal: request.rendition.reimbursementTotal, nonDeductibleOutstanding, reimbursementPayable: reimbursementPayable?._id }, session });
 
       await resolveNotification(`request:${request._id}:rendition-review`);
       await request.populate(requestPopulate);
-      return { request, journal };
+      return { request, journal, accountsPayable: reimbursementPayable || undefined };
     });
+    if (provisionsReimbursement) {
+      await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: "Employee reimbursement ready", message: `${request.requestNumber}: undocumented reimbursement approved and ready to pay to the employee's verified account.`, path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
+    }
     if (nonDeductibleOutstanding > 0) {
       await notifyRoles({ roles: [ROLES.ACCOUNTING], eventKey: `request:${request._id}:non-deductible`, type: "RENDITION_NON_DEDUCTIBLE", title: "Non-deductible balance pending", message: `${request.requestNumber} keeps ${nonDeductibleOutstanding.toFixed(2)} in Account 14 pending reimbursement or payroll deduction.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
       await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:non-deductible-owner`, type: "RENDITION_NON_DEDUCTIBLE", title: "Rendition balance pending", message: `${request.requestNumber} has a non-deductible balance of ${nonDeductibleOutstanding.toFixed(2)} pending regularization.`, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
@@ -398,32 +455,54 @@ export async function settleNonDeductibleRendition({ requestId, amount, method, 
   return result;
 }
 
-export async function recoverRejectedRendition({ requestId, amount, method, reference, user, req }) {
+// A repayment is evidenced by the bank operation that credited UMA: its number, the
+// date it was executed and the amount, which may not exceed what is still owed.
+function recoveryEvidence({ request, method, amount, reference, operationNumber, operationDate }) {
+  const settlementMethod = String(method || "").toUpperCase();
+  if (!["REIMBURSEMENT", "PAYROLL_DEDUCTION"].includes(settlementMethod)) throw new AppError(422, "Recovery method must be REIMBURSEMENT or PAYROLL_DEDUCTION.", { method }, ERROR_CODES.VALIDATION_ERROR);
+  const outstanding = roundMoney(request.rendition?.recovery?.outstandingAmount || 0);
+  const settlementAmount = roundMoney(amount);
+  if (!(settlementAmount > 0) || toMinorUnits(settlementAmount) > toMinorUnits(outstanding)) throw new AppError(422, "Recovery amount must be greater than zero and cannot exceed the outstanding recovery balance.", { field: "amount", settlementAmount, outstanding }, ERROR_CODES.VALIDATION_ERROR);
+  const date = operationDate === undefined || operationDate === null || operationDate === "" ? null : validDate(operationDate);
+  if (operationDate && !date) throw new AppError(422, "A valid operation date is required.", { field: "operationDate" }, ERROR_CODES.VALIDATION_ERROR);
+  if (date && date.getTime() > Date.now()) throw new AppError(422, "The operation date cannot be in the future.", { field: "operationDate" }, ERROR_CODES.VALIDATION_ERROR);
+  if (settlementMethod === "PAYROLL_DEDUCTION") {
+    const payrollReference = String(reference || "").trim();
+    if (!payrollReference) throw new AppError(422, "A payroll deduction reference is required.", { field: "reference" }, ERROR_CODES.VALIDATION_ERROR);
+    if ((request.rendition?.recovery?.settlements || []).some((item) => item.method === "PAYROLL_DEDUCTION" && String(item.reference || "").toUpperCase() === payrollReference.toUpperCase())) {
+      throw new AppError(409, "This payroll deduction reference is already recorded for this recovery.", { field: "reference", reference: payrollReference }, ERROR_CODES.CONFLICT);
+    }
+    return { method: settlementMethod, amount: settlementAmount, outstanding, reference: payrollReference, operationDate: date || undefined };
+  }
+  const bankOperation = String(operationNumber || "").trim();
+  const missing = [!bankOperation ? "operationNumber" : null, !date ? "operationDate" : null].filter(Boolean);
+  if (missing.length) throw new AppError(422, "A reimbursement requires the bank operation number, the operation date and the amount.", { fields: missing }, ERROR_CODES.VALIDATION_ERROR);
+  const used = (request.rendition?.recovery?.settlements || []).some((item) => item.operationNumber && item.operationNumber.toUpperCase() === bankOperation.toUpperCase());
+  if (used) throw new AppError(409, "This bank operation number is already recorded for this recovery.", { field: "operationNumber", operationNumber: bankOperation }, ERROR_CODES.CONFLICT);
+  return { method: settlementMethod, amount: settlementAmount, outstanding, reference: String(reference || "").trim() || bankOperation, operationNumber: bankOperation, operationDate: date };
+}
+
+export async function recoverRejectedRendition({ requestId, amount, method, reference, operationNumber, operationDate, user, req }) {
   const request = await FinancialRequest.findById(requestId).select("+attachments.path");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   if (request.rendition?.status !== "REJECTED" || request.rendition?.recovery?.status !== "PENDING") {
     throw new AppError(409, "Only a rejected rendition with a pending recovery balance can record a recovery.", { status: request.status, renditionStatus: request.rendition?.status, recoveryStatus: request.rendition?.recovery?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
-  const settlementMethod = String(method || "").toUpperCase();
-  if (!["REIMBURSEMENT", "PAYROLL_DEDUCTION"].includes(settlementMethod)) throw new AppError(422, "Recovery method must be REIMBURSEMENT or PAYROLL_DEDUCTION.", { method }, ERROR_CODES.VALIDATION_ERROR);
-  const settlementReference = String(reference || "").trim();
-  if (!settlementReference) throw new AppError(422, "A reimbursement receipt or payroll reference is required.", { field: "reference" }, ERROR_CODES.VALIDATION_ERROR);
-  const settlementAmount = roundMoney(amount);
-  const outstanding = roundMoney(request.rendition?.recovery?.outstandingAmount || 0);
-  if (!(settlementAmount > 0) || settlementAmount > outstanding) throw new AppError(422, "Recovery amount must be greater than zero and cannot exceed the outstanding advance.", { settlementAmount, outstanding }, ERROR_CODES.VALIDATION_ERROR);
+  const evidence = recoveryEvidence({ request, method, amount, reference, operationNumber, operationDate });
+  const { method: settlementMethod, amount: settlementAmount, outstanding, reference: settlementReference } = evidence;
   const accountsPayable = await AccountsPayable.findOne({ request: request._id }).sort({ createdAt: 1 });
   if (!accountsPayable) throw new AppError(404, "Advance Accounts Payable record not found.", { requestId }, ERROR_CODES.NOT_FOUND);
 
   const result = await runFinancialOperation(async (session) => {
-    const journal = await createRenditionSettlementJournal(request, accountsPayable, { amount: settlementAmount, method: settlementMethod, reference: settlementReference }, user._id, { session });
-    request.rendition.recovery.outstandingAmount = roundMoney(outstanding - settlementAmount);
-    request.rendition.recovery.settlements.push({ method: settlementMethod, amount: settlementAmount, reference: settlementReference, settledAt: new Date(), settledBy: user._id, journal: journal._id });
+    const journal = await createRenditionSettlementJournal(request, accountsPayable, { amount: settlementAmount, method: settlementMethod, reference: evidence.operationNumber || settlementReference }, user._id, { session });
+    request.rendition.recovery.outstandingAmount = subtractMoney(outstanding, settlementAmount);
+    request.rendition.recovery.settlements.push({ method: settlementMethod, amount: settlementAmount, reference: settlementReference, operationNumber: evidence.operationNumber, operationDate: evidence.operationDate, settledAt: new Date(), settledBy: user._id, journal: journal._id });
     if (request.rendition.recovery.outstandingAmount <= 0) {
       request.rendition.recovery.status = "RECOVERED";
       request.observation = {};
     }
     await request.save({ session });
-    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_RECOVERY_SETTLED", user, req, module: "RENDITION", newValues: { method: settlementMethod, amount: settlementAmount, reference: settlementReference, remaining: request.rendition.recovery.outstandingAmount, journal: journal.entryNumber }, session });
+    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_RECOVERY_SETTLED", user, req, module: "RENDITION", newValues: { method: settlementMethod, amount: settlementAmount, reference: settlementReference, operationNumber: evidence.operationNumber, operationDate: evidence.operationDate, remaining: request.rendition.recovery.outstandingAmount, journal: journal.entryNumber }, session });
     await request.populate(requestPopulate);
     return { request, journal };
   });

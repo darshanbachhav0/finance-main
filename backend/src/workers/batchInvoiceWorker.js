@@ -1,5 +1,6 @@
 import "dotenv/config";
 import mongoose from "mongoose";
+import { isMainModule } from "./isMainModule.js";
 import { connectDB } from "../config/db.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
 import { processMassUploadBatch } from "../services/batchInvoiceService.js";
@@ -48,15 +49,29 @@ async function tick() {
   }
 }
 
+// Starts polling on an already-open Mongoose connection. Used both by the standalone CLI below
+// and in-process by server.js. Multiple instances are safe: processMassUploadBatch claims each
+// QUEUED batch with an atomic QUEUED -> PROCESSING update, so a batch is never processed twice.
+export function startBatchInvoiceWorker() {
+  stopping = false;
+  console.log(`UMA batch invoice worker running every ${pollMs}ms (concurrency ${concurrency})`);
+  tick().catch((error) => console.error(error));
+  const timer = setInterval(() => tick().catch((error) => console.error(error)), pollMs);
+  return {
+    name: "batch-invoice",
+    async stop() {
+      stopping = true;
+      clearInterval(timer);
+      while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  };
+}
+
 async function main() {
   await connectDB();
-  console.log(`UMA batch invoice worker running every ${pollMs}ms (concurrency ${concurrency})`);
-  await tick();
-  const timer = setInterval(() => tick().catch((error) => console.error(error)), pollMs);
+  const worker = startBatchInvoiceWorker();
   const stop = async () => {
-    stopping = true;
-    clearInterval(timer);
-    while (running) await new Promise((resolve) => setTimeout(resolve, 100));
+    await worker.stop();
     await mongoose.disconnect();
     process.exit(0);
   };
@@ -64,7 +79,9 @@ async function main() {
   process.on("SIGTERM", stop);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (isMainModule(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

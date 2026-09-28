@@ -11,7 +11,10 @@ const monthlyBudgetSchema = new mongoose.Schema({
 
 const adjustmentSchema = new mongoose.Schema({
   operationId: { type: String, required: true },
-  action: { type: String, enum: ["CREATED", "TRANSFER", "ALLOCATE_RESERVE", "INCREASE"], required: true },
+  // EXCEPTION_INCREASE: shortfall added automatically when Management approved a
+  // REQUEST_BUDGET_INCREASE exception. CARRY_OVER_OUT / CARRY_OVER_IN: open commitments moved
+  // from one budget year into the next by the year-end carry-over.
+  action: { type: String, enum: ["CREATED", "TRANSFER", "ALLOCATE_RESERVE", "INCREASE", "EXCEPTION_INCREASE", "CARRY_OVER_OUT", "CARRY_OVER_IN"], required: true },
   amount: Number,
   fromMonth: Number,
   toMonth: Number,

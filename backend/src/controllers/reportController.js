@@ -1,4 +1,5 @@
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
+import { OPEN_PAYABLE_STATUSES, REPORTING_EXCLUDED_REQUEST_STATUSES, openPayableAmountPENExpression, openPayableMatch } from "../../../shared/openPayables.mjs";
 import { getFinancialProgressForRequests } from "../services/financialProgressService.js";
 import mongoose from "mongoose";
 import AccountsPayable from "../models/AccountsPayable.js";
@@ -16,7 +17,8 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../s
 import { AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { requestVisibilityFilter } from "../utils/permissions.js";
 
-const excludedStatuses = [REQUEST_STATUS.DRAFT, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED];
+// Drafts, rejected and voided requests never count (shared with the dashboards).
+const excludedStatuses = [...REPORTING_EXCLUDED_REQUEST_STATUSES];
 const pendingAgreedDate = { $and: [
   { $in: ["$paymentTermsSnapshot.source", ["PURCHASE_ORDER", "QUOTATION"]] },
   { $eq: [{ $ifNull: ["$dueDate", null] }, null] }
@@ -108,7 +110,10 @@ export const managementSummary = asyncHandler(async (req, res) => {
     delete previousQuery.dateTo;
   }
   const previousMatch = requestMatch(previousQuery, req.user);
-  const openPayableStatuses = [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID];
+  // Journals carry their own period; every other chosen filter (and visibility) applies through
+  // the linked request.
+  const journalRequestMatch = requestMatch({ ...req.query, period: undefined }, req.user, { includeInactiveWorkflow: true });
+  const openPayables = openPayableMatch();
   const budgetFilters = {
     ...(period ? { period } : {}),
     ...(req.query.costCenter && mongoose.isValidObjectId(req.query.costCenter) ? { costCenter: req.query.costCenter } : {}),
@@ -157,8 +162,8 @@ export const managementSummary = asyncHandler(async (req, res) => {
       { $group: { _id: "$status", original: { $sum: "$penEquivalent" }, outstanding: { $sum: { $multiply: ["$outstandingAmount", "$exchangeRate"] } }, count: { $sum: 1 } } }
     ]),
     AccountsPayable.aggregate([
-      ...payableRequestPipeline(match, { status: { $in: openPayableStatuses } }),
-      { $project: { amount: { $multiply: ["$outstandingAmount", "$exchangeRate"] }, pendingAgreedDate, daysOverdue: { $floor: { $divide: [{ $subtract: [now, { $ifNull: ["$dueDate", "$createdAt"] }] }, 86400000] } } } },
+      ...payableRequestPipeline(match, openPayables),
+      { $project: { amount: openPayableAmountPENExpression, pendingAgreedDate, daysOverdue: { $floor: { $divide: [{ $subtract: [now, { $ifNull: ["$dueDate", "$createdAt"] }] }, 86400000] } } } },
       { $project: { amount: 1, bucket: { $switch: { branches: [
         { case: "$pendingAgreedDate", then: { label: "Date pending", order: 5 } },
         { case: { $lte: ["$daysOverdue", 0] }, then: { label: "Current", order: 0 } },
@@ -171,18 +176,18 @@ export const managementSummary = asyncHandler(async (req, res) => {
     ]),
     AccountsPayable.aggregate([
       ...payableRequestPipeline(match, { status: { $ne: AP_STATUS.CANCELLED } }),
-      { $project: { amount: { $cond: [{ $eq: ["$status", AP_STATUS.PAID] }, "$penEquivalent", { $multiply: ["$outstandingAmount", "$exchangeRate"] }] }, category: { $switch: { branches: [
+      { $project: { amount: { $cond: [{ $eq: ["$status", AP_STATUS.PAID] }, "$penEquivalent", openPayableAmountPENExpression] }, category: { $switch: { branches: [
         { case: { $eq: ["$status", AP_STATUS.PAID] }, then: "Paid" },
         { case: pendingAgreedDate, then: "Pending" },
-        { case: { $and: [{ $lt: ["$dueDate", now] }, { $in: ["$status", openPayableStatuses] }] }, then: "Overdue" }
+        { case: { $and: [{ $lt: ["$dueDate", now] }, { $in: ["$status", [...OPEN_PAYABLE_STATUSES]] }] }, then: "Overdue" }
       ], default: "Pending" } } } },
       { $group: { _id: "$category", total: { $sum: "$amount" }, count: { $sum: 1 } } },
       { $sort: { total: -1 } }
     ]),
     AccountsPayable.aggregate([
-      ...payableRequestPipeline(match, { status: { $in: openPayableStatuses } }),
+      ...payableRequestPipeline(match, openPayables),
       { $match: { $expr: { $not: [pendingAgreedDate] } } },
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$dueDate", "$createdAt"] } } }, total: { $sum: { $multiply: ["$outstandingAmount", "$exchangeRate"] } }, count: { $sum: 1 } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$dueDate", "$createdAt"] } } }, total: { $sum: openPayableAmountPENExpression }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
       { $limit: 14 }
     ]),
@@ -200,7 +205,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
       { $sort: { count: -1 } }
     ]),
     FinancialRequest.aggregate([{ $match: { ...match, status: { $in: [REQUEST_STATUS.OBSERVED, REQUEST_STATUS.RETURNED] } } }, { $group: { _id: "$requesterArea", count: { $sum: 1 }, amount: { $sum: "$totalPENEquivalent" } } }]),
-    JournalEntry.aggregate([{ $match: { ...(period ? { period } : {}), status: "POSTED" } }, { $group: { _id: "$entryType", debit: { $sum: "$totalDebit" }, credit: { $sum: "$totalCredit" }, count: { $sum: 1 } } }]),
+    JournalEntry.aggregate([...linkedRequestPipeline(journalRequestMatch, { ...(period ? { period } : {}), status: "POSTED" }), { $group: { _id: "$entryType", debit: { $sum: "$totalDebit" }, credit: { $sum: "$totalCredit" }, count: { $sum: 1 } } }]),
     PaymentBatch.find(period ? { paymentDate: { $gte: new Date(`${period}-01T00:00:00.000Z`), $lt: new Date(new Date(`${period}-01T00:00:00.000Z`).setUTCMonth(new Date(`${period}-01T00:00:00.000Z`).getUTCMonth() + 1)) } } : {}).select("-filePath").populate("generatedBy", "name role").sort({ generatedAt: -1 }).limit(50),
     BudgetCommitment.find(period ? { period } : {}).populate("request", "requestNumber requestType status project requesterArea").sort({ createdAt: -1 }).limit(100),
     BudgetCommitment.aggregate([...linkedRequestPipeline(match, period ? { period } : {}), { $group: { _id: "$status", total: { $sum: "$totalAmount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }]),
@@ -221,10 +226,10 @@ export const managementSummary = asyncHandler(async (req, res) => {
         costCenters: [{ $unwind: "$lines" }, { $group: { _id: "$lines.costCenter", code: { $first: "$lines.costCenterSnapshot.code" }, name: { $first: "$lines.costCenterSnapshot.name" } } }, { $sort: { code: 1 } }]
       } }
     ]),
-    AccountsPayable.aggregate([...payableRequestPipeline(match, { status: { $in: openPayableStatuses } }), { $count: "count" }]),
+    AccountsPayable.aggregate([...payableRequestPipeline(match, openPayables), { $count: "count" }]),
     budgetOverview(budgetFilters)
   ]);
-  const overduePayables = await AccountsPayable.countDocuments({ status: { $in: openPayableStatuses }, dueDate: { $lt: now } });
+  const overduePayables = (await AccountsPayable.aggregate([...payableRequestPipeline(match, { ...openPayables, dueDate: { $lt: now } }), { $count: "count" }]))[0]?.count || 0;
   const overdueApprovals = await FinancialRequest.countDocuments({ ...match, status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalDueAt: { $lt: now } });
   const exports = await GeneratedFile.find({ kind: "MANAGEMENT_CSV" }).populate("generatedBy", "name role").sort({ createdAt: -1 }).limit(50);
   const [periodRecord, pendingFiscal, pendingRenditions, missingFx, unbalancedJournals, paidAwaitingReconciliation] = await Promise.all([
@@ -232,7 +237,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, status: REQUEST_STATUS.BUDGET_COMMITTED }),
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } }),
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, currency: "USD", $or: [{ exchangeRateDate: null }, { exchangeRate: { $lte: 0 } }] }),
-    JournalEntry.countDocuments({ period: selectedPeriod, status: "POSTED", $expr: { $ne: ["$totalDebit", "$totalCredit"] } }),
+    JournalEntry.aggregate([...linkedRequestPipeline(journalRequestMatch, { period: selectedPeriod, status: "POSTED", $expr: { $ne: ["$totalDebit", "$totalCredit"] } }), { $count: "count" }]).then((rows) => rows[0]?.count || 0),
     FinancialRequest.countDocuments({ ...match, accountingPeriod: selectedPeriod, status: REQUEST_STATUS.PAID })
   ]);
   const currentComparison = comparisonTotals[0][0] || { total: 0, count: 0 };

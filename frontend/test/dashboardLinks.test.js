@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dashboardMetricLink } from "../src/utils/dashboardLinks.js";
 import { authenticatedRoles, canAccessNavigation } from "../src/utils/navigationAccess.js";
 
-const keys = ["requests", "users", "workflow", "supplierWarnings", "blocked", "drafts", "returned", "pending", "rendition", "closed", "amount", "oldest", "overdue", "spend", "capex", "opex", "available", "commitments", "period", "cxp", "debit", "credit", "closure", "queue", "pen", "usd", "missingBank", "files", "assigned", "committed", "executed", "paid"];
+const keys = ["requests", "users", "workflow", "supplierWarnings", "blocked", "drafts", "returned", "pending", "rendition", "closed", "amount", "oldest", "overdue", "spend", "capex", "opex", "available", "commitments", "period", "cxp", "debit", "credit", "closure", "queue", "pen", "usd", "missingBank", "files", "assigned", "committed", "executed", "paid", "awaitingOrder", "openOrders"];
 for (const role of authenticatedRoles) {
   for (const key of keys) {
     const { to } = dashboardMetricLink(role, key);

@@ -27,7 +27,15 @@ const paymentItemSchema = new mongoose.Schema(
     amount: { type: Number, required: true, min: 0 },
     currency: { type: String, enum: CURRENCY, required: true },
     priority: { type: String, enum: ["NORMAL", "PRIORITY"], default: "NORMAL" },
-    status: { type: String, enum: ["INSTRUCTION_CREATED", "CONFIRMED", "REJECTED", "REPROGRAMMED", "CANCELLED"], default: "INSTRUCTION_CREATED" },
+    status: { type: String, enum: ["INSTRUCTION_CREATED", "PARTIALLY_CONFIRMED", "CONFIRMED", "REJECTED", "REPROGRAMMED", "CANCELLED"], default: "INSTRUCTION_CREATED" },
+    confirmedAmount: { type: Number, min: 0, default: 0 },
+    // A partially confirmed item whose unpaid remainder Treasury moved into a later file.
+    remainderMovedTo: { type: mongoose.Schema.Types.ObjectId, ref: "PaymentBatch" },
+    cancellation: {
+      reason: String,
+      cancelledAt: Date,
+      cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
     rejection: {
       reason: String,
       bankReference: String,
@@ -66,6 +74,12 @@ const paymentBatchSchema = new mongoose.Schema(
     },
     priority: { type: String, enum: ["NORMAL", "PRIORITY", "MIXED"], default: "NORMAL", index: true },
     status: { type: String, enum: ["GENERATED", "PARTIALLY_CONFIRMED", "CONFIRMED", "REJECTED", "REPROGRAMMED", "CANCELLED"], default: "GENERATED", index: true },
+    scheduleOverrideReason: { type: String, trim: true, default: "" },
+    cancellation: {
+      reason: String,
+      cancelledAt: Date,
+      cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
     generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     generatedAt: { type: Date, default: Date.now }
   },

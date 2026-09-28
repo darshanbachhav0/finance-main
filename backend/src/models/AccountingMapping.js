@@ -9,7 +9,9 @@ const accountingMappingSchema = new mongoose.Schema(
     // master) - this mapping only resolves the GL accounts for postings ExpenseType doesn't cover.
     purpose: {
       type: String,
-      enum: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE"],
+      // SUPPLIER_CREDIT: receivable from a supplier created by a credit note on an already-paid invoice.
+      // EXCHANGE_GAIN / EXCHANGE_LOSS: exchange difference on USD payments (Accounts 776 / 676).
+      enum: ["ACCOUNTS_PAYABLE", "BANK", "ADVANCE_TRANSIT", "IGV", "RETURN_RECEIVABLE", "SUPPLIER_CREDIT", "EXCHANGE_GAIN", "EXCHANGE_LOSS"],
       required: true
     },
     requestType: { type: String, enum: ["*", ...REQUEST_TYPES], default: "*" },

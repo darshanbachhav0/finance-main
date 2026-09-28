@@ -20,9 +20,10 @@ const documentRuleSchema = new mongoose.Schema(
     requirements: { type: [documentRequirementSchema], default: [] },
     quotationPolicy: {
       enabled: { type: Boolean, default: false },
-      minimumCount: { type: Number, min: 1, default: 3 },
-      allowAuthorizedException: { type: Boolean, default: true },
-      exceptionReasonRequired: { type: Boolean, default: true }
+      // At least one quotation is required wherever quotations apply; the service layer always
+      // enforces exactly this minimum (documentRuleService.QUOTATION_MINIMUM_COUNT), so a legacy
+      // value of 3 stored before that decision is ignored rather than trusted.
+      minimumCount: { type: Number, min: 1, default: 1 }
     },
     active: { type: Boolean, default: true }
   },

@@ -1,7 +1,7 @@
 import BudgetException from "../models/BudgetException.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { assertRequestActive, assertClosureAllowed, getFinancialProgress, getFinancialProgressForRequests } from "./financialProgressService.js";
-import { canonicalRequestStatus, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
+import { canonicalRequestStatus, renditionSettledForClosure, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
@@ -29,7 +29,7 @@ import {
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, notifyApprovalStep, resolveNotification } from "./notificationService.js";
+import { notifyRoles, notifyApprovalStep, resolveApprovalNotifications, resolveNotification } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
@@ -38,6 +38,7 @@ import { transitionRequest, canTransition } from "./workflowService.js";
 import { validateXmlAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
+import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   DOCUMENT_PHASE,
@@ -47,10 +48,11 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canModifyRequest, canUseCostCenter, canViewRequest, requestVisibilityFilter } from "../utils/permissions.js";
+import { canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, requestVisibilityFilter } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
+import { plainClone } from "../utils/plainClone.js";
 
 export const requestPopulate = [
   { path: "supplier" },
@@ -106,11 +108,14 @@ function parseBoolean(value) {
 }
 
 const A1_B_EXPENDITURE_CLASSIFICATIONS = new Set([REQUEST_TYPE.OPEX, REQUEST_TYPE.CAPEX]);
+const TRACK_C_REQUEST_TYPES = new Set([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
 
 export function normalizeRequestTypeForTrack(flowType, requestType) {
   const normalizedFlow = flowType || FLOW_TYPE.A1;
 
-  if (normalizedFlow === FLOW_TYPE.C) return REQUEST_TYPE.ENTREGA_RENDIR;
+  // Track C carries two request types: an advance to render (the default) and an
+  // undocumented reimbursement of money the employee already spent.
+  if (normalizedFlow === FLOW_TYPE.C) return TRACK_C_REQUEST_TYPES.has(requestType) ? requestType : REQUEST_TYPE.ENTREGA_RENDIR;
 
   if ([FLOW_TYPE.A1, FLOW_TYPE.B].includes(normalizedFlow) && !A1_B_EXPENDITURE_CLASSIFICATIONS.has(requestType)) {
     throw new AppError(
@@ -478,9 +483,25 @@ function normalizeTrackFields(request) {
 // eligibility rule for this area/expense-nature/amount - no rule means no exception, so the
 // requester must use Track A1 instead. Enforced at submission (not draft save) so the wizard
 // doesn't block a requester before they've entered the fields the rule is matched against.
+// The cap is checked against the PEN equivalent of the lines as submitted: prepareRequest calls
+// this only after the exchange rate is applied and the totals are recomputed (request.validate),
+// and the amount is derived from the lines here rather than trusting a stored total that may be
+// stale (update+submit) or still the schema default of 0 (create+submit).
+function trackEligibilityAmount(request) {
+  const rate = Number(request.exchangeRate) > 0 ? Number(request.exchangeRate) : 1;
+  const lines = request.lines || [];
+  if (lines.length) {
+    return lines.reduce((sum, line) => {
+      const pen = Number(line.penEquivalent) > 0 ? Number(line.penEquivalent) : multiplyMoney(Number(line.totalAmount || 0), Number(line.exchangeRate) > 0 ? Number(line.exchangeRate) : rate);
+      return Math.round((sum + pen) * 100) / 100;
+    }, 0);
+  }
+  return Number(request.totalPENEquivalent || 0) || multiplyMoney(Number(request.totalAmount || 0), rate);
+}
+
 async function assertTrackEligible(request) {
   if (request.flowType !== FLOW_TYPE.B) return;
-  const amount = Number(request.totalPENEquivalent ?? request.penEquivalent ?? request.totalAmount ?? 0);
+  const amount = trackEligibilityAmount(request);
   const area = request.requesterArea || request.requestingArea || "General";
   const now = request.issueDate ? new Date(request.issueDate) : new Date();
   const rules = await DirectPaymentEligibilityRule.find({
@@ -505,7 +526,6 @@ async function assertTrackEligible(request) {
 
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
-  if (validateSubmission) await assertTrackEligible(request);
   const officialRequest = isOfficialCapexOpexRequest(request);
   assertRequestLines(request.lines);
   await validateAccountingDimensions({
@@ -524,6 +544,8 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   await applyProjectSnapshot(request);
   await applyExchangeRate(request);
   await request.validate();
+  // After the exchange rate and totals exist, so the Track B cap sees the real PEN amount.
+  if (validateSubmission) await assertTrackEligible(request);
 
   const xmlAttachment = [...(request.attachments || [])].reverse().find((attachment) => attachment.kind === "XML");
   if (xmlAttachment) {
@@ -564,14 +586,21 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       throw new AppError(422, "Track A2 is created from an approved Purchase Order through the batch-invoice workspace, not as a new request.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
     }
     if (request.flowType === FLOW_TYPE.C) {
-      const overdue = await FinancialRequest.findOne({
-        _id: { $ne: request._id },
-        requester: request.requester,
-        flowType: FLOW_TYPE.C,
-        "rendition.dueAt": { $lt: new Date() },
-        "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }
-      }).select("requestNumber rendition.dueAt");
-      if (overdue) throw new AppError(409, "A new advance is blocked because the employee has a rendition overdue past its configured deadline.", { overdueRequest: overdue.requestNumber, dueAt: overdue.rendition?.dueAt }, ERROR_CODES.OVERDUE_RENDITION);
+      // Several advances may be open at once. Only a rendition that is past its deadline
+      // and still not submitted blocks a new advance: PENDING (never sent) or OBSERVED
+      // (returned to the employee, so not currently submitted). A rendition submitted on
+      // time and waiting for Accounting (SUBMITTED) never blocks.
+      if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
+        const overdue = await FinancialRequest.findOne({
+          _id: { $ne: request._id },
+          requester: request.requester,
+          flowType: FLOW_TYPE.C,
+          requestType: REQUEST_TYPE.ENTREGA_RENDIR,
+          "rendition.dueAt": { $lt: new Date() },
+          "rendition.status": { $in: ["PENDING", "OBSERVED"] }
+        }).select("requestNumber rendition.dueAt rendition.status");
+        if (overdue) throw new AppError(409, "A new advance is blocked because the employee has an overdue rendition that has not been submitted.", { overdueRequest: overdue.requestNumber, dueAt: overdue.rendition?.dueAt, renditionStatus: overdue.rendition?.status }, ERROR_CODES.OVERDUE_RENDITION);
+      }
     } else if (request.flowType === FLOW_TYPE.A1) {
       if (officialRequest) assertOfficialRequestFields(request);
       assertSupplierEligibleForRequestReview(supplier);
@@ -587,11 +616,43 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   return { supplier, files };
 }
 
+function routeAuditSnapshot(route = []) {
+  return [...route].sort((a, b) => a.sequence - b.sequence).map((step) => ({
+    sequence: step.sequence,
+    approvalLevel: step.approvalLevel,
+    role: step.role,
+    approverUser: step.approverUser?._id || step.approverUser,
+    approverName: step.approverSnapshot?.name,
+    status: step.status,
+    completedAt: step.completedAt,
+    completedBy: step.completedBy?._id || step.completedBy,
+    source: step.source
+  }));
+}
+
 async function submitPreparedRequest(request, { user, req, comments }) {
   assertRequestActive(request);
+  // A resubmission (after OBSERVE, RETURN or a withdrawal) never reuses the old
+  // route: the route is re-resolved for the request's current amount, track and
+  // area and restarts at the first approver. The replaced route is kept in the
+  // audit log so its decisions stay visible.
+  const previousRoute = routeAuditSnapshot(request.approvalRouteSnapshot || []);
   await initializeApprovalRoute(request);
   request.rejectionReason = "";
   await request.save();
+  if (previousRoute.length) {
+    await recordAudit({
+      entityType: "FinancialRequest",
+      entity: request,
+      action: "APPROVAL_ROUTE_RESET",
+      user,
+      req,
+      module: "APPROVALS",
+      comments: "Resubmitted: the approval route was re-resolved and restarts at the first approver.",
+      oldValues: { approvalRoute: previousRoute },
+      newValues: { approvalRoute: routeAuditSnapshot(request.approvalRouteSnapshot), approvalRoutingMode: request.approvalRoutingMode }
+    });
+  }
 
   await transitionRequest({
     request,
@@ -627,14 +688,19 @@ export async function listRequestsPage(queryParams, user) {
     // "My Requests": only what this user raised. Team members' requests live
     // under My Team, even when this user is on their approval route.
     query.$or = [{ requester: user._id }, { solicitor: user._id }];
-  } else if (queryParams.teamScope && user.role !== ROLES.ADMIN) {
+  } else if (queryParams.teamScope) {
+    // My Team: submitted requests from this user's own hierarchy - never the
+    // team's drafts, and for Admin too only its own team, not everything.
     const teamIds = await teamMemberIds(user._id);
-    query.$and = [...(query.$and || []), { $or: teamIds.length ? [{ requester: { $in: teamIds } }, { solicitor: { $in: teamIds } }] : [{ _id: null }] }];
+    query.$and = [...(query.$and || []), { status: { $ne: REQUEST_STATUS.DRAFT } }, { $or: teamIds.length ? [{ requester: { $in: teamIds } }, { solicitor: { $in: teamIds } }] : [{ _id: null }] }];
   } else {
     Object.assign(query, requestVisibilityFilter(user));
   }
   if (queryParams.status === "RENDICION_PENDIENTE") { query.flowType = "C"; query["rendition.status"] = { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }; query.status = { $nin: terminalStatusValues }; }
-  else if (queryParams.status) query.status = { $in: statusAliases(canonicalRequestStatus(queryParams.status)) };
+  // Dashboard drill-down: Track A1 requests with committed budget still waiting for a Purchase Order.
+  else if (queryParams.status === "PENDIENTE_OC") { query.flowType = "A1"; query.status = REQUEST_STATUS.BUDGET_COMMITTED; query.purchaseOrder = null; }
+  // A comma-separated list selects any of several statuses (e.g. DEVUELTO,OBSERVADO).
+  else if (queryParams.status) query.status = { $in: [...new Set(String(queryParams.status).split(",").map((value) => value.trim()).filter(Boolean).flatMap((value) => statusAliases(canonicalRequestStatus(value))))] };
   applyRenditionStatusFilter(query, queryParams.renditionStatus);
   if (queryParams.type || queryParams.requestType) query.requestType = queryParams.type || queryParams.requestType;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
@@ -673,7 +739,9 @@ export async function listRequestsPage(queryParams, user) {
     FinancialRequest.countDocuments(query)
   ]);
   const progress = await getFinancialProgressForRequests(data);
-  const rows = data.map(record => ({ ...record.toObject(), status: canonicalRequestStatus(record.status), financialProgress: progress.get(String(record._id)), allowedActions: allowedRequestActions(record, user) }));
+  // canView tells list screens (My Team especially) whether a row may link to its
+  // detail page: listing a team request does not by itself grant opening it.
+  const rows = data.map(record => ({ ...record.toObject(), status: canonicalRequestStatus(record.status), financialProgress: progress.get(String(record._id)), allowedActions: allowedRequestActions(record, user), canView: canViewRequest(record, user) }));
   return paginatedPayload(rows, total, page, pageSize);
 }
 
@@ -698,10 +766,8 @@ export async function getRequestDetail(id, user) {
   const hasActiveObligations = accountsPayable.some(item => item.status !== "CANCELLED");
   const closureReady = canonicalRequestStatus(request.status) === REQUEST_STATUS.RECONCILED
     && financialProgress?.status === REQUEST_STATUS.RECONCILED
-    && !financialProgress?.orderOpen
-    && (request.flowType !== FLOW_TYPE.C || (request.rendition?.status === "VALIDATED"
-      && !Number(request.rendition?.balanceOutstanding || 0)
-      && !Number(request.rendition?.nonDeductibleOutstanding || 0)));
+    && renditionSettledForClosure(request)
+    && !Number(request.rendition?.nonDeductibleOutstanding || 0);
   return {
     request,
     allowedActions: allowedRequestActions(request, user, {
@@ -741,7 +807,7 @@ export async function getRequestProcurementReadiness(id, user) {
 }
 
 export async function createFinancialRequest({ payload, files, user, req }) {
-  const requestedFlow = payload.flowType || (payload.requestType === REQUEST_TYPE.ENTREGA_RENDIR ? FLOW_TYPE.C : FLOW_TYPE.A1);
+  const requestedFlow = payload.flowType || (TRACK_C_REQUEST_TYPES.has(payload.requestType) ? FLOW_TYPE.C : FLOW_TYPE.A1);
   if (requestedFlow === FLOW_TYPE.A2) {
     throw new AppError(422, "Track A2 starts from an existing approved Purchase Order in the batch-invoice workspace.", { flowType: requestedFlow }, ERROR_CODES.VALIDATION_ERROR);
   }
@@ -865,6 +931,52 @@ export async function submitFinancialRequest({ id, user, req, comments }) {
   return request;
 }
 
+// The requester takes a submitted request back to draft before their first
+// approver decides, to correct and resubmit it. The open steps are closed as
+// SKIPPED (the next submission resolves a fresh route anyway) and the approver's
+// pending task and SLA alerts are resolved.
+export async function withdrawFinancialRequest({ id, user, req, comments }) {
+  const request = await FinancialRequest.findById(id);
+  if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
+  if (!canWithdrawRequest(request, user)) {
+    throw new AppError(409, "Only the requester can withdraw a request, and only while it is pending approval and no approver has approved it yet.", { status: canonicalRequestStatus(request.status) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  const withdrawnAt = new Date();
+  const pendingApprovers = [];
+  for (const step of request.approvalRouteSnapshot || []) {
+    if (["PENDING", "NOT_REACHED"].includes(step.status)) {
+      if (step.status === "PENDING" && step.approverUser) pendingApprovers.push(step.approverUser);
+      step.status = "SKIPPED";
+      step.completedAt = withdrawnAt;
+    }
+  }
+  await transitionRequest({
+    request,
+    targetStatus: REQUEST_STATUS.DRAFT,
+    user,
+    req,
+    action: "WITHDRAWN",
+    comments: String(comments || "").trim() || "Withdrawn by the requester before the first approval.",
+    dueAt: null,
+    skipControls: true,
+    skipRoleCheck: true
+  });
+  await resolveApprovalNotifications(request._id);
+  await recordAudit({
+    entityType: "FinancialRequest",
+    entity: request,
+    action: "REQUEST_WITHDRAWN",
+    user,
+    req,
+    module: "APPROVALS",
+    comments: String(comments || "").trim() || undefined,
+    oldValues: { status: REQUEST_STATUS.PENDING_APPROVAL, pendingApprovers },
+    newValues: { status: REQUEST_STATUS.DRAFT }
+  });
+  await request.populate(requestPopulate);
+  return request;
+}
+
 export async function voidFinancialRequest({ id, user, req, comments }) {
   const reason = String(comments || "").trim();
   if (!reason) throw new AppError(422, "A void reason is required.", { field: "comments" }, ERROR_CODES.VALIDATION_ERROR);
@@ -878,6 +990,7 @@ export async function voidFinancialRequest({ id, user, req, comments }) {
     // Validate the transition before changing any budget balances.
     if (!canTransition(request.status, REQUEST_STATUS.VOIDED)) throw new AppError(409, "This request cannot be cancelled at its current stage.");
     await releaseBudget(request, user._id, reason, { session });
+    await cancelProcurementOnVoid({ request, user, req, reason, session });
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.VOIDED, user, req, action: "VOIDED", comments: reason, session });
   });
   await request.populate(requestPopulate);
@@ -889,7 +1002,10 @@ export async function closeFinancialRequest({ id, user, req, comments }) {
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "CLOSE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await assertClosureAllowed(request);
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.CLOSED, user, req, action: "CLOSED", comments: comments || "All obligations reconciled and financial file closed." });
+  await runFinancialOperation(async session => {
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.CLOSED, user, req, action: "CLOSED", comments: comments || "All obligations reconciled and financial file closed.", session });
+    await settleProcurementAtClosure({ request, user, req, session });
+  });
   await resolveNotification(`request:${request._id}:close`);
   await request.populate(requestPopulate);
   return request;
@@ -988,7 +1104,7 @@ export async function previewFinancialRequestBudget({ payload, user }) {
 }
 
 export function publicRequestPayload(value, user, actionContext) {
-  const object = value?.toObject ? value.toObject() : structuredClone(value);
+  const object = value?.toObject ? value.toObject() : plainClone(value);
   if (object?.status) object.status = canonicalRequestStatus(object.status);
   if (object && user && !object.allowedActions) object.allowedActions = allowedRequestActions(value, user, actionContext);
   for (const attachment of object?.attachments || []) delete attachment.path;

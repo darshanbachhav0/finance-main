@@ -3,8 +3,12 @@ import {
   Ban,
   Boxes,
   Eye,
+  FileDiff,
   RefreshCw
 } from "lucide-react";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import SupplierCreditsPanel from "../components/SupplierCreditsPanel.jsx";
+import { useToast } from "../context/ToastContext.jsx";
 
 import {
   useMemo,
@@ -53,12 +57,51 @@ export default function AccountsPayable() {
 
   const money = (currency, value) => formatCurrency(value, currency || "PEN", language);
 
-  const cancelPayable = async (row) => {
-    const reason = window.prompt(t("Reason for cancelling this unpaid CXP (required):"));
-    if (!reason || !reason.trim()) return;
-    await api.post(`/accounting/accounts-payable/${row._id}/cancel`, { reason: reason.trim() });
-    payableTable.reload();
-  };
+  const { notify } = useToast();
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [noteTarget, setNoteTarget] = useState(null);
+  const [noteFiles, setNoteFiles] = useState({ xml: null, pdf: null });
+  const [processing, setProcessing] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  const cancelPayable = (row) => { setActionError(""); setCancelTarget(row); };
+
+  async function confirmCancel(reason) {
+    setProcessing(true);
+    try {
+      await api.post(`/accounting/accounts-payable/${cancelTarget._id}/cancel`, { reason });
+      notify("CXP cancelled. The reversal was posted, the Purchase Order balance restored and the voucher annulled.");
+      setCancelTarget(null);
+      payableTable.reload();
+      creditTable.reload();
+    } catch (err) {
+      setActionError(err.message);
+      notify(err.message, "error");
+      setCancelTarget(null);
+    } finally { setProcessing(false); }
+  }
+
+  function openNote(row) { setActionError(""); setNoteFiles({ xml: null, pdf: null }); setNoteTarget(row); }
+
+  async function submitNote(event) {
+    event.preventDefault();
+    if (!noteFiles.xml) return;
+    setProcessing(true);
+    setActionError("");
+    const data = new FormData();
+    data.append("xml", noteFiles.xml);
+    if (noteFiles.pdf) data.append("pdf", noteFiles.pdf);
+    if (noteTarget.sunatVoucher?._id) data.append("originalVoucherId", noteTarget.sunatVoucher._id);
+    data.append("requestId", noteTarget.request?._id || noteTarget.request);
+    try {
+      const response = await api.post("/accounting/adjustment-notes", data, { headers: { "Content-Type": "multipart/form-data" } });
+      notify(response.data.observed ? "The note was registered but SUNAT could not validate it. Approve a manual SUNAT exception from Accounting Entries to apply it." : response.data.supplierCredit ? "Credit note applied. The paid part is now a supplier credit." : "Note applied to the original invoice.");
+      setNoteTarget(null);
+      payableTable.reload();
+      creditTable.reload();
+    } catch (err) { setActionError(err.message); notify(err.message, "error"); }
+    finally { setProcessing(false); }
+  }
 
   const [
     selected,
@@ -70,6 +113,8 @@ export default function AccountsPayable() {
     usePaginatedResource(
       "/accounting/accounts-payable"
     );
+
+  const creditTable = usePaginatedResource("/accounting/supplier-credits", { initialPageSize: 10 });
 
   const {
     rows,
@@ -150,7 +195,7 @@ export default function AccountsPayable() {
 
       <Message type="error">
         {
-          payableTable.error
+          actionError || payableTable.error
         }
       </Message>
 
@@ -285,9 +330,15 @@ export default function AccountsPayable() {
                     row
                   )
             },
+            ...(row.sunatVoucher && row.status !== "CANCELLED" ? [{
+              label: "Register credit/debit note",
+              icon: FileDiff,
+              onClick: () => openNote(row)
+            }] : []),
             ...(["OPEN", "SCHEDULED"].includes(row.status) ? [{
               label: "Cancel unpaid CXP",
               icon: Ban,
+              tone: "danger",
               onClick: () => cancelPayable(row)
             }] : [])
           ]}
@@ -441,11 +492,13 @@ export default function AccountsPayable() {
 
                     <span>
                       {
-                        row.sunatVoucher
-                          ?.sunatStatus ||
-                        row.sunatVoucher
-                          ?.validationStatus ||
-                        "-"
+                        row.sunatValidation?.status === "MANUAL_EXCEPTION" || row.sunatVoucher?.validationStatus === "MANUAL_EXCEPTION"
+                          ? t("Manual SUNAT exception")
+                          : row.sunatVoucher
+                            ?.sunatStatus ||
+                          row.sunatVoucher
+                            ?.validationStatus ||
+                          "-"
                       }
                     </span>
                   </div>
@@ -1010,6 +1063,11 @@ export default function AccountsPayable() {
                 </div>
 
                 <div>
+                  <dt>{t("Accounting period")}</dt>
+                  <dd>{selected.accountingPeriod || "-"}</dd>
+                </div>
+
+                <div>
                   <dt>
                     {
                       t(
@@ -1114,6 +1172,42 @@ export default function AccountsPayable() {
                   </div>
                 )
               }
+
+              {(selected.sunatValidation?.status === "MANUAL_EXCEPTION" || selected.sunatVoucher?.manualOverride?.reason) && (
+                <div className="alert-strip warning">
+                  <AlertTriangle size={18} />
+                  <div>
+                    <strong>{t("Manual SUNAT exception")}</strong>
+                    <p>{selected.sunatValidation?.manualException?.reason || selected.sunatVoucher?.manualOverride?.reason}</p>
+                    <p>{t("Approved by Accounting on")} {formatDateTime(selected.sunatValidation?.manualException?.approvedAt || selected.sunatVoucher?.manualOverride?.overriddenAt)}{(selected.sunatValidation?.manualException?.evidenceReference || selected.sunatVoucher?.manualOverride?.evidenceReference) ? ` · ${t("Evidence")}: ${selected.sunatValidation?.manualException?.evidenceReference || selected.sunatVoucher?.manualOverride?.evidenceReference}` : ""}</p>
+                  </div>
+                </div>
+              )}
+
+              {selected.adjustments?.length > 0 && (
+                <div className="detail-section">
+                  <h3>{t("Credit and debit notes")}</h3>
+                  <div className="compact-lines">
+                    {selected.adjustments.map((item) => (
+                      <div key={item._id || `${item.series}-${item.number}`}>
+                        <span>
+                          {t(item.kind === "CREDIT_NOTE" ? "Credit note" : "Debit note")} {item.series}-{item.number} · {money(selected.currency, item.amount)} · {t("Period")} {item.period}
+                          {item.supplierCreditAmount > 0 ? ` · ${t("Supplier credit")}: ${money(selected.currency, item.supplierCreditAmount)}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {selected.invoiceAmount !== undefined && <p>{t("Original invoice amount")}: {money(selected.currency, selected.invoiceAmount)}</p>}
+                </div>
+              )}
+
+              {selected.cancellation?.reason && (
+                <div className="detail-section">
+                  <h3>{t("Cancellation")}</h3>
+                  <p>{selected.cancellation.reason}</p>
+                  <p>{t("Reversal posted in period")} {selected.cancellation.period || "-"}</p>
+                </div>
+              )}
 
               {
                 selected.bouncedPayment && (
@@ -1233,6 +1327,43 @@ export default function AccountsPayable() {
           )
         }
       </Drawer>
+
+      <SupplierCreditsPanel table={creditTable} onChanged={payableTable.reload} />
+
+      <Drawer
+        open={Boolean(noteTarget)}
+        title="Register credit/debit note"
+        description={noteTarget ? `${noteTarget.voucher?.series || ""}-${noteTarget.voucher?.number || ""} · ${noteTarget.request?.requestNumber || ""}` : ""}
+        onClose={() => !processing && setNoteTarget(null)}
+        footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setNoteTarget(null)}>{t("Cancel")}</button><button type="submit" form="adjustment-note-form" className="primary-button" disabled={processing || !noteFiles.xml}><FileDiff size={16} /><span>{t(processing ? "Processing..." : "Register note")}</span></button></>}
+      >
+        {noteTarget && (
+          <form id="adjustment-note-form" className="form-grid" onSubmit={submitNote}>
+            <Message type="error">{actionError}</Message>
+            <p>{t("A credit note reduces this invoice's unpaid balance; if the invoice was already paid, the paid part becomes a supplier credit that can be recovered or applied to a future invoice. A debit note increases this invoice's payable. The note is linked to this invoice and must reference it if its XML has a reference.")}</p>
+            <label className="field"><span>{t("Note XML")} *</span><input type="file" accept=".xml" required onChange={(event) => setNoteFiles({ ...noteFiles, xml: event.target.files?.[0] || null })} /></label>
+            <label className="field"><span>{t("Note PDF")}</span><input type="file" accept=".pdf" onChange={(event) => setNoteFiles({ ...noteFiles, pdf: event.target.files?.[0] || null })} /></label>
+          </form>
+        )}
+      </Drawer>
+
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancel unpaid CXP?"
+        description="The provision is reversed in the current open period, the budget and Purchase Order balance are restored, and the SUNAT voucher is annulled so a corrected invoice can be registered."
+        details={cancelTarget ? [
+          { label: "Voucher", value: `${cancelTarget.voucher?.series || ""}-${cancelTarget.voucher?.number || ""}` },
+          { label: "Amount", value: money(cancelTarget.currency, cancelTarget.originalAmount) }
+        ] : []}
+        confirmLabel="Cancel CXP"
+        cancelLabel="Keep CXP"
+        tone="danger"
+        inputLabel="Cancellation reason"
+        inputRequired
+        loading={processing}
+        onClose={() => !processing && setCancelTarget(null)}
+        onConfirm={confirmCancel}
+      />
     </section>
   );
 }

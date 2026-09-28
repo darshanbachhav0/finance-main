@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { CURRENCY, FLOW_TYPE } from "../utils/constants.js";
+import { canonicalSeries, canonicalVoucherNumber, canonicalVoucherType } from "../utils/voucherIdentity.js";
 
 export const INVOICE_OBSERVATION_STATUSES = Object.freeze([
   "OBSERVED_SUNAT",
@@ -70,9 +71,9 @@ const invoiceObservationSchema = new mongoose.Schema(
 
 invoiceObservationSchema.pre("validate", function normalizeIdentity() {
   this.rucIssuer = String(this.rucIssuer || "").replace(/\D/g, "");
-  this.voucherType = String(this.voucherType || "FACTURA").trim().toUpperCase();
-  this.series = String(this.series || "").trim().toUpperCase();
-  this.number = String(this.number || "").trim().toUpperCase();
+  this.voucherType = canonicalVoucherType(this.voucherType);
+  this.series = canonicalSeries(this.series);
+  this.number = canonicalVoucherNumber(this.number);
   this.seriesNumber = this.series || this.number ? `${this.series}-${this.number}`.replace(/^-|-$/g, "") : "";
 });
 
