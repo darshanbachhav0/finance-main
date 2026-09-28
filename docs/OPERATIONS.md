@@ -86,6 +86,44 @@ it comes from `SEED_DEMO_PASSWORD` if set, otherwise a random password is genera
 printed in the seed's final JSON summary (`password`/`passwordSource` fields). Capture it from that
 output; it is not written anywhere else.
 
+The seed runs offline: it stores its own USD selling rates for every day from the start of the
+previous month through today in SUNAT's authoritative record shape (`sourceLabel` starts with
+"DEMO"; a real rate already stored for a day is never overwritten), so it needs neither
+`SUNAT_EXCHANGE_RATE_ENDPOINT` nor `EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK`. It also installs an
+uncertified BBVA fixed-width configuration with a fictional debit account (notes say DEMO; a
+configuration Treasury set up is left alone) so bank files can be generated outside production.
+Every scenario goes through the real services. Scenarios (`developmentScenarioKey`), all built by
+the seed:
+
+| # | Scenario | Resulting status |
+| --- | --- | --- |
+| 01 | Draft (A1 goods) | `BORRADOR` |
+| 02 | Waiting for the first jefe (area director) | `PENDIENTE_APROBACION` |
+| 03 | Forwarded by the director, waiting for the vice-rector | `PENDIENTE_APROBACION` |
+| 04 | USD CAPEX > PEN 100,000, chain done, waiting for the Rectorate rule stage | `PENDIENTE_APROBACION` |
+| 05 | Approved, budget committed automatically | `COMPROMISO_PRESUPUESTAL` |
+| 06 | Purchase Order issued, invoice provisioned | `CONTABILIZADO` |
+| 07 | Payable scheduled on the next 15th/30th cycle | `PROGRAMADO` |
+| 08 | BBVA TXT to a Scotiabank beneficiary, SPOT detracción pending | `TXT_GENERADO` |
+| 09 | USD CAPEX in a BBVA USD TXT (Interbank beneficiary) | `TXT_GENERADO` |
+| 10 | Paid by BBVA, awaiting reconciliation | `PAGADO` |
+| 11 | Full A1 cycle with PO: paid, reconciled, closed | `CERRADO` |
+| 12 | Track C advance paid, rendition pending (due in working days) | `PAGADO` |
+| 13 | Track C advance rendered, validated, reconciled, closed | `CERRADO` |
+| 14 | Track C undocumented reimbursement, declaration approved and provisioned | `CONTABILIZADO` |
+| 15 | Observed by the area director | `OBSERVADO` |
+| 16 | Rejected | `RECHAZADO` |
+| 17 | Budget exception awaiting Management (extraordinary approval) | `OBSERVADO_PRESUPUESTO` |
+| 18 | Draft dated in the closed previous period | `BORRADOR` |
+| 19 | Track B direct payment, paid and reconciled (ready to close) | `CONCILIADO` |
+| 20 | SPOT maintenance service: net BBVA payment + Banco de la Nación deposit | `PAGADO` |
+| 21 | A1 framework PO invoiced through an A2 ZIP batch (two invoices, balance left) | `CONTABILIZADO` |
+
+Scenarios paid during the seed are scheduled for today with an audited off-cycle reason (a
+payment cannot be confirmed before its date); the others use the default cycle date. Re-running
+the seed reuses scenarios that already exist. `backend/test/seedSmoke.test.js` runs the whole seed
+against a throwaway database and storage directory.
+
 To wipe and recreate (refuses to run outside a database whose name contains `erp_financial`,
 `development`, or `dev`, and refuses to run at all when `NODE_ENV=production`):
 
