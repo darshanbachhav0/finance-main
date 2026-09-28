@@ -155,7 +155,7 @@ export default function RequestCreate() {
   const [quotationFiles, setQuotationFiles] = useState({});
   const [files, setFiles] = useState(Object.fromEntries(documentDefinitions.map((item) => [item.key, []])));
   const [existingAttachments, setExistingAttachments] = useState([]);
-  const [formPolicy, setFormPolicy] = useState({ documentRequirements: [], quotationPolicy: { enabled: false, minimumCount: 3 } });
+  const [formPolicy, setFormPolicy] = useState({ documentRequirements: [], quotationPolicy: { enabled: false, minimumCount: 1 } });
   const [budgetPreview, setBudgetPreview] = useState({ status: "PENDING_VALIDATION", lines: [] });
   const [budgetRefresh, setBudgetRefresh] = useState(0);
   const [budgetLoading, setBudgetLoading] = useState(false);
@@ -331,7 +331,8 @@ export default function RequestCreate() {
         if (policy.quotationPolicy?.enabled) {
           setQuotations((current) => {
             if (current.length) return current;
-            return Array.from({ length: policy.quotationPolicy.minimumCount }, emptyQuotation);
+            // At least one quotation is required; the requester adds or removes more freely.
+            return Array.from({ length: Math.max(1, policy.quotationPolicy.minimumCount || 1) }, emptyQuotation);
           });
         } else {
           setQuotations((current) => current.some(quotationHasData) ? current : []);
@@ -379,7 +380,7 @@ export default function RequestCreate() {
 
   const selectedSupplier = masters.suppliers.find((supplier) => supplier._id === form.supplier);
   const officialRequest = form.flowType === "A1" && officialTypes.has(form.requestType);
-  const quotationPolicy = formPolicy.quotationPolicy || { enabled: false, minimumCount: 3 };
+  const quotationPolicy = formPolicy.quotationPolicy || { enabled: false, minimumCount: 1 };
   const eligibleSuppliers = useMemo(() => masters.suppliers.filter((supplier) => {
     const status = supplierStatus(supplier);
     return !["REJECTED", "INACTIVE"].includes(status) || supplier._id === form.supplier;
@@ -486,7 +487,7 @@ export default function RequestCreate() {
         });
       });
       if (quotationPolicy.enabled && submitting) {
-        if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size < quotationPolicy.minimumCount) next.quotations = `At least ${quotationPolicy.minimumCount} different supplier quotations are required.`;
+        if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size < quotationPolicy.minimumCount) next.quotations = "At least one supplier quotation is required.";
         quotations.forEach((quotation, quoteIndex) => {
           if (!quotation.supplier) next[`quotations.${quoteIndex}.supplier`] = "Select a supplier.";
           if (!(Number(quotation.amount) > 0)) next[`quotations.${quoteIndex}.amount`] = "Quotation amount must be greater than zero.";
@@ -654,7 +655,7 @@ export default function RequestCreate() {
         {step === 1 && <div className="wizard-step">{form.flowType === "C" && <p>{t("The advance is paid to the requester. No supplier is required.")}</p>}
           {form.flowType !== "C" && !quotationPolicy.enabled && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("Supplier")}</h3><p>{t("Select the supplier linked to this request. Pending or observed suppliers may continue through review but must be homologated before budget commitment.")}</p></div></div><div className="form-grid two-column-form"><SearchSelect label="Supplier" value={form.supplier} options={eligibleSuppliers} onChange={(value) => setForm((current) => ({ ...current, supplier: value }))} getOptionLabel={(item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)} - ${t(supplierStatus(item))}`} error={errors.supplier} required searchPlaceholder="Search name or RUC/DNI..." />{selectedSupplier && <div className="supplier-inline-status"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /></div>}</div><Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : "/requests/new")}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link></div>}
 
-          {form.flowType !== "C" && <div className="official-subsection quotation-section"><div className="section-heading"><div><h3>{t("Supplier quotations")}</h3><p>{quotationPolicy.enabled ? t("The configured policy requires {count} different suppliers with evidence.").replace("{count}", quotationPolicy.minimumCount) : t("Quotation comparison is optional for this classification.")}</p></div><button type="button" className="secondary-button" onClick={() => setQuotations((current) => [...current, emptyQuotation()])}><Plus size={16} /><span>{t("Add quotation")}</span></button></div>
+          {form.flowType !== "C" && <div className="official-subsection quotation-section"><div className="section-heading"><div><h3>{t("Supplier quotations")}</h3><p>{quotationPolicy.enabled ? t("At least one supplier quotation with evidence is required. Add or remove further quotations as needed.") : t("Quotation comparison is optional for this classification.")}</p></div><button type="button" className="secondary-button" onClick={() => setQuotations((current) => [...current, emptyQuotation()])}><Plus size={16} /><span>{t("Add quotation")}</span></button></div>
             {errors.quotations && <Message type="error">{errors.quotations}</Message>}
             <MotionList className="quotation-grid">{quotations.map((quotation, index) => {
               const supplier = masters.suppliers.find((item) => item._id === quotation.supplier);
