@@ -2,12 +2,15 @@ import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 import { APPROVAL_STAGES, PERMISSIONS, ROLES } from "../utils/constants.js";
 
+// Sparse unique indexes exclude absent fields, but still index empty strings.
+const optionalIdentifier = (value) => value == null || !String(value).trim() ? undefined : String(value).trim();
+
 const userSchema = new mongoose.Schema(
   {
-    employeeCode: { type: String, trim: true, uppercase: true, unique: true, sparse: true },
+    employeeCode: { type: String, trim: true, uppercase: true, unique: true, sparse: true, set: optionalIdentifier },
     dni: { type: String, trim: true, unique: true, sparse: true },
     name: { type: String, required: true, trim: true },
-    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true, set: optionalIdentifier },
     passwordHash: { type: String, required: true },
     passwordResetRequired: { type: Boolean, default: false },
     tokenVersion: { type: Number, default: 0 },

@@ -33,6 +33,12 @@ export function errorHandler(error, _req, res, _next) {
       ? "The supplier voucher is already registered."
       : "Duplicate value violates a unique constraint.";
     details = error.keyValue;
+    const identifierLabels = { employeeCode: "employee code", dni: "DNI", email: "email address" };
+    const duplicateFields = Object.keys(error.keyPattern || error.keyValue || {});
+    if (duplicateFields.length === 1 && identifierLabels[duplicateFields[0]]) {
+      message = `The ${identifierLabels[duplicateFields[0]]} is already in use. Enter a different value.`;
+      details = { field: duplicateFields[0] };
+    }
   }
 
   if (error.name === "ValidationError") {
