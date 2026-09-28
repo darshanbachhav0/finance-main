@@ -234,6 +234,13 @@ per-line and reversed symmetrically on cancellation/void (`releaseBudget`,
 - **Provisioning** (`accountingService.js`) posts a balanced journal (expense/asset debit, AP
   credit, from `ExpenseType.accountNumber`; AP/bank/advance-transit/IGV/return-receivable accounts
   resolved via `AccountingMapping`) and creates an `AccountsPayable` record per request/invoice.
+- **Accounting mappings** are maintained by Admin and Accounting in *Configuration → Accounting
+  mappings* (`/configuration/accounting-mappings`, backed by `/api/accounting-mappings`, which only
+  those two roles can read or write; every change is audited and records are deactivated, never
+  deleted). A mapping has a purpose (`ACCOUNTS_PAYABLE`, `BANK`, `ADVANCE_TRANSIT`, `IGV`,
+  `RETURN_RECEIVABLE`, `SUPPLIER_CREDIT`, `EXCHANGE_GAIN`, `EXCHANGE_LOSS`), an account and
+  sub-account, and optional request-type / expense-nature / bank / currency scopes (`*` = any).
+  `EXCHANGE_GAIN`/`EXCHANGE_LOSS` must be configured for USD payments to post exchange differences.
 - **Cancelling an unpaid CXP** (`POST /accounting/accounts-payable/:id/cancel`, Admin/Accounting) is
   only possible while it's `OPEN` or `SCHEDULED` (no money has moved) — it posts a `REVERSAL` journal
   entry that exactly offsets the original provision and moves the budget back to committed. A
@@ -333,9 +340,6 @@ SUNAT submission — that remains a distinct, not-yet-built integration.
 - Per-voucher SUNAT API validation without real production credentials (padrón-only baseline).
 - Fixed-asset depreciation/amortization from CAPEX fields (`assetCategory`, `usefulLifeYears`,
   `npv`, `payback` are captured for approval-committee context and reporting only).
-- An admin screen for accounting mappings (they are managed through `/api/accounting-mappings`;
-  `EXCHANGE_GAIN`/`EXCHANGE_LOSS` must be configured there for USD payments to post exchange
-  differences).
 - BBVA/SUNAT production certification itself — those are external approvals this codebase cannot
   grant to itself; `BankFormatConfiguration.certified` and the SUNAT provider mode both stay in
   their honest, uncertified/unconfigured state until the real institution provides them.

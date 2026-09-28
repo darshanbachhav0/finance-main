@@ -366,7 +366,7 @@ Accounting can download existing generated bank files through the file-access ru
 ### What Accounting can do
 
 - Create or maintain supplier records, correct eligible proposals, check taxpayer data, review compliance, homologate, verify bank ownership and account status, set preferred accounts, and remove/deactivate accounts through supported lifecycle actions.
-- Maintain cost centers, expense types, projects, exchange rates, document rules, accounting mappings and Finance settings. Create, close and reopen accounting periods.
+- Maintain cost centers, expense types, projects, exchange rates, document rules, accounting mappings (Configuration → Accounting mappings; only Admin and Accounting can read or change them) and Finance settings. Create, close and reopen accounting periods.
 - Register A1 invoice evidence across requests; upload/retry invoice batches; review and resolve fiscal observations; process accounting entries/payables and export consolidation or SIRE files.
 - Review employee bank profiles; observe, reject, approve or validate submitted renditions; settle eligible non-deductible Account 14 balances.
 - Close or void requests through eligible workflow actions. Voiding requires a reason.

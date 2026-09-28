@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -23,12 +24,15 @@ const TAB_VIEWS = { budget: "Budget", exceptions: "Exceptions", commitments: "Co
 
 export default function BudgetControl() {
   const [searchParams, setSearchParams] = useSearchParams();
-  // Deep links from notifications, tasks and the dashboard: ?record=<exception id> or
-  // ?tab=exceptions (optionally with exceptionStatus=PENDING) open the Exceptions view directly.
+  // Deep links from notifications, tasks and the dashboard: ?record=<exception id>,
+  // ?request=<request id> (that request's exceptions) or ?tab=exceptions (optionally with
+  // exceptionStatus=PENDING) open the Exceptions view directly.
   const recordId = searchParams.get("record") || "";
+  const linkedRequestId = searchParams.get("request") || "";
+  const exceptionLink = recordId ? { record: recordId } : linkedRequestId ? { request: linkedRequestId } : null;
   const tabParam = String(searchParams.get("tab") || "").toLowerCase();
   const exceptionStatus = searchParams.get("exceptionStatus") || "";
-  const [focusView, setFocusView] = useState(() => recordId ? "Exceptions" : TAB_VIEWS[tabParam] || "Budget");
+  const [focusView, setFocusView] = useState(() => exceptionLink ? "Exceptions" : TAB_VIEWS[tabParam] || "Budget");
   const { user } = useAuth();
   const { t, language } = useLanguage();
   const money = (value) => value === null || value === undefined ? "—" : formatCurrency(value, "PEN", language);
@@ -47,15 +51,16 @@ export default function BudgetControl() {
   useDraftResume("budget-plan", () => { if (canDecide) setWorkspace({ planId: null }); });
   useDraftResume("budget-adjustment", id => { if (canDecide) setWorkspace({ planId: id }); });
   const allocationTable = usePaginatedResource("/budget/allocations", { fixedParams: { period } });
-  const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: recordId ? { record: recordId } : { period }, initialFilters: exceptionStatus ? { status: exceptionStatus } : {} });
+  const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: exceptionLink || { period }, initialFilters: exceptionStatus ? { status: exceptionStatus } : {}, deepLink: Boolean(exceptionLink) });
   useEffect(() => {
-    if (recordId) setFocusView("Exceptions");
+    if (exceptionLink) setFocusView("Exceptions");
     else if (TAB_VIEWS[tabParam]) setFocusView(TAB_VIEWS[tabParam]);
-  }, [recordId, tabParam]);
+  }, [recordId, linkedRequestId, tabParam]);
 
   function showAllExceptions() {
     const next = new URLSearchParams(searchParams);
     next.delete("record");
+    next.delete("request");
     next.set("tab", "exceptions");
     setSearchParams(next, { replace: true });
   }
@@ -160,7 +165,7 @@ export default function BudgetControl() {
       { key: "paidAmount", label: "Paid", align: "right", render: (row) => money(row.paidAmount) }, { key: "availableAmount", label: "Available", sortable: false, align: "right", render: (row) => <strong className={row.availableAmount < 0 ? "text-danger" : ""}>{money(row.availableAmount)}</strong> }
     ]} /></div>
 
-    <div hidden={focusView !== "Exceptions"} className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget exceptions")}</h3><p>{t("Insufficient-budget branches require an explicit decision and remain auditable.")}</p></div><span className="section-count">{exceptionTable.pagination.total}</span></div>{recordId && <div className="alert-strip"><div><strong>{t("Showing one budget exception")}</strong><p>{t("Opened from a notification or task.")}</p></div><button type="button" className="secondary-button" onClick={showAllExceptions}>{t("Show all exceptions")}</button></div>}<DataTable rows={exceptionTable.rows} loading={exceptionTable.loading} remote={exceptionTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED", "RESOLVED"] }]} rowActions={exceptionActions} columns={[
+    <div hidden={focusView !== "Exceptions"} className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget exceptions")}</h3><p>{t("Insufficient-budget branches require an explicit decision and remain auditable.")}</p></div><span className="section-count">{exceptionTable.pagination.total}</span></div>{exceptionLink && <DeepLinkNotice title={recordId ? "Showing one budget exception" : "Showing the budget exceptions of the linked request"} missing={!exceptionTable.loading && !exceptionTable.rows.length} missingDescription="No budget exception was found for this link. The request may have been committed or corrected." clearLabel="Show all exceptions" onClear={showAllExceptions} />}<DataTable rows={exceptionTable.rows} loading={exceptionTable.loading} remote={exceptionTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED", "RESOLVED"] }]} rowActions={exceptionActions} columns={[
       { key: "request", label: "Request", sortable: false, getValue: (row) => row.request?.requestNumber, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
       { key: "preparationComments", label: "Budget review", render: row => row.preparationComments || t(row.status === "PENDING" ? "Pending Budget review" : "Not reviewed") },
       { key: "strategy", label: "Strategy" }, { key: "costCenter", label: "Cost center", sortable: false, render: (row) => row.costCenter?.code || "-" }, { key: "expenseType", label: "Expense type", sortable: false, render: (row) => row.expenseType?.accountNumber || "-" },

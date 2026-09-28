@@ -84,6 +84,7 @@ const groups = [
       { label: "Configuration", path: "/configuration/approval-rules", icon: SlidersHorizontal },
       { label: "Budget Rules", path: "/configuration/budget-rules", icon: SlidersHorizontal },
       { label: "Finance Configurations", path: "/configuration/finance-configurations", icon: SlidersHorizontal },
+      { label: "Accounting Mappings", path: "/configuration/accounting-mappings", icon: BookOpenCheck },
       { label: "Bank Formats", path: "/configuration/bank-formats", icon: Landmark }
     ]
   },

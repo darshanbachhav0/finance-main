@@ -1,15 +1,17 @@
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { FileArchive, RefreshCw, UploadCloud, Eye } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/client.js";
 import BatchUploadStatus from "../components/BatchUploadStatus.jsx";
 import DataTable from "../components/DataTable.jsx";
+import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
@@ -25,7 +27,18 @@ export default function BulkInvoiceUpload() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const batchTable = usePaginatedResource("/batch-invoices", { initialPageSize: 10 });
+  // ?batch=<batch id> (batch notifications) opens that batch; ?request=<request id> lists the
+  // request's batches and opens the most recent one.
+  const deepLink = useDeepLink(["batch", "request"]);
+  const batchTable = usePaginatedResource("/batch-invoices", { initialPageSize: 10, fixedParams: deepLink.link, deepLink: deepLink.active });
+  const openedLink = useRef("");
+  useEffect(() => {
+    if (!deepLink.active || openedLink.current === deepLink.linkKey) return;
+    const target = deepLink.link.batch || (!batchTable.loading && batchTable.rows[0]?._id);
+    if (!target) return;
+    openedLink.current = deepLink.linkKey;
+    openBatch({ _id: target });
+  }, [deepLink.linkKey, batchTable.loading, batchTable.rows]);
 
   async function loadOrders() {
     setLoadingOrders(true);
@@ -89,6 +102,7 @@ export default function BulkInvoiceUpload() {
     <section>
       <PageHeader title="A2 · Batch invoice ingestion" description="Select an active Purchase Order and upload a ZIP of XML/PDF pairs, optionally with an XLSX invoice list. Every voucher is validated independently." actions={<button type="button" className="secondary-button" onClick={() => { loadOrders(); batchTable.reload(); }}><RefreshCw size={16} /><span>{t("Refresh")}</span></button>} />
       <Message type="error">{error || batchTable.error}</Message>
+      {deepLink.active && <DeepLinkNotice title={deepLink.link.batch ? "Showing the batch linked from your notification" : "Showing the batches of the linked request"} missing={!batchTable.loading && !batchTable.rows.length} missingDescription="No invoice batch was found for this link." clearLabel="Show all batches" onClear={() => { setActiveBatch(null); deepLink.clear(); }} />}
       <div className="workspace-panel batch-upload-workspace">
         <div className="document-requirement required"><FileArchive size={22} /><div><strong>{t("Independent batch processing")}</strong><p>{t("SUNAT, duplicate identity, and remaining PO ceiling are checked per invoice. Invalid invoices are isolated instead of stopping the entire batch.")}</p></div></div>
         <DraftPanel busy={submitting} draft={draft} onDiscard={() => { setFile(null); setPurchaseOrderId(""); draft.separateCopy(); }}><form className="form-grid two-column-form" onSubmit={upload}>

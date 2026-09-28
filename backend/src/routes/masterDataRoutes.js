@@ -52,7 +52,10 @@ bindCrud(documentRuleRouter, documentRules, [ROLES.ADMIN, ROLES.ACCOUNTING]);
 export const directPaymentEligibilityRuleRouter = Router();
 bindCrud(directPaymentEligibilityRuleRouter, directPaymentEligibilityRules, [ROLES.ADMIN]);
 
+// GL account mappings are Accounting master data: only Admin and Accounting read or maintain them
+// (Configuration > Accounting mappings). Posting services read the model directly, not this API.
 export const accountingMappingRouter = Router();
+accountingMappingRouter.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
 bindCrud(accountingMappingRouter, accountingMappings, [ROLES.ADMIN, ROLES.ACCOUNTING]);
 
 export const bankFormatRouter = Router();

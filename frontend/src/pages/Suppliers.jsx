@@ -204,6 +204,26 @@ export default function Suppliers() {
     []
   );
 
+  // ?record=<supplier id> (bank re-verification notifications and task links) opens that
+  // supplier's record directly.
+  const linkedSupplierId =
+    /^[a-f0-9]{24}$/i.test(searchParams.get("record") || "")
+      ? searchParams.get("record")
+      : "";
+
+  useEffect(
+    () => {
+      if (linkedSupplierId) {
+        loadSupplier(
+          linkedSupplierId
+        );
+      }
+    },
+    [
+      linkedSupplierId
+    ]
+  );
+
   /*
    * After 11 RUC digits have been entered, automatically:
    *

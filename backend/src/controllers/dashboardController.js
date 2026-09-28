@@ -13,6 +13,7 @@ import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBan
 import User from "../models/User.js";
 import { slaStatus } from "../services/approvalRuleService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
+import { countEscalatedApprovals } from "../services/slaMonitoringService.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { budgetOverview } from "../services/budgetReportingService.js";
 import { isEligibleSupplierPaymentAccount, usesEmployeeReimbursementDestination } from "../services/paymentDestinationService.js";
@@ -91,7 +92,7 @@ async function buildTasks(user) {
     const config = slaConfiguration();
     items.push({ key: "approvalDueSoon", label: "Approval due soon", count: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $gte: new Date(), $lte: new Date(Date.now() + config.dueSoonHours * 3600000) } }), path: "/approvals", tone: "amber" });
     const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope({ role: ROLES.ADMIN }) : query;
-    items.push({ key: "approvalEscalated", label: "SLA escalation", count: await FinancialRequest.countDocuments({ ...escalationScope, approvalDueAt: { $lte: new Date(Date.now() - config.escalationHours * 3600000) } }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "red" });
+    items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "red" });
   }
   if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role)) {
     const payable = await AccountsPayable.countDocuments({ status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED] } });

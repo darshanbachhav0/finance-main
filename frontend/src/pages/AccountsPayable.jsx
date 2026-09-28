@@ -11,7 +11,9 @@ import SupplierCreditsPanel from "../components/SupplierCreditsPanel.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 
@@ -21,6 +23,7 @@ import {
 
 import api from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
+import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
 import Drawer from "../components/Drawer.jsx";
@@ -33,6 +36,7 @@ import {
   useLanguage
 } from "../context/LanguageContext.jsx";
 
+import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 
 import {
@@ -109,10 +113,22 @@ export default function AccountsPayable() {
   ] =
     useState(null);
 
+  // ?record=<CXP id> opens that CXP's details; ?request=<request id> lists the request's CXPs.
+  const deepLink = useDeepLink(["record", "request"]);
+
   const payableTable =
     usePaginatedResource(
-      "/accounting/accounts-payable"
+      "/accounting/accounts-payable",
+      { fixedParams: deepLink.link, deepLink: deepLink.active }
     );
+
+  const openedLink = useRef("");
+  useEffect(() => {
+    const row = deepLink.link.record && payableTable.rows.find((item) => String(item._id) === deepLink.link.record);
+    if (!row || openedLink.current === deepLink.link.record) return;
+    openedLink.current = deepLink.link.record;
+    setSelected(row);
+  }, [deepLink.link.record, payableTable.rows]);
 
   const creditTable = usePaginatedResource("/accounting/supplier-credits", { initialPageSize: 10 });
 
@@ -198,6 +214,8 @@ export default function AccountsPayable() {
           actionError || payableTable.error
         }
       </Message>
+
+      {deepLink.active && <DeepLinkNotice title="Showing the CXP linked from your notification" missing={!loading && !rows.length} missingDescription="No CXP was found for this link." clearLabel="Show all CXP" onClear={deepLink.clear} />}
 
       <div className="stats-grid compact-stats">
         <StatCard

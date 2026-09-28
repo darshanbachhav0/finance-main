@@ -4,13 +4,20 @@ import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { activeApprovalStep, nearestAvailableSupervisor } from "./approvalRuleService.js";
 import { allowedRequestActions } from "./requestActionPolicy.js";
-import { classifyApprovalSla, slaConfiguration } from "./slaPolicy.js";
+import { classifyApprovalSla, escalationCandidateCutoff, isApprovalEscalated, slaConfiguration } from "./slaPolicy.js";
 import { recordAudit } from "./auditService.js";
 import { notificationFields, notificationText } from "./notificationService.js";
 
 export const SLA_TYPES = ["SLA_DUE_SOON", "SLA_OVERDUE", "SLA_ESCALATION"];
 const ACTIVE_STATUSES = ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR"];
 const titles = { SLA_DUE_SOON: notificationText("Approval due soon"), SLA_OVERDUE: notificationText("Approval overdue"), SLA_ESCALATION: notificationText("Approval escalated") };
+
+// Requests matching `query` whose approval (approvalDueAt) has escalated under the working-day
+// rule the SLA worker uses. Dashboard and management-portal counters share this.
+export async function countEscalatedApprovals(query = {}, { now = new Date(), config = slaConfiguration() } = {}) {
+  const candidates = await FinancialRequest.find({ $and: [query, { approvalDueAt: { $lte: escalationCandidateCutoff(now, config) } }] }).select("approvalDueAt").lean();
+  return candidates.filter((request) => isApprovalEscalated(request.approvalDueAt, now, config)).length;
+}
 
 export function approvalSlaCycle(request) {
   if (!ACTIVE_STATUSES.includes(request.status) || request.approvalStage === "COMPLETE") return null;

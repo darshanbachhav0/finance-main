@@ -288,7 +288,7 @@ async function provisionA1Voucher({ request, purchaseOrder, voucher, data, sunat
       type: "TREASURY_PAYMENT",
       title: notificationText("CXP ready for payment"),
       message: notificationText("{requestNumber} invoice {invoiceNumber} is ready for Treasury.", { requestNumber: result.request.requestNumber, invoiceNumber: data.invoiceNumber }),
-      path: "/treasury",
+      path: `/treasury?tab=prepare&record=${result.accountsPayable._id}`,
       entityType: "AccountsPayable",
       entityId: result.accountsPayable._id
     });
