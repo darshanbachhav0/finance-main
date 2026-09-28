@@ -13,6 +13,8 @@ import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
+  "Required invoice documents are missing": "Faltan documentos obligatorios de la factura",
+  "Invoice document requirements could not be loaded correctly. Refresh the page; if this continues, contact Admin to review the document rules.": "No se pudieron cargar correctamente los requisitos de la factura. Actualiza la página; si persiste, contacta a Administración para revisar las reglas documentales.",
   "Pending with": "Pendiente de",
   "This completes all request approvals and proceeds to budget control. Budget and accounting checks still apply.": "Esto completa todas las aprobaciones y pasa al control presupuestal. Se mantienen los controles de presupuesto y contabilidad.",
   "Approval complete - Budget control": "Aprobacion completa - Control presupuestal",

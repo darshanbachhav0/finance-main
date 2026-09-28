@@ -320,10 +320,14 @@ export default function RequestDetail() {
 
   async function submitInvoice(event) {
     event.preventDefault(); if (!invoiceDraft.ready || invoiceDraft.status === "conflict") return;
-    event.preventDefault();
+    const form = event.currentTarget;
+    if (invoiceRequirements.some((item) => !item.kind || !invoiceDocumentFields.some((field) => field.kind === item.kind))) {
+      setError(t("Invoice document requirements could not be loaded correctly. Refresh the page; if this continues, contact Admin to review the document rules."));
+      return;
+    }
     const missingInvoiceFiles = invoiceRequirements.filter((requirement) => !invoiceFiles[invoiceDocumentFields.find((field) => field.kind === requirement.kind)?.key]);
     if (missingInvoiceFiles.length) {
-      setError(`Required invoice documents are missing: ${missingInvoiceFiles.map((item) => item.labelKey || item.kind).join(", ")}.`);
+      setError(`${t("Required invoice documents are missing")}: ${missingInvoiceFiles.map((item) => t(invoiceDocumentFields.find((field) => field.kind === item.kind)?.label || item.labelKey || item.kind)).join(", ")}.`);
       return;
     }
     setInvoiceSubmitting(true);
@@ -334,7 +338,7 @@ export default function RequestDetail() {
       await invoiceDraft.complete();
       notify(response.data.observed ? "Invoice isolated for correction; the observation is now traceable." : "Invoice validated, matched to the PO and provisioned in CXP.");
       setInvoiceFiles(Object.fromEntries(invoiceDocumentFields.map((field) => [field.key, null])));
-      event.currentTarget.reset();
+      form.reset();
       await load();
     } catch (err) {
       setError(`${err.message}${err.code ? ` (${err.code})` : ""}`);

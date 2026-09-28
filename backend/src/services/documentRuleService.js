@@ -23,7 +23,7 @@ export const QUOTATION_MINIMUM_COUNT = 1;
 function normalizeRequirement(requirement) {
   return requirement.kind === "QUOTATION"
     ? { kind: requirement.kind, labelKey: "at least one quotation", minCount: QUOTATION_MINIMUM_COUNT }
-    : requirement;
+    : { kind: requirement.kind, minCount: requirement.minCount, labelKey: requirement.labelKey };
 }
 
 function mergeRequirements(requirements) {
@@ -154,7 +154,7 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
 
 export function validateDocumentRequirements(request, requirements, attachments = request.attachments || []) {
   const counts = attachments.reduce((map, attachment) => { map.set(attachment.kind, (map.get(attachment.kind) || 0) + 1); return map; }, new Map());
-  const evaluated = requirements.map((item) => ({ ...item, present: counts.get(item.kind) || 0 }));
+  const evaluated = requirements.map(normalizeRequirement).map((item) => ({ ...item, present: counts.get(item.kind) || 0 }));
   const missing = evaluated.filter((item) => item.present < item.minCount).map((item) => ({ kind: item.kind, required: item.minCount, present: item.present, label: item.labelKey }));
   return { valid: missing.length === 0, requirements: evaluated, missing };
 }

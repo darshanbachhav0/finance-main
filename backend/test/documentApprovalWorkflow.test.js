@@ -20,6 +20,21 @@ function kinds(request, phase) {
 }
 
 test("phase-based document and approval workflow rules", { timeout: 120000 }, async t => {
+  await t.test("hydrated document rules serialize correctly and block missing invoice evidence", () => {
+    const rule = new DocumentRule({ code: "HYDRATED", requirements: [
+      { kind: "XML", minCount: 1, labelKey: "Invoice XML" },
+      { kind: "PDF", minCount: 1, labelKey: "Invoice PDF" },
+      { kind: "CONFORMITY", minCount: 1, labelKey: "Service conformity" }
+    ] });
+    assert.throws(() => assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", [{ kind: "PDF" }]), error => {
+      assert.deepEqual(error.details.missing.map(item => item.kind), ["XML", "CONFORMITY"]);
+      const serialized = JSON.parse(JSON.stringify(error.details.requirements));
+      assert.deepEqual(serialized[0], { kind: "XML", minCount: 1, labelKey: "Invoice XML", present: 0 });
+      assert.equal(JSON.stringify(serialized).includes("$__"), false);
+      return error.code === "MISSING_REQUIRED_DOCUMENT";
+    });
+    assert.equal(assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", [{ kind: "XML" }, { kind: "PDF" }, { kind: "CONFORMITY" }]).valid, true);
+  });
   await t.test("A1 goods requirements are enforced at their correct phases", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS };
     // Product decision: at least one quotation; three quotations are not compulsory.
@@ -71,6 +86,7 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
       await DocumentRule.collection.insertOne({ code: "TEST-LEGACY-SUBMISSION", flowType: "A1", requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES, requirements: [{ kind: "CONTRACT", minCount: 2, labelKey: "legacy submission evidence" }], active: true });
       const requirements = await configuredDocumentRequirements({ flowType: FLOW_TYPE.B, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);
       assert.deepEqual(requirements.map((item) => [item.kind, item.minCount]), [["SUPPORTING", 2]]);
+      assert.throws(() => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.ACCOUNTING, [{ kind: "SUPPORTING" }]), error => error.details.missing[0].required === 2);
       const legacySubmission = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
       assert.deepEqual(legacySubmission.map((item) => [item.kind, item.minCount]), [["CONTRACT", 2]]);
       const legacyAccounting = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);

@@ -1292,6 +1292,10 @@ async function moveToAccounting(request, users, sequence, accountNumber) {
     throw new Error(`${current.requestNumber} did not reach budget commitment; current status ${current.status}.`);
   }
   if (current.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO && !current.rendition?.number) {
+    if (!current.attachments.some(attachment => attachment.kind === "RENDITION")) {
+      await addAttachment(current, "RENDITION", `declaracion-demo-${current.requestNumber}.pdf`, minimalPdf(`DEMO - Declaracion de gastos ${current.requestNumber}`), users.solicitorHealth);
+      await current.save();
+    }
     await submitRendition({
       requestId: current._id,
       payload: {

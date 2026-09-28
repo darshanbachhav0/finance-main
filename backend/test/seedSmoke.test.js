@@ -53,7 +53,8 @@ test("development seed completes and builds every demo scenario", { timeout: 240
       UMA_01_BORRADOR_SALUD: "BORRADOR",
       UMA_02_PENDIENTE_DIRECTOR: "PENDIENTE_APROBACION",
       UMA_03_PENDIENTE_VICERRECTOR: "PENDIENTE_APROBACION",
-      UMA_04_PENDIENTE_RECTORADO: "PENDIENTE_APROBACION",
+      // Legacy scenario key: jefe finalization no longer appends Rectorate approval.
+      UMA_04_PENDIENTE_RECTORADO: "COMPROMISO_PRESUPUESTAL",
       UMA_05_COMPROMISO_PRESUPUESTAL: "COMPROMISO_PRESUPUESTAL",
       UMA_06_CONTABILIZADO: "CONTABILIZADO",
       UMA_07_PROGRAMADO: "PROGRAMADO",
@@ -92,7 +93,8 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     // (recorded SKIPPED); the Purchase Order and the closure must still accept that route.
     const closed = await db.collection("financialrequests").findOne({ developmentScenarioKey: "UMA_11_CERRADO_BCP" });
     assert.ok(closed.purchaseOrder);
-    assert.ok(closed.approvalRouteSnapshot.some((step) => step.status === "SKIPPED" && step.required !== false));
+    assert.ok(closed.approvalRouteSnapshot.some((step) => step.status === "APPROVED"));
+    assert.ok(closed.approvalRouteSnapshot.every((step) => step.required === false || ["APPROVED", "SKIPPED"].includes(step.status)));
   } finally {
     connection ||= await mongoose.createConnection(uri).asPromise();
     await connection.dropDatabase();
