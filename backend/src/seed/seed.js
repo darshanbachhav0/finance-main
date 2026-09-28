@@ -31,6 +31,7 @@ import { recordAudit, workflowEvent } from "../services/auditService.js";
 import { createMassUploadBatch, processMassUploadBatch } from "../services/batchInvoiceService.js";
 import { closeFinancialRequest, submitFinancialRequest } from "../services/requestService.js";
 import { defaultQuotationPolicy } from "../services/documentRuleService.js";
+import { getSunatPadronStatus } from "../services/sunatPadronService.js";
 import { ensureSpotCategories, pendingDetractionAmount } from "../services/detractionService.js";
 import { requiresPurchaseOrder } from "../services/procurementReadinessService.js";
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
@@ -2148,8 +2149,20 @@ async function buildSummary(users) {
 
 // Connects with MONGODB_URI (the developer database by default), seeds, and returns the summary.
 // The caller owns the connection afterwards (the CLI entry point below disconnects).
+// A development machine configured for SUNAT_PROVIDER_MODE=PADRON usually has no downloaded
+// Padrón, and then no demo invoice could be validated. The seed (never run in production)
+// switches its own process to MOCK validation in that case and says so.
+async function useMockSunatWithoutPadron() {
+  if (!["PADRON", "PUBLIC_PADRON", "PUBLIC-PADRON"].includes(String(process.env.SUNAT_PROVIDER_MODE || "").toUpperCase())) return;
+  const status = await getSunatPadronStatus().catch(() => ({ ready: false }));
+  if (status.ready) return;
+  console.warn("[SEED] SUNAT_PROVIDER_MODE=PADRON but no Padrón dataset is downloaded: demo invoices are validated with the MOCK provider for this seed run only.");
+  process.env.SUNAT_PROVIDER_MODE = "MOCK";
+}
+
 export async function seed() {
   if (process.env.NODE_ENV === "production") throw new Error("Development seed is disabled in production.");
+  await useMockSunatWithoutPadron();
   await connectDB();
   await fs.mkdir(generatedRoot, { recursive: true });
   await fs.mkdir(uploadRoot, { recursive: true });
