@@ -10,7 +10,7 @@ import { guardAccountingPeriod } from "./periodService.js";
 import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { executeBudgetAmount } from "./budgetService.js";
-import { notifyRoles } from "./notificationService.js";
+import { notificationText, notifyRoles } from "./notificationService.js";
 import {
   assertPurchaseOrderInvoiceFits,
   consumePurchaseOrderBalance,
@@ -286,8 +286,8 @@ async function provisionA1Voucher({ request, purchaseOrder, voucher, data, sunat
       roles: [ROLES.TREASURY],
       eventKey: `request:${result.request._id}:treasury:${result.accountsPayable._id}`,
       type: "TREASURY_PAYMENT",
-      title: "CXP ready for payment",
-      message: `${result.request.requestNumber} invoice ${data.invoiceNumber} is ready for Treasury.`,
+      title: notificationText("CXP ready for payment"),
+      message: notificationText("{requestNumber} invoice {invoiceNumber} is ready for Treasury.", { requestNumber: result.request.requestNumber, invoiceNumber: data.invoiceNumber }),
       path: "/treasury",
       entityType: "AccountsPayable",
       entityId: result.accountsPayable._id

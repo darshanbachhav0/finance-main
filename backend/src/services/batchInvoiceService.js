@@ -13,7 +13,7 @@ import { createAccountsPayableFromVoucher } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { configuredDocumentRequirements, validateDocumentRequirements } from "./documentRuleService.js";
 import { executeBudgetAmount } from "./budgetService.js";
-import { notifyRoles } from "./notificationService.js";
+import { notificationText, notifyRoles } from "./notificationService.js";
 import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance, restorePurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
 import { escapedRegex, paginatedPayload, parsePagination } from "./queryService.js";
 import { nextMassUploadBatchNumber } from "./sequenceService.js";
@@ -847,8 +847,8 @@ export async function processMassUploadBatch(batchId) {
       roles: [ROLES.ACCOUNTING],
       eventKey: `batch:${batch._id}:complete:${batch.updatedAt?.getTime?.() || Date.now()}`,
       type: "BATCH_COMPLETE",
-      title: "Batch invoice processing complete",
-      message: `${batch.batchCode}: ${batch.processedSuccess} provisioned, ${batch.observed + batch.failed} observed/failed.`,
+      title: notificationText("Batch invoice processing complete"),
+      message: notificationText("{batchCode}: {provisioned} provisioned, {observedOrFailed} observed/failed.", { batchCode: batch.batchCode, provisioned: batch.processedSuccess, observedOrFailed: batch.observed + batch.failed }),
       path: "/accounting/invoice-observations",
       entityType: "MassUploadBatch",
       entityId: batch._id

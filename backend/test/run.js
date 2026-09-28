@@ -20,6 +20,7 @@ import "./directPaymentWorkflow.test.js";
 import "./renditionDeadline.test.js";
 import "./trackCRenditions.test.js";
 import "./notificationBell.test.js";
+import "./notificationText.test.js";
 import "./budgetSimulator.test.js";
 
 import "./workDrafts.test.js";

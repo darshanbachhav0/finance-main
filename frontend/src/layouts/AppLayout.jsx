@@ -30,6 +30,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import useNotificationBell from "../hooks/useNotificationBell.js";
+import { notificationMessage, notificationTitle } from "../utils/notificationText.js";
 import CommandPalette from "../components/CommandPalette.jsx";
 import UmaBrand from "../components/UmaBrand.jsx";
 import ThemeControl from "../components/ThemeControl.jsx";
@@ -299,7 +300,7 @@ export default function AppLayout() {
                     {notifications.data.map((item) => (
                       <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
                         <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "red" : item.type === "SLA_DUE_SOON" ? "amber" : item.readAt ? "neutral" : "teal"}`} />
-                        <span><strong>{t(item.title)}</strong><small>{t(item.message)}</small></span>
+                        <span><strong>{notificationTitle(t, item)}</strong><small>{notificationMessage(t, item)}</small></span>
                       </Link>
                     ))}
                     {!notifications.data.length && !notificationError && <p className="popover-empty">{t("No notifications yet.")}</p>}

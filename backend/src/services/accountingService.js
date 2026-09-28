@@ -22,7 +22,7 @@ import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
@@ -1015,8 +1015,8 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     roles: ["Treasury"],
     eventKey: `request:${request._id}:treasury`,
     type: "TREASURY_PAYABLE",
-    title: "Payable item ready",
-    message: `${request.requestNumber} has an open CXP ready for Treasury scheduling.`,
+    title: notificationText("Payable item ready"),
+    message: notificationText("{requestNumber} has an open CXP ready for Treasury scheduling.", { requestNumber: request.requestNumber }),
     path: "/treasury",
     entityType: "FinancialRequest",
     entityId: request._id
