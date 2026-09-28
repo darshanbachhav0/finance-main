@@ -95,8 +95,21 @@ the actual child records before allowing it).
 
 - **A1 — standard procurement** (default track). Full path: submission → approval → budget
   commitment → Procurement issues a Purchase Order → invoice registered against the order (with
-  SUNAT/XML validation) → accounting → treasury → payment → reconciliation → close. Requires 3
-  quotations for goods/services above the configured threshold (`DocumentRule`).
+  SUNAT/XML validation) → accounting → treasury → payment → reconciliation → close. Wherever quotations apply (`DocumentRule`), **at
+  least one** supplier quotation with evidence is required; there is no minimum amount and three
+  quotations are not compulsory — the requester adds or removes quotations freely. The former
+  single-source quotation exception was retired with the three-quotation rule, and legacy rules
+  that still store "3" are normalized to 1 (`documentRuleService.QUOTATION_MINIMUM_COUNT`).
+  A1 requests whose expense nature is never bought through an order (`TRAVEL`, `RESEARCH`,
+  `PETTY_CASH`, `REIMBURSEMENT_LIQUIDATION`) report procurement readiness as *not applicable*
+  (`procurementReadinessService.requiresPurchaseOrder`) and go from budget commitment straight to
+  Accounting's invoice (XML/SUNAT) processing and provisioning without a Purchase Order.
+  **Purchase Order closure:** invoicing is complete when the request is **closed** (`CERRADO`,
+  every obligation paid and reconciled). At that moment the order's uninvoiced remainder is
+  cancelled (order status `CLOSED`, `cancelledAmount`) and the never-executed part of the budget
+  commitment is released back to its Cost Center / plan, both audited. A remaining order balance
+  therefore no longer blocks closure. Voiding a request cancels its order (`CANCELLED`) and releases
+  its commitment.
 - **A2 — batch invoicing against an existing order.** Not created as a new request; it is produced
   by uploading a ZIP/XLSX invoice batch against an already-approved A1 Purchase Order
   (`/batch-invoices`), processed asynchronously by `backend/src/workers/batchInvoiceWorker.js`.
@@ -185,12 +198,31 @@ enforced funds) and `exceptionStrategy` when a request would exceed availability
   `BudgetException` is created. There is no retry path; the requester must resubmit within budget or
   ask Finance to configure a different strategy for that dimension.
 - **`REQUEST_BUDGET_INCREASE`** — creates a `BudgetException`, request goes to `OBSERVADO_PRESUPUESTO`
-  until resolved.
+  until resolved. When Management approves it, the shortfall is **added to the budget automatically**
+  (annual plan and the request's month, a legacy allocation, or the Cost Center's annual budget —
+  audited as an `EXCEPTION_INCREASE` adjustment), so the retried commitment proceeds.
 - **`EXTRAORDINARY_APPROVAL`** — creates a `BudgetException` that only **Management** may
   approve/reject (never Admin, never any other configurable role — `BudgetRule.exceptionApproverRole`
   can only ever be `"Management"` at the schema level). Budget prepares/reviews; Management decides.
   An optional `exceptionEscalationAmount` can require a second look above a threshold, but the
   authority is still Management either way — there is no higher role to escalate to.
+
+**Exception workflow:** Budget (or Admin) reviews first (`REVIEWED`); Management can approve or reject
+only a reviewed exception, and is notified — and counted on its dashboard — once the review is saved.
+A resubmitted request whose previous exception was `REJECTED`, or `APPROVED` but now exceeded, gets a
+**new** exception that `supersedes` the stale one (only one `PENDING` exception per request dimension
+is allowed). A `PENDING` exception that became moot — the commitment later succeeded, or the budget
+was released — is auto-resolved (`RESOLVED`) so it neither blocks closure nor inflates counters.
+
+**TRANSITIONAL never blocks:** a larger invoice (e.g. USD at a higher rate) grows the informational
+commitment instead of attempting an enforced top-up, and TRANSITIONAL usage is reported in the budget
+overview's committed/executed/paid totals (`totals.transitional`) without reducing availability.
+
+**Year-end carry-over** (`POST /budget/year-end/carry-over`, Budget/Admin, confirmation dialog in
+Budget Control): every commitment of the fiscal year that is still open (committed, not yet executed
+by an invoice) moves with its funds into January of the next year's plan/allocation for the same
+dimension (created if missing). Executed/paid history stays in the closing year. It is audited and
+idempotent — running it again changes nothing.
 
 An annual/monthly `BudgetAllocation` ("budget plan") always forces `ACTIVE` mode for its dimension
 regardless of the cost center's own default. Committed → executed → paid amounts are tracked
@@ -218,7 +250,9 @@ per-line and reversed symmetrically on cancellation/void (`releaseBudget`,
   a signed replacement CCI letter — the next scheduling attempt re-resolves and re-verifies the
   destination account from scratch (there is no way to reuse an unverified snapshot).
 - **Reconciliation & close**: a bank-statement reconciliation record per paid CXP; a request closes
-  once every CXP is reconciled (or, for Track C, once its rendition is resolved).
+  once every CXP is reconciled (or, for Track C, once its rendition is `VALIDATED`, or `REJECTED` with
+  the advance fully `RECOVERED`). A remaining Purchase Order balance does not block closure — it is
+  released at closure (see §3.2).
 
 ## 6. Banks — source vs. beneficiary
 

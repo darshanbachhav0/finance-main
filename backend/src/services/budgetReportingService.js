@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import BudgetException from "../models/BudgetException.js";
@@ -56,16 +57,50 @@ export async function budgetAllocationRows(filters = {}) {
   if (!documents.length) {
     const centerQuery = { active: true };
     if (filters.costCenter) centerQuery._id = filters.costCenter;
-    for (const center of await CostCenter.find(centerQuery).lean()) rows.push({ _id: center._id, period: "", costCenter: center, assignedAmount: center.annualBudget, committedAmount: center.committedAmount, executedAmount: center.executedAmount, paidAmount: center.paidAmount, availableAmount: subtractMoney(subtractMoney(center.annualBudget, center.committedAmount), center.executedAmount), source: "TRANSITIONAL_COST_CENTER", reportingScope: "UNDATED_LEGACY" });
+    const informational = new Map((await transitionalUsageGroups({ costCenter: filters.costCenter }, "$lines.costCenter")).map((usage) => [String(usage.key), usage]));
+    for (const center of await CostCenter.find(centerQuery).lean()) {
+      // Pooled (enforced) counters plus TRANSITIONAL informational usage, which never reduces availability.
+      const usage = informational.get(String(center._id)) || { committed: 0, executed: 0, paid: 0 };
+      rows.push({ _id: center._id, period: "", costCenter: center, assignedAmount: center.annualBudget,
+        committedAmount: addMoney(center.committedAmount || 0, usage.committed), executedAmount: addMoney(center.executedAmount || 0, usage.executed), paidAmount: addMoney(center.paidAmount || 0, usage.paid),
+        transitionalCommittedAmount: usage.committed, transitionalExecutedAmount: usage.executed, transitionalPaidAmount: usage.paid,
+        availableAmount: subtractMoney(subtractMoney(center.annualBudget, center.committedAmount), center.executedAmount), source: "TRANSITIONAL_COST_CENTER", reportingScope: "UNDATED_LEGACY" });
+    }
   }
   return rows.filter((row) => (!filters.source || row.source === filters.source) && (!filters.search || `${row.costCenter?.code} ${row.costCenter?.name} ${row.expenseType?.name} ${row.expenseType?.accountNumber} ${row.project} ${row.period}`.toLowerCase().includes(String(filters.search).toLowerCase())));
 }
 
+// TRANSITIONAL (Phase 1) lines never touch pooled Cost Center / allocation balances, so the
+// ledger rows alone would show 0 committed for them. Their usage is tracked on the commitment
+// lines instead and reported here as informational committed/executed/paid amounts.
+async function transitionalUsageGroups(filters = {}, groupBy = null) {
+  const period = budgetPeriodFilter(filters.period);
+  const match = { status: { $nin: ["RELEASED", "DEFERRED"] }, ...(period ? { period } : {}) };
+  const lineMatch = { "lines.mode": "TRANSITIONAL", ...(filters.costCenter && mongoose.isValidObjectId(filters.costCenter) ? { "lines.costCenter": new mongoose.Types.ObjectId(String(filters.costCenter)) } : {}) };
+  const groups = await BudgetCommitment.aggregate([
+    { $match: match }, { $unwind: "$lines" }, { $match: lineMatch },
+    { $group: { _id: groupBy, amount: { $sum: "$lines.amount" }, executed: { $sum: { $ifNull: ["$lines.executedAmount", 0] } }, paid: { $sum: { $ifNull: ["$lines.paidAmount", 0] } } } }
+  ]);
+  return groups.map((usage) => {
+    const executed = addMoney(0, usage.executed || 0);
+    return { key: usage._id, committed: Math.max(0, subtractMoney(usage.amount || 0, executed)), executed, paid: addMoney(0, usage.paid || 0) };
+  });
+}
+
+export async function transitionalBudgetUsage(filters = {}) {
+  const [usage] = await transitionalUsageGroups(filters);
+  return { committed: usage?.committed || 0, executed: usage?.executed || 0, paid: usage?.paid || 0 };
+}
+
 export async function budgetOverview(filters = {}) {
   const rows = await budgetAllocationRows(filters);
-  const totals = rows.filter((row) => !["UNDATED_LEGACY", "ANNUAL_FALLBACK"].includes(row.reportingScope)).reduce((result, row) => ({
+  const ledgerTotals = rows.filter((row) => !["UNDATED_LEGACY", "ANNUAL_FALLBACK"].includes(row.reportingScope)).reduce((result, row) => ({
     assigned: addMoney(result.assigned, row.assignedAmount || 0), committed: addMoney(result.committed, row.committedAmount || 0), executed: addMoney(result.executed, row.executedAmount || 0), paid: addMoney(result.paid, row.paidAmount || 0), available: addMoney(result.available, row.availableAmount || 0)
   }), { assigned: 0, committed: 0, executed: 0, paid: 0, available: 0 });
+  const transitional = await transitionalBudgetUsage(filters);
+  // Informational usage is added to the committed/executed/paid totals but never reduces the
+  // enforced available balance.
+  const totals = { ...ledgerTotals, committed: addMoney(ledgerTotals.committed, transitional.committed), executed: addMoney(ledgerTotals.executed, transitional.executed), paid: addMoney(ledgerTotals.paid, transitional.paid), transitional };
   const warnings = rows.filter((row) => row.availableAmount !== null && (row.availableAmount < 0 || (row.assignedAmount > 0 && row.availableAmount / row.assignedAmount < .1))).map((row) => ({ allocation: row._id, costCenter: row.costCenter?._id, code: row.costCenter?.code, name: row.costCenter?.name, available: row.availableAmount, severity: row.availableAmount < 0 ? "OVER_EXECUTION" : "LOW_BALANCE" }));
   let commitments = [], exceptions = [];
   if (String(filters.summaryOnly) !== "true") {

@@ -10,7 +10,7 @@ const legacyCodes = [
 ];
 
 const canonicalRules = [
-  ["DOC-A1-GOODS-SUBMISSION", "A1", "SUBMISSION", "*", "GOODS", [["QUOTATION", 3, "tres cotizaciones"]]],
+  ["DOC-A1-GOODS-SUBMISSION", "A1", "SUBMISSION", "*", "GOODS", [["QUOTATION", 1, "al menos una cotización"]]],
   ["DOC-A1-GOODS-INVOICE", "A1", "INVOICE_REGISTRATION", "*", "GOODS", [["XML", 1, "XML de factura"], ["PDF", 1, "PDF de factura"]]],
   ["DOC-A1-GOODS-ACCOUNTING", "A1", "ACCOUNTING", "*", "GOODS", [["CONFORMITY", 1, "conformidad de bienes"]]],
   ["DOC-A1-SERVICES-SUBMISSION", "A1", "SUBMISSION", "*", "SERVICES", [["CONTRACT", 1, "contrato o acuerdo de servicio"]]],
@@ -30,9 +30,7 @@ function ruleDocument([code, flowType, phase, requestType, expenseNature, requir
     requirements: requirements.map(([kind, minCount, labelKey]) => ({ kind, minCount, labelKey })),
     quotationPolicy: {
       enabled: requirements.some(([kind]) => kind === "QUOTATION"),
-      minimumCount: requirements.find(([kind]) => kind === "QUOTATION")?.[1] || 3,
-      allowAuthorizedException: true,
-      exceptionReasonRequired: true
+      minimumCount: 1
     },
     active: true,
     updatedAt: new Date()

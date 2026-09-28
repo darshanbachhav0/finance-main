@@ -801,7 +801,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
   });
 
   const documentRules = [
-    ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 3, labelKey: "tres cotizaciones" }]],
+    ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 1, labelKey: "al menos una cotización" }]],
     ["DOC-A1-GOODS-INVOICE", FLOW_TYPE.A1, "INVOICE_REGISTRATION", "*", EXPENSE_NATURE.GOODS, [{ kind: "XML", minCount: 1, labelKey: "XML de factura" }, { kind: "PDF", minCount: 1, labelKey: "PDF de factura" }]],
     ["DOC-A1-GOODS-ACCOUNTING", FLOW_TYPE.A1, "ACCOUNTING", "*", EXPENSE_NATURE.GOODS, [{ kind: "CONFORMITY", minCount: 1, labelKey: "conformidad de bienes" }]],
     ["DOC-A1-SERVICES-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.SERVICES, [{ kind: "CONTRACT", minCount: 1, labelKey: "contrato o acuerdo de servicio" }]],
@@ -824,9 +824,7 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
       requirements,
       quotationPolicy: {
         enabled: Boolean(quotationRequirement),
-        minimumCount: quotationRequirement?.minCount || 3,
-        allowAuthorizedException: true,
-        exceptionReasonRequired: true
+        minimumCount: 1
       },
       active: true
     });

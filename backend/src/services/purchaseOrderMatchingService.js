@@ -75,7 +75,28 @@ export async function restorePurchaseOrderBalance(purchaseOrderId, amount, { ses
   order.consumedAmount = Math.max(0, subtractMoney(order.consumedAmount || 0, invoiceAmount));
   order.remainingAmount = Math.min(roundMoney(order.originalAmount ?? order.amount), addMoney(order.remainingAmount || 0, invoiceAmount));
   order.liquidatedInvoiceCount = Math.max(0, Number(order.liquidatedInvoiceCount || 0) - 1);
-  order.status = order.consumedAmount > 0 ? "PARTIALLY_LIQUIDATED" : "ISSUED";
+  if (!["CLOSED", "CANCELLED"].includes(order.status)) order.status = order.consumedAmount > 0 ? "PARTIALLY_LIQUIDATED" : "ISSUED";
   await order.save({ session });
   return order;
 }
+
+// Cancels whatever part of the order was never invoiced. CLOSED keeps the invoiced part as the
+// order's final value (request closed - invoicing complete); CANCELLED is used when the request
+// itself is voided. Idempotent: an order already CLOSED/CANCELLED is returned unchanged.
+export async function cancelPurchaseOrderBalance(purchaseOrderId, { status = "CLOSED", reason, userId, session } = {}) {
+  if (!["CLOSED", "CANCELLED"].includes(status)) throw new AppError(422, "Unsupported Purchase Order closing status.", { status }, ERROR_CODES.VALIDATION_ERROR);
+  const order = await PurchaseOrder.findById(purchaseOrderId).session(session || null);
+  if (!order || ["CLOSED", "CANCELLED"].includes(order.status)) return { order, cancelledAmount: 0, changed: false };
+  const previous = { status: order.status, remainingAmount: remainingOf(order), cancelledAmount: roundMoney(order.cancelledAmount || 0) };
+  if (status === "CLOSED" && previous.remainingAmount <= 0) return { order, cancelledAmount: 0, changed: false, previous };
+  order.cancelledAmount = addMoney(previous.cancelledAmount, previous.remainingAmount);
+  order.remainingAmount = 0;
+  order.status = status;
+  order.closedAt = new Date();
+  order.closedBy = userId;
+  order.closureReason = reason;
+  await order.save({ session });
+  return { order, cancelledAmount: previous.remainingAmount, changed: true, previous };
+}
+
+export { requiresPurchaseOrder } from "./procurementReadinessService.js";

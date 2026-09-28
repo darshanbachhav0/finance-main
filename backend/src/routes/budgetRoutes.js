@@ -5,7 +5,8 @@ import {
   getBudgetOverview,
   listBudgetAllocations,
   listBudgetCommitments,
-  listBudgetExceptions
+  listBudgetExceptions,
+  runYearEndCarryOver
 } from "../controllers/budgetController.js";
 import { addBudgetPlan, changeBudgetPlan, readBudgetPlan } from "../controllers/budgetController.js";
 import { authorize, protect } from "../middleware/auth.js";
@@ -22,4 +23,5 @@ router.get("/commitments", listBudgetCommitments);
 router.get("/exceptions", listBudgetExceptions);
 router.post("/exceptions/:id/decision", authorize(ROLES.ADMIN, ROLES.BUDGET, ROLES.MANAGEMENT), decideBudgetException);
 router.post("/requests/:id/commit", authorize(ROLES.ADMIN, ROLES.BUDGET), commitRequestBudget);
+router.post("/year-end/carry-over", authorize(ROLES.ADMIN, ROLES.BUDGET), runYearEndCarryOver);
 export default router;

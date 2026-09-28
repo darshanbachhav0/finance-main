@@ -158,7 +158,8 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
       };
       const result = validateStructuredQuotationComparison(request, policy);
       assert.equal(result.valid, true);
-      assert.equal(policy.minimumCount, 3);
+      // Product decision: one quotation is the minimum; three are not compulsory.
+      assert.equal(policy.minimumCount, 1);
       assert.equal(validateStructuredQuotationComparison({ ...request, supplier: objectIds[9] }, policy).valid, false);
     });
 

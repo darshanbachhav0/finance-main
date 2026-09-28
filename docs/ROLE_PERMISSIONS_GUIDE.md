@@ -436,7 +436,8 @@ Budget does not have Supplier Master, full employee banking, Accounting, Treasur
 ### What Budget can do
 
 - Create annual budget plans, set the permitted monthly structure/control mode, and post supported adjustments with reasons and an audit trail.
-- Maintain budget rules and allocations; review insufficient-budget cases and prepare or mark reviewed a supported exception outcome. Budget cannot itself approve or reject the exception — only Management may decide it.
+- Maintain budget rules and allocations; review insufficient-budget cases and prepare or mark reviewed a supported exception outcome. Budget cannot itself approve or reject the exception — only Management may decide it, and only after Budget's review. Approving a budget-increase exception adds the shortfall to the budget automatically.
+- Run the year-end carry-over for a fiscal year (Budget Control → Year-end carry-over), which moves still-open commitments with their funds into the next year's plan. It is audited and safe to repeat.
 - Every fully approved request now commits its budget automatically at final approval (rule-based, manager-chain and Management-final routes alike). Budget commits manually only to retry after a budget observation or exception has been resolved, or when the automatic commitment could not run. This commitment is what makes the request eligible for Procurement to issue the order next; Budget's own involvement ends here.
 - Read project reference data and Finance configurations available to Budget.
 
@@ -503,7 +504,7 @@ Management request lists/details are not restricted by area in the same way as a
 ### What Management can do
 
 - Approve, observe, return or reject an active step assigned to Management and matching the user's approvalLevel.
-- Approve or reject a pending budget exception. Management is the only role that may decide one — Budget and Admin can only prepare it or mark it reviewed, and Admin can never approve it directly, only repair the exception-approver configuration if it is broken.
+- Approve or reject a pending budget exception once Budget has reviewed it (Management is notified, and the dashboard counts exceptions awaiting its decision; the notification opens the exception in Budget Control). Management is the only role that may decide one — Budget and Admin can only prepare it or mark it reviewed, and Admin can never approve it directly, only repair the exception-approver configuration if it is broken.
 - Review institutional budget availability, commitments, spending, pending approvals and financial execution.
 - View and export permitted management reports.
 

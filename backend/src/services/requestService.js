@@ -1,7 +1,7 @@
 import BudgetException from "../models/BudgetException.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { assertRequestActive, assertClosureAllowed, getFinancialProgress, getFinancialProgressForRequests } from "./financialProgressService.js";
-import { canonicalRequestStatus, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
+import { canonicalRequestStatus, renditionSettledForClosure, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
@@ -38,6 +38,7 @@ import { transitionRequest, canTransition } from "./workflowService.js";
 import { validateXmlAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
+import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   DOCUMENT_PHASE,
@@ -481,9 +482,25 @@ function normalizeTrackFields(request) {
 // eligibility rule for this area/expense-nature/amount - no rule means no exception, so the
 // requester must use Track A1 instead. Enforced at submission (not draft save) so the wizard
 // doesn't block a requester before they've entered the fields the rule is matched against.
+// The cap is checked against the PEN equivalent of the lines as submitted: prepareRequest calls
+// this only after the exchange rate is applied and the totals are recomputed (request.validate),
+// and the amount is derived from the lines here rather than trusting a stored total that may be
+// stale (update+submit) or still the schema default of 0 (create+submit).
+function trackEligibilityAmount(request) {
+  const rate = Number(request.exchangeRate) > 0 ? Number(request.exchangeRate) : 1;
+  const lines = request.lines || [];
+  if (lines.length) {
+    return lines.reduce((sum, line) => {
+      const pen = Number(line.penEquivalent) > 0 ? Number(line.penEquivalent) : multiplyMoney(Number(line.totalAmount || 0), Number(line.exchangeRate) > 0 ? Number(line.exchangeRate) : rate);
+      return Math.round((sum + pen) * 100) / 100;
+    }, 0);
+  }
+  return Number(request.totalPENEquivalent || 0) || multiplyMoney(Number(request.totalAmount || 0), rate);
+}
+
 async function assertTrackEligible(request) {
   if (request.flowType !== FLOW_TYPE.B) return;
-  const amount = Number(request.totalPENEquivalent ?? request.penEquivalent ?? request.totalAmount ?? 0);
+  const amount = trackEligibilityAmount(request);
   const area = request.requesterArea || request.requestingArea || "General";
   const now = request.issueDate ? new Date(request.issueDate) : new Date();
   const rules = await DirectPaymentEligibilityRule.find({
@@ -508,7 +525,6 @@ async function assertTrackEligible(request) {
 
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
-  if (validateSubmission) await assertTrackEligible(request);
   const officialRequest = isOfficialCapexOpexRequest(request);
   assertRequestLines(request.lines);
   await validateAccountingDimensions({
@@ -527,6 +543,8 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   await applyProjectSnapshot(request);
   await applyExchangeRate(request);
   await request.validate();
+  // After the exchange rate and totals exist, so the Track B cap sees the real PEN amount.
+  if (validateSubmission) await assertTrackEligible(request);
 
   const xmlAttachment = [...(request.attachments || [])].reverse().find((attachment) => attachment.kind === "XML");
   if (xmlAttachment) {
@@ -747,10 +765,8 @@ export async function getRequestDetail(id, user) {
   const hasActiveObligations = accountsPayable.some(item => item.status !== "CANCELLED");
   const closureReady = canonicalRequestStatus(request.status) === REQUEST_STATUS.RECONCILED
     && financialProgress?.status === REQUEST_STATUS.RECONCILED
-    && !financialProgress?.orderOpen
-    && (request.flowType !== FLOW_TYPE.C || (request.rendition?.status === "VALIDATED"
-      && !Number(request.rendition?.balanceOutstanding || 0)
-      && !Number(request.rendition?.nonDeductibleOutstanding || 0)));
+    && renditionSettledForClosure(request)
+    && !Number(request.rendition?.nonDeductibleOutstanding || 0);
   return {
     request,
     allowedActions: allowedRequestActions(request, user, {
@@ -973,6 +989,7 @@ export async function voidFinancialRequest({ id, user, req, comments }) {
     // Validate the transition before changing any budget balances.
     if (!canTransition(request.status, REQUEST_STATUS.VOIDED)) throw new AppError(409, "This request cannot be cancelled at its current stage.");
     await releaseBudget(request, user._id, reason, { session });
+    await cancelProcurementOnVoid({ request, user, req, reason, session });
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.VOIDED, user, req, action: "VOIDED", comments: reason, session });
   });
   await request.populate(requestPopulate);
@@ -984,7 +1001,10 @@ export async function closeFinancialRequest({ id, user, req, comments }) {
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "CLOSE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await assertClosureAllowed(request);
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.CLOSED, user, req, action: "CLOSED", comments: comments || "All obligations reconciled and financial file closed." });
+  await runFinancialOperation(async session => {
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.CLOSED, user, req, action: "CLOSED", comments: comments || "All obligations reconciled and financial file closed.", session });
+    await settleProcurementAtClosure({ request, user, req, session });
+  });
   await resolveNotification(`request:${request._id}:close`);
   await request.populate(requestPopulate);
   return request;

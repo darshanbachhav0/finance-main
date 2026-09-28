@@ -14,9 +14,21 @@ import {
 function canonicalType(value) { return LEGACY_REQUEST_TYPE_MAP[value] || value; }
 function canonicalNature(value) { return LEGACY_EXPENSE_NATURE_MAP[value] || value; }
 
+// Product decision: quotations have no minimum amount and three quotations are not compulsory.
+// Wherever quotations apply, at least one supplier quotation (with its evidence) is required and
+// the requester may add or remove further quotations freely. Legacy DocumentRule records that
+// still carry "3" (seeded before this decision) are normalized here, so no configuration can
+// silently reintroduce the old three-quotation gate.
+export const QUOTATION_MINIMUM_COUNT = 1;
+function normalizeRequirement(requirement) {
+  return requirement.kind === "QUOTATION"
+    ? { kind: requirement.kind, labelKey: "at least one quotation", minCount: QUOTATION_MINIMUM_COUNT }
+    : requirement;
+}
+
 function mergeRequirements(requirements) {
   const merged = new Map();
-  for (const requirement of requirements) {
+  for (const requirement of requirements.map(normalizeRequirement)) {
     const current = merged.get(requirement.kind);
     if (!current || requirement.minCount > current.minCount) merged.set(requirement.kind, requirement);
   }
@@ -48,7 +60,7 @@ export function defaultDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBM
     return [];
   }
   if (goodsNatures.has(nature)) {
-    if (phase === DOCUMENT_PHASE.SUBMISSION) return [requirement("QUOTATION", "three quotations", 3)];
+    if (phase === DOCUMENT_PHASE.SUBMISSION) return [requirement("QUOTATION", "at least one quotation", QUOTATION_MINIMUM_COUNT)];
     if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")];
     if (phase === DOCUMENT_PHASE.ACCOUNTING) return [requirement("CONFORMITY", "goods conformity or reception evidence")];
     return [];
@@ -83,7 +95,7 @@ async function matchingRules(request, phase) {
 
 export async function configuredDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
   const rules = await matchingRules(request, phase);
-  if (!rules.length) return defaultDocumentRequirements(request, phase);
+  if (!rules.length) return mergeRequirements(defaultDocumentRequirements(request, phase));
   return mergeRequirements(rules.flatMap((rule) => rule.requirements || []));
 }
 
@@ -109,30 +121,26 @@ export async function documentStatusByPhase(request) {
 
 export function defaultQuotationPolicy(request) {
   const quotation = defaultDocumentRequirements(request, DOCUMENT_PHASE.SUBMISSION).find((item) => item.kind === "QUOTATION");
-  return { enabled: Boolean(quotation), minimumCount: quotation?.minCount || 3, allowAuthorizedException: true, exceptionReasonRequired: true, source: "DEFAULT_DOCUMENT_REQUIREMENTS" };
+  return { enabled: Boolean(quotation), minimumCount: QUOTATION_MINIMUM_COUNT, source: "DEFAULT_DOCUMENT_REQUIREMENTS" };
 }
 
 export async function configuredQuotationPolicy(request) {
   const rules = await matchingRules(request, DOCUMENT_PHASE.SUBMISSION);
   if (!rules.length) return defaultQuotationPolicy(request);
-  const quotationMinimums = rules.flatMap((rule) => [
-    ...(rule.requirements || []).filter((item) => item.kind === "QUOTATION").map((item) => item.minCount),
-    ...(rule.quotationPolicy?.enabled ? [rule.quotationPolicy.minimumCount] : [])
-  ]);
-  if (!quotationMinimums.length) return { ...defaultQuotationPolicy(request), source: "CONFIGURED_DOCUMENT_RULES", ruleCodes: rules.map((rule) => rule.code) };
-  return { enabled: true, minimumCount: Math.max(...quotationMinimums), allowAuthorizedException: rules.every((rule) => rule.quotationPolicy?.allowAuthorizedException !== false), exceptionReasonRequired: rules.some((rule) => rule.quotationPolicy?.exceptionReasonRequired !== false), source: "CONFIGURED_DOCUMENT_RULES", ruleCodes: rules.map((rule) => rule.code) };
+  const quotationRequired = rules.some((rule) => rule.quotationPolicy?.enabled || (rule.requirements || []).some((item) => item.kind === "QUOTATION"));
+  if (!quotationRequired) return { ...defaultQuotationPolicy(request), source: "CONFIGURED_DOCUMENT_RULES", ruleCodes: rules.map((rule) => rule.code) };
+  return { enabled: true, minimumCount: QUOTATION_MINIMUM_COUNT, source: "CONFIGURED_DOCUMENT_RULES", ruleCodes: rules.map((rule) => rule.code) };
 }
 
+// With a minimum of one quotation there is nothing left to waive, so the former authorized
+// "single-source exception" (request.quotationException) no longer participates in validation.
 export function validateStructuredQuotationComparison(request, policy = defaultQuotationPolicy(request)) {
   const paymentErrors = (request.quotations || []).flatMap((quotation, index) => validatePaymentTerms(quotation).map((error) => ({ code: "QUOTATION_PAYMENT_TERMS_INVALID", quotation: index + 1, ...error })));
   if (!policy.enabled) return { valid: paymentErrors.length === 0, applicable: false, policy, errors: paymentErrors };
   const quotations = request.quotations || [];
-  const exception = request.quotationException || {};
-  const exceptionAccepted = Boolean(exception.authorized && policy.allowAuthorizedException);
   const errors = [...paymentErrors];
-  const supplierIds = quotations.map((quotation) => String(quotation.supplier?._id || quotation.supplier || "")).filter(Boolean);
-  if (!exceptionAccepted && new Set(supplierIds).size < policy.minimumCount) errors.push({ code: "QUOTATION_MINIMUM_NOT_MET", required: policy.minimumCount, present: new Set(supplierIds).size });
-  if (exceptionAccepted && policy.exceptionReasonRequired && !String(exception.reason || "").trim()) errors.push({ code: "QUOTATION_EXCEPTION_REASON_REQUIRED" });
+  const supplierIds = new Set(quotations.map((quotation) => String(quotation.supplier?._id || quotation.supplier || "")).filter(Boolean));
+  if (supplierIds.size < QUOTATION_MINIMUM_COUNT) errors.push({ code: "QUOTATION_MINIMUM_NOT_MET", required: QUOTATION_MINIMUM_COUNT, present: supplierIds.size });
   if (quotations.some((quotation) => !quotation.supplier)) errors.push({ code: "QUOTATION_SUPPLIER_REQUIRED" });
   quotations.forEach((quotation, index) => { if (!quotation.attachment) errors.push({ code: "QUOTATION_ATTACHMENT_REQUIRED", quotation: index + 1 }); });
   const recommended = quotations.filter((quotation) => quotation.recommended);
@@ -141,7 +149,7 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
   const selectedSupplier = String(request.supplier?._id || request.supplier || "");
   if (recommended.length === 1 && String(recommended[0].supplier?._id || recommended[0].supplier || "") !== selectedSupplier) errors.push({ code: "RECOMMENDED_SUPPLIER_MISMATCH" });
   if (!String(request.supplierSelectionReason || "").trim()) errors.push({ code: "SUPPLIER_SELECTION_REASON_REQUIRED" });
-  return { valid: errors.length === 0, applicable: true, policy, exceptionAccepted, errors };
+  return { valid: errors.length === 0, applicable: true, policy: { ...policy, minimumCount: QUOTATION_MINIMUM_COUNT }, errors };
 }
 
 export function validateDocumentRequirements(request, requirements, attachments = request.attachments || []) {

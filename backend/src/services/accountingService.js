@@ -7,7 +7,7 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import { resolvePayablePaymentTerms, resolvePayableDueDate } from "./payablePaymentTermsService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
-import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
+import { assertPurchaseOrderInvoiceFits, consumePurchaseOrderBalance, requiresPurchaseOrder } from "./purchaseOrderMatchingService.js";
 import JournalEntry from "../models/JournalEntry.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { requireAccountingMapping } from "./accountingMappingService.js";
@@ -555,7 +555,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     throw new AppError(409, "The supplier voucher is already registered.", { accountsPayable: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
   }
   const purchaseOrder = request.flowType === FLOW_TYPE.A1 ? await PurchaseOrder.findOne({ request: request._id }) : null;
-  if (request.flowType === FLOW_TYPE.A1) {
+  if (request.flowType === FLOW_TYPE.A1 && (purchaseOrder || requiresPurchaseOrder(request))) {
     if (!purchaseOrder) throw new AppError(409, "Procurement must issue the approved order before A1 accounting.");
     await assertPurchaseOrderInvoiceFits(purchaseOrder._id, request.totalAmount, { currency: request.currency });
   }

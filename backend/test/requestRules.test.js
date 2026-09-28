@@ -30,10 +30,10 @@ test("every request needs at least one fully dimensioned accounting line", () =>
   assert.doesNotThrow(() => assertRequestLines([{ costCenter: "cost-1", expenseType: "expense-1" }]));
 });
 
-test("goods submission requires three quotations while invoice documents belong to the invoice phase", () => {
-  const request = { requestType: "CAPEX", expenseNature: "Compra de Bienes", attachments: [{ kind: "PDF" }, { kind: "QUOTATION" }, { kind: "QUOTATION" }] };
-  assert.deepEqual(requiredDocumentsFor(request).map((rule) => [rule.kind, rule.min]), [["QUOTATION", 3]]);
-  assert.throws(() => assertMandatoryDocuments(request), (error) => error.statusCode === 422 && /three quotations/.test(error.message));
+test("goods submission requires at least one quotation (three are not compulsory) while invoice documents belong to the invoice phase", () => {
+  const request = { requestType: "CAPEX", expenseNature: "Compra de Bienes", attachments: [{ kind: "PDF" }] };
+  assert.deepEqual(requiredDocumentsFor(request).map((rule) => [rule.kind, rule.min]), [["QUOTATION", 1]]);
+  assert.throws(() => assertMandatoryDocuments(request), (error) => error.statusCode === 422 && /at least one quotation/.test(error.message));
   request.attachments.push({ kind: "QUOTATION" });
   assert.doesNotThrow(() => assertMandatoryDocuments(request));
 });
