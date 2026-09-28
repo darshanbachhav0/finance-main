@@ -23,10 +23,11 @@ import Project from "../models/Project.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import User from "../models/User.js";
-import { commitApprovedRequestBudget, decideApproval } from "../services/approvalService.js";
+import { approvalDecisionOptions, commitApprovedRequestBudget, decideApproval } from "../services/approvalService.js";
 import { processAccountsPayable } from "../services/accountingService.js";
 import { recordAudit, workflowEvent } from "../services/auditService.js";
 import { closeFinancialRequest, submitFinancialRequest } from "../services/requestService.js";
+import { defaultQuotationPolicy } from "../services/documentRuleService.js";
 import { reviewRendition, submitRendition } from "../services/renditionService.js";
 import { generatedRoot, uploadRoot } from "../services/storageService.js";
 import {
@@ -1047,6 +1048,16 @@ async function seedRequest({
     draftSavedAt: now
   });
   if (evidence !== "NONE") await addEvidenceProfile(request, evidence, supplier, requester, voucherNumber);
+  const needsQuotation = request.flowType !== FLOW_TYPE.C && defaultQuotationPolicy(request).enabled;
+  if (!competingSuppliers.length && needsQuotation && supplier && !request.attachments.some((attachment) => attachment.kind === "QUOTATION")) {
+    // Single-quotation purchase: at least one quotation is required and more are optional.
+    await addAttachment(request, "QUOTATION", `cotizacion-1-${request.requestNumber}.pdf`, minimalPdf(`Cotización 1 - ${request.requestNumber}`), requester);
+  }
+  if (!competingSuppliers.length && needsQuotation && supplier) {
+    const quotationAttachment = request.attachments.find((attachment) => attachment.kind === "QUOTATION");
+    request.quotations = [{ supplier: supplier._id, amount: total, currency, attachment: quotationAttachment?._id, recommended: true }];
+    request.supplierSelectionReason ||= "Proveedor seleccionado por mejor propuesta técnica y económica (DEMO).";
+  }
   if (competingSuppliers.length) {
     // The 3 QUOTATION-kind attachments were just pushed by addEvidenceProfile (in that order) -
     // build the structured comparison the quotation policy requires, referencing them by id.
@@ -1124,7 +1135,8 @@ async function approveNext(request, users) {
       id: current._id,
       action: "APPROVE",
       comments: `Aprobación electrónica DEMO - ${stage}.`,
-      forward: true,
+      // Walk the demo request up the chain while a jefe above exists, then finalize.
+      forward: (await approvalDecisionOptions(current)).canForward,
       user: actor,
       req: fakeReq
     });

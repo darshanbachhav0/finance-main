@@ -6,6 +6,7 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, ROLES } from "../utils/constants.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
 import { notifyEmployeeBankDecision, notifyEmployeeBankReview, resolveEmployeeBankReview } from "./bankNotificationService.js";
+import { plainClone } from "../utils/plainClone.js";
 
 const OWNER_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR]);
 const REVIEW_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
@@ -43,7 +44,7 @@ function mask(value, visible = 4) {
 }
 
 function bankPayload(account, user) {
-  const value = account?.toObject ? account.toObject() : structuredClone(account);
+  const value = account?.toObject ? account.toObject() : plainClone(account);
   const owns = String(value.user?._id || value.user) === String(user?._id);
   const canReadFull = owns || [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user?.role);
   value.accountNumberMasked = mask(value.accountNumber);

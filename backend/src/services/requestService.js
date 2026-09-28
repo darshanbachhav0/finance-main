@@ -52,6 +52,7 @@ import { canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest,
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
+import { plainClone } from "../utils/plainClone.js";
 
 export const requestPopulate = [
   { path: "supplier" },
@@ -1103,7 +1104,7 @@ export async function previewFinancialRequestBudget({ payload, user }) {
 }
 
 export function publicRequestPayload(value, user, actionContext) {
-  const object = value?.toObject ? value.toObject() : structuredClone(value);
+  const object = value?.toObject ? value.toObject() : plainClone(value);
   if (object?.status) object.status = canonicalRequestStatus(object.status);
   if (object && user && !object.allowedActions) object.allowedActions = allowedRequestActions(value, user, actionContext);
   for (const attachment of object?.attachments || []) delete attachment.path;
