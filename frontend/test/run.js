@@ -25,3 +25,4 @@ import "./operationsAccess.test.js";
 import "./notificationTranslations.test.js";
 import "./notificationLinks.test.js";
 import "./uiPolish.test.js";
+import "./globalSearchContracts.test.js";
