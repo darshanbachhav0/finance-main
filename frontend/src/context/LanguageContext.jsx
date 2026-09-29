@@ -13,6 +13,9 @@ import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const spanish = {
+  "Correct the invoice documents. Existing approvals and the issued order remain valid; do not submit the request for approval again.": "Corrige los documentos de la factura. Las aprobaciones y la orden emitida siguen vigentes; no vuelvas a enviar la solicitud a aprobación.",
+  "The XML issuer RUC does not match the approved supplier.": "El RUC del emisor del XML no coincide con el proveedor aprobado.",
+  "This request already has an issued order. Correct the invoice in Documents; do not resubmit the request for approval.": "Esta solicitud ya tiene una orden emitida. Corrige la factura en Documentos; no vuelvas a enviarla a aprobación.",
   "Required invoice documents are missing": "Faltan documentos obligatorios de la factura",
   "Invoice document requirements could not be loaded correctly. Refresh the page; if this continues, contact Admin to review the document rules.": "No se pudieron cargar correctamente los requisitos de la factura. Actualiza la página; si persiste, contacta a Administración para revisar las reglas documentales.",
   "Pending with": "Pendiente de",

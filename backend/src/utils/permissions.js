@@ -29,6 +29,9 @@ export function canViewSuppliers(role) {
 
 export function canModifyRequest(request, user) {
   if (!request || !user || isTerminalRequest(request.status)) return false;
+  // An issued order is an approved snapshot. Invoice observations must be
+  // corrected through invoice registration, not by restarting request approval.
+  if (request.purchaseOrder) return false;
   if (user.role === ROLES.ADMIN && !["BORRADOR", "DEVUELTO", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(request.status)) return false;
   if (user.role === ROLES.ADMIN) return true;
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;

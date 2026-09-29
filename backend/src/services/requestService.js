@@ -923,6 +923,7 @@ export async function updateFinancialRequest({ id, payload, files, user, req }) 
 export async function submitFinancialRequest({ id, user, req, comments }) {
   const request = await FinancialRequest.findById(id).select("+attachments.path").populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
+  if (request.purchaseOrder) throw new AppError(409, "This request already has an issued order. Correct the invoice in Documents; do not resubmit the request for approval.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   if (!canModifyRequest(request, user)) throw new AppError(403, "This request cannot be submitted.", { status: request.status }, ERROR_CODES.FORBIDDEN);
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "SUBMIT", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await prepareRequest(request, { user, validateSubmission: true });

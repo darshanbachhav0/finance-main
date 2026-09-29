@@ -1,12 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
-import { applyRenditionStatusFilter } from "../src/services/requestService.js";
+import { applyRenditionStatusFilter, submitFinancialRequest } from "../src/services/requestService.js";
+import FinancialRequest from "../src/models/FinancialRequest.js";
 
 const owner = { _id: "owner", role: "Solicitor", active: true, area: "Operations" };
 const director = { _id: "director", role: "AreaDirector", active: true, approvalLevel: "AREA_DIRECTOR", area: "Operations" };
 const vice = { _id: "vice", role: "ViceRector", active: true, approvalLevel: "VICE_RECTOR", area: "Management" };
 const accounting = { _id: "accounting", role: "Accounting", active: true, area: "Finance" };
+
+test("direct submit rejects an issued order before changing approvals or financial data", async t => {
+  const request = { _id: "request", requester: owner._id, status: "OBSERVADO_SUNAT", purchaseOrder: "order", approvalStage: "COMPLETE" };
+  const before = JSON.stringify(request);
+  t.mock.method(FinancialRequest, "findById", () => ({ select: () => ({ populate: async () => request }) }));
+  await assert.rejects(submitFinancialRequest({ id: request._id, user: owner }), error => error.statusCode === 409 && error.message.includes("Correct the invoice in Documents"));
+  assert.equal(JSON.stringify(request), before);
+});
+
+test("invoice observations preserve issued orders and expose invoice correction, not resubmission", () => {
+  for (const status of ["OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO"]) {
+    const request = { requester: owner._id, flowType: "A1", status, purchaseOrder: "issued-order" };
+    for (const user of [owner, accounting, { _id: "admin", role: "Admin" }]) {
+      const actions = allowedRequestActions(request, user);
+      assert.ok(actions.includes("REGISTER_INVOICE"));
+      assert.ok(!actions.includes("EDIT"));
+      assert.ok(!actions.includes("SUBMIT"));
+    }
+    assert.ok(!allowedRequestActions(request, { ...owner, _id: "other" }).includes("REGISTER_INVOICE"));
+  }
+  assert.ok(allowedRequestActions({ requester: owner._id, status: "OBSERVADO" }, owner).includes("SUBMIT"));
+});
 
 function approvalRequest(overrides = {}) {
   return {
