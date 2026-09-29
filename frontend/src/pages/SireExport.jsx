@@ -1,3 +1,4 @@
+import { MonthInput } from "../components/DateInput.jsx";
 import { AlertTriangle, CheckCircle2, Download, Search } from "lucide-react";
 import { useState } from "react";
 import api from "../api/client.js";
@@ -98,7 +99,7 @@ export default function SireExport() {
       <Message type="error">{error || historyTable.error}</Message>
 
       <div className="period-toolbar">
-        <label className="field compact-period"><span>{t("Accounting period")}</span><input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
+        <label className="field compact-period"><span>{t("Accounting period")}</span><MonthInput value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
         <button type="button" className="secondary-button" onClick={preview} disabled={loading}><Search size={16} /><span>{t(loading ? "Loading preview..." : "Validate preview")}</span></button>
         <button type="button" className="primary-button" onClick={exportTxt} disabled={exporting || loading || !canExport} title={exportHint}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Download SUNAT TXT")}</span></button>
       </div>

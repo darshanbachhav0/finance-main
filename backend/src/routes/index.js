@@ -16,6 +16,7 @@ import reportRoutes from "./reportRoutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import fileRoutes from "./fileRoutes.js";
 import userRoutes from "./userRoutes.js";
+import searchRoutes from "./searchRoutes.js";
 import employeeReimbursementBankRoutes from "./employeeReimbursementBankRoutes.js";
 import externalManagementRoutes from "./externalManagementRoutes.js";
 import {
@@ -72,6 +73,7 @@ router.use("/bank-formats", bankFormatRouter);
 router.use("/finance-configurations", financeConfigurationRouter);
 router.use("/sire", sireRoutes);
 router.use("/users", userRoutes);
+router.use("/search", searchRoutes);
 router.use("/employee-bank-accounts", employeeReimbursementBankRoutes);
 
 export default router;

@@ -200,7 +200,7 @@ export default function MasterConfiguration() {
   return <section>
     {user.role === "Admin" && <details className="workspace-tools"><summary>{t("SUNAT administration")}</summary><PadronStatus /></details>}
     <Message type="error">{error}</Message>
-    <details className="workspace-tools"><summary>{t("Configuration sections")}</summary><nav className="section-tabs" aria-label={t("Configuration sections")}>{visibleEntries.map(([key, item]) => <NavLink key={key} to={`/configuration/${key}`}>{t(item.label)}</NavLink>)}</nav></details>
+    <nav className="section-tabs configuration-sections" aria-label={t("Configuration sections")}>{visibleEntries.map(([key, item]) => <NavLink key={key} to={`/configuration/${key}`}>{t(item.label)}</NavLink>)}</nav>
     <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" readOnly={Boolean(config.writeRoles && !config.writeRoles.includes(user.role))} renderBeforeTable={config.renderBeforeTable} />
   </section>;
 }

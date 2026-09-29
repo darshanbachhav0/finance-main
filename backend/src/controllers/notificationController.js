@@ -1,5 +1,5 @@
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { countUnreadNotifications, listUserNotifications, markAllNotificationsRead, markNotificationRead } from "../services/notificationService.js";
+import { countUnreadNotifications, dismissNotification, listUserNotifications, markAllNotificationsRead, markNotificationRead } from "../services/notificationService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 
@@ -13,6 +13,12 @@ export const listNotifications = asyncHandler(async (req, res) => {
 
 export const readNotification = asyncHandler(async (req, res) => {
   const data = await markNotificationRead(req.params.id, req.user._id);
+  if (!data) throw new AppError(404, "Notification not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
+  res.json({ data });
+});
+
+export const dismissOneNotification = asyncHandler(async (req, res) => {
+  const data = await dismissNotification(req.params.id, req.user._id);
   if (!data) throw new AppError(404, "Notification not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   res.json({ data });
 });

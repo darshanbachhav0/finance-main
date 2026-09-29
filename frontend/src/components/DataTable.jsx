@@ -8,18 +8,24 @@ import {
   ListFilter,
   Search
 } from "lucide-react";
-import { LayoutList, Table2, X } from "lucide-react";
+import { LayoutList, PanelRightOpen, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Drawer from "./Drawer.jsx";
 import EmptyState from "./EmptyState.jsx";
 import RowActionMenu from "./RowActionMenu.jsx";
 import TableTools from "./TableTools.jsx";
+import { TableSkeletonRows } from "./WorkspaceSkeleton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
+import { columnLayout, isPrimaryColumn } from "../utils/tableColumns.js";
 
 function rawValue(column, row) {
   if (column.getValue) return column.getValue(row);
   return row[column.key];
 }
+
+// Clicks on controls inside a row (links, buttons, fields, the account selector) never open it.
+const INTERACTIVE_TARGET = "a, button, input, select, textarea, details, label, [role='button'], [role='menuitem']";
 
 function compare(left, right) {
   if (left === right) return 0;
@@ -48,7 +54,9 @@ export default function DataTable({
   tableId,
   exportable = false,
   onExport,
+  emptyTitle = "No records yet",
   emptyDescription = "Adjust filters or create a new record.",
+  emptyAction,
   caption,
   remote
 }) {
@@ -61,9 +69,14 @@ export default function DataTable({
   const [density, setDensity] = useState(() => localStorage.getItem("erp_table_density") || "compact");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileCards, setMobileCards] = useState(true);
+  const [detailRow, setDetailRow] = useState(null);
   const scrollRef = useRef(null);
-  const primaryColumns = columns.filter((column, index) => index < 2 || column.primary === true || /amount|total|status|action|supplier|beneficiary/i.test(column.key));
+  const primaryColumns = columns.filter(isPrimaryColumn);
   const secondaryColumns = columns.filter(column => !primaryColumns.includes(column));
+  // Rows open their details panel on click unless the page already opens its own view.
+  const openRow = onRowClick || (secondaryColumns.length ? setDetailRow : null);
+  // Keep the panel on the latest copy of the row after a reload.
+  const detailRecord = detailRow ? rows.find((row) => row[rowKey] === detailRow[rowKey]) || detailRow : null;
   const [scrolls, setScrolls] = useState(false);
   useEffect(() => {
     const element = scrollRef.current;
@@ -210,6 +223,35 @@ export default function DataTable({
   const fullPlaceholder = t(searchPlaceholder);
   const searchHint = narrowScreen && fullPlaceholder.includes(",") ? `${fullPlaceholder.split(",")[0].replace(/[.…]+$/, "")}…` : fullPlaceholder;
 
+  function cellValue(column, row) {
+    const value = column.render ? column.render(row) : rawValue(column, row);
+    return typeof value === "string" ? t(value) : value;
+  }
+
+  // The row's name in its details panel: the first plain text value (request number, code...).
+  function rowTitle(row) {
+    for (const column of columns) {
+      if (column.type === "checkbox") continue;
+      const value = rawValue(column, row);
+      if ((typeof value === "string" && value.trim()) || typeof value === "number") return String(value);
+    }
+    return t("Details");
+  }
+
+  function clickRow(event, row) {
+    // React bubbles clicks from portals (row menu, its overlay) through the row: ignore them.
+    if (!event.currentTarget.contains(event.target)) return;
+    if (event.target.closest(INTERACTIVE_TARGET)) return;
+    if (String(window.getSelection?.() || "").trim()) return;
+    openRow(row);
+  }
+
+  // Rows that already have a "…" menu open their details from it instead of a separate column,
+  // so wide tables (Approvals, Treasury) keep every column on screen.
+  const menuActions = rowActions && secondaryColumns.length
+    ? (row) => [{ label: "Details", icon: PanelRightOpen, onClick: () => setDetailRow(row) }, ...(typeof rowActions === "function" ? rowActions(row) : rowActions)]
+    : rowActions;
+
   return (
     <div aria-busy={loading} className={`data-table density-${density} ${mobileCards ? "mobile-cards" : ""} ${className}`.trim()}>
       {controls && (
@@ -266,7 +308,7 @@ export default function DataTable({
       {showResultCount && (
         <div className="table-result-bar">
           <span role="status">{loading ? t("Loading records...") : t("Showing {shown} of {total} results").replace("{shown}", visibleRows.length).replace("{total}", isRemote ? remote.pagination?.total || 0 : processed.length)}</span>
-          {selection && selectedIds.length > 0 && <strong>{t("{count} selected").replace("{count}", selectedIds.length)}</strong>}
+          {selection && selectedIds.length > 0 && <strong>{t(selectedIds.length === 1 ? "{count} item selected" : "{count} selected").replace("{count}", selectedIds.length)}</strong>}
         </div>
       )}
 
@@ -284,9 +326,10 @@ export default function DataTable({
               {primaryColumns.map((column) => {
                 const sorted = activeSort?.key === (column.sortKey || column.key);
                 const SortIcon = !sorted ? ChevronsUpDown : activeSort.direction === "asc" ? ArrowUp : ArrowDown;
+                const layout = columnLayout(column);
                 return (
-                  <th scope="col" aria-sort={sorted ? activeSort.direction === "asc" ? "ascending" : "descending" : undefined} key={column.key} className={column.align ? `align-${column.align}` : ""} style={column.width ? { width: column.width } : undefined}>
-                    {column.sortable === false || column.key === "actions" ? t(column.label) : (
+                  <th scope="col" aria-sort={sorted ? activeSort.direction === "asc" ? "ascending" : "descending" : undefined} key={column.key} className={layout.className} style={layout.style}>
+                    {column.sortable === false || column.key === "actions" || layout.type === "checkbox" ? (column.label ? t(column.label) : layout.type === "checkbox" ? <span className="sr-only">{t("Select")}</span> : null) : (
                       <button type="button" className="sort-button" onClick={() => toggleSort(column)}>
                         <span>{t(column.label)}</span>
                         <SortIcon size={14} aria-hidden="true" />
@@ -295,28 +338,23 @@ export default function DataTable({
                   </th>
                 );
               })}
-              {secondaryColumns.length > 0 && <th>{t("Details")}</th>}
+              {secondaryColumns.length > 0 && !rowActions && <th className="row-details-column">{t("Details")}</th>}
               {rowActions && <th className="actions-column"><span className="sr-only">{t("Actions")}</span></th>}
             </tr>
           </thead>
           <tbody>
-            {loading ? Array.from({ length: Math.min(activePageSize, 6) }).map((_, rowIndex) => (
-              <tr key={`loading-${rowIndex}`} aria-hidden="true">
-                {selection && <td><span className="skeleton skeleton-check" /></td>}
-                {primaryColumns.map((column) => <td key={column.key}><span className="skeleton skeleton-line" /></td>)}
-                {secondaryColumns.length > 0 && <td><span className="skeleton skeleton-line" /></td>}
-                {rowActions && <td><span className="skeleton skeleton-check" /></td>}
-              </tr>
-            )) : visibleRows.map((row) => (
+            {loading ? <TableSkeletonRows rowCount={Math.min(activePageSize, 6)} cells={[
+              ...(selection ? ["check"] : []),
+              ...primaryColumns.map((column) => column.type === "checkbox" ? "check" : "line"),
+              ...(secondaryColumns.length ? ["line"] : []),
+              ...(rowActions ? ["check"] : [])
+            ]} /> : visibleRows.map((row) => (
               <tr
                 key={row[rowKey]}
-                className={`${onRowClick ? "clickable-row" : ""}${selection && selectedIds.includes(row[rowKey]) ? " is-selected" : ""}`}
+                className={`${openRow ? "clickable-row" : ""}${selection && selectedIds.includes(row[rowKey]) ? " is-selected" : ""}`.trim() || undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={onRowClick ? (event) => { if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); onRowClick(row); } } : undefined}
-                onClick={onRowClick ? (event) => {
-                  if (event.target.closest("a, button, input, select, textarea, details")) return;
-                  onRowClick(row);
-                } : undefined}
+                onClick={openRow ? (event) => clickRow(event, row) : undefined}
               >
                 {selection && (
                   <td className="checkbox-column" data-label={t("Select row")}>
@@ -329,18 +367,35 @@ export default function DataTable({
                     />
                   </td>
                 )}
-                {primaryColumns.map((column) => {
-                  const value = column.render ? column.render(row) : rawValue(column, row);
-                  return <td key={column.key} className={column.align ? `align-${column.align}` : ""} data-label={t(column.label)}>{typeof value === "string" ? t(value) : value}</td>;
-                })}
-                {secondaryColumns.length > 0 && <td data-label={t("Details")}><details className="row-details" onClick={event => event.stopPropagation()}><summary>{t("Details")}</summary><dl>{secondaryColumns.map(column => { const value = column.render ? column.render(row) : rawValue(column, row); return <div key={column.key}><dt>{t(column.label)}</dt><dd>{typeof value === "string" ? t(value) : value}</dd></div>; })}</dl></details></td>}
-                {rowActions && <td className="actions-column" data-label={t("More actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
+                {primaryColumns.map((column) => (
+                  <td key={column.key} className={columnLayout(column).className} data-label={column.label ? t(column.label) : column.type === "checkbox" ? t("Select") : undefined}>{cellValue(column, row)}</td>
+                ))}
+                {secondaryColumns.length > 0 && !rowActions && <td className="row-details-cell" data-label={t("Details")}>
+                  <button type="button" className="row-details-button" aria-haspopup="dialog" aria-label={`${t("Details")}: ${rowTitle(row)}`} onClick={() => setDetailRow(row)}>
+                    <PanelRightOpen size={15} aria-hidden="true" /><span>{t("Details")}</span>
+                  </button>
+                </td>}
+                {rowActions && <td className="actions-column" data-label={t("More actions")}><RowActionMenu row={row} actions={menuActions} /></td>}
               </tr>
             ))}
           </tbody>
         </table>
-        {!loading && !visibleRows.length && <EmptyState title={hasFilters ? "No matching results" : "No records yet"} filtered={hasFilters} onClear={hasFilters ? clearFilters : undefined} description={hasFilters ? "Try a different search or clear your filters." : emptyDescription} />}
+        {!loading && !visibleRows.length && <EmptyState title={hasFilters ? "No matching results" : emptyTitle} filtered={hasFilters} onClear={hasFilters ? clearFilters : undefined} description={hasFilters ? "Try a different search or clear your filters." : emptyDescription} action={emptyAction} />}
       </div>
+
+      {secondaryColumns.length > 0 && (
+        <Drawer open={Boolean(detailRecord)} size="small" title={detailRecord ? rowTitle(detailRecord) : "Details"} description="Additional information for this record." onClose={() => setDetailRow(null)}>
+          {detailRecord && <dl className="row-detail-list">
+            {secondaryColumns.map((column) => {
+              const value = cellValue(column, detailRecord);
+              return <div key={column.key} className={column.label ? undefined : "is-unlabelled"}>
+                {column.label && <dt>{t(column.label)}</dt>}
+                <dd className={columnLayout(column).className}>{value === undefined || value === null || value === "" ? "-" : value}</dd>
+              </div>;
+            })}
+          </dl>}
+        </Drawer>
+      )}
 
       {controls && (processed.length > 0 || (isRemote && (remote.pagination?.total || 0) > 0)) && (
         <div className="table-pagination">

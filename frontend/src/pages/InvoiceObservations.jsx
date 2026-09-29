@@ -94,15 +94,15 @@ export default function InvoiceObservations() {
       <Message type="error">{table.error}</Message>
       {deepLink.active && <DeepLinkNotice title={deepLink.link.record ? "Showing the observed invoice linked from your notification" : "Showing the observed invoices of the linked batch"} missing={!table.loading && !table.rows.length} missingDescription="No open observation remains for this link. The invoices may already have been revalidated." clearLabel="Show all observations" onClear={deepLink.clear} />}
       <div className="workspace-panel">
-        <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, onClick: () => open(row) }]} columns={[
-          { key: "request", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },
-          { key: "purchaseOrder", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
-          { key: "rucIssuer", label: "RUC" },
-          { key: "seriesNumber", label: "Voucher" },
-          { key: "xmlAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.xmlAmount, row.currency || "PEN", language) },
-          { key: "validationStatus", label: "Status", render: (row) => <StatusBadge status={row.validationStatus || row.status} /> },
-          { key: "observationDetail", label: "Observation", sortable: false, render: (row) => row.observationDetail || row.errorDetail || "-" },
-          { key: "batch", label: "Batch", sortable: false, render: (row) => row.batch?.batchCode || "-" }
+        <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, onClick: () => open(row) }]} columns={[
+          { key: "request", type: "code", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },
+          { key: "purchaseOrder", type: "code", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
+          { key: "rucIssuer", type: "code", label: "RUC" },
+          { key: "seriesNumber", type: "code", label: "Voucher" },
+          { key: "xmlAmount", type: "money", label: "Amount", render: (row) => formatCurrency(row.xmlAmount, row.currency || "PEN", language) },
+          { key: "validationStatus", type: "status", label: "Status", render: (row) => <StatusBadge status={row.validationStatus || row.status} /> },
+          { key: "observationDetail", primary: true, minWidth: "240px", label: "Observation", sortable: false, render: (row) => row.observationDetail || row.errorDetail || "-" },
+          { key: "batch", type: "code", label: "Batch", sortable: false, render: (row) => row.batch?.batchCode || "-" }
         ]} />
       </div>
       <Drawer open={Boolean(selected)} title="Revalidate observed invoice" description={selected ? `${selected.seriesNumber} · ${selected.purchaseOrder?.poNumber || ""}` : ""} onClose={() => !processing && setSelected(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelected(null)}>{t("Cancel")}</button><button className="primary-button" form="observation-resolution-form" type="submit" disabled={processing || !draft.ready || draft.status === "conflict"}><RotateCcw size={16} /><span>{t(processing ? "Processing..." : "Revalidate")}</span></button></>}>

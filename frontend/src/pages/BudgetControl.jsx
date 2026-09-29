@@ -139,8 +139,8 @@ export default function BudgetControl() {
   }
 
   return <section>
-    <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
       <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
+      <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
     <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error}</Message>
     <div className="period-toolbar budget-period-toolbar">
       <div className="budget-view-switch" role="group" aria-label={t("Budget view")}><button type="button" aria-pressed={view === "ANNUAL"} onClick={() => changeView("ANNUAL")}>{t("Annual view")}</button><button type="button" aria-pressed={view === "MONTHLY"} onClick={() => changeView("MONTHLY")}>{t("Monthly view")}</button></div>

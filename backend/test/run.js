@@ -48,6 +48,7 @@ import "./myTeam.test.js";
 import "./businessCalendar.test.js";
 import "./approvalCanonicalCompletion.test.js";
 import "./approvalFlexibleChain.test.js";
+import "./approvalBulk.test.js";
 import "./budgetExceptionRouting.test.js";
 import "./budgetProcurementDecisions.test.js";
 import "./exchangeRateEvidence.test.js";
@@ -58,3 +59,8 @@ import "./accountingFixes.test.js";
 import "./plainClone.test.js";
 import "./seedSmoke.test.js";
 import "./notificationLinks.test.js";
+import "./globalSearch.test.js";
+
+import "./dashboardTasks.test.js";
+
+import "./sessionRefresh.test.js";

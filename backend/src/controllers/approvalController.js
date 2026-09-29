@@ -1,5 +1,5 @@
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { decideApproval, getApprovalDecisionOptions, listApprovalInbox } from "../services/approvalService.js";
+import { bulkApproveRequests, decideApproval, getApprovalDecisionOptions, listApprovalInbox } from "../services/approvalService.js";
 import { publicRequestPayload } from "../services/requestService.js";
 
 export const getApprovalInbox = asyncHandler(async (req, res) => {
@@ -24,6 +24,19 @@ function decisionHandler(action) {
     res.json({ data: publicRequestPayload(result.request, req.user), warning: result.budgetWarning });
   });
 }
+
+// Per-request outcomes are always 200: a partial failure is a normal result the
+// inbox summarizes ("8 approved, 2 with errors"), not a failed call.
+export const bulkApproveRequestsHandler = asyncHandler(async (req, res) => {
+  const data = await bulkApproveRequests({
+    ids: req.body.ids,
+    comments: req.body.comments,
+    forward: req.body.forward,
+    user: req.user,
+    req
+  });
+  res.json({ data });
+});
 
 export const approveRequest = decisionHandler("APPROVE");
 export const observeRequest = decisionHandler("OBSERVE");

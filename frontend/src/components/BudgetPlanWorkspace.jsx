@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import api from "../api/client.js";
 import Drawer from "./Drawer.jsx";
 import Message from "./Message.jsx";
+import { ListSkeleton } from "./WorkspaceSkeleton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget } from "../../../shared/budgetPlanning.mjs";
@@ -93,7 +94,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
   const monthOptions = BUDGET_MONTHS.map((name, index) => <option key={name} value={index + 1}>{t(name)}</option>);
   return <Drawer open={open} title={planId || plan ? "Annual budget plan" : "Create annual budget"} size="large" onClose={() => !saving && onClose()}>
     <Message type="error">{t(error)}</Message>
-    {loading ? <p role="status">{t("Loading...")}</p> : plan ? <>
+    {loading ? <div role="status"><span className="sr-only">{t("Loading...")}</span><ListSkeleton rowCount={4} columnCount={3} /></div> : plan ? <>
       <div className="budget-plan-heading"><div><strong>{plan.period} · {plan.costCenter?.code} · {plan.expenseType?.accountNumber}</strong><p>{plan.costCenter?.name} / {plan.expenseType?.name}{plan.project ? ` / ${plan.project}` : ""}</p></div><span className="budget-mode-tag">{t(BUDGET_PLANNING_MODES[plan.planningMode])}</span></div>
       <dl className="budget-plan-metrics">
         <div><dt>{t("Annual budget")}</dt><dd>{money(plan.assignedAmount)}</dd></div>

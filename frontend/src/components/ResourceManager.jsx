@@ -1,3 +1,4 @@
+import DateInput from "./DateInput.jsx";
 import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { Eye, Pencil, Plus, Save, Trash2, X } from "lucide-react";
@@ -342,6 +343,8 @@ export default function ResourceManager({
                 <ChipMultiSelect value={form[field.name]} options={field.options} label={field.label} onChange={(next) => setForm({ ...form, [field.name]: next })} />
               ) : field.type === "tags" ? (
                 <TagInput value={form[field.name]} label={field.label} placeholder={field.placeholder} onChange={(next) => setForm({ ...form, [field.name]: next })} />
+              ) : field.type === "date" ? (
+                <DateInput value={form[field.name]} required={field.required} min={field.min} max={field.max} onChange={(event) => setForm({ ...form, [field.name]: event.target.value })} />
               ) : field.type === "textarea" ? (
                 <textarea
                   rows={field.rows || 4}

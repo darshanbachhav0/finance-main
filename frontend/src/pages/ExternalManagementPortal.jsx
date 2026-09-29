@@ -1,3 +1,4 @@
+import DateInput from "../components/DateInput.jsx";
 import { RefreshCw, ShieldCheck, WalletCards, ClipboardCheck, CircleDollarSign, CalendarClock, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import api from "../api/client.js";
@@ -61,8 +62,8 @@ export default function ExternalManagementPortal() {
         <div className="report-filter-grid">
           <label className="field"><span>{t("Period")}</span><select value={filters.period} onChange={(event) => setFilters((current) => ({ ...current, period: event.target.value }))}><option value="">{t("All periods")}</option>{data.filters?.periods?.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label className="field"><span>{t("Area")}</span><select value={filters.area} onChange={(event) => setFilters((current) => ({ ...current, area: event.target.value }))}><option value="">{t("All areas")}</option>{data.filters?.areas?.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label className="field"><span>{t("From")}</span><input type="date" value={filters.dateFrom} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} /></label>
-          <label className="field"><span>{t("To")}</span><input type="date" value={filters.dateTo} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} /></label>
+          <label className="field"><span>{t("From")}</span><DateInput value={filters.dateFrom} onChange={(event) => setFilters((current) => ({ ...current, dateFrom: event.target.value }))} /></label>
+          <label className="field"><span>{t("To")}</span><DateInput value={filters.dateTo} onChange={(event) => setFilters((current) => ({ ...current, dateTo: event.target.value }))} /></label>
         </div>
         <div className="management-filter-actions"><button className="primary-button" type="submit">{t("Apply filters")}</button><button className="text-button" type="button" onClick={() => { const reset = { period: "", area: "", dateFrom: "", dateTo: "" }; setFilters(reset); setApplied(reset); }}>{t("Clear")}</button></div>
       </form>

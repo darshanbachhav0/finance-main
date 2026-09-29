@@ -431,6 +431,47 @@ export default function RequestDetail() {
     : permissions.canCommitBudget ? ["Review budget availability and commit the approved request.", "Available actions", "#request-actions"]
     : permissions.canIssueOrder ? ["Review the approved purchase and issue the order.", "Available actions", "#request-actions"]
     : permissions.canClose ? ["Review the reconciliation before closing this request.", "Available actions", "#request-actions"] : null;
+  const confirmCommitBudget = () => setConfirm({
+    type: "budget",
+    title: "Commit this request budget?",
+    description: "The backend will validate every budget dimension and exception rule before reserving funds.",
+    confirmLabel: "Commit budget",
+    details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Successful commitment changes the request to COMPROMISO_PRESUPUESTAL." }]
+  });
+  const confirmIssueOrder = () => setConfirm({
+    type: "order",
+    title: "Issue the Purchase or Service Order?",
+    description: "The order will use the approved request supplier, PRV, lines, currency, and amount. Repeated requests return the existing order.",
+    confirmLabel: "Issue order",
+    details: [
+      { label: "Request", value: request.requestNumber },
+      { label: "Order type", value: procurementReadiness?.orderKind },
+      { label: "Supplier / PRV", value: `${entityName(supplier)} / ${supplier?.supplierCode || "-"}` },
+      { label: "Result", value: "An immutable OC reference and approved-data snapshot are created." }
+    ]
+  });
+  const confirmClose = () => setConfirm({
+    type: "close",
+    title: "Close this request?",
+    description: "Only a reconciled request in an open permitted period can be closed.",
+    confirmLabel: "Close request",
+    inputLabel: "Closing comments",
+    details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes from CONCILIADO to CERRADO." }]
+  });
+  // Phones: the main action the page offers stays within reach in a bar above the bottom
+  // navigation. It reuses the action panel's handlers; the full panel stays at #request-actions.
+  const stickyAction = permissions.canApprove
+    ? (isChainApprovalStep
+      ? { label: "Approve and finalize", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button" }
+      : { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve") })
+    : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
+    : permissions.canCommitBudget ? { label: "Commit budget", icon: CheckCircle2, onClick: confirmCommitBudget }
+    : permissions.canIssueOrder ? { label: "Issue order", icon: ShoppingCart, onClick: confirmIssueOrder }
+    : permissions.canClose ? { label: "Close request", icon: CheckCircle2, onClick: confirmClose }
+    : nextAction?.[1] === "Documents" ? { label: "Open documents", icon: FileText, href: nextAction[2], onClick: () => setActiveTab("Documents") }
+    : null;
+  const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && permissions.canObserve, permissions.canApprove && permissions.canReturn, permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
+  const StickyIcon = stickyAction?.icon;
   const requestDescription = request.flowType === "C"
     ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
     : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
@@ -898,37 +939,13 @@ export default function RequestDetail() {
                 </div>
               )}
               {permissions.canCommitBudget && (
-                <button type="button" className="primary-button" onClick={() => setConfirm({
-                  type: "budget",
-                  title: "Commit this request budget?",
-                  description: "The backend will validate every budget dimension and exception rule before reserving funds.",
-                  confirmLabel: "Commit budget",
-                  details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Successful commitment changes the request to COMPROMISO_PRESUPUESTAL." }]
-                })}><CheckCircle2 size={16} /><span>{t("Commit budget")}</span></button>
+                <button type="button" className="primary-button" onClick={confirmCommitBudget}><CheckCircle2 size={16} /><span>{t("Commit budget")}</span></button>
               )}
               {permissions.canIssueOrder && (
-                <button type="button" className="primary-button" onClick={() => setConfirm({
-                  type: "order",
-                  title: "Issue the Purchase or Service Order?",
-                  description: "The order will use the approved request supplier, PRV, lines, currency, and amount. Repeated requests return the existing order.",
-                  confirmLabel: "Issue order",
-                  details: [
-                    { label: "Request", value: request.requestNumber },
-                    { label: "Order type", value: procurementReadiness?.orderKind },
-                    { label: "Supplier / PRV", value: `${entityName(supplier)} / ${supplier?.supplierCode || "-"}` },
-                    { label: "Result", value: "An immutable OC reference and approved-data snapshot are created." }
-                  ]
-                })}><ShoppingCart size={16} /><span>{t("Issue order")}</span></button>
+                <button type="button" className="primary-button" onClick={confirmIssueOrder}><ShoppingCart size={16} /><span>{t("Issue order")}</span></button>
               )}
               {permissions.canClose && (
-                <button type="button" className="primary-button" onClick={() => setConfirm({
-                  type: "close",
-                  title: "Close this request?",
-                  description: "Only a reconciled request in an open permitted period can be closed.",
-                  confirmLabel: "Close request",
-                  inputLabel: "Closing comments",
-                  details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes from CONCILIADO to CERRADO." }]
-                })}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
+                <button type="button" className="primary-button" onClick={confirmClose}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
               )}
               {permissions.canVoid && (
                 <button type="button" className="danger-button subtle" onClick={() => setConfirm({
@@ -964,6 +981,15 @@ export default function RequestDetail() {
           </div>
         </aside>
       </div>
+
+      {stickyAction && (
+        <div className="request-sticky-actions" role="region" aria-label={t("Main action")}>
+          {availableActionCount > 1 && <a className="secondary-button" href="#request-actions">{t("More actions")}</a>}
+          {stickyAction.href
+            ? <a className="primary-button" href={stickyAction.href} onClick={stickyAction.onClick}><StickyIcon size={16} aria-hidden="true" /><span>{t(stickyAction.label)}</span></a>
+            : <button type="button" className={stickyAction.className || "primary-button"} disabled={processing || stickyAction.disabled} onClick={stickyAction.onClick}><StickyIcon size={16} aria-hidden="true" /><span>{t(stickyAction.label)}</span></button>}
+        </div>
+      )}
 
       <ConfirmDialog
         open={Boolean(confirm)}
