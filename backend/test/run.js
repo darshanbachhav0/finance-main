@@ -60,3 +60,5 @@ import "./plainClone.test.js";
 import "./seedSmoke.test.js";
 import "./notificationLinks.test.js";
 import "./globalSearch.test.js";
+
+import "./dashboardTasks.test.js";

@@ -2941,7 +2941,8 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   .command-results small { white-space: normal; overflow-wrap: anywhere; }
 }
 
-/* ==== ux: bulk actions ======================================================================
+/* ==== ux: bulk actions ===============================================================
+
    Approval inbox bulk approve, Treasury bank-file selection and the bell's per-item actions.
    The bar follows its table and stays pinned to the bottom of the viewport while it scrolls. */
 .bulk-bar {
@@ -2979,3 +2980,40 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   .notification-row-actions .icon-button { width: var(--touch-target); height: var(--touch-target); min-height: var(--touch-target); }
 }
 @media print { .bulk-bar { display: none !important; } }
+=======
+/* ==== ux: role home ==== */
+/* Dashboard "My tasks": the role's to-do list, one linked row per task, most urgent first.
+   Approval Inbox: the budget-exception decision section for Management. */
+.my-tasks { margin-bottom: var(--space-5); }
+.my-tasks-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); margin-bottom: var(--space-4); }
+.my-tasks-heading h2 { margin: 0; font-size: 19px; }
+.my-tasks-heading p { margin: var(--space-1) 0 0; color: var(--gray-600); font-size: var(--font-sm); }
+.my-tasks-heading .primary-button, .my-tasks-empty .primary-button { min-height: var(--control-height); }
+.my-tasks-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.my-task { display: flex; align-items: center; gap: var(--space-3); min-height: calc(var(--touch-target) + var(--space-4)); padding: var(--space-3) var(--space-4); color: var(--gray-950); background: var(--surface-panel); border: 1px solid var(--gray-200); border-left: 3px solid var(--gray-400); border-radius: var(--radius-md); text-decoration: none; transition: border-color var(--motion-fast, .15s) ease, background-color var(--motion-fast, .15s) ease; }
+.my-task:hover { color: var(--gray-950); text-decoration: none; border-color: var(--gray-400); background: var(--gray-100); }
+.my-task.tone-red { border-left-color: var(--red-700); }
+.my-task.tone-amber { border-left-color: var(--amber-700); }
+.my-task.tone-teal, .my-task.tone-navy { border-left-color: var(--teal-600); }
+.my-task .task-indicator { flex: 0 0 auto; }
+.my-task-text { display: grid; flex: 1 1 auto; gap: var(--space-1); min-width: 0; }
+.my-task-text strong { font-size: var(--font-md); font-weight: 700; overflow-wrap: anywhere; }
+.my-task-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+.my-task-chip { display: inline-flex; align-items: center; padding: 2px var(--space-2); color: var(--gray-700); background: var(--gray-100); border-radius: var(--radius-sm); font-size: var(--font-xs); font-weight: 700; }
+.my-task-chip.tone-red { color: var(--red-700); background: var(--red-100); }
+.my-task-chip.tone-amber { color: var(--amber-700); background: var(--amber-100); }
+.my-task-chip.tone-teal { color: var(--teal-700); background: var(--surface-tint-e6f5f2, var(--gray-100)); }
+.my-task-arrow { flex: 0 0 auto; color: var(--gray-400); }
+.my-task:hover .my-task-arrow { color: var(--gray-700); }
+.my-tasks-empty { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); padding: var(--space-4); background: var(--surface-tint-f2fbf6, var(--gray-100)); border-radius: var(--radius-md); }
+.my-tasks-empty > svg { flex: 0 0 auto; color: var(--green-700); }
+.my-tasks-empty > div { flex: 1 1 220px; }
+.my-tasks-empty strong { font-size: var(--font-md); }
+.my-tasks-empty p { margin: var(--space-1) 0 0; color: var(--gray-600); font-size: var(--font-sm); }
+.budget-exception-decisions { scroll-margin-top: calc(var(--space-6) * 2); }
+.budget-exception-decisions-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.budget-exception-decisions .decision-actions .icon-button { display: inline-grid; place-items: center; }
+@media (max-width: 760px) {
+  .my-tasks-heading .primary-button, .my-tasks-empty .primary-button { width: 100%; justify-content: center; min-height: var(--touch-target); }
+  .my-task { padding: var(--space-3); }
+}
