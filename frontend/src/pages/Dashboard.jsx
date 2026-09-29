@@ -75,7 +75,7 @@ export default function Dashboard() {
     { key: "totalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.totalAmount, row.currency, language) },
     { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> }
   ];
-  const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
+  const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, rowId: item._id || item.request._id, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
   const workspace = {
     Admin: ["Keep university operations moving", "Review requests and the items that need your team’s attention.", "/administration", "Administration"],
     Solicitor: ["Your next request starts here", "Prepare a request or continue work saved in your drafts.", "/requests/new", "New request"],
@@ -129,7 +129,7 @@ export default function Dashboard() {
                 <div><h3>{t(isApprovalRole(summary.role) ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3><p>{t("Current operational work in priority order.")}</p></div>
                 <Link className="text-link" to={isApprovalRole(summary.role) ? "/approvals" : summary.role === "Treasury" ? "/treasury" : "/requests"}>{t("View all")}</Link>
               </div>
-              <DataTable className="dashboard-request-table" controls={false} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." />
+              <DataTable className="dashboard-request-table cards-narrow-only" controls={false} rowKey={operationalRows.some((row) => row.rowId) ? "rowId" : "_id"} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." />
             </div>
 
             <AnalyticsChart
@@ -168,7 +168,7 @@ export default function Dashboard() {
               />
             )}
 
-            {["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link" to="/reports">{t("More insights in Reports")}</Link>}
+            {["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link dashboard-reports-link" to="/reports">{t("More insights in Reports")}</Link>}
 
           </div>
         </>

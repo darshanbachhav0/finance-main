@@ -8,6 +8,7 @@ import sireSpanish from "./i18n/sire.js";
 import treasurySpanish from "./i18n/treasury.js";
 import renditionsSpanish from "./i18n/renditions.js";
 import operationsSpanish from "./i18n/operations.js";
+import interfaceSpanish, { interfaceCodeLabels } from "./i18n/interface.js";
 import notificationsSpanish from "./i18n/notifications.js";
 import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
@@ -1824,7 +1825,7 @@ const quotationPaymentSpanish = {
   "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...notificationsSpanish };
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...notificationsSpanish };
 Object.assign(spanishDictionary, {
   "Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed.": "Generar una instrucción BBVA de ancho fijo. El pago queda pendiente hasta confirmar la ejecución bancaria.",
   "BBVA confirmed configuration (JSON)": "Configuración BBVA confirmada (JSON)",
@@ -1846,10 +1847,22 @@ Object.assign(spanishDictionary, {
   "The server could not complete this action. Try again; if it continues, contact Administration.": "El servidor no pudo completar esta acción. Inténtalo de nuevo; si continúa, contacta con Administración.",
   "The action could not be completed. Check the information and try again.": "No se pudo completar la acción. Revisa la información e inténtalo de nuevo."
 });
+// Workflow codes (OBSERVADO_PRESUPUESTO, PAYMENT_BOUNCED...) have some translations written in
+// capitals; they are shown in sentence case like every other status, keeping acronyms.
+const CODE = /^[A-Z0-9]+(_[A-Z0-9]+)+$|^[A-Z]{4,}$/;
+const ACRONYMS = new Set(["SUNAT", "CXP", "PEN", "USD", "BBVA", "BCP", "IGV", "RUC", "DNI", "OC", "SLA", "SPOT", "TXT", "XML", "PDF", "CECO", "CAPEX", "OPEX", "RXH", "SIRE", "RCE", "UMA"]);
+function sentenceCase(value) {
+  return value.toLowerCase().split(" ").map((word, index) => {
+    if (ACRONYMS.has(word.toUpperCase())) return word.toUpperCase();
+    return index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+  }).join(" ");
+}
+
 export function translateMessage(text, language = "en") {
   if (text === undefined || text === null) return "";
-  const display = umaCopy[text] || text;
-  return language === "en" ? display : umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
+  const display = umaCopy[text] || interfaceCodeLabels[text] || text;
+  const result = language === "en" ? display : umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
+  return typeof text === "string" && CODE.test(text) && result !== text && /\s/.test(result) && result === result.toUpperCase() ? sentenceCase(result) : result;
 }
 
 export function LanguageProvider({ children }) {

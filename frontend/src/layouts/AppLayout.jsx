@@ -287,13 +287,13 @@ export default function AppLayout() {
             {!managementViewer && <div className="topbar-menu">
               <button type="button" className="icon-button notification-button" onClick={() => { if (!taskOpen) loadTasks(); setTaskOpen((current) => !current); setUserOpen(false); }} aria-label={t("Open task notifications")} aria-expanded={taskOpen}>
                 <Bell size={19} />
-                {notifications.unreadCount > 0 ? <span className="notification-dot" aria-live="polite" aria-label={t("{count} unread notifications").replace("{count}", notifications.unreadCount)}>{notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}</span> : tasks.total > 0 && <span className="notification-dot" aria-label={t("Pending tasks")}>•</span>}
+                {notifications.unreadCount > 0 ? <span className="notification-dot" aria-live="polite" aria-label={t(notifications.unreadCount === 1 ? "{count} unread notification" : "{count} unread notifications").replace("{count}", notifications.unreadCount)}>{notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}</span> : tasks.total > 0 && <span className="notification-dot" aria-label={t("Pending tasks")}>•</span>}
               </button>
               {taskOpen && (
                 <div className="topbar-popover task-popover">
                   <div className="popover-heading">
                     <strong>{t("Tasks and alerts")}</strong>
-                    <span>{t("{count} unread notifications").replace("{count}", notifications.unreadCount)}</span>
+                    <span>{t(notifications.unreadCount === 1 ? "{count} unread notification" : "{count} unread notifications").replace("{count}", notifications.unreadCount)}</span>
                   </div>
                   {notificationError && <p className="popover-empty" role="status">{t(notificationError)} <button type="button" className="text-button" onClick={loadTasks}>{t("Retry")}</button></p>}
                   <div className="task-list">
@@ -322,7 +322,7 @@ export default function AppLayout() {
             <div className="topbar-menu">
               <button type="button" className="user-menu-button" aria-label={t("Account menu")} onClick={() => { setUserOpen((current) => !current); setTaskOpen(false); }} aria-expanded={userOpen}>
                 <span className="user-avatar">{user.name?.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
-                <span className="user-summary"><strong>{user.name}</strong><small>{t(user.role)} · {user.area}</small></span>
+                <span className="user-summary" title={`${user.name} · ${t(user.role)} · ${user.area || ""}`}><strong>{user.name}</strong><small>{t(user.role)} · {user.area}</small></span>
                 <ChevronDown size={15} />
               </button>
               {userOpen && (

@@ -8,12 +8,6 @@ import { LanguageProvider } from "./context/LanguageContext.jsx";
 import { ToastProvider } from "./context/ToastContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import "./styles/global.css";
-import "./styles/uma.css";
-import "./styles/experience.css";
-import "./styles/responsive.css";
-import "./styles/motion.css";
-import "./styles/polish.css";
-import "./styles/refinement.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

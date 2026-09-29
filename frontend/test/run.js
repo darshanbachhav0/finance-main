@@ -24,3 +24,4 @@ import "./managementPortal.test.js";
 import "./operationsAccess.test.js";
 import "./notificationTranslations.test.js";
 import "./notificationLinks.test.js";
+import "./uiPolish.test.js";
