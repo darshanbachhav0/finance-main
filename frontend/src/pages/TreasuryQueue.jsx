@@ -115,6 +115,11 @@ export default function TreasuryQueue({ historyOnly = false }) {
     linkResolved.current = "";
     if (linkActive && PAYMENT_VIEWS.includes(deepLink.tab)) setPaymentView(deepLink.tab);
   }, [deepLink.linkKey, deepLink.tab, linkActive]);
+  // A plain stage link (/treasury?tab=confirm, from a task or the menu) opens that stage even
+  // when it names no record.
+  useEffect(() => {
+    if (!linkActive && PAYMENT_VIEWS.includes(deepLink.tab)) setPaymentView(deepLink.tab);
+  }, [deepLink.tab, linkActive]);
   useEffect(() => {
     const linkId = deepLink.linkKey + deepLink.tab;
     if (!linkActive || linkResolved.current === linkId || stageTotals.some((total) => total === null)) return;
