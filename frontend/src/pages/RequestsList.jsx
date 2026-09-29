@@ -103,13 +103,13 @@ export default function RequestsList() {
 
   return (
     <section>
-      <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
       <PageHeader
         title={ownScope ? "My Requests" : "Requests"}
         description="Create, track, submit, and review financial requests by status and accounting period."
         help={<WorkflowStatusLegend align="start" />}
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}
       />
+      <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
       <Message type="error">{actionError || requestsTable.error}</Message>
       <div className="workspace-panel">
         <DataTable
@@ -134,6 +134,9 @@ export default function RequestsList() {
             { key: "project", label: "projects", allLabel: "All projects", options: projects }
           ]}
           searchPlaceholder="Search request, supplier, solicitor..."
+          emptyTitle="No requests yet"
+          emptyDescription={canCreate ? "Create a request to start its approval workflow." : "Requests appear here once they are submitted."}
+          emptyAction={canCreate ? { label: "Create request", to: "/requests/new", icon: Plus } : undefined}
           onRowClick={(row) => setQuickViewId(row._id)}
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
@@ -143,17 +146,17 @@ export default function RequestsList() {
             { label: "Delete permanently", icon: Trash2, tone: "danger", hidden: !canDelete(row), onClick: () => setDeleteRow(row) }
           ]}
           columns={[
-            { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-            { key: "flowType", label: "Track", render: (row) => <span className="flow-chip">{row.flowType || "A1"}</span> },
+            { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
+            { key: "flowType", type: "code", label: "Track", render: (row) => <span className="flow-chip">{row.flowType || "A1"}</span> },
             { key: "requestType", label: "Type" },
             { key: "expenseNature", label: "Expense nature", render: (row) => t(expenseNatureLabels[row.expenseNature] || row.expenseNature) },
             { key: "priority", label: "Priority", render: (row) => <span className={`priority priority-${String(row.priority || "MEDIA").toLowerCase()}`}>{t(row.priority || "MEDIA")}</span> },
-            { key: "supplier", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
+            { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
             { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
-            { key: "accountingPeriod", label: "Period" },
-            { key: "totalAmount", label: "Amount", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
-            { key: "status", label: "Status", render: (row) => <div className="status-cell"><FinancialProgressSummary request={row} compact /><RequestStageIndicator request={row} compact /></div> },
-            { key: "updatedAt", label: "Updated", render: (row) => formatDate(row.updatedAt) }
+            { key: "accountingPeriod", type: "code", label: "Period" },
+            { key: "totalAmount", type: "money", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
+            { key: "status", type: "status", minWidth: "180px", label: "Status", render: (row) => <div className="status-cell"><FinancialProgressSummary request={row} compact /><RequestStageIndicator request={row} compact /></div> },
+            { key: "updatedAt", type: "date", label: "Updated", render: (row) => formatDate(row.updatedAt) }
           ]}
         />
       </div>

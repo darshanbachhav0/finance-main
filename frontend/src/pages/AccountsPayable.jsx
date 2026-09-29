@@ -332,6 +332,9 @@ export default function AccountsPayable() {
             }
           ]}
           searchPlaceholder="Search request, supplier, voucher, Purchase Order, or bank batch..."
+          emptyTitle="No CXP records yet"
+          emptyDescription="A CXP is created for each invoice once Accounting processes it."
+          emptyAction={{ label: "Accounting Entries", to: "/accounting" }}
           rowActions={(
             row
           ) => [
@@ -365,6 +368,9 @@ export default function AccountsPayable() {
               key:
                 "request",
 
+              type:
+                "code",
+
               label:
                 "Request",
 
@@ -395,6 +401,9 @@ export default function AccountsPayable() {
               key:
                 "flowType",
 
+              type:
+                "code",
+
               label:
                 "Track",
 
@@ -419,6 +428,9 @@ export default function AccountsPayable() {
             {
               key:
                 "supplier",
+
+              type:
+                "name",
 
               label:
                 "Supplier",
@@ -459,6 +471,9 @@ export default function AccountsPayable() {
             {
               key:
                 "voucher",
+
+              type:
+                "code",
 
               label:
                 "Voucher",
@@ -526,6 +541,9 @@ export default function AccountsPayable() {
             {
               key:
                 "purchaseOrder",
+
+              type:
+                "code",
 
               label:
                 "Purchase Order",
@@ -602,6 +620,9 @@ export default function AccountsPayable() {
               key:
                 "currency",
 
+              type:
+                "code",
+
               label:
                 "Currency"
             },
@@ -609,6 +630,9 @@ export default function AccountsPayable() {
             {
               key:
                 "outstandingAmount",
+
+              type:
+                "money",
 
               label:
                 "Outstanding",
@@ -651,6 +675,9 @@ export default function AccountsPayable() {
               key:
                 "status",
 
+              type:
+                "status",
+
               label:
                 "Status",
 
@@ -682,12 +709,18 @@ export default function AccountsPayable() {
               key:
                 "dueDate",
 
+              type:
+                "date",
+
+              primary:
+                true,
+
               label:
                 "Due date",
 
               render:
                 (row) =>
-                  row.dueDate ? dateText(row.dueDate) : row.paymentTermsSnapshot?.paymentCondition ? t("Date to be confirmed under the agreed terms") : "-"
+                  row.dueDate ? dateText(row.dueDate) : row.paymentTermsSnapshot?.paymentCondition ? <span className="cell-note">{t("Date to be confirmed under the agreed terms")}</span> : "-"
             }
           ]}
         />
