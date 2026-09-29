@@ -115,6 +115,18 @@ export async function markNotificationRead(id, userId) {
   return Notification.findOneAndUpdate({ _id: id, user: userId }, { $set: { readAt: new Date() } }, { new: true });
 }
 
+// "Mark done": the owner clears one notification from their bell. It only hides
+// the alert — the underlying task (approval, payment…) is unaffected and stays in
+// its workspace, and a re-sent notification for the same event comes back unread.
+export async function dismissNotification(id, userId) {
+  const now = new Date();
+  return Notification.findOneAndUpdate(
+    { _id: id, user: userId },
+    [{ $set: { readAt: { $ifNull: ["$readAt", now] }, resolvedAt: { $ifNull: ["$resolvedAt", now] } } }],
+    { new: true }
+  );
+}
+
 export async function markAllNotificationsRead(userId) {
   return Notification.updateMany({ user: userId, readAt: null, resolvedAt: null }, { $set: { readAt: new Date() } });
 }
