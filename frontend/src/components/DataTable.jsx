@@ -14,6 +14,7 @@ import EmptyState from "./EmptyState.jsx";
 import RowActionMenu from "./RowActionMenu.jsx";
 import TableTools from "./TableTools.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import useMediaQuery from "../hooks/useMediaQuery.js";
 
 function rawValue(column, row) {
   if (column.getValue) return column.getValue(row);
@@ -203,6 +204,12 @@ export default function DataTable({
     URL.revokeObjectURL(url);
   }
 
+  // Long search hints ("Search request, supplier, voucher...") are cut off on phones; there the
+  // first term is shown and the full hint stays available as the field's tooltip.
+  const narrowScreen = useMediaQuery("(max-width: 640px)");
+  const fullPlaceholder = t(searchPlaceholder);
+  const searchHint = narrowScreen && fullPlaceholder.includes(",") ? `${fullPlaceholder.split(",")[0].replace(/[.…]+$/, "")}…` : fullPlaceholder;
+
   return (
     <div aria-busy={loading} className={`data-table density-${density} ${mobileCards ? "mobile-cards" : ""} ${className}`.trim()}>
       {controls && (
@@ -211,7 +218,7 @@ export default function DataTable({
             <label className="table-search">
               <Search size={16} aria-hidden="true" />
               <span className="sr-only">{t("Search")}</span>
-              <input value={activeSearch} onChange={(event) => isRemote ? updateRemote({ search: event.target.value, page: 1 }) : setSearch(event.target.value)} placeholder={t(searchPlaceholder)} />
+              <input value={activeSearch} onChange={(event) => isRemote ? updateRemote({ search: event.target.value, page: 1 }) : setSearch(event.target.value)} placeholder={searchHint} title={fullPlaceholder} aria-label={fullPlaceholder} />
             </label>
             {filters.length > 1 && <button type="button" className={`table-filter-toggle${activeFilterCount ? " has-active" : ""}`} aria-expanded={mobileFiltersOpen} onClick={() => setMobileFiltersOpen((current) => !current)}><ListFilter size={16} /><span>{t("More filters")}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span><ChevronDown size={15} /></button>}
             <div className={`table-filter-fields simplified-filters${mobileFiltersOpen ? " is-open" : ""}`}>
@@ -327,7 +334,7 @@ export default function DataTable({
                   return <td key={column.key} className={column.align ? `align-${column.align}` : ""} data-label={t(column.label)}>{typeof value === "string" ? t(value) : value}</td>;
                 })}
                 {secondaryColumns.length > 0 && <td data-label={t("Details")}><details className="row-details" onClick={event => event.stopPropagation()}><summary>{t("Details")}</summary><dl>{secondaryColumns.map(column => { const value = column.render ? column.render(row) : rawValue(column, row); return <div key={column.key}><dt>{t(column.label)}</dt><dd>{typeof value === "string" ? t(value) : value}</dd></div>; })}</dl></details></td>}
-                {rowActions && <td className="actions-column" data-label={t("Actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
+                {rowActions && <td className="actions-column" data-label={t("More actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
               </tr>
             ))}
           </tbody>

@@ -34,43 +34,31 @@ function BankFormatCertificationPanel({ rows, reload }) {
     <details className="workspace-panel" open>
       <summary>{t("BBVA certification")}</summary>
       <p>{t("Certification is a separate, audited action from editing the format. Mark a format certified only after Treasury/BBVA formally accepts the generated PEN/USD test files. Files already generated keep the certification state that applied when they were created.")}</p>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>{t("Currency")}</th>
-            <th>{t("Certified")}</th>
-            <th>{t("Certified by")}</th>
-            <th>{t("Certified at")}</th>
-            <th>{t("Reference / comment")}</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row._id}>
-              <td>{row.currency}</td>
-              <td>{row.certified ? t("Yes") : t("No")}</td>
-              <td>{row.certifiedBy?.name || "-"}</td>
-              <td>{row.certifiedAt ? formatDateTime(row.certifiedAt) : "-"}</td>
-              <td>
-                <input
-                  type="text"
-                  placeholder={t("Required to certify")}
-                  value={reference[row._id] || ""}
-                  onChange={(event) => setReference({ ...reference, [row._id]: event.target.value })}
-                />
-              </td>
-              <td>
-                {row.certified ? (
-                  <button type="button" className="secondary-button" disabled={busyId === row._id} onClick={() => certify(row, false)}>{t("Remove certification")}</button>
-                ) : (
-                  <button type="button" className="primary-button" disabled={busyId === row._id} onClick={() => certify(row, true)}>{t("Certify")}</button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="certification-list">
+        {rows.map((row) => (
+          <div className="certification-row" key={row._id}>
+            <div className="certification-meta">
+              <strong>{row.currency}</strong>
+              <span className={`badge ${row.certified ? "badge-green" : "badge-amber"}`}>{t(row.certified ? "Certified" : "Not certified")}</span>
+              <small>{row.certified ? `${row.certifiedBy?.name || "-"} · ${row.certifiedAt ? formatDateTime(row.certifiedAt) : "-"}` : t("No certification recorded")}</small>
+            </div>
+            <label className="field certification-reference">
+              <span>{t("Reference / comment")}</span>
+              <input
+                type="text"
+                placeholder={t("Required to certify")}
+                value={reference[row._id] || ""}
+                onChange={(event) => setReference({ ...reference, [row._id]: event.target.value })}
+              />
+            </label>
+            {row.certified ? (
+              <button type="button" className="secondary-button" disabled={busyId === row._id} onClick={() => certify(row, false)}>{t("Remove certification")}</button>
+            ) : (
+              <button type="button" className="primary-button" disabled={busyId === row._id} onClick={() => certify(row, true)}>{t("Certify")}</button>
+            )}
+          </div>
+        ))}
+      </div>
     </details>
   );
 }

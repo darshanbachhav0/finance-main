@@ -6,6 +6,8 @@ import { optionLabel, requestTypeLabels, requestTypes } from "../utils/options.j
 export default function ReportFilters({ values, options, onChange, onApply, onClear, loading }) {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
+  // An empty <input type="month"> renders "--------- ----"; show a readable placeholder until used.
+  const [periodFocused, setPeriodFocused] = useState(false);
   const update = (key) => (event) => onChange({ ...values, [key]: event.target.value });
 
   return (
@@ -15,7 +17,7 @@ export default function ReportFilters({ values, options, onChange, onApply, onCl
       </button>
       <div className="report-filter-content focused-report-filters">
         <div className="report-filter-grid">
-          <label className="field"><span>{t("Accounting period")}</span><input type="month" value={values.period} onChange={update("period")} /></label>
+          <label className="field"><span>{t("Accounting period")}</span><input type={values.period || periodFocused ? "month" : "text"} placeholder={t("All periods")} value={values.period} onFocus={() => setPeriodFocused(true)} onBlur={() => setPeriodFocused(false)} onChange={update("period")} /></label>
           <label className="field"><span>{t("Date from")}</span><input type="date" value={values.dateFrom} onChange={update("dateFrom")} /></label>
           <label className="field"><span>{t("Date to")}</span><input type="date" value={values.dateTo} onChange={update("dateTo")} /></label>
           <label hidden={!expanded} className="field"><span>{t("Currency")}</span><select value={values.currency} onChange={update("currency")}><option value="">{t("All currencies")}</option><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
