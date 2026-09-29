@@ -7,6 +7,7 @@ import {
   BookOpenCheck,
   Building2,
   CalendarRange,
+  Check,
   ChartNoAxesCombined,
   ChevronDown,
   ChevronLeft,
@@ -133,7 +134,7 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 1080px)");
   const managementViewer = user.role === "ManagementViewer";
-  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead } = useNotificationBell(user._id, !managementViewer);
+  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead, dismiss: dismissNotification } = useNotificationBell(user._id, !managementViewer);
   const [taskOpen, setTaskOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -299,10 +300,16 @@ export default function AppLayout() {
                   <div className="task-list">
                     <div className="notification-list-heading"><strong>{t("Notifications")}</strong>{notifications.unreadCount > 0 && <button type="button" className="text-button" onClick={markAllRead}>{t("Mark all read")}</button>}</div>
                     {notifications.data.map((item) => (
-                      <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
+                      <div key={item._id} className="notification-row">
+                      <Link to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
                         <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "red" : item.type === "SLA_DUE_SOON" ? "amber" : item.readAt ? "neutral" : "teal"}`} />
                         <span><strong>{notificationTitle(t, item)}</strong><small>{notificationMessage(t, item)}</small></span>
                       </Link>
+                      <span className="notification-row-actions">
+                        {!item.readAt && <button type="button" className="icon-button quiet" title={t("Mark read")} aria-label={t("Mark read")} onClick={() => markNotificationRead(item)}><Check size={15} /></button>}
+                        <button type="button" className="icon-button quiet" title={t("Mark done")} aria-label={t("Mark done")} onClick={() => dismissNotification(item)}><X size={15} /></button>
+                      </span>
+                      </div>
                     ))}
                     {!notifications.data.length && !notificationError && <p className="popover-empty">{t("No notifications yet.")}</p>}
                     <div className="notification-list-heading"><strong>{t("Pending tasks")}</strong></div>
