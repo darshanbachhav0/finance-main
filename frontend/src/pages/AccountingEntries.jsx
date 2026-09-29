@@ -1,3 +1,4 @@
+import DateInput, { MonthInput } from "../components/DateInput.jsx";
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
@@ -141,7 +142,7 @@ export default function AccountingEntries() {
       <Message type="error">{actionError || entriesTable.error || pendingTable.error || historyTable.error}</Message>
 
       <div className="period-toolbar">
-        <label className="field compact-period"><span>{t("Accounting period")}</span><input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
+        <label className="field compact-period"><span>{t("Accounting period")}</span><MonthInput value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
         <button type="button" className="secondary-button" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Load period")}</span></button>
         <button type="button" className="primary-button" onClick={exportCsv} disabled={exporting || loading || Number(previewSummary.difference || 0) !== 0 || !previewSummary.balanced} title={Number(previewSummary.difference || 0) !== 0 || !previewSummary.balanced ? t("Export is blocked until the reconciliation difference is zero and journals balance.") : undefined}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Export consolidation CSV")}</span></button>
       </div>
@@ -234,10 +235,10 @@ export default function AccountingEntries() {
           <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option value="FACTURA">{t("FACTURA")}</option><option value="BOLETA">{t("BOLETA")}</option><option value="RXH">{t("RXH")}</option></select><small className="field-hint">{t("Credit and debit notes are registered against their original invoice from Accounts Payable.")}</small></label>
           <label className="field"><span>{t("Series")} *</span><input required value={fiscalForm.series} onChange={(event) => setFiscalForm({ ...fiscalForm, series: event.target.value.toUpperCase() })} /></label>
           <label className="field"><span>{t("Document number")} *</span><input required value={fiscalForm.number} onChange={(event) => setFiscalForm({ ...fiscalForm, number: event.target.value })} /></label>
-          <label className="field"><span>{t("Document date")} *</span><input required type="date" value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value, fiscalPeriod: event.target.value.slice(0, 7) })} /></label>
-          <label className="field"><span>{t("Accounting date")} *</span><input required type="date" value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
-          <label className="field"><span>{t("Fiscal period")}</span><input type="month" readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
-          <label className="field"><span>{t("Due date")}</span><input type="date" value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
+          <label className="field"><span>{t("Document date")} *</span><DateInput required value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value, fiscalPeriod: event.target.value.slice(0, 7) })} /></label>
+          <label className="field"><span>{t("Accounting date")} *</span><DateInput required value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
+          <label className="field"><span>{t("Fiscal period")}</span><MonthInput readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
+          <label className="field"><span>{t("Due date")}</span><DateInput value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
           <label className="field"><span>{t("Account number")}</span><input value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("Posting uses the account of each line's Expense Type. A different account number is rejected.")}</small></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>

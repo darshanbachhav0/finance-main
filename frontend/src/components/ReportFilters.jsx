@@ -1,13 +1,12 @@
 import { ChevronDown, Filter, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
+import DateInput, { MonthInput } from "./DateInput.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { optionLabel, requestTypeLabels, requestTypes } from "../utils/options.js";
 
 export default function ReportFilters({ values, options, onChange, onApply, onClear, loading }) {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
-  // An empty <input type="month"> renders "--------- ----"; show a readable placeholder until used.
-  const [periodFocused, setPeriodFocused] = useState(false);
   const update = (key) => (event) => onChange({ ...values, [key]: event.target.value });
 
   return (
@@ -17,9 +16,9 @@ export default function ReportFilters({ values, options, onChange, onApply, onCl
       </button>
       <div className="report-filter-content focused-report-filters">
         <div className="report-filter-grid">
-          <label className="field"><span>{t("Accounting period")}</span><input type={values.period || periodFocused ? "month" : "text"} placeholder={t("All periods")} value={values.period} onFocus={() => setPeriodFocused(true)} onBlur={() => setPeriodFocused(false)} onChange={update("period")} /></label>
-          <label className="field"><span>{t("Date from")}</span><input type="date" value={values.dateFrom} onChange={update("dateFrom")} /></label>
-          <label className="field"><span>{t("Date to")}</span><input type="date" value={values.dateTo} onChange={update("dateTo")} /></label>
+          <label className="field"><span>{t("Accounting period")}</span><MonthInput clearable placeholder="All periods" value={values.period} onChange={update("period")} /></label>
+          <label className="field"><span>{t("Date from")}</span><DateInput value={values.dateFrom} max={values.dateTo || undefined} onChange={update("dateFrom")} /></label>
+          <label className="field"><span>{t("Date to")}</span><DateInput value={values.dateTo} min={values.dateFrom || undefined} onChange={update("dateTo")} /></label>
           <label hidden={!expanded} className="field"><span>{t("Currency")}</span><select value={values.currency} onChange={update("currency")}><option value="">{t("All currencies")}</option><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
           <label hidden={!expanded} className="field"><span>{t("Request type")}</span><select value={values.requestType} onChange={update("requestType")}><option value="">{t("All types")}</option>{requestTypes.map((item) => <option key={item} value={item}>{t(optionLabel(item, requestTypeLabels))}</option>)}</select></label>
           <label className="field"><span>{t("Area")}</span><select value={values.area} onChange={update("area")}><option value="">{t("All areas")}</option>{options.areas.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>

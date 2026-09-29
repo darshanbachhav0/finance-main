@@ -25,3 +25,5 @@ import "./operationsAccess.test.js";
 import "./notificationTranslations.test.js";
 import "./notificationLinks.test.js";
 import "./uiPolish.test.js";
+import "./dateInput.test.js";
+import "./uxFormsContracts.test.js";
