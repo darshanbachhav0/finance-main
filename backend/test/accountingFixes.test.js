@@ -152,6 +152,34 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
         assert.ok(await AuditLog.exists({ action: "MANUAL_SUNAT_OVERRIDE", requestId: request._id }));
         await assertNoBlockingObservation(ap);
         await fs.rm(path.resolve(uploadRoot, "requests", String(request._id)), { recursive: true, force: true });
+
+        // A Render restart can remove local uploads after the invoice was observed.
+        // Saving the exception must expose that blocker, and an owner retry must reuse it.
+        const retryRequest = await makeRequest();
+        await reserveBudget(retryRequest, admin._id);
+        await PurchaseOrder.create({ poNumber: "FIX-PO-RETRY", request: retryRequest._id, supplier: supplier._id, amount: 1180, currency: "PEN", generatedBy: admin._id });
+        const retryVoucher = invoice();
+        const firstAttempt = await registerA1Invoice({ requestId: retryRequest._id, files: {
+          xml: [await writeTemp("retry.xml", invoiceXml(retryVoucher))],
+          pdf: [await writeTemp("retry.pdf", "%PDF-1.4 test")]
+        }, user: owner, req });
+        const stored = await SunatVoucher.findById(firstAttempt.sunatVoucher._id).select("+xmlPath");
+        await fs.unlink(stored.xmlPath);
+        const deferred = await approveManualSunatException({ requestId: retryRequest._id, voucherId: stored._id, reason: "UAT manual review", user: accounting, req });
+        assert.equal(deferred.provisioned, false);
+        assert.match(deferred.detail, /Re-upload the same XML and PDF/);
+        assert.equal((await FinancialRequest.findById(retryRequest._id)).observation.code, "INVOICE_POSTING_PENDING");
+        assert.equal(await AccountsPayable.countDocuments({ request: retryRequest._id }), 0);
+        assert.ok(await AuditLog.exists({ requestId: retryRequest._id, action: "MANUAL_EXCEPTION_POSTING_DEFERRED" }));
+        const retry = await registerA1Invoice({ requestId: retryRequest._id, files: {
+          xml: [await writeTemp("retry.xml", invoiceXml(retryVoucher))],
+          pdf: [await writeTemp("retry.pdf", "%PDF-1.4 test")]
+        }, user: owner, req });
+        assert.ok(retry.accountsPayable);
+        assert.equal(retry.sunatVoucher.validationStatus, "MANUAL_EXCEPTION");
+        assert.equal(await AccountsPayable.countDocuments({ request: retryRequest._id }), 1);
+        assert.equal(await AuditLog.countDocuments({ requestId: retryRequest._id, action: "MANUAL_SUNAT_OVERRIDE" }), 1);
+        await fs.rm(path.resolve(uploadRoot, "requests", String(retryRequest._id)), { recursive: true, force: true });
       } finally {
         if (originalMode === undefined) delete process.env.SUNAT_PROVIDER_MODE; else process.env.SUNAT_PROVIDER_MODE = originalMode;
         if (originalPadronDir === undefined) delete process.env.SUNAT_PADRON_DATA_DIR; else process.env.SUNAT_PADRON_DATA_DIR = originalPadronDir;

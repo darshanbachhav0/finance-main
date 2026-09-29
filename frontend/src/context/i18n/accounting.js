@@ -1,5 +1,7 @@
 // Spanish copy for the accounting area. Keys are the English UI strings passed to t().
 export default {
+  "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown.": "Contabilidad registró una excepción manual SUNAT. La contabilización sigue pendiente. Abra Documentos y reintente con los mismos archivos del comprobante; se mostrará cualquier impedimento restante.",
+  "The saved invoice file is no longer available. Re-upload the same XML and PDF in Documents and retry invoice validation. The manual SUNAT exception is already recorded.": "El archivo guardado del comprobante ya no está disponible. Vuelva a cargar el mismo XML y PDF en Documentos y reintente la validación. La excepción manual SUNAT ya está registrada.",
   // Manual SUNAT exception
   "SUNAT exceptions": "Excepciones SUNAT",
   "Invoices SUNAT could not validate": "Comprobantes que SUNAT no pudo validar",

@@ -416,6 +416,10 @@ export default function RequestDetail() {
   const supplier = request.supplier;
   const order = request.purchaseOrder;
   const invoiceCorrection = Boolean(order) && ["OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(request.status);
+  const approvedExceptionAfterObservation = request.status === "OBSERVADO_SUNAT"
+    && request.observation?.code === "OBSERVADO_SUNAT"
+    && related.sunatVouchers?.some((voucher) => voucher.validationStatus === "MANUAL_EXCEPTION"
+      && new Date(voucher.manualOverride?.overriddenAt) > new Date(request.observation?.observedAt));
   const nextAction = invoiceCorrection
     ? ["Correct the invoice documents. Existing approvals and the issued order remain valid; do not submit the request for approval again.", "Documents", "#request-section-documents-and-fiscal-validation"]
     : permissions.modifiable
@@ -467,7 +471,9 @@ export default function RequestDetail() {
         <div><dt>{t("Current status")}</dt><dd><FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact /></dd></div>
       </dl>
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1])}</a></div>}
-      {invoiceCorrection && request.observation?.detail && <Message type="error">{t(request.observation.detail)}</Message>}
+      {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
+        ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
+        : request.observation.detail)}</Message>}
       <div className="stage-row">
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}</p>}

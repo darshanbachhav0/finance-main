@@ -412,13 +412,29 @@ export async function approveManualSunatException({ requestId, voucherId, reason
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   const voucher = await applyManualSunatOverride({ request, voucherId, reason, evidenceReference, user, req });
   const outcome = { voucher, provisioned: false };
+  async function deferredPosting(error) {
+    const detail = error.code === "ENOENT"
+      ? "The saved invoice file is no longer available. Re-upload the same XML and PDF in Documents and retry invoice validation. The manual SUNAT exception is already recorded."
+      : error.message;
+    // Preserve the exception and history, but do not leave the requester looking at the
+    // pre-approval SUNAT error when a different posting control is now blocking progress.
+    if (request.status === REQUEST_STATUS.OBSERVED_SUNAT) {
+      await FinancialRequest.updateOne({ _id: request._id, status: REQUEST_STATUS.OBSERVED_SUNAT }, {
+        $set: { observation: { code: "INVOICE_POSTING_PENDING", detail, observedAt: new Date(), observedBy: user._id } }
+      });
+    }
+    await recordAudit({ entityType: "SunatVoucher", entity: voucher, requestId: request._id,
+      action: "MANUAL_EXCEPTION_POSTING_DEFERRED", user, req, module: "ACCOUNTING",
+      newValues: { voucher: voucher._id, code: error.code, detail }, comments: detail });
+    return { ...outcome, detail };
+  }
   if (isAdjustmentNote(voucher.voucherType)) {
     if (voucher.adjustmentAppliedAt) return outcome;
     try {
       const applied = await applyAdjustmentNote({ noteVoucherId: voucher._id, user, req });
       return { ...outcome, provisioned: true, accountsPayable: applied.accountsPayable, supplierCredit: applied.supplierCredit };
     } catch (error) {
-      return { ...outcome, detail: error.message };
+      return deferredPosting(error);
     }
   }
   if (voucher.accountsPayable) return { ...outcome, provisioned: true };
@@ -431,14 +447,14 @@ export async function approveManualSunatException({ requestId, voucherId, reason
     }
     if (voucher.flowType === FLOW_TYPE.A1 && request.flowType === FLOW_TYPE.A1) {
       const purchaseOrder = await PurchaseOrder.findOne({ request: request._id });
-      if (!purchaseOrder) return { ...outcome, detail: "Purchase Order is required for Track A1 invoice matching." };
+      if (!purchaseOrder) return deferredPosting(new Error("Purchase Order is required for Track A1 invoice matching."));
       const stored = await SunatVoucher.findById(voucher._id).select("+xmlPath +pdfPath");
-      if (!stored.xmlPath) return { ...outcome, detail: "The observed invoice has no stored XML." };
+      if (!stored.xmlPath) return deferredPosting({ code: "ENOENT" });
       const data = await parseInvoiceXml(stored.xmlPath);
       const parts = splitVoucherNumber(data.invoiceNumber);
       const invoice = { ...data, voucherType: data.voucherType || stored.voucherType, series: parts.series, number: parts.number, currency: data.currency || request.currency };
       const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
-      if (data.ruc !== expectedRuc) return { ...outcome, detail: "The XML issuer RUC does not match the approved supplier." };
+      if (data.ruc !== expectedRuc) return deferredPosting(new Error("The XML issuer RUC does not match the approved supplier."));
       await guardAccountingPeriod({ period: invoicePostingPeriod(data.issueDate), action: "POST", user, req, module: "ACCOUNTING", entityType: "SunatVoucher", entityId: stored._id, requestId: request._id });
       await assertPurchaseOrderInvoiceFits(purchaseOrder._id, data.totalAmount, { currency: invoice.currency });
       const xmlFile = { path: stored.xmlPath, url: stored.xmlUrl, checksum: stored.xmlChecksum };
@@ -448,7 +464,7 @@ export async function approveManualSunatException({ requestId, voucherId, reason
     }
   } catch (error) {
     // The exception itself is recorded; posting can be retried once the blocker is resolved.
-    return { ...outcome, detail: error.message };
+    return deferredPosting(error);
   }
   return outcome;
 }
