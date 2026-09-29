@@ -2973,7 +2973,7 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   .notification-row-actions .icon-button { width: var(--touch-target); height: var(--touch-target); min-height: var(--touch-target); }
 }
 @media print { .bulk-bar { display: none !important; } }
-=======
+
 /* ==== ux: role home ==== */
 /* Dashboard "My tasks": the role's to-do list, one linked row per task, most urgent first.
    Approval Inbox: the budget-exception decision section for Management. */
@@ -3009,7 +3009,8 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
 @media (max-width: 760px) {
   .my-tasks-heading .primary-button, .my-tasks-empty .primary-button { width: 100%; justify-content: center; min-height: var(--touch-target); }
   .my-task { padding: var(--space-3); }
-=======
+}
+
 /* ==== ux: lists ============================================================================
    Lists show more and hide less: a row's secondary fields open in a side panel, related
    tools are visible chips, columns take the width their content needs, headers stay in view

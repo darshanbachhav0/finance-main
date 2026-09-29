@@ -61,9 +61,11 @@ test("column types size columns to their content", () => {
   assert.equal(isPrimaryColumn({ key: "dueDate", type: "date", primary: true }, 9), true);
   assert.equal(isPrimaryColumn({ key: "supplier", primary: false }, 1), false);
   assert.match(table, /const layout = columnLayout\(column\);[\s\S]*className=\{layout\.className\} style=\{layout\.style\}/);
-  // Main tables declare their column types; Treasury's checkbox column is narrow.
+  // Main tables declare their column types. Treasury selects CXPs through DataTable's built-in
+  // selection column, which the stylesheet keeps at 44px.
   const treasury = source("../src/pages/TreasuryQueue.jsx");
-  assert.match(treasury, /\{ key: "select", type: "checkbox"/);
+  assert.match(treasury, /selection=\{\{ selected, onChange: setSelected/);
+  assert.match(source("../src/styles/global.css"), /\.table-scroll th\.checkbox-column \{ width: 44px/);
   for (const [page, count] of [["RequestsList", 6], ["ApprovalInbox", 5], ["TreasuryQueue", 30], ["InvoiceObservations", 7], ["AccountingEntries", 20]]) {
     assert.ok((source(`../src/pages/${page}.jsx`).match(/type: "(code|money|status|name|date|checkbox|number)"/g) || []).length >= count, `${page} sets column types`);
   }
