@@ -10,6 +10,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import BudgetExceptionDecisions, { useBudgetExceptionDecisions } from "../components/BudgetExceptionDecisions.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
@@ -31,6 +32,8 @@ export default function ApprovalInbox() {
   const approvalTable = usePaginatedResource("/approvals/inbox", { fixedParams: deepLink.link, deepLink: deepLink.active });
   useEffect(() => { if (linkedRequest) setQuickViewId(linkedRequest); }, [linkedRequest]);
   const { rows, loading } = approvalTable;
+  // Management/Admin: reviewed budget exceptions awaiting Management's decision (own section below).
+  const exceptionDecisions = useBudgetExceptionDecisions();
 
   const summary = useMemo(() => ({
     total: approvalTable.payload.summary?.total || 0,
@@ -150,6 +153,10 @@ export default function ApprovalInbox() {
         <StatCard label="Pending approval" value={summary.total} tone="amber" />
         <StatCard label="PEN equivalent waiting" value={formatCurrency(summary.amount, "PEN", language)} tone="teal" />
         <StatCard label="Oldest request age" value={summary.oldest} suffix="days" tone="navy" />
+        {exceptionDecisions.enabled && <>
+          <StatCard label="Budget exceptions to decide" value={exceptionDecisions.total} tone="red" to="#budget-exceptions" actionLabel="View budget exceptions" />
+          <StatCard label="Decisions awaiting you" value={summary.total + exceptionDecisions.total} tone="neutral" />
+        </>}
       </div>
       <div className="workspace-panel">
         <DataTable
@@ -182,6 +189,7 @@ export default function ApprovalInbox() {
           ]}
         />
       </div>
+      <BudgetExceptionDecisions queue={exceptionDecisions} />
       <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
       <ConfirmDialog open={Boolean(confirm)} {...confirm} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
     </section>

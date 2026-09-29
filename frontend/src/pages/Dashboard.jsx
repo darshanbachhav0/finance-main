@@ -1,5 +1,6 @@
 import ContinueWork from "../components/ContinueWork.jsx";
-import { AlertTriangle, ArrowRight, CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
+import MyTasks from "../components/MyTasks.jsx";
+import { CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/client.js";
@@ -76,23 +77,23 @@ export default function Dashboard() {
     { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> }
   ];
   const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, rowId: item._id || item.request._id, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
-  const workspace = {
-    Admin: ["Keep university operations moving", "Review requests and the items that need your team’s attention.", "/administration", "Administration"],
-    Solicitor: ["Your next request starts here", "Prepare a request or continue work saved in your drafts.", "/requests/new", "New request"],
-    AreaDirector: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
-    ViceRector: ["Your decisions move work forward", "Review the oldest pending requests and their supporting documents.", "/approvals", "Review approvals"],
-    Accounting: ["Keep the accounts up to date", "Review pending entries, documents and accounting observations.", "/accounting", "Open Accounting"],
-    Treasury: ["A clear view of upcoming payments", "Review payment destinations, scheduled items and bank confirmations.", "/treasury", "Open Treasury"],
-    Budget: ["Plan the year. Follow each month.", "Review annual availability, monthly allocations and budget exceptions.", "/budget", "Open Budget Control"],
-    Management: ["See the institution’s financial position", "Explore spending, budget availability and work awaiting completion.", "/reports", "Open reports"],
-    Procurement: ["Keep approved requests moving to a Purchase Order", "Review requests awaiting an order, open orders, and invoices registered against them.", AWAITING_PURCHASE_ORDER_PATH, "Review requests"]
+  // The role's primary action, kept visible above its task list (and offered when all is done).
+  const primaryAction = {
+    Admin: ["/administration", "Administration"],
+    Solicitor: ["/requests/new", "New request"],
+    AreaDirector: ["/approvals", "Review approvals"],
+    ViceRector: ["/approvals", "Review approvals"],
+    Accounting: ["/accounting", "Open Accounting"],
+    Treasury: ["/treasury", "Open Treasury"],
+    Budget: ["/budget", "Open Budget Control"],
+    Management: ["/approvals", "Review decisions"],
+    Procurement: [AWAITING_PURCHASE_ORDER_PATH, "Review requests"]
   }[summary?.role];
 
   return (
     <section>
       <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
-      <ContinueWork />
 
       {loading && !summary && (
         <div className="dashboard-loading" role="status" aria-label={t("Loading dashboard...")}>
@@ -103,25 +104,15 @@ export default function Dashboard() {
 
       {summary && (
         <>
-          {workspace && <div className="dashboard-next"><div><small>UMA · {t("Your workspace")}</small><h2>{t(workspace[0])}</h2><p>{t(workspace[1])}</p></div><Link className="primary-button" to={workspace[2]}>{t(workspace[3])}<ArrowRight size={17} /></Link></div>}
+          {/* The role's to-do list replaces the generic welcome banner; its tasks also cover the
+              former "Items need attention" warnings (missing exchange-rate dates). */}
+          <MyTasks items={summary.tasks?.items} action={primaryAction && { to: primaryAction[0], label: primaryAction[1] }} />
+          <ContinueWork />
           <div className="stats-grid">
             {summary.metrics.filter(metric => !["credit", "debit", "closed", "files", "assigned", "capex", "opex", "users"].includes(metric.key)).slice(0, 4).map((metric) => (
               <StatCard key={metric.key} label={metric.label} value={metricValue(metric)} suffix={metric.suffix} tone={metric.tone} icon={metricIcons[metric.key] || FileText} {...dashboardMetricLink(summary.role, metric.key)} />
             ))}
           </div>
-
-
-          {summary.warnings?.length > 0 && (
-            <div className="alert-strip" role="status">
-              <AlertTriangle size={20} />
-              <div>
-                <strong>{t("Items need attention")}</strong>
-                <div className="alert-links">
-                  {summary.warnings.map((warning) => <Link key={warning.key} to={warning.path}>{t(warning.label)} <span>{warning.count}</span></Link>)}
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="dashboard-grid">
             <div className="workspace-panel dashboard-primary">
