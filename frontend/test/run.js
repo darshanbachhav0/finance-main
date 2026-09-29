@@ -30,3 +30,6 @@ import "./uiPolish.test.js";
 import "./globalSearchContracts.test.js";
 
 import "./uxListsContracts.test.js";
+
+import "./colorContrast.test.js";
+import "./uxShell.test.js";
