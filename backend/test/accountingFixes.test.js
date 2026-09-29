@@ -32,7 +32,7 @@ import { applySupplierCredit, recoverSupplierCredit, registerAdjustmentNote } fr
 import { createMassUploadBatch, processMassUploadBatch } from "../src/services/batchInvoiceService.js";
 import { reserveBudget } from "../src/services/budgetService.js";
 import { syncFinancialProgress } from "../src/services/financialProgressService.js";
-import { approveManualSunatException, registerA1Invoice } from "../src/services/invoiceRegistrationService.js";
+import { approveManualSunatException, registerA1Invoice, supersedeObservedInvoice } from "../src/services/invoiceRegistrationService.js";
 import { closeAccountingPeriod } from "../src/services/periodAdministrationService.js";
 import { periodFromDate } from "../src/services/periodService.js";
 import { consumePurchaseOrderBalance } from "../src/services/purchaseOrderMatchingService.js";
@@ -179,6 +179,20 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
         assert.equal(retry.sunatVoucher.validationStatus, "MANUAL_EXCEPTION");
         assert.equal(await AccountsPayable.countDocuments({ request: retryRequest._id }), 1);
         assert.equal(await AuditLog.countDocuments({ requestId: retryRequest._id, action: "MANUAL_SUNAT_OVERRIDE" }), 1);
+        const obsolete = await SunatVoucher.create({ request: retryRequest._id, supplier: supplier._id, flowType: "A1", rucIssuer: "20111111111", voucherType: "FACTURA", series: "OLD1", number: "9", xmlAmount: 999, validationStatus: "OBSERVED_SUNAT" });
+        const correction = { requestId: retryRequest._id, voucherId: obsolete._id, replacementId: retry.sunatVoucher._id, reason: "Wrong UAT invoice replaced by correct invoice", user: accounting, req };
+        await assert.rejects(() => supersedeObservedInvoice({ ...correction, user: owner }), /permission/);
+        await assert.rejects(() => supersedeObservedInvoice({ ...correction, reason: " " }), /reason/);
+        await assert.rejects(() => supersedeObservedInvoice({ ...correction, replacementId: observed.sunatVoucher._id }), /different invoices/);
+        await assert.rejects(() => supersedeObservedInvoice({ ...correction, voucherId: retry.sunatVoucher._id, replacementId: obsolete._id }), /unposted/);
+        const fixed = await supersedeObservedInvoice(correction);
+        assert.equal(fixed.status, "CONTABILIZADO");
+        await supersedeObservedInvoice(correction);
+        assert.equal(await AuditLog.countDocuments({ requestId: retryRequest._id, action: "INVOICE_SUPERSEDED" }), 1);
+        assert.equal((await SunatVoucher.findById(obsolete._id)).validationStatus, "OBSERVED_SUNAT");
+        assert.equal(await AccountsPayable.countDocuments({ request: retryRequest._id }), 1);
+        assert.equal((await PurchaseOrder.findOne({ request: retryRequest._id })).consumedAmount, retryVoucher.totalAmount);
+
         await fs.rm(path.resolve(uploadRoot, "requests", String(retryRequest._id)), { recursive: true, force: true });
       } finally {
         if (originalMode === undefined) delete process.env.SUNAT_PROVIDER_MODE; else process.env.SUNAT_PROVIDER_MODE = originalMode;

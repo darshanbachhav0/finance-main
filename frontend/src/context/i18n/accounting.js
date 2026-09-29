@@ -1,5 +1,13 @@
 // Spanish copy for the accounting area. Keys are the English UI strings passed to t().
 export default {
+  "Replacement": "Reemplazo",
+  "Replaced by": "Reemplazado por",
+  "Replace incorrect invoice": "Reemplazar comprobante incorrecto",
+  "Posted replacement invoice": "Comprobante de reemplazo contabilizado",
+  "Confirm replacement": "Confirmar reemplazo",
+  "The original invoice and its history are preserved. No payment is created.": "Se conserva el comprobante original y su historial. No se crea ningún pago.",
+  "Invoice replacement recorded. Request progress updated.": "Reemplazo registrado. Progreso de la solicitud actualizado.",
+  "This invoice already has an Accounts Payable record. Open the existing payable; do not provision it again.": "Este comprobante ya tiene una cuenta por pagar. Abra la cuenta existente; no vuelva a provisionarlo.",
   "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown.": "Contabilidad registró una excepción manual SUNAT. La contabilización sigue pendiente. Abra Documentos y reintente con los mismos archivos del comprobante; se mostrará cualquier impedimento restante.",
   "The saved invoice file is no longer available. Re-upload the same XML and PDF in Documents and retry invoice validation. The manual SUNAT exception is already recorded.": "El archivo guardado del comprobante ya no está disponible. Vuelva a cargar el mismo XML y PDF en Documentos y reintente la validación. La excepción manual SUNAT ya está registrada.",
   // Manual SUNAT exception

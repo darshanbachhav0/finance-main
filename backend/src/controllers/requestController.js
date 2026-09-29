@@ -18,7 +18,7 @@ import {
   withdrawFinancialRequest
 } from "../services/requestService.js";
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
-import { registerA1Invoice } from "../services/invoiceRegistrationService.js";
+import { registerA1Invoice, supersedeObservedInvoice } from "../services/invoiceRegistrationService.js";
 import {
   getRenditionBankDestination,
   getRenditionPolicy,
@@ -97,6 +97,11 @@ export const updateRequest = asyncHandler(async (req, res) => {
 export const registerInvoice = asyncHandler(async (req, res) => {
   const result = await registerA1Invoice({ requestId: req.params.id, files: req.files, user: req.user, req });
   res.json({ data: publicRequestPayload(result.request, req.user), sunatVoucher: result.sunatVoucher, accountsPayable: result.accountsPayable, observed: result.observed });
+});
+
+export const replaceObservedInvoice = asyncHandler(async (req, res) => {
+  const request = await supersedeObservedInvoice({ requestId: req.params.id, voucherId: req.params.voucherId, replacementId: req.body.replacementId, reason: req.body.reason, user: req.user, req });
+  res.json({ data: publicRequestPayload(request, req.user) });
 });
 
 export const submitRequest = asyncHandler(async (req, res) => {

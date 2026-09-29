@@ -150,6 +150,7 @@ function Section({ title, description, children, className = "" }) {
 export default function RequestDetail() {
   const [activeTab, setActiveTab] = useState("General");
   const [showAllPhases, setShowAllPhases] = useState(false);
+  const [replacingInvoice, setReplacingInvoice] = useState(false);
   const { id } = useParams();
   const { user } = useAuth();
   const { language, t } = useLanguage();
@@ -708,7 +709,27 @@ export default function RequestDetail() {
                       { key: "xmlAmount", label: "XML amount", align: "right", render: (row) => formatCurrency(row.xmlAmount, row.currency || request.currency, language) },
                       { key: "sunatStatus", label: "SUNAT" },
                       { key: "validationStatus", label: "Status", render: (row) => <StatusBadge status={row.validationStatus} /> },
-                      { key: "observationDetail", label: "Observation" }
+                      { key: "observationDetail", label: "Observation" },
+                      { key: "replacement", label: "Replacement", render: (row) => row.supersededBy
+                        ? <span>{t("Replaced by")}: {related.sunatVouchers.find((item) => item._id === row.supersededBy)?.seriesNumber || row.supersededBy}</span>
+                        : ["Admin", "Accounting"].includes(user.role) && !["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"].includes(request.status) && !row.accountsPayable && !row.batch && ["OBSERVED_SUNAT", "OBSERVED_AMOUNT_EXCEEDED", "PENDING"].includes(row.validationStatus)
+                          && related.sunatVouchers.some((item) => item.accountsPayable && !item.supersededBy)
+                        ? <details><summary>{t("Replace incorrect invoice")}</summary><form onSubmit={async (event) => {
+                          event.preventDefault();
+                          const values = new FormData(event.currentTarget);
+                          setReplacingInvoice(true);
+                          try {
+                            await api.post(`/requests/${id}/invoice/${row._id}/replace`, { replacementId: values.get("replacementId"), reason: values.get("reason") });
+                            notify("Invoice replacement recorded. Request progress updated.");
+                            await load();
+                          } catch (err) { setError(err.message); notify(err.message, "error"); }
+                          finally { setReplacingInvoice(false); }
+                        }}>
+                          <label>{t("Posted replacement invoice")}<select name="replacementId" required defaultValue=""><option value="">{t("Select")}</option>{related.sunatVouchers.filter((item) => item.accountsPayable && !item.supersededBy).map((item) => <option key={item._id} value={item._id}>{item.seriesNumber}</option>)}</select></label>
+                          <label>{t("Reason")}<input name="reason" required maxLength={1000} /></label>
+                          <p>{t("The original invoice and its history are preserved. No payment is created.")}</p>
+                          <button className="secondary-button" disabled={replacingInvoice} type="submit">{t("Confirm replacement")}</button>
+                        </form></details> : null }
                     ]}
                   />
                 </div>

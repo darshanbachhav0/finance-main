@@ -19,6 +19,7 @@ import {
   recoverRendition,
   rejectRendition,
   registerInvoice,
+  replaceObservedInvoice,
   settleRenditionBalance,
   submitRequest,
   updateRequest,
@@ -47,6 +48,7 @@ router.post("/:id/procurement-order", authorize(ROLES.ADMIN, ROLES.PROCUREMENT),
 router.post("/:id/submit", submitRequest);
 router.post("/:id/withdraw", withdrawRequest);
 router.post("/:id/invoice", authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.ACCOUNTING), uploadFields, registerInvoice);
+router.post("/:id/invoice/:voucherId/replace", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), replaceObservedInvoice);
 router.post("/:id/rendition", authorize(ROLES.ADMIN, ROLES.SOLICITOR), uploadFields, uploadRendition);
 router.get("/:id/rendition/policy", getRenditionFormPolicy);
 router.get("/:id/rendition/bank-destination", getRenditionPaymentDestination);

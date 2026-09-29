@@ -3,6 +3,7 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
+import AccountsPayable from "../models/AccountsPayable.js";
 import { createAccountsPayableFromVoucher, invoicePostingPeriod } from "./accountingService.js";
 import { applyAdjustmentNote, registerAdjustmentNote } from "./adjustmentNoteService.js";
 import { retryInvoiceObservation } from "./batchInvoiceService.js";
@@ -43,6 +44,33 @@ const invoiceAttachmentKinds = Object.freeze({
   contract: "CONTRACT",
   supporting: "SUPPORTING"
 });
+
+// Explicit correction only: never infer that a second invoice replaces a legitimate obligation.
+export async function supersedeObservedInvoice({ requestId, voucherId, replacementId, reason, user, req }) {
+  if (![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user?.role)) throw new AppError(403, "Accounting permission is required.");
+  if (!String(reason || "").trim()) throw new AppError(422, "A replacement reason is required.");
+  return runFinancialOperation(async (session) => {
+    const request = await FinancialRequest.findById(requestId).session(session || null);
+    if (!request) throw new AppError(404, "Request not found.");
+    if (["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"].includes(request.status)) throw new AppError(409, "Terminal requests cannot be corrected.");
+    const original = await SunatVoucher.findOne({ _id: voucherId, request: requestId }).session(session || null);
+    const replacement = await SunatVoucher.findOne({ _id: replacementId, request: requestId }).session(session || null);
+    if (!original || !replacement || String(original._id) === String(replacement._id)) throw new AppError(422, "Choose two different invoices from this request.");
+    if (original.accountsPayable || original.provisionedAt || original.batch || !["OBSERVED_SUNAT", "OBSERVED_AMOUNT_EXCEEDED", "PENDING"].includes(original.validationStatus)) throw new AppError(409, "Only an unposted individual invoice observation can be replaced.");
+    const payable = await AccountsPayable.findOne({ _id: replacement.accountsPayable, request: requestId, sunatVoucher: replacement._id, status: { $ne: "CANCELLED" } }).populate("provisionJournal").session(session || null);
+    if (!payable || payable.provisionJournal?.status !== "POSTED" || replacement.supersededBy || !["VALID", "MANUAL_EXCEPTION"].includes(replacement.validationStatus)) throw new AppError(409, "The replacement must have an active payable and posted accounting journal.");
+    if (original.supersededBy && String(original.supersededBy) !== String(replacement._id)) throw new AppError(409, "This invoice already has a different replacement.");
+    if (!original.supersededBy) {
+      original.supersededBy = replacement._id;
+      original.supersededAt = new Date();
+      original.supersededByUser = user._id;
+      await original.save({ session });
+      await recordAudit({ entityType: "SunatVoucher", entity: original, requestId: request._id, user, req, session, module: "ACCOUNTING", action: "INVOICE_SUPERSEDED", comments: reason.trim(), oldValues: { validationStatus: original.validationStatus }, newValues: { supersededBy: replacement._id } });
+    }
+    await syncFinancialProgress({ request, user, req, session, action: "INVOICE_REPLACEMENT_PROGRESS_UPDATED" });
+    return request;
+  });
+}
 
 function attachment(file, kind, userId) {
   return {

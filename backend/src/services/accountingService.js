@@ -874,6 +874,9 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     throw new AppError(409, "The supplier voucher is already registered.", { accountsPayable: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
   }
   const purchaseOrder = request.flowType === FLOW_TYPE.A1 ? await PurchaseOrder.findOne({ request: request._id }) : null;
+  const existingPayable = await AccountsPayable.findOne({ request: request._id,
+    ...activePayableFilter({ supplierIdentifier: fiscal.supplierIdentifierNormalized, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number }) });
+  if (existingPayable) throw new AppError(409, "This invoice already has an Accounts Payable record. Open the existing payable; do not provision it again.", { accountsPayable: existingPayable._id }, ERROR_CODES.DUPLICATE_VOUCHER);
   if (request.flowType === FLOW_TYPE.A1 && (purchaseOrder || requiresPurchaseOrder(request))) {
     if (!purchaseOrder) throw new AppError(409, "Procurement must issue the approved order before A1 accounting.");
     await assertPurchaseOrderInvoiceFits(purchaseOrder._id, request.totalAmount, { currency: request.currency });
