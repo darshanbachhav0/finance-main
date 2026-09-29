@@ -21,8 +21,8 @@
   --gray-950: #17212b;
   --gray-800: #344250;
   --gray-700: #4c5b68;
-  --gray-600: #667581;
-  --gray-500: #7d8a94;
+  --gray-600: #56636e;
+  --gray-500: #5e6a75;
   --gray-400: #a6b0b8;
   --gray-300: #ccd3d8;
   --gray-200: #e0e5e8;
@@ -68,7 +68,7 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .sidebar-mobile-close.icon-button { display: none; margin-left: auto; color: white; border-color: transparent; }
 .nav-groups { flex: 1; overflow-y: auto; padding: 12px 10px 18px; scrollbar-width: thin; }
 .nav-group { margin-bottom: 15px; }
-.nav-group-label { display: block; padding: 3px 10px 6px; color: #728da1; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; white-space: nowrap; }
+.nav-group-label { display: block; padding: 3px 10px 6px; color: var(--gray-600); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; white-space: nowrap; }
 .nav-item { position: relative; min-height: 38px; display: flex; align-items: center; gap: 11px; margin: 2px 0; padding: 8px 10px; border-radius: 5px; color: #c4d1db; font-size: 14px; font-weight: 600; text-decoration: none; transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
 .nav-item:hover { color: white; background: rgba(255,255,255,0.07); text-decoration: none; }
 .nav-item.active { color: white; background: #17465a; box-shadow: inset 3px 0 0 var(--teal-600); }
@@ -1506,8 +1506,8 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
   --gray-900: #302d38;
   --gray-800: #45404e;
   --gray-700: #595463;
-  --gray-600: #686372;
-  --gray-500: #746e7b;
+  --gray-600: #615c6a;
+  --gray-500: #6b6574;
   --gray-400: #a39da9;
   --gray-300: #d4cfd8;
   --gray-200: #e7e3e9;
@@ -2920,4 +2920,108 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
   /* Names in cards wrap instead of being cut off. */
   .mobile-cards .table-primary-cell strong, .mobile-cards .primary-cell strong { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+
+/* ==== ux: app shell ==========================================================================
+   Menu counters, the compact brand area, the session-expiry notice, and the phone shell: larger
+   checkbox tap areas, the bottom navigation bar and the request action bar above it. */
+:root {
+  --bottom-nav-height: 60px;
+  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  --sticky-action-height: 64px;
+  --checkbox-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.5 8.5 3 3 6-7'/%3E%3C/svg%3E");
+  --checkbox-mixed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+
+/* Menu counters: one pill style; on an icon (collapsed sidebar, bottom bar) it is filled. */
+.nav-counter { min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+@media (min-width: 1081px) {
+  .sidebar-collapsed .nav-counter { top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; color: var(--on-action); background: var(--action-fill); box-shadow: 0 0 0 2px var(--surface-panel); }
+}
+
+/* Brand: one row as tall as the top bar (was ~136px). Dark mode shows the logo inverted on the
+   sidebar surface instead of a white rectangle. */
+.brand { min-height: 76px; height: 76px; padding: 10px 16px 10px 20px; gap: var(--space-3); }
+.brand > a { display: flex; align-items: center; min-width: 0; }
+.brand .uma-brand { flex-direction: row; align-items: center; gap: var(--space-3); }
+.brand .uma-logo-full { width: 112px; }
+.brand .uma-product-name { max-width: 96px; padding-left: var(--space-3); border-left: 1px solid var(--gray-200); font-size: 11px; line-height: 1.3; letter-spacing: .06em; }
+.sidebar-collapsed .brand { min-height: 76px; height: 76px; padding: 10px; }
+[data-theme="dark"] .brand .uma-logo-full, [data-theme="dark"] .brand .uma-logo-symbol { padding: 0; border-radius: 0; background: transparent; filter: invert(1) hue-rotate(180deg); mix-blend-mode: screen; }
+@media (max-width: 1080px) {
+  .brand, .sidebar-collapsed .brand { min-height: 76px; height: 76px; padding: 10px 12px 10px 20px; justify-content: space-between; }
+  /* The drawer's close button takes the room of the product name. */
+  .brand .uma-product-name, .sidebar-collapsed .brand .uma-product-name { display: none; }
+}
+
+/* Session-expiry notice: non-blocking, bottom corner. */
+.session-expiry-notice { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 450; width: min(400px, calc(100vw - 2 * var(--space-4))); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); padding: var(--space-4); background: var(--surface-panel); border: 1px solid var(--gray-200); border-left: 4px solid var(--amber-700); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); animation: surface-in var(--motion-standard) ease-out; }
+.session-expiry-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: var(--amber-700); background: var(--amber-100); }
+.session-expiry-body h2 { margin: 0 0 var(--space-1); color: var(--gray-950); font-size: 15px; line-height: 1.35; }
+.session-expiry-body p { margin: 0; color: var(--gray-700); font-size: var(--font-sm); line-height: 1.5; }
+.session-expiry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-3); }
+
+.mobile-bottom-nav, .request-sticky-actions { display: none; }
+
+@media (max-width: 760px) {
+  /* Checkboxes: the same 22px box, drawn inside a 40px tap area (the negative margin keeps the
+     layout as it was). */
+  input[type="checkbox"]:not(.sr-only) {
+    -webkit-appearance: none; appearance: none; position: relative; display: inline-block; flex: 0 0 auto;
+    width: var(--touch-target); height: var(--touch-target); margin: -9px; padding: 0;
+    vertical-align: middle; background: transparent; border: 0; border-radius: var(--radius-md); cursor: pointer;
+  }
+  input[type="checkbox"]:not(.sr-only)::before {
+    content: ""; position: absolute; inset: 9px; box-sizing: border-box;
+    border: 2px solid var(--gray-500); border-radius: var(--radius-sm);
+    background: var(--surface-panel) center / 16px 16px no-repeat;
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  }
+  input[type="checkbox"]:not(.sr-only):checked::before { border-color: var(--action-fill); background-color: var(--action-fill); background-image: var(--checkbox-check); }
+  input[type="checkbox"]:not(.sr-only):indeterminate::before { border-color: var(--action-fill); background-color: var(--action-fill); background-image: var(--checkbox-mixed); }
+  input[type="checkbox"]:not(.sr-only):focus-visible { outline: none; }
+  input[type="checkbox"]:not(.sr-only):focus-visible::before { box-shadow: 0 0 0 2px var(--surface-panel), 0 0 0 4px var(--uma-primary); }
+  input[type="checkbox"]:not(.sr-only):disabled { cursor: not-allowed; opacity: .55; }
+  label:has(> input[type="checkbox"]) { min-height: var(--touch-target); }
+}
+
+@media (max-width: 640px) {
+  /* Bottom navigation: the role's main destinations and Search. */
+  .mobile-bottom-nav {
+    position: fixed; inset: auto 0 0 0; z-index: 60; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+    min-height: var(--bottom-nav-offset); padding: var(--space-1) var(--space-1) env(safe-area-inset-bottom, 0px);
+    background: color-mix(in srgb, var(--surface-panel) 97%, transparent); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--gray-200); box-shadow: 0 -6px 18px #24232b0d;
+    transition: transform var(--motion-standard) ease, visibility 0s linear 0s;
+  }
+  .mobile-bottom-nav.is-hidden { transform: translateY(100%); visibility: hidden; transition: transform var(--motion-standard) ease, visibility 0s linear var(--motion-standard); }
+  .mobile-bottom-nav-item { position: relative; min-width: 0; min-height: calc(var(--bottom-nav-height) - var(--space-2)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: var(--space-1) 2px; color: var(--gray-600); background: transparent; border: 0; border-radius: var(--radius-md); font-size: 11px; font-weight: 650; line-height: 1.2; text-decoration: none; }
+  .mobile-bottom-nav-item:hover { color: var(--uma-primary); text-decoration: none; }
+  .mobile-bottom-nav-item.active { color: var(--uma-primary); }
+  .mobile-bottom-nav-icon { position: relative; width: 52px; height: 28px; display: grid; place-items: center; border-radius: 999px; transition: background-color var(--motion-fast) ease; }
+  .mobile-bottom-nav-item.active .mobile-bottom-nav-icon { background: var(--uma-soft); }
+  .mobile-bottom-nav-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-bottom-nav .mobile-bottom-nav-counter { position: absolute; top: -5px; left: calc(50% + 4px); min-width: 18px; height: 18px; margin: 0; padding: 0 4px; display: grid; place-items: center; color: var(--on-action); background: var(--action-fill); box-shadow: 0 0 0 2px var(--surface-panel); }
+  /* Page content and bottom-anchored bars stay clear of it. */
+  .app-shell:has(.mobile-bottom-nav) .content { padding-bottom: calc(var(--bottom-nav-offset) + var(--space-6)); }
+  .app-shell:has(.mobile-bottom-nav:not(.is-hidden)) .wizard-actions { bottom: var(--bottom-nav-offset); }
+  html:has(.mobile-bottom-nav) { scroll-padding-bottom: calc(var(--bottom-nav-offset) + var(--sticky-action-height)); }
+
+  /* Request detail: the main action stays within reach, above the bottom bar. */
+  .request-sticky-actions { position: fixed; inset: auto 0 0 0; z-index: 55; display: flex; gap: var(--space-2); padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); background: var(--surface-panel); border-top: 1px solid var(--gray-200); box-shadow: 0 -6px 18px #24232b12; }
+  .app-shell:has(.mobile-bottom-nav:not(.is-hidden)) .request-sticky-actions { bottom: var(--bottom-nav-offset); padding-bottom: var(--space-2); }
+  .request-sticky-actions > * { flex: 1 1 0; min-width: 0; min-height: var(--control-height); justify-content: center; }
+  .request-sticky-actions > .primary-button { flex-grow: 2; }
+  .request-sticky-actions span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .focused-request-detail:has(.request-sticky-actions) { padding-bottom: var(--sticky-action-height); }
+
+  /* The session notice sits above whatever is anchored to the bottom. */
+  .session-expiry-notice { left: var(--space-3); right: var(--space-3); width: auto; bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); }
+  body:has(.mobile-bottom-nav:not(.is-hidden)) .session-expiry-notice { bottom: calc(var(--bottom-nav-offset) + var(--space-3)); }
+  body:has(.mobile-bottom-nav:not(.is-hidden)):has(.request-sticky-actions) .session-expiry-notice { bottom: calc(var(--bottom-nav-offset) + var(--sticky-action-height) + var(--space-3)); }
+  .session-expiry-actions > * { flex: 1 1 0; justify-content: center; min-height: var(--touch-target); }
+}
+
+@media print {
+  .mobile-bottom-nav, .request-sticky-actions, .session-expiry-notice { display: none !important; }
 }
