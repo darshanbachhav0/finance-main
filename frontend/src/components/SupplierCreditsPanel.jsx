@@ -1,3 +1,4 @@
+import DateInput from "./DateInput.jsx";
 import { HandCoins, Landmark } from "lucide-react";
 import { useState } from "react";
 import api from "../api/client.js";
@@ -84,7 +85,7 @@ export default function SupplierCreditsPanel({ table, onChanged }) {
             ) : (
               <>
                 <label className="field"><span>{t("Receiving bank")} *</span><input required value={form.bank} onChange={(event) => setForm({ ...form, bank: event.target.value.toUpperCase() })} placeholder="BCP" /></label>
-                <label className="field"><span>{t("Refund date")} *</span><input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
+                <label className="field"><span>{t("Refund date")} *</span><DateInput required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
                 <label className="field"><span>{t("Bank operation reference")} *</span><input required value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} /></label>
               </>
             )}

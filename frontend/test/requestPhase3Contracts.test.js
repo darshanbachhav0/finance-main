@@ -10,9 +10,11 @@ test("RCO-FOR-001 extends the existing request wizard instead of introducing a p
   const page = source("../src/pages/RequestCreate.jsx");
   assert.match(page, /export default function RequestCreate/);
   assert.doesNotMatch(page, /FinancialRequestV2|OfficialRequest|CAPEXRequest|OPEXRequest/);
-  for (const section of ["General information", "Item / service breakdown", "Supplier quotations", "BudgetRemainingSummary", "Review and submit"]) {
+  for (const section of ["RequestFormBlock", "blockInfo.items", "Supplier quotations", "BudgetRemainingSummary", "Review and submit"]) {
     assert.ok(page.includes(section), `Missing ${section}`);
   }
+  const blocks = source("../src/utils/requestFormBlocks.js");
+  for (const heading of ["What do you need?", "Why?", "Budget", "Items and amounts"]) assert.ok(blocks.includes(heading), `Missing block ${heading}`);
 });
 
 test("Solicitor CECO choices come from the authorized backend endpoint and lines inherit the header", () => {
