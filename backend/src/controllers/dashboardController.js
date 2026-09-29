@@ -4,6 +4,7 @@ import AuditLog from "../models/AuditLog.js";
 import BudgetException from "../models/BudgetException.js";
 import ExchangeRate from "../models/ExchangeRate.js";
 import FinancialRequest from "../models/FinancialRequest.js";
+import InvoiceObservation from "../models/InvoiceObservation.js";
 import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
@@ -105,11 +106,17 @@ async function buildTasks(user) {
     if (user.role === ROLES.SOLICITOR) query.$or = [{ requester: user._id }, { solicitor: user._id }];
     items.push({ key: "rendition", label: "Renditions outstanding", count: await FinancialRequest.countDocuments(query), path: "/requests?renditionStatus=PENDING%2CSUBMITTED%2COBSERVED", tone: "amber" });
   }
+  // The requester's own requests sent back to them (returned or observed) and waiting for a correction.
+  if (user.role === ROLES.SOLICITOR) {
+    const statuses = [REQUEST_STATUS.RETURNED, REQUEST_STATUS.OBSERVED, REQUEST_STATUS.OBSERVED_BUDGET, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.OBSERVED_BATCH];
+    items.push({ key: "requestCorrections", label: "Requests returned for correction", count: await FinancialRequest.countDocuments({ status: { $in: statuses }, $or: [{ requester: user._id }, { solicitor: user._id }] }), path: `/requests?status=${encodeURIComponent(statuses.join(","))}`, tone: "red" });
+  }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
     items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: await EmployeeReimbursementBankAccount.countDocuments({ active: true, verificationStatus: "PENDING" }), path: "/reimbursement-bank?verificationStatus=PENDING", tone: "amber" });
     items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: await SupplierBankAccount.countDocuments({ active: true, verificationStatus: "PENDING" }), path: "/suppliers", tone: "amber" });
     items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "teal" });
     items.push({ key: "suppliers", label: "Suppliers awaiting homologation", count: await Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }), path: "/suppliers", tone: "amber" });
+    items.push({ key: "invoiceObservations", label: "Open invoice observations", count: await InvoiceObservation.countDocuments({ resolutionStatus: "OPEN" }), path: "/accounting/invoice-observations", tone: "amber" });
     const missingDates = await missingExchangeRateDates();
     items.push({ key: "missingExchangeRate", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "red" });
     const period = await AccountingPeriod.findOne({ period: currentPeriod() });

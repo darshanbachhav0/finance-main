@@ -58,3 +58,4 @@ import "./accountingFixes.test.js";
 import "./plainClone.test.js";
 import "./seedSmoke.test.js";
 import "./notificationLinks.test.js";
+import "./sessionRefresh.test.js";

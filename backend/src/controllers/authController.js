@@ -19,6 +19,13 @@ function signToken(user) {
   });
 }
 
+// Every response that issues a token also says when it expires, so the client can warn the user
+// before the session ends.
+function sessionResponse(token, user) {
+  const { exp } = jwt.decode(token) || {};
+  return { token, expiresAt: exp ? new Date(exp * 1000).toISOString() : undefined, user };
+}
+
 // Per-account lockout: after LOGIN_MAX_FAILED_ATTEMPTS consecutive failures the account refuses
 // sign-in for LOGIN_LOCKOUT_MINUTES, whatever IP the attempts come from (the route's rate limiter
 // only throttles per IP).
@@ -94,7 +101,16 @@ export const login = asyncHandler(async (req, res) => {
     user.lockedUntil = null;
   }
   await auditLogin("LOGIN_SUCCEEDED", { req, user, identifier });
-  res.json({ token: signToken(user), user: await sessionUser(user) });
+  res.json(sessionResponse(signToken(user), await sessionUser(user)));
+});
+
+// Extends a live session. protect() has already verified the current token (signature, expiry,
+// active account, tokenVersion), so an expired or revoked token never reaches this handler. The
+// new token keeps the same tokenVersion: signing out still revokes it like any other.
+export const refresh = asyncHandler(async (req, res) => {
+  const session = sessionResponse(signToken(req.user), await sessionUser(req.user));
+  await recordAudit({ entityType: "User", entity: req.user._id, action: "SESSION_REFRESHED", user: req.user, req, module: "AUTH", newValues: { expiresAt: session.expiresAt } });
+  res.json(session);
 });
 
 // Ends the session server-side: bumping tokenVersion invalidates every token issued so far for
@@ -123,7 +139,7 @@ export const register = asyncHandler(async (req, res) => {
     role: userCount === 0 ? ROLES.ADMIN : ROLES.SOLICITOR
   });
 
-  res.status(201).json({ token: signToken(user), user: await sessionUser(user) });
+  res.status(201).json(sessionResponse(signToken(user), await sessionUser(user)));
 });
 
 export const me = asyncHandler(async (req, res) => {
@@ -143,5 +159,5 @@ export const changePassword = asyncHandler(async (req, res) => {
   user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "PASSWORD_CHANGED", user, req, module: "AUTH", newValues: { passwordResetRequired: false, sessionsRevoked: true } });
-  res.json({ token: signToken(user), user: await sessionUser(user) });
+  res.json(sessionResponse(signToken(user), await sessionUser(user)));
 });
