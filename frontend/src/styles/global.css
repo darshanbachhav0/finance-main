@@ -2475,12 +2475,21 @@ summary:focus-visible { outline: 2px solid var(--uma-primary); outline-offset: 3
 .continue-work-row { gap: 12px; }
 .continue-work-row > div { min-width: 0; overflow-wrap: anywhere; }
 @container (max-width: 1050px) {
- .mobile-cards .table-scroll table, .mobile-cards .table-scroll tbody { display: block; width: 100%; min-width: 0; }
- .mobile-cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
- .mobile-cards tbody tr { display: block; border: 1px solid var(--gray-200); border-radius: 10px; margin-bottom: 12px; background: var(--surface-panel); }
- .mobile-cards tbody td, .mobile-cards tbody td.align-right { display: grid; grid-template-columns: minmax(80px, .65fr) minmax(0, 1.5fr); gap: 12px; padding: 10px 12px; width: 100%; max-width: none; text-align: left; height: auto; white-space: normal; position: static; }
- .mobile-cards td::before { content: attr(data-label); color: var(--gray-600); font-size: 12px; }
- .mobile-cards .primary-cell span { white-space: normal; max-width: 100%; }
+ .mobile-cards:not(.cards-narrow-only) .table-scroll table, .mobile-cards:not(.cards-narrow-only) .table-scroll tbody { display: block; width: 100%; min-width: 0; }
+ .mobile-cards:not(.cards-narrow-only) thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+ .mobile-cards:not(.cards-narrow-only) tbody tr { display: block; border: 1px solid var(--gray-200); border-radius: 10px; margin-bottom: 12px; background: var(--surface-panel); }
+ .mobile-cards:not(.cards-narrow-only) tbody td, .mobile-cards:not(.cards-narrow-only) tbody td.align-right { display: grid; grid-template-columns: minmax(80px, .65fr) minmax(0, 1.5fr); gap: 12px; padding: 10px 12px; width: 100%; max-width: none; text-align: left; height: auto; white-space: normal; position: static; }
+ .mobile-cards:not(.cards-narrow-only) td::before { content: attr(data-label); color: var(--gray-600); font-size: 12px; }
+ .mobile-cards:not(.cards-narrow-only) .primary-cell span { white-space: normal; max-width: 100%; }
+}
+/* Short lists (dashboard) stay a compact table until their panel is really narrow. */
+@container (max-width: 520px) {
+ .mobile-cards.cards-narrow-only .table-scroll table, .mobile-cards.cards-narrow-only .table-scroll tbody { display: block; width: 100%; min-width: 0; }
+ .mobile-cards.cards-narrow-only thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+ .mobile-cards.cards-narrow-only tbody tr { display: block; border: 1px solid var(--gray-200); border-radius: 10px; margin-bottom: 12px; background: var(--surface-panel); }
+ .mobile-cards.cards-narrow-only tbody td, .mobile-cards.cards-narrow-only tbody td.align-right { display: grid; grid-template-columns: minmax(80px, .65fr) minmax(0, 1.5fr); gap: 12px; padding: 10px 12px; width: 100%; max-width: none; text-align: left; height: auto; white-space: normal; position: static; }
+ .mobile-cards.cards-narrow-only td::before { content: attr(data-label); color: var(--gray-600); font-size: 12px; }
+ .mobile-cards.cards-narrow-only .primary-cell span { white-space: normal; max-width: 100%; }
 }
 @media (max-width: 1180px) {
  .accounting-line, .rendition-line { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
@@ -2785,3 +2794,130 @@ a:hover { color: var(--uma-primary); }
 .chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 3px 4px 3px 10px; border: 1px solid var(--gray-200); border-radius: 999px; background: var(--gray-100); color: var(--gray-900); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .chip button { width: 18px; height: 18px; min-height: 18px; flex-shrink: 0; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--gray-600); cursor: pointer; }
 .chip button:hover { background: var(--gray-200); color: var(--gray-950); }
+
+/* ==== design system (final layer) =========================================================
+   Shared tokens and the rules every page relies on. It comes last, so it settles the
+   conflicts between the earlier layers (select styling, filter toggle, page headers,
+   touch targets). New styles should use these tokens rather than raw pixel values. */
+:root {
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --control-height: 42px; --control-height-sm: 36px; --touch-target: 40px;
+  --font-xs: 12px; --font-sm: 13px; --font-md: 14px;
+  --control-border: var(--gray-300);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a97a3' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Page header: the description wraps instead of being cut with an ellipsis, and the action
+   group moves below the title as a whole when space runs out. */
+.page-header { flex-wrap: wrap; }
+@media (min-width: 761px) { .page-header > div:first-child { flex: 1 1 360px; } }
+.page-header .page-description { max-width: 80ch; overflow: visible; white-space: normal; text-overflow: clip; }
+.page-actions { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; }
+
+/* One select style everywhere: same chevron, height and border as text inputs; long values
+   end with an ellipsis instead of running under the arrow. */
+select:not([multiple]) {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: var(--select-chevron); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px;
+  text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+}
+.page-size select, .saved-view-select select { padding-right: 30px; background-position: right 9px center; }
+
+/* "More filters" is a real button at every width, styled like the other secondary controls. */
+.table-filter-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-height); padding: 0 14px;
+  color: var(--gray-800); background: var(--surface-panel); border: 1px solid var(--control-border); border-radius: var(--radius-md);
+  font-size: var(--font-sm); font-weight: 650; white-space: nowrap;
+}
+.table-filter-toggle:hover { border-color: var(--gray-400); color: var(--gray-950); }
+.table-filter-toggle svg:last-child { margin-left: 2px; transition: transform var(--motion-fast) ease; }
+.table-filter-toggle[aria-expanded="true"] svg:last-child { transform: rotate(180deg); }
+.table-filter-toggle.has-active { color: var(--uma-primary); border-color: var(--uma-primary); background: var(--uma-soft); }
+
+/* Toolbar: a wide search, and the open filter set as an even grid on its own row. */
+.table-toolbar-primary { flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.table-search { flex: 1 1 320px; max-width: 580px; }
+/* An earlier layer forces .simplified-filters to flex with !important; the open set is a grid. */
+.table-filter-fields.simplified-filters.is-open { flex-basis: 100%; display: grid !important; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2) var(--space-3); }
+.table-filter-fields.is-open .compact-field, .table-filter-fields.is-open .compact-field select { width: 100%; min-width: 0; max-width: none; }
+.table-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+
+/* Searchable selector: the text never runs under the clear (x) button. */
+.search-select:has(.search-select-clear) .search-select-trigger > span:first-child { padding-right: 26px; }
+.search-select-clear { top: 50%; transform: translateY(-50%); right: 34px; }
+.search-select-popover li { white-space: normal; overflow-wrap: anywhere; }
+
+/* Top bar: longer names, full name on hover (title); the task panel scrolls. */
+.user-summary strong { max-width: 210px; }
+.task-popover { max-height: min(560px, calc(100dvh - 88px)); overflow-y: auto; overscroll-behavior: contain; }
+.task-popover .task-list { max-height: none; overflow: visible; }
+
+/* Approvals: decision buttons wrap inside their cell instead of spilling over the next columns. */
+.decision-actions { flex-wrap: wrap; gap: 6px; min-width: 210px; }
+@media (min-width: 1100px) { .table-scroll td:has(> .decision-actions) { min-width: 330px; padding-right: var(--space-4); } }
+.decision-actions .decision-button { min-height: var(--control-height-sm); padding: 6px 10px; white-space: nowrap; }
+.decision-actions .icon-button { width: var(--control-height-sm); height: var(--control-height-sm); min-height: var(--control-height-sm); }
+
+/* Request progress: number above its label, the connector joins the circles only. */
+@media (min-width: 641px) {
+  .workflow-stepper button { flex-direction: column; gap: 6px; min-height: 76px; padding: 8px 4px; text-align: center; }
+  .workflow-stepper li:not(:last-child)::after { top: 24px; left: calc(50% + 22px); right: calc(-50% + 22px); }
+}
+
+/* Charts: one readable size for category ticks. */
+.chart-category-tick { fill: var(--gray-600); font-size: 12px; }
+
+/* List cells: progress counters and badges wrap within their column. */
+.table-scroll td .financial-progress-summary { min-width: 0; max-width: 100%; }
+.table-scroll td .financial-progress-counts { flex-direction: column; align-items: flex-start; gap: 2px; }
+.table-scroll td .financial-progress-counts span, .table-scroll td .badge { white-space: normal; }
+.mobile-cards td .badge { justify-self: start; width: auto; max-width: 100%; }
+.mobile-cards td .primary-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
+/* Payment stages: the history link is a tab like the others; request numbers in tables are links. */
+.focus-tabs a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--gray-600); font-size: 13px; font-weight: 600; text-decoration: none; }
+.focus-tabs a:hover { color: var(--gray-950); text-decoration: none; }
+.link-button { display: inline; min-height: 0; padding: 0; border: 0; background: none; color: var(--uma-primary); font: inherit; font-weight: 600; text-align: left; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; }
+.link-button:hover { color: var(--uma-primary-hover); }
+
+/* Bank format certification: one row per currency that reflows on small screens. */
+.certification-list { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.certification-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) auto; align-items: end; gap: var(--space-3) var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid var(--gray-200); border-radius: var(--radius-md); background: var(--surface-panel); }
+.certification-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; align-self: center; }
+.certification-meta small { flex-basis: 100%; color: var(--gray-600); font-size: var(--font-xs); }
+.certification-reference { margin: 0; }
+details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size: var(--font-sm); line-height: 1.55; }
+
+/* Dashboard: the reports link closes the grid instead of floating in an empty cell; an odd
+   last panel takes the full row. */
+.dashboard-grid > .dashboard-reports-link { grid-column: 1 / -1; justify-self: end; }
+.dashboard-grid > .analytics-panel:nth-child(odd):nth-last-child(2) { grid-column: 1 / -1; }
+
+/* Request form: sections are separated evenly; the expense-category rule spans the form. */
+.official-subsection + .section-heading { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--gray-200); }
+.request-default-account { max-width: none; }
+.request-default-account > .field, .request-default-account > .section-note { max-width: 640px; }
+
+@media (max-width: 760px) {
+  /* Touch targets of at least 40px on phones and small tablets. */
+  .icon-button, .pagination-buttons .icon-button, .row-menu .icon-button, .decision-actions .icon-button { width: var(--touch-target); height: var(--touch-target); min-width: var(--touch-target); min-height: var(--touch-target); }
+  .page-size button { min-width: var(--touch-target); min-height: var(--touch-target); }
+  .stat-card a, .text-link, .link-button { display: inline-flex; align-items: center; min-height: var(--touch-target); }
+  /* Disclosure toggles keep their marker: taller through padding, not a display change. */
+  .row-details > summary, .compact-options > summary, .workspace-tools > summary { padding-block: 10px; }
+  .decision-actions .decision-button { min-height: var(--touch-target); }
+  /* Summary cards: a lone last card fills the row. */
+  .stats-grid > :last-child:nth-child(odd), .compact-stats > :last-child:nth-child(odd), .budget-stats > :last-child:nth-child(odd), .report-stats > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .certification-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .certification-row > button { width: 100%; justify-content: center; }
+  .dashboard-grid > .dashboard-reports-link { justify-self: start; }
+  .mobile-cards td a, .asset-button-link, .request-section-toggle, .text-button { display: inline-flex; align-items: center; min-height: var(--touch-target); }
+  .info-popover-trigger { min-width: var(--touch-target); min-height: var(--touch-target); }
+  .search-select-clear { width: 32px; height: 32px; right: 30px; }
+  .search-select:has(.search-select-clear) .search-select-trigger > span:first-child { padding-right: 34px; }
+  input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; }
+  /* Names in cards wrap instead of being cut off. */
+  .mobile-cards .table-primary-cell strong, .mobile-cards .primary-cell strong { white-space: normal; overflow: visible; text-overflow: clip; }
+}
