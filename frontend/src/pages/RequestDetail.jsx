@@ -103,12 +103,14 @@ function requesterName(request) {
 
 function RequestStatusFlow({ request }) {
   const { t } = useLanguage();
-  const currentIndex = workflow.indexOf(request.status);
+  const currentStatus = canonicalRequestStatus(request.status);
+  const closed = currentStatus === "CERRADO";
+  const currentIndex = workflow.indexOf(currentStatus);
   return (
     <ol className="status-flow" aria-label={t("Request workflow status")}>
       {workflow.map((status, index) => (
-        <li key={status} className={`${index < currentIndex ? "completed" : ""} ${index === currentIndex ? "active" : ""}`}>
-          <span className="status-flow-dot">{index < currentIndex ? <Check size={14} /> : index + 1}</span>
+        <li key={status} className={`${closed || index < currentIndex ? "completed" : ""} ${!closed && index === currentIndex ? "active" : ""}`}>
+          <span className="status-flow-dot">{closed || index < currentIndex ? <Check size={14} /> : index + 1}</span>
           <span>{t(status)}</span>
         </li>
       ))}
