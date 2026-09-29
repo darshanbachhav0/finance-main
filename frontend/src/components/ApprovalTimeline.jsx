@@ -1,11 +1,12 @@
 import { useLanguage } from "../context/LanguageContext.jsx";
+import EmptyState from "./EmptyState.jsx";
 import { formatDateTime } from "../utils/formatters.js";
 
 export default function ApprovalTimeline({ history = [] }) {
   const { t } = useLanguage();
 
   if (!history.length) {
-    return <div className="empty-state">{t("No workflow events yet.")}</div>;
+    return <EmptyState title="No workflow events yet." />;
   }
 
   return (

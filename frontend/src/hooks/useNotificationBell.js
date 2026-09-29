@@ -49,6 +49,14 @@ export default function useNotificationBell(userId, enabled = true) {
       await refresh();
     } catch { setError("Could not mark notifications as read. Try again."); }
   }
+  // "Mark done" clears one notification from the bell; its task stays in its workspace.
+  async function dismiss(item) {
+    if (!enabled) return;
+    try {
+      await api.patch(`/notifications/${item._id}/dismiss`);
+      await refresh();
+    } catch { setError("Could not update the notification. Try again."); }
+  }
   async function markAllRead() {
     if (!enabled) return;
     try {
@@ -56,5 +64,5 @@ export default function useNotificationBell(userId, enabled = true) {
       await refresh();
     } catch { setError("Could not mark notifications as read. Try again."); }
   }
-  return { tasks, notifications, error, refresh, markRead, markAllRead };
+  return { tasks, notifications, error, refresh, markRead, markAllRead, dismiss };
 }

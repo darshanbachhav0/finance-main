@@ -2,13 +2,22 @@ import { flushAllDrafts, clearDraftSessions } from "../utils/workDrafts.js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import api, { SESSION_EXPIRED_EVENT } from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import SessionExpiryNotice from "../components/SessionExpiryNotice.jsx";
+import { minutesLeft, sessionExpiresAt, sessionPhase } from "../utils/sessionExpiry.js";
 import { useToast } from "./ToastContext.jsx";
 
 const AuthContext = createContext(null);
+// How often the remaining session time is re-checked (timers pause in background tabs, so a
+// single long timeout could fire late; a short interval plus focus/visibility checks cannot).
+const SESSION_CHECK_MS = 15000;
 
 function clearStoredSession() {
   localStorage.removeItem("erp_token");
   localStorage.removeItem("erp_user");
+}
+
+function storedExpiry() {
+  return sessionExpiresAt({ token: localStorage.getItem("erp_token") });
 }
 
 export function AuthProvider({ children }) {
@@ -20,7 +29,19 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(Boolean(localStorage.getItem("erp_token")));
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [expiresAt, setExpiresAt] = useState(storedExpiry);
+  const [now, setNow] = useState(() => Date.now());
+  const [extending, setExtending] = useState(false);
   const expiredNoticeShown = useRef(false);
+  const warnedFor = useRef(null);
+
+  const storeSession = useCallback((data) => {
+    localStorage.setItem("erp_token", data.token);
+    localStorage.setItem("erp_user", JSON.stringify(data.user));
+    setExpiresAt(sessionExpiresAt(data));
+    setNow(Date.now());
+    setUser(data.user);
+  }, []);
 
   // Any authenticated call answered 401 (see api/client.js): drop the session and return to the
   // sign-in page (ProtectedRoute redirects once user is null). Drafts are deliberately kept - the
@@ -30,6 +51,7 @@ export function AuthProvider({ children }) {
       if (!localStorage.getItem("erp_token")) return;
       clearStoredSession();
       setUser(null);
+      setExpiresAt(null);
       setLoading(false);
       if (!expiredNoticeShown.current) {
         expiredNoticeShown.current = true;
@@ -60,20 +82,65 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Session clock: re-check while signed in, when the tab becomes visible again, and when another
+  // tab extends or ends the session (the token in localStorage is shared).
+  useEffect(() => {
+    if (!user) return undefined;
+    const tick = () => setNow(Date.now());
+    const onVisible = () => { if (document.visibilityState !== "hidden") tick(); };
+    const onStorage = (event) => {
+      if (event.key !== "erp_token") return;
+      setExpiresAt(storedExpiry());
+      tick();
+    };
+    const timer = window.setInterval(tick, SESSION_CHECK_MS);
+    window.addEventListener("focus", tick);
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", tick);
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [user]);
+
+  const phase = user ? sessionPhase(expiresAt, now) : "hidden";
+
+  useEffect(() => {
+    if (phase === "warning" && warnedFor.current !== expiresAt) {
+      // Save open drafts to the account while the token still works.
+      warnedFor.current = expiresAt;
+      void flushAllDrafts();
+    }
+    // The token has run out: end the session the same way a 401 would (drafts are kept).
+    if (phase === "expired") window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+  }, [phase, expiresAt]);
+
+  async function extendSession() {
+    setExtending(true);
+    try {
+      const response = await api.post("/auth/refresh");
+      storeSession(response.data);
+      notify("Your session was extended.", "success");
+    } catch (error) {
+      // A 401 already ended the session (api/client.js); anything else can be retried.
+      if (error?.status !== 401) notify("The session could not be extended. Try again.", "error");
+    } finally {
+      setExtending(false);
+    }
+  }
+
   async function login(dni, password) {
     const response = await api.post("/auth/login", { dni, password });
     clearDraftSessions();
     expiredNoticeShown.current = false;
-    localStorage.setItem("erp_token", response.data.token);
-    localStorage.setItem("erp_user", JSON.stringify(response.data.user));
-    setUser(response.data.user);
+    storeSession(response.data);
   }
 
   async function changePassword(currentPassword, newPassword) {
     const response = await api.post("/auth/change-password", { currentPassword, newPassword });
-    localStorage.setItem("erp_token", response.data.token);
-    localStorage.setItem("erp_user", JSON.stringify(response.data.user));
-    setUser(response.data.user);
+    storeSession(response.data);
   }
 
   const finishLogout = useCallback(async () => {
@@ -86,6 +153,7 @@ export function AuthProvider({ children }) {
       clearDraftSessions();
       clearStoredSession();
       setUser(null);
+      setExpiresAt(null);
       setSigningOut(false);
       setConfirmLogout(false);
     }
@@ -100,11 +168,19 @@ export function AuthProvider({ children }) {
     await finishLogout();
   }
 
-  const value = useMemo(() => ({ user, loading, login, logout, changePassword, isAuthenticated: Boolean(user) }), [user, loading]);
+  const value = useMemo(() => ({ user, loading, login, logout, changePassword, extendSession, sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user) }), [user, loading, expiresAt]);
 
   return (
     <AuthContext.Provider value={value}>
       {children}
+      {phase === "warning" && !confirmLogout && (
+        <SessionExpiryNotice
+          minutes={minutesLeft(expiresAt, now)}
+          extending={extending}
+          onExtend={() => { void extendSession(); }}
+          onLogout={() => { void logout(); }}
+        />
+      )}
       <ConfirmDialog
         open={confirmLogout}
         tone="danger"

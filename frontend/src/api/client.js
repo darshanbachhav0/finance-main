@@ -23,7 +23,8 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
-    if (response.config?.method && response.config.method.toLowerCase() !== "get" && !response.config.url?.endsWith("/budget-preview") && !response.config.url?.startsWith("/work-drafts")) {
+    // Extending the session (POST /auth/refresh) changes no work items, so it does not reload tasks.
+    if (response.config?.method && response.config.method.toLowerCase() !== "get" && !response.config.url?.endsWith("/budget-preview") && !response.config.url?.startsWith("/work-drafts") && !response.config.url?.endsWith("/auth/refresh")) {
       window.dispatchEvent(new CustomEvent("erp:tasks-changed"));
     }
     return response;

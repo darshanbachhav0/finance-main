@@ -289,6 +289,9 @@ export default function Suppliers() {
           key:
             "supplierCode",
 
+          type:
+            "code",
+
           label:
             "PRV Code",
 
@@ -310,6 +313,12 @@ export default function Suppliers() {
         {
           key:
             "legalName",
+
+          type:
+            "name",
+
+          minWidth:
+            "260px",
 
           label:
             "Supplier",
@@ -359,6 +368,12 @@ export default function Suppliers() {
           key:
             "rucDni",
 
+          type:
+            "code",
+
+          primary:
+            true,
+
           label:
             "RUC / DNI",
 
@@ -369,6 +384,9 @@ export default function Suppliers() {
         {
           key:
             "homologationStatus",
+
+          type:
+            "status",
 
           label:
             "Homologation Status",
@@ -390,6 +408,9 @@ export default function Suppliers() {
         {
           key:
             "financeReview",
+
+          type:
+            "status",
 
           label:
             "Finance Review",
@@ -1526,7 +1547,9 @@ export default function Suppliers() {
         ]}
         searchPlaceholder="Search by PRV, RUC, legal or commercial name..."
         exportable
-        emptyDescription="No suppliers match the current search and filters."
+        emptyTitle="No suppliers yet"
+        emptyDescription={canPropose ? "Propose a supplier to start its RCO-FOR-002 homologation." : "Suppliers appear here once they are proposed for homologation."}
+        emptyAction={canPropose ? { label: "New supplier", onClick: startCreate, icon: Plus } : undefined}
       />
 
       <Drawer

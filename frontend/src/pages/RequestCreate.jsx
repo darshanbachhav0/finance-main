@@ -22,6 +22,11 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
 import Message from "../components/Message.jsx";
 import RequestItemLine from "../components/RequestItemLine.jsx";
+import DateInput from "../components/DateInput.jsx";
+import RequestFormBlock from "../components/RequestFormBlock.jsx";
+import { OPTIONAL_REQUEST_FIELDS, REQUEST_FORM_BLOCKS, isRequestFormField, requestBlockStatuses } from "../utils/requestFormBlocks.js";
+import { openPeriodError, positiveAmountError, requiredError } from "../utils/fieldValidation.js";
+import { formatIsoMonth } from "../utils/dateInput.js";
 import { restoreEditorLine, editRequestLine, requestLinePayload } from "../utils/requestLineEditor.js";
 import PageHeader from "../components/PageHeader.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
@@ -53,6 +58,7 @@ import {
 
 const steps = ["Request information", "Supplier", "Documents", "Review and submit"];
 const officialTypes = new Set(["CAPEX", "OPEX"]);
+const blockInfo = Object.fromEntries(REQUEST_FORM_BLOCKS.map(({ id, title, description }) => [id, { id, title, description }]));
 const supplierStatus = (supplier) => supplier?.homologationStatus || supplier?.status || "PENDING_VALIDATION";
 const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierId = (value) => value?._id || value || "";
@@ -165,6 +171,7 @@ export default function RequestCreate() {
   const [maxStep, setMaxStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
   const [errors, setErrors] = useState({});
+  const [blurredFields, setBlurredFields] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -513,6 +520,58 @@ export default function RequestCreate() {
     return next;
   }
 
+  // What step 1 still needs right now: the Continue / Submit rules (submitting = true, so
+  // it matches what approval requires) plus checks that help while typing. It feeds the
+  // messages shown when a field is left and the "Complete" badge of each block.
+  function liveProblems() {
+    const problems = validationForStep(0, true);
+    if (!problems.issueDate && form.issueDate && form.issueDate.slice(0, 7) === form.accountingPeriod) {
+      const outside = openPeriodError(form.issueDate, masters.periods, "The issue date must fall within an open accounting period.");
+      if (outside) problems.issueDate = outside;
+    }
+    if (!form.defaultExpenseType && lines.some((line) => !line.expenseType)) problems.defaultExpenseType = "Select an expense category.";
+    return problems;
+  }
+
+  function setFieldError(key, message) {
+    setErrors((current) => {
+      if ((current[key] || "") === (message || "")) return current;
+      const next = { ...current };
+      if (message) next[key] = message;
+      else delete next[key];
+      return next;
+    });
+  }
+
+  // Validation runs after the blur has been rendered, so a value committed on blur (the
+  // date field completes "30/09/26" when it is left) is the one checked.
+  function validateField(...keys) {
+    setBlurredFields({ keys });
+  }
+
+  useEffect(() => {
+    if (!blurredFields) return;
+    const problems = liveProblems();
+    blurredFields.keys.forEach((key) => setFieldError(key, problems[key]));
+  }, [blurredFields]);
+
+  // A message disappears as soon as the field is fixed; new ones only appear on blur or submit.
+  useEffect(() => {
+    if (!hydrated) return;
+    const problems = liveProblems();
+    setErrors((current) => {
+      const fixed = Object.keys(current).filter((key) => isRequestFormField(key) && !problems[key]);
+      if (!fixed.length) return current;
+      const next = { ...current };
+      fixed.forEach((key) => delete next[key]);
+      return next;
+    });
+  }, [hydrated, form, lines, masters.periods, allowedExpenseTypes, officialRequest]);
+
+  function validateQuotationAmount(index) {
+    setFieldError(`quotations.${index}.amount`, positiveAmountError(quotations[index]?.amount, { required: quotationPolicy.enabled, message: "Quotation amount must be greater than zero." }));
+  }
+
   function nextStep() {
     const nextErrors = validationForStep(step, false);
     setErrors(nextErrors);
@@ -592,6 +651,11 @@ export default function RequestCreate() {
     }
   }
 
+  const blockStatuses = requestBlockStatuses(hydrated ? liveProblems() : {}, {
+    optional: officialRequest ? [] : ["why"],
+    filled: { why: Boolean(String(form.businessJustification || "").trim() && String(form.nonApprovalRisk || "").trim()) }
+  });
+
   if (loading) return <WorkspaceSkeleton label={isEditing ? "Loading request..." : "Loading form data..."} />;
 
   return <section>
@@ -607,31 +671,51 @@ export default function RequestCreate() {
       <div className="wizard-financial-context"><span>{t("Step {step} of {total}").replace("{step}", step + 1).replace("{total}", steps.length)} · {t(steps[step])}</span><span>{t("Total amount")}<strong>{formatCurrency(totals.total, form.currency, language)}</strong></span><small>{t("Fields marked * are required.")}</small></div>
       <div className="wizard-workspace">
         <MotionSurface changeKey={step} directional>
-        {step === 0 && <div className="wizard-step">
-          <div className="section-heading"><div><h3>{t("General information")}</h3><p>{t("Identify the request, authorized CECO, period, and institutional need.")}</p></div></div>
+        {step === 0 && <div className="wizard-step request-form-blocks">
+          <div className="request-blocks-progress" aria-live="polite"><span>{t("{done} of {total} blocks complete").replace("{done}", String(REQUEST_FORM_BLOCKS.filter((block) => blockStatuses[block.id] !== "incomplete").length)).replace("{total}", String(REQUEST_FORM_BLOCKS.length))}</span><small>{t("Each field is checked when you leave it.")}</small></div>
+
+          <RequestFormBlock {...blockInfo.need} status={blockStatuses.need}>
           <div className="form-grid two-column-form">
             <label className="field"><span>{t("Operational track")} *</span><select value={form.flowType} onChange={(event) => { const flowType = event.target.value; setForm((current) => ({ ...current, flowType, requestType: requestTypeForFlow(flowType, current.requestType), supplier: flowType === "C" ? "" : current.supplier })); }}>{flowTypes.filter((type) => type !== "A2").map((type) => <option key={type} value={type}>{t(optionLabel(type, flowTypeLabels))}</option>)}</select><small>{t(form.flowType === "A1" ? "Formal purchase with quotations and PO." : form.flowType === "B" ? "Direct invoice / advance payment with mandatory XML + PDF." : "Advance to render / petty cash; expense budget is executed at rendition validation.")}</small></label>
-            {form.flowType !== "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>CAPEX / OPEX *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))}>{requestCreationClassifications.map((type) => <option key={type} value={type}>{t(optionLabel(type, expenditureClassificationLabels))}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t("The operational track defines how the transaction is processed; CAPEX / OPEX defines the economic classification of the spend.")}</small></label>}
-            {form.flowType === "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>{t("Track C request type")} *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))}>{trackCRequestTypes.map((type) => <option key={type} value={type}>{t(trackCRequestTypeLabels[type])}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t(form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "Reimburses an expense you already paid and could not support with a fiscal receipt. After approval you sign the declaration, Accounting reviews it and Treasury pays your verified account." : "UMA pays you first; you then render the advance with receipts within the configured working-day deadline.")}</small></label>}
-            <label className="field"><span>{t("Expense nature")} *</span><select value={form.expenseNature} onChange={(event) => setForm((current) => ({ ...current, expenseNature: event.target.value }))}>{expenseNatures.map((item) => <option key={item} value={item}>{t(optionLabel(item, expenseNatureLabels))}</option>)}</select></label>
-            <label className="field"><span>{t("Priority")} *</span><select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}>{requestPriorities.map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
-            <label className="field"><span>{t("Requesting area")}</span><input value={user.area || "General"} disabled title={t("Assigned from the signed-in user profile.")} /></label>
-            <div className="form-span-two"><SearchSelect label="Cost Center / CECO" value={form.requesterCostCenter} options={masters.costCenters} onChange={setHeaderCostCenter} getOptionLabel={(item) => `${item.code} - ${item.name}${item.area ? ` (${item.area})` : ""}`} error={errors.requesterCostCenter} required searchPlaceholder="Search authorized CECO..." /><small className="field-hint">{t("Only Cost Centers assigned to your profile are available.")}</small></div>
-            <label className="field"><span>{t("Area correlative")}</span><input value={form.areaCorrelative} onChange={(event) => setForm((current) => ({ ...current, areaCorrelative: event.target.value }))} /></label>
-            <label className="field"><span>{t("School / department")}</span><input value={form.schoolOrDepartment} onChange={(event) => setForm((current) => ({ ...current, schoolOrDepartment: event.target.value }))} /></label>
-            <label className="field"><span>{t("Issue date")} *</span><input type="date" value={form.issueDate} onChange={(event) => setForm((current) => ({ ...current, issueDate: event.target.value, accountingPeriod: event.target.value.slice(0, 7) }))} /></label>
-            <label className={`field${errors.accountingPeriod ? " field-error" : ""}`}><span>{t("Request month")} *</span><select value={form.accountingPeriod} onChange={(event) => setForm((current) => ({ ...current, accountingPeriod: event.target.value }))}><option value="">{t("Select")}</option>{masters.periods.map((period) => <option key={period._id} value={period.period} disabled={period.status !== "OPEN"}>{period.period} - {t(period.status)}</option>)}</select>{errors.accountingPeriod && <small className="field-error-text">{t(errors.accountingPeriod)}</small>}</label>
-            <label className="field"><span>{t("Currency")} *</span><select value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
-            <label className="field"><span>{t("Requirement title")} *</span><input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />{errors.title && <small className="field-error-text">{t(errors.title)}</small>}</label>
-            <label className="field form-span-two"><span>{t("Detailed description")} *</span><textarea rows="4" value={form.detailedDescription} onChange={(event) => setForm((current) => ({ ...current, detailedDescription: event.target.value, description: event.target.value }))} />{errors.detailedDescription && <small className="field-error-text">{t(errors.detailedDescription)}</small>}</label>
-            <label className="field form-span-two"><span>{t("Business justification")} *</span><textarea rows="3" value={form.businessJustification} onChange={(event) => setForm((current) => ({ ...current, businessJustification: event.target.value }))} />{errors.businessJustification && <small className="field-error-text">{t(errors.businessJustification)}</small>}</label>
-            <label className="field form-span-two"><span>{t("Risk if not approved")} *</span><textarea rows="3" value={form.nonApprovalRisk} onChange={(event) => setForm((current) => ({ ...current, nonApprovalRisk: event.target.value }))} />{errors.nonApprovalRisk && <small className="field-error-text">{t(errors.nonApprovalRisk)}</small>}</label>
+            {form.flowType !== "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>CAPEX / OPEX *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))} onBlur={() => validateField("requestType")} aria-invalid={Boolean(errors.requestType)}>{requestCreationClassifications.map((type) => <option key={type} value={type}>{t(optionLabel(type, expenditureClassificationLabels))}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t("The operational track defines how the transaction is processed; CAPEX / OPEX defines the economic classification of the spend.")}</small></label>}
+            {form.flowType === "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>{t("Track C request type")} *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))} onBlur={() => validateField("requestType")} aria-invalid={Boolean(errors.requestType)}>{trackCRequestTypes.map((type) => <option key={type} value={type}>{t(trackCRequestTypeLabels[type])}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t(form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "Reimburses an expense you already paid and could not support with a fiscal receipt. After approval you sign the declaration, Accounting reviews it and Treasury pays your verified account." : "UMA pays you first; you then render the advance with receipts within the configured working-day deadline.")}</small></label>}
+            <label className={`field${errors.expenseNature ? " field-error" : ""}`}><span>{t("Expense nature")} *</span><select value={form.expenseNature} onChange={(event) => setForm((current) => ({ ...current, expenseNature: event.target.value }))} onBlur={() => validateField("expenseNature")} aria-invalid={Boolean(errors.expenseNature)}>{expenseNatures.map((item) => <option key={item} value={item}>{t(optionLabel(item, expenseNatureLabels))}</option>)}</select>{errors.expenseNature && <small className="field-error-text">{t(errors.expenseNature)}</small>}</label>
+            <label className={`field${errors.title ? " field-error" : ""}`}><span>{t("Requirement title")}{officialRequest ? " *" : ""}</span><input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} onBlur={() => validateField("title")} aria-invalid={Boolean(errors.title)} />{errors.title && <small className="field-error-text">{t(errors.title)}</small>}</label>
+            <label className={`field form-span-two${errors.detailedDescription || errors.description ? " field-error" : ""}`}><span>{t("Detailed description")} *</span><textarea rows="4" value={form.detailedDescription} onChange={(event) => setForm((current) => ({ ...current, detailedDescription: event.target.value, description: event.target.value }))} onBlur={() => validateField("detailedDescription", "description")} aria-invalid={Boolean(errors.detailedDescription || errors.description)} />{(errors.detailedDescription || errors.description) && <small className="field-error-text">{t(errors.detailedDescription || errors.description)}</small>}</label>
           </div>
 
           {form.flowType === "C" && form.requestType !== "REEMBOLSO_SIN_SUSTENTO" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("Track C - Advance to render")}</strong><span>{t("CAPEX / OPEX is not selected when the advance is created. The final expense is recognized when Accounting validates the rendition.")}</span></div></div>}
           {form.flowType === "C" && form.requestType === "REEMBOLSO_SIN_SUSTENTO" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("Track C - Undocumented reimbursement")}</strong><span>{t("Use a non-deductible expense account. No advance is paid: once approved, submit the undocumented-expense declaration with a verified PEN reimbursement account.")}</span></div></div>}
 
           {form.flowType === "B" && form.requestType === "CAPEX" && <div className="inline-alert alert-warning"><AlertTriangle size={18} /><div><strong>{t("Direct CAPEX purchase")}</strong><span>{t("Track B has no prior Purchase Order. Provide a clear business justification and the required supporting evidence for this capital expenditure.")}</span></div></div>}
+
+          <details className="request-optional-fields" open={OPTIONAL_REQUEST_FIELDS.some((field) => errors[field]) ? true : undefined}>
+            <summary><span>{t("More details (optional)")}</span><small>{t("Priority")}: {t(form.priority)}{form.areaCorrelative ? ` · ${form.areaCorrelative}` : ""}{form.schoolOrDepartment ? ` · ${form.schoolOrDepartment}` : ""}</small></summary>
+            <div className="form-grid two-column-form">
+              <label className={`field${errors.priority ? " field-error" : ""}`}><span>{t("Priority")}</span><select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} onBlur={() => validateField("priority")}>{requestPriorities.map((item) => <option key={item} value={item}>{t(item)}</option>)}</select>{errors.priority ? <small className="field-error-text">{t(errors.priority)}</small> : <small className="field-hint">{t("Medium by default; raise it only when the need is urgent.")}</small>}</label>
+              <label className="field"><span>{t("Area correlative")}</span><input value={form.areaCorrelative} onChange={(event) => setForm((current) => ({ ...current, areaCorrelative: event.target.value }))} /></label>
+              <label className="field"><span>{t("School / department")}</span><input value={form.schoolOrDepartment} onChange={(event) => setForm((current) => ({ ...current, schoolOrDepartment: event.target.value }))} /></label>
+            </div>
+          </details>
+          </RequestFormBlock>
+
+          <RequestFormBlock {...blockInfo.why} status={blockStatuses.why}>
+          <div className="form-grid two-column-form">
+            <label className={`field form-span-two${errors.businessJustification ? " field-error" : ""}`}><span>{t("Business justification")}{officialRequest ? " *" : ""}</span><textarea rows="3" value={form.businessJustification} onChange={(event) => setForm((current) => ({ ...current, businessJustification: event.target.value }))} onBlur={() => validateField("businessJustification")} aria-invalid={Boolean(errors.businessJustification)} />{errors.businessJustification && <small className="field-error-text">{t(errors.businessJustification)}</small>}</label>
+            <label className={`field form-span-two${errors.nonApprovalRisk ? " field-error" : ""}`}><span>{t("Risk if not approved")}{officialRequest ? " *" : ""}</span><textarea rows="3" value={form.nonApprovalRisk} onChange={(event) => setForm((current) => ({ ...current, nonApprovalRisk: event.target.value }))} onBlur={() => validateField("nonApprovalRisk")} aria-invalid={Boolean(errors.nonApprovalRisk)} />{errors.nonApprovalRisk && <small className="field-error-text">{t(errors.nonApprovalRisk)}</small>}</label>
+          </div>
+          </RequestFormBlock>
+
+          <RequestFormBlock {...blockInfo.budget} status={blockStatuses.budget}>
+          <div className="form-grid two-column-form">
+            <label className="field"><span>{t("Requesting area")}</span><input value={user.area || "General"} disabled title={t("Assigned from the signed-in user profile.")} /></label>
+            <div className="form-span-two"><SearchSelect label="Cost Center / CECO" value={form.requesterCostCenter} options={masters.costCenters} onChange={setHeaderCostCenter} getOptionLabel={(item) => `${item.code} - ${item.name}${item.area ? ` (${item.area})` : ""}`} error={errors.requesterCostCenter} required searchPlaceholder="Search authorized CECO..." /><small className="field-hint">{t("Only Cost Centers assigned to your profile are available.")}</small></div>
+            <label className={`field${errors.issueDate ? " field-error" : ""}`}><span>{t("Issue date")} *</span><DateInput required value={form.issueDate} onChange={(event) => setForm((current) => ({ ...current, issueDate: event.target.value, accountingPeriod: event.target.value.slice(0, 7) }))} onBlur={() => validateField("issueDate", "accountingPeriod")} aria-invalid={Boolean(errors.issueDate)} />{errors.issueDate && <small className="field-error-text">{t(errors.issueDate)}</small>}</label>
+            <label className={`field${errors.accountingPeriod ? " field-error" : ""}`}><span>{t("Request month")} *</span><select value={form.accountingPeriod} onChange={(event) => setForm((current) => ({ ...current, accountingPeriod: event.target.value }))} onBlur={() => validateField("accountingPeriod")} aria-invalid={Boolean(errors.accountingPeriod)}><option value="">{t("Select")}</option>{masters.periods.map((period) => <option key={period._id} value={period.period} disabled={period.status !== "OPEN"}>{formatIsoMonth(period.period) || period.period} - {t(period.status)}</option>)}</select>{errors.accountingPeriod && <small className="field-error-text">{t(errors.accountingPeriod)}</small>}</label>
+            <label className={`field${errors.currency ? " field-error" : ""}`}><span>{t("Currency")} *</span><select value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))} onBlur={() => validateField("currency")}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select>{errors.currency && <small className="field-error-text">{t(errors.currency)}</small>}</label>
+          </div>
+
+          <div className="official-subsection request-default-account"><SearchSelect label="Expense category for these items" value={form.defaultExpenseType || ""} options={allowedExpenseTypes} onChange={setDefaultExpenseType} getOptionLabel={item => item.name} searchPlaceholder="Search expense category..." error={errors.defaultExpenseType} required /><p className="section-note">{t("Choose the expense category for these items.")}</p></div>
 
           {form.requestType === "CAPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("CAPEX financial information")}</h3><p>{t("Planning information is recorded only; no depreciation or NPV calculation is generated.")}</p></div></div><div className="form-grid three-column-form">
             <label className="field"><span>{t("Project / PEP")}</span><select value={capex.projectId} onChange={(event) => { const project = masters.projects.find((item) => item._id === event.target.value); setCapex((current) => ({ ...current, projectId: event.target.value, projectPep: project?.code || current.projectPep })); }}><option value="">{t("No project")}</option>{masters.projects.map((project) => <option key={project._id} value={project._id}>{project.code} - {project.name}</option>)}</select></label>
@@ -642,17 +726,19 @@ export default function RequestCreate() {
             <div className="field"><span>{t("Payback")}</span><div className="compound-field"><input aria-label={t("Payback value")} type="number" min="0" step="0.01" value={capex.paybackValue} onChange={(event) => setCapex((current) => ({ ...current, paybackValue: event.target.value }))} /><select aria-label={t("Payback unit")} value={capex.paybackUnit} onChange={(event) => setCapex((current) => ({ ...current, paybackUnit: event.target.value }))}><option value="MONTHS">{t("Months")}</option><option value="YEARS">{t("Years")}</option></select></div></div>
           </div></div>}
 
-          <div className="official-subsection request-default-account"><SearchSelect label="Expense category for these items" value={form.defaultExpenseType || ""} options={allowedExpenseTypes} onChange={setDefaultExpenseType} getOptionLabel={item => item.name} searchPlaceholder="Search expense category..." required /><p className="section-note">{t("Choose the expense category for these items.")}</p></div>
-
           {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("The expense account remains controlled by the configured accounting master.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="EVERY_3_MONTHS">{language === "es" ? "Cada 3 meses" : "Every 3 months"}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
-          <div className="section-heading"><div><h3>{t("Item / service breakdown")}</h3><p>{t("Enter the quantity and unit price. We calculate IGV and the final total for you.")}</p></div><button type="button" className="secondary-button" onClick={() => setLines(current => [...current, emptyLine(form.requesterCostCenter, form.defaultExpenseType)])}><Plus size={16} /><span>{t("Add line")}</span></button></div>
-          <MotionList className="official-line-list">{lines.map((line, index) => <RequestItemLine key={line.clientId} line={line} index={index} currency={form.currency} errors={errors} onChange={patch => updateLine(index, patch)} canRemove={lines.length > 1} onRemove={() => setLines(current => current.filter((_, currentIndex) => currentIndex !== index))} />)}</MotionList>
+          </RequestFormBlock>
+
+          <RequestFormBlock {...blockInfo.items} status={blockStatuses.items} action={<button type="button" className="secondary-button" onClick={() => setLines(current => [...current, emptyLine(form.requesterCostCenter, form.defaultExpenseType)])}><Plus size={16} /><span>{t("Add line")}</span></button>}>
+          {errors.lines && <small className="field-error-text">{t(errors.lines)}</small>}
+          <MotionList className="official-line-list">{lines.map((line, index) => <RequestItemLine key={line.clientId} line={line} index={index} currency={form.currency} errors={errors} onChange={patch => updateLine(index, patch)} onFieldBlur={field => validateField(`lines.${index}.${field}`)} canRemove={lines.length > 1} onRemove={() => setLines(current => current.filter((_, currentIndex) => currentIndex !== index))} />)}</MotionList>
           <div className="request-items-total"><span>{t("Request total")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div>
           <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.(costCenter|expenseType)/.test(key)) ? true : undefined}>
             <summary>{t("Adjust budget allocation")}</summary>
             <p className="section-note">{t("Items inherit the request's cost center and expense account. Adjust only when an item uses a different budget.")}</p>
             {lines.map((line, index) => <div className="request-budget-line" key={line.clientId}><strong>{t("Item")} {index + 1}: {line.itemDescription || t("Item / service description")}</strong><div className="form-grid two-column-form"><SearchSelect label="Cost Center / CECO" value={line.costCenter} options={masters.costCenters} onChange={value => updateLine(index, { costCenter: value })} getOptionLabel={item => item.code + " - " + item.name} error={errors["lines." + index + ".costCenter"]} required searchPlaceholder="Search authorized CECO..." /><SearchSelect label="Expense type" value={line.expenseType} options={allowedExpenseTypes} onChange={value => updateLine(index, { expenseType: value })} getOptionLabel={item => item.name} error={errors["lines." + index + ".expenseType"]} required searchPlaceholder="Search expense category..." /></div></div>)}
           </details>
+          </RequestFormBlock>
 
         </div>}
 
@@ -669,7 +755,7 @@ export default function RequestCreate() {
               return <article className={`quotation-card${quotation.recommended ? " recommended" : ""}`} key={quotation.clientId} data-motion-key={quotation.clientId}><div className="quotation-card-head"><span>{t("Quotation")} {index + 1}</span>{supplier && <StatusBadge status={status} />}</div>
                 <SearchSelect label="Supplier" value={quotation.supplier} options={masters.suppliers} onChange={(value) => updateQuotation(index, { supplier: value, recommended: false })} getOptionLabel={(item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)} - ${t(supplierStatus(item))}`} error={errors[`quotations.${index}.supplier`]} required searchPlaceholder="Search name or RUC/DNI..." />
                 {supplier && <div className="supplier-inline-status"><div><strong>{supplierName(supplier)}</strong><span>{supplier.rucDni}{supplier.supplierCode ? ` - ${supplier.supplierCode}` : ""}</span></div></div>}
-                <div className="form-grid two-column-form"><label className="field"><span>{t("Amount")} *</span><input type="number" min="0" step="0.01" value={quotation.amount} onChange={(event) => updateQuotation(index, { amount: event.target.value })} /></label><label className="field"><span>{t("Currency")}</span><select value={quotation.currency} onChange={(event) => updateQuotation(index, { currency: event.target.value })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label><label className="field"><span>{t("Delivery period")}</span><input value={quotation.deliveryPeriod} onChange={(event) => updateQuotation(index, { deliveryPeriod: event.target.value })} /></label></div>
+                <div className="form-grid two-column-form"><label className={`field${errors[`quotations.${index}.amount`] ? " field-error" : ""}`}><span>{t("Amount")} *</span><input type="number" min="0" step="0.01" value={quotation.amount} onChange={(event) => updateQuotation(index, { amount: event.target.value })} onBlur={() => validateQuotationAmount(index)} aria-invalid={Boolean(errors[`quotations.${index}.amount`])} />{errors[`quotations.${index}.amount`] && <small className="field-error-text">{t(errors[`quotations.${index}.amount`])}</small>}</label><label className="field"><span>{t("Currency")}</span><select value={quotation.currency} onChange={(event) => updateQuotation(index, { currency: event.target.value })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label><label className="field"><span>{t("Delivery period")}</span><input value={quotation.deliveryPeriod} onChange={(event) => updateQuotation(index, { deliveryPeriod: event.target.value })} /></label></div>
                 <QuotationPaymentTerms quotation={quotation} onChange={(changes) => updateQuotation(index, changes)} errors={errors} errorPrefix={`quotations.${index}.`} />
                 <label className="field"><span>{t("Commercial conditions")}</span><textarea rows="2" value={quotation.commercialConditions} onChange={(event) => updateQuotation(index, { commercialConditions: event.target.value })} /></label>
                 <label className={`quotation-evidence${errors[`quotations.${index}.attachment`] ? " field-error" : ""}`}><FileText size={18} /><span><strong>{quotationFiles[quotation.clientId]?.name || evidence?.originalName || t("Attach quotation evidence")}</strong><small>{quotationFiles[quotation.clientId] || evidence ? t("Evidence attached") : t("Evidence missing")}</small></span><input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" onChange={(event) => setQuotationFiles((current) => ({ ...current, [quotation.clientId]: event.target.files?.[0] }))} /></label>
@@ -678,7 +764,7 @@ export default function RequestCreate() {
             })}</MotionList>
             {quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}
             <Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : "/requests/new")}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
-            <label className="field"><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => setForm((current) => ({ ...current, supplierSelectionReason: event.target.value }))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
+            <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => { setForm((current) => ({ ...current, supplierSelectionReason: event.target.value })); if (event.target.value.trim()) setFieldError("supplierSelectionReason", ""); }} onBlur={() => quotationPolicy.enabled && setFieldError("supplierSelectionReason", requiredError(form.supplierSelectionReason, "Supplier selection reason is required."))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
 
           <BudgetRemainingSummary payload={budgetPayload} preview={budgetPreview} loading={budgetLoading} onRefresh={() => setBudgetRefresh(value => value + 1)} expenseTypes={masters.expenseTypes} />

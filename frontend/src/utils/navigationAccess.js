@@ -93,3 +93,57 @@ export const roleNavigation = {
   ManagementViewer: [["Management Portal", "/management-view"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
 };
+
+// Pending-task counters next to menu entries. Each path adds up the /dashboard/tasks counters
+// of the work people act on from that page; a key the role does not receive counts as 0.
+export const navigationCounterKeys = Object.freeze({
+  "/approvals": ["approval"],
+  "/treasury": ["payable", "paymentConfirmation"],
+  "/accounting": ["accounting"],
+  "/accounting/invoice-observations": ["invoiceObservations"],
+  "/budget": ["budgetExceptions"],
+  "/requests": ["corrections", "rendition"],
+  "/suppliers": ["suppliers"]
+});
+
+export function navigationCount(path, counters) {
+  return (navigationCounterKeys[path] || []).reduce((sum, key) => {
+    const value = Number(counters?.[key]);
+    return sum + (Number.isFinite(value) && value > 0 ? Math.floor(value) : 0);
+  }, 0);
+}
+
+// Badge text: nothing at 0, capped at "99+".
+export function counterBadgeText(count) {
+  const value = Number(count) || 0;
+  if (value <= 0) return "";
+  return value > 99 ? "99+" : String(value);
+}
+
+// Phone bottom bar: up to three main destinations per role (from roleNavigation), plus Search.
+export const bottomNavigation = Object.freeze({
+  Solicitor: ["/", "/requests", "/requests/new"],
+  AreaDirector: ["/", "/approvals", "/requests"],
+  ViceRector: ["/", "/approvals", "/requests"],
+  Budget: ["/", "/budget", "/requests"],
+  Procurement: ["/", "/requests", "/suppliers"],
+  Accounting: ["/", "/accounting", "/accounting/invoice-observations"],
+  Treasury: ["/", "/treasury", "/treasury/history"],
+  Management: ["/", "/approvals", "/reports"],
+  Admin: ["/", "/administration"]
+});
+
+// Shorter labels where the menu label does not fit a bottom-bar slot.
+export const bottomNavigationLabels = Object.freeze({
+  "/accounting/invoice-observations": "Observations",
+  "/treasury/history": "History",
+  "/budget": "Budget"
+});
+
+export function bottomNavigationForUser(user) {
+  const items = navigationForUser(user);
+  // A requester who also approves for a team gets Approvals in place of the request list.
+  const paths = user?.role === "Solicitor" && user?.hasTeam === true ? ["/", "/approvals", "/requests/new"] : bottomNavigation[user?.role];
+  const chosen = paths ? paths.map((path) => items.find(([, itemPath]) => itemPath === path)).filter(Boolean) : items.slice(0, 3);
+  return chosen.slice(0, 3).map(([label, path]) => ({ label: bottomNavigationLabels[path] || label, path }));
+}

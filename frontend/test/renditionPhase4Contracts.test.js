@@ -24,7 +24,7 @@ test("mobility and unsupported rows are repeatable and use semantic form control
   const workspace = source("../src/components/rendition/OfficialRenditionWorkspace.jsx");
   assert.match(workspace, /setMobilityLines\(\(rows\) => \[\.\.\.rows, emptyMobility\(\)\]\)/);
   assert.match(workspace, /setUnsupportedLines\(\(rows\) => \[\.\.\.rows, emptyUnsupported\(\)\]\)/);
-  assert.match(workspace, /type="date"/);
+  assert.match(workspace, /<DateInput required value=\{line\.date\}/);
   assert.match(workspace, /goodsServiceType/);
 });
 

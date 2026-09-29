@@ -2,6 +2,7 @@ import "./menuNavigation.test.js";
 import "./myTeamAccess.test.js";
 import "./validationMessages.test.js";
 import "./dashboardLinks.test.js";
+import "./myTasks.test.js";
 import "./financialContracts.test.js";
 import "./uiUxContracts.test.js";
 import "./supplierPhase2Contracts.test.js";
@@ -18,6 +19,7 @@ import "./frontendBackendAlignment.test.js";
 import "./sireExportContracts.test.js";
 import "./slaContracts.test.js";
 import "./approvalFlexibleChainContracts.test.js";
+import "./bulkActionsContracts.test.js";
 
 import "./uiCleanup.test.js";
 import "./managementPortal.test.js";
@@ -25,3 +27,12 @@ import "./operationsAccess.test.js";
 import "./notificationTranslations.test.js";
 import "./notificationLinks.test.js";
 import "./uiPolish.test.js";
+import "./globalSearchContracts.test.js";
+
+import "./uxListsContracts.test.js";
+
+import "./colorContrast.test.js";
+import "./uxShell.test.js";
+
+import "./dateInput.test.js";
+import "./uxFormsContracts.test.js";

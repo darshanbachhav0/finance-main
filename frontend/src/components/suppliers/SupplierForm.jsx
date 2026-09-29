@@ -23,6 +23,15 @@ import {
 } from "../../context/LanguageContext.jsx";
 
 import OptionalSection from "../OptionalSection.jsx";
+import { dniError, identifierError, requiredError } from "../../utils/fieldValidation.js";
+
+// Checked when the field is left; submit keeps its own validation below.
+const blurChecks = {
+  rucDni: (values) => identifierError(values.rucDni),
+  legalName: (values) => requiredError(values.legalName),
+  representativeDocumentNumber: (values) => values.representativeDocumentType === "DNI" ? dniError(values.representativeDocumentNumber, { required: false }) : "",
+  proposalJustification: (values) => requiredError(values.proposalJustification)
+};
 
 const emptyContact = {
   name: "",
@@ -447,6 +456,33 @@ export default function SupplierForm({
   ] =
     useState("");
 
+  const [
+    fieldErrors,
+    setFieldErrors
+  ] =
+    useState({});
+
+  function checkField(
+    field
+  ) {
+    setFieldErrors(
+      (current) => ({
+        ...current,
+        [field]: blurChecks[field](form)
+      })
+    );
+  }
+
+  const fieldClass = (field, base = "field") =>
+    `${base}${fieldErrors[field] ? " field-error" : ""}`;
+
+  const fieldMessage = (field) =>
+    fieldErrors[field] && (
+      <small className="field-error-text">
+        {t(fieldErrors[field])}
+      </small>
+    );
+
   const padronData =
     padronLookup?.found
       ? padronLookup.data
@@ -536,6 +572,17 @@ export default function SupplierForm({
     value
   ) {
     editedFields.current.add(field);
+    // A message disappears as soon as the value is fixed.
+    setFieldErrors(
+      (current) => {
+        const values = { ...form, [field]: value };
+        const fixed = Object.keys(current).filter((key) => current[key] && !blurChecks[key](values));
+        if (!fixed.length) return current;
+        const next = { ...current };
+        fixed.forEach((key) => { next[key] = ""; });
+        return next;
+      }
+    );
     setForm(
       (current) => ({
         ...current,
@@ -1284,7 +1331,7 @@ export default function SupplierForm({
         status="RCO-FOR-002 · Section 1"
       >
         <div className="form-grid supplier-form-grid">
-          <label className="field">
+          <label className={fieldClass("rucDni")}>
             <span>
               {t(
                 "RUC / identifier"
@@ -1312,7 +1359,10 @@ export default function SupplierForm({
                 )
               }
               required
+              onBlur={() => checkField("rucDni")}
+              aria-invalid={Boolean(fieldErrors.rucDni)}
             />
+            {fieldMessage("rucDni")}
           </label>
 
           <label className="field">
@@ -1356,7 +1406,7 @@ export default function SupplierForm({
             </select>
           </label>
 
-          <label className="field field-span-2">
+          <label className={fieldClass("legalName", "field field-span-2")}>
             <span>
               {t(
                 "Legal Name"
@@ -1378,7 +1428,10 @@ export default function SupplierForm({
                   )
               }
               required
+              onBlur={() => checkField("legalName")}
+              aria-invalid={Boolean(fieldErrors.legalName)}
             />
+            {fieldMessage("legalName")}
           </label>
 
           <label className="field field-span-2">
@@ -1608,7 +1661,7 @@ export default function SupplierForm({
             </select>
           </label>
 
-          <label className="field">
+          <label className={fieldClass("representativeDocumentNumber")}>
             <span>
               {t(
                 "Representative document number"
@@ -1629,7 +1682,11 @@ export default function SupplierForm({
                       .value
                   )
               }
+              inputMode={form.representativeDocumentType === "DNI" ? "numeric" : undefined}
+              onBlur={() => checkField("representativeDocumentNumber")}
+              aria-invalid={Boolean(fieldErrors.representativeDocumentNumber)}
             />
+            {fieldMessage("representativeDocumentNumber")}
           </label>
         </div>
       </Section>
@@ -1821,7 +1878,7 @@ export default function SupplierForm({
             )
           }
 
-          <label className="field field-span-2">
+          <label className={fieldClass("proposalJustification", "field field-span-2")}>
             <span>
               {t(
                 "Registration justification"
@@ -1844,7 +1901,10 @@ export default function SupplierForm({
                   )
               }
               required
+              onBlur={() => checkField("proposalJustification")}
+              aria-invalid={Boolean(fieldErrors.proposalJustification)}
             />
+            {fieldMessage("proposalJustification")}
           </label>
         </div>
       </Section>

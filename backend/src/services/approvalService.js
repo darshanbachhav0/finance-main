@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
@@ -517,6 +518,91 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   }
   await request.populate(requestPopulate);
   return { request, budgetWarning: budgetWarning || budgetDeferred };
+}
+
+export const MAX_BULK_APPROVALS = 50;
+
+function bulkRowFailure(id, requestNumber, error) {
+  // Only an operational (AppError-style) message is passed on; anything else is
+  // reported generically, as the error handler would for a single request.
+  const operational = Boolean(error?.isOperational || error?.statusCode);
+  return {
+    id: String(id),
+    requestNumber: requestNumber || null,
+    ok: false,
+    statusCode: error?.name === "CastError" ? 422 : error?.statusCode || 500,
+    code: typeof error?.code === "string" ? error.code : ERROR_CODES.VALIDATION_ERROR,
+    message: operational ? error.message : "The approval could not be recorded. Try this request individually."
+  };
+}
+
+// Bulk "Approve" for the Approval Inbox: one shared comment and one batch-wide
+// chain decision (forward = "Send to my jefe", otherwise "Approve and finalize").
+// Every request still goes through decideApproval — same actor checks, controls,
+// transaction and notifications — one at a time and independently, so one
+// failure never blocks or rolls back the others. Only approvals are bulk;
+// observe / return / reject stay individual decisions with their own reason.
+export async function bulkApproveRequests({ ids, comments, forward, user, req }) {
+  if (!Array.isArray(ids) || !ids.length) {
+    throw new AppError(422, "Select at least one request to approve.", { field: "ids" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const uniqueIds = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!uniqueIds.length) {
+    throw new AppError(422, "Select at least one request to approve.", { field: "ids" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (uniqueIds.length > MAX_BULK_APPROVALS) {
+    throw new AppError(422, `A bulk approval can include at most ${MAX_BULK_APPROVALS} requests.`, { field: "ids", max: MAX_BULK_APPROVALS, received: uniqueIds.length }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (forward !== undefined && forward !== null && typeof forward !== "boolean") {
+    throw new AppError(422, "forward must be true or false.", { field: "forward" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+
+  const validIds = uniqueIds.filter((id) => mongoose.isValidObjectId(id));
+  const loaded = await FinancialRequest.find({ _id: { $in: validIds } })
+    .select("requestNumber requester solicitor status approvalRouteSnapshot approvalStage requesterArea requestingArea");
+  const byId = new Map(loaded.map((request) => [String(request._id), request]));
+
+  // The chain decision is made once for the whole batch, so it is checked up front
+  // over the rows this user may actually approve (other rows fail individually).
+  const needsDecision = [];
+  const cannotForward = [];
+  for (const request of loaded) {
+    if (!allowedRequestActions(request, user).includes("APPROVE")) continue;
+    const chain = activeApprovalStep(request)?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+    if (chain && typeof forward !== "boolean") needsDecision.push(request);
+    if (forward === true && (!chain || !(await approvalDecisionOptions(request)).canForward)) cannotForward.push(request);
+  }
+  const listed = (requests) => requests.map((request) => ({ id: String(request._id), requestNumber: request.requestNumber }));
+  if (needsDecision.length) {
+    throw new AppError(422, "Choose Approve and finalize or Send to my jefe for the manager-chain requests in this batch.", { field: "forward", requests: listed(needsDecision) }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (cannotForward.length) {
+    throw new AppError(422, "Send to my jefe is only possible when every selected request can be sent to your jefe. Approve and finalize them, or remove these requests from the selection.", { field: "forward", reason: "FORWARD_NOT_AVAILABLE", requests: listed(cannotForward) }, ERROR_CODES.VALIDATION_ERROR);
+  }
+
+  const results = [];
+  for (const id of uniqueIds) {
+    const known = byId.get(id);
+    if (!known) {
+      results.push(bulkRowFailure(id, null, new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND)));
+      continue;
+    }
+    try {
+      const result = await decideApproval({ id, action: "APPROVE", comments: typeof comments === "string" ? comments : undefined, forward: typeof forward === "boolean" ? forward : undefined, user, req });
+      results.push({
+        id,
+        requestNumber: result.request.requestNumber,
+        ok: true,
+        status: result.request.status,
+        forwarded: forward === true,
+        warning: result.budgetWarning?.message || null
+      });
+    } catch (error) {
+      results.push(bulkRowFailure(id, known.requestNumber, error));
+    }
+  }
+  const approved = results.filter((item) => item.ok).length;
+  return { results, summary: { requested: uniqueIds.length, approved, failed: uniqueIds.length - approved } };
 }
 
 const noChainOptions = Object.freeze({ chain: false, canForward: false, forwardTo: null, remainingPolicyStages: [] });

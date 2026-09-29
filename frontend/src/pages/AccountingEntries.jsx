@@ -1,3 +1,4 @@
+import DateInput, { MonthInput } from "../components/DateInput.jsx";
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
@@ -136,12 +137,12 @@ export default function AccountingEntries() {
 
   return (
     <section>
-      <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Accounting Mappings", "/configuration/accounting-mappings"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Expense Types", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Management Reports", "/reports"]]} />
       <PageHeader title="Accounting Entries" description="Process fiscal documents, post balanced journals, reconcile the month, and retain export history." actions={<><Link className="secondary-button" to="/accounting/payables">{t("Accounts Payable")}</Link><Link className="secondary-button" to="/accounting/periods">{t("Manage periods")}</Link></>} />
+      <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Accounting Mappings", "/configuration/accounting-mappings"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Expense Types", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Management Reports", "/reports"]]} />
       <Message type="error">{actionError || entriesTable.error || pendingTable.error || historyTable.error}</Message>
 
       <div className="period-toolbar">
-        <label className="field compact-period"><span>{t("Accounting period")}</span><input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
+        <label className="field compact-period"><span>{t("Accounting period")}</span><MonthInput value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
         <button type="button" className="secondary-button" onClick={load} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Load period")}</span></button>
         <button type="button" className="primary-button" onClick={exportCsv} disabled={exporting || loading || Number(previewSummary.difference || 0) !== 0 || !previewSummary.balanced} title={Number(previewSummary.difference || 0) !== 0 || !previewSummary.balanced ? t("Export is blocked until the reconciliation difference is zero and journals balance.") : undefined}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Export consolidation CSV")}</span></button>
       </div>
@@ -158,23 +159,23 @@ export default function AccountingEntries() {
         <div className="section-heading"><div><h3>{t("Invoices SUNAT could not validate")}</h3><p>{t("When SUNAT is down or the platform runs in Padrón-only mode, one Accounting user can approve a manual SUNAT exception. The reason is required and audited, and the exception stays visible on the invoice and its CXP.")}</p></div><span className="section-count">{sunatTable.pagination.total}</span></div>
         {sunatTable.payload.sunat?.variant === "PADRON" && <div className="document-requirement"><FileCheck2 size={20} /><div><strong>{t("Padrón-only mode")}</strong><p>{t("The public Padrón checks the supplier's RUC status but never verifies an individual invoice, so every invoice needs a manual SUNAT exception.")}</p></div></div>}
         <DataTable rows={sunatTable.rows} loading={sunatTable.loading} remote={sunatTable.remote} searchPlaceholder="Search request, RUC, or voucher..." rowActions={(row) => [{ label: "Approve manual SUNAT exception", icon: ShieldCheck, onClick: () => openException(row) }]} columns={[
-          { key: "request", label: "Request", sortable: false, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
-          { key: "seriesNumber", label: "Voucher", render: (row) => <div className="primary-cell"><strong>{t(row.voucherType)} {row.seriesNumber}</strong><span>{row.rucIssuer}</span></div> },
-          { key: "xmlAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.xmlAmount || 0, row.currency || "PEN", language) },
-          { key: "observationDetail", label: "Observation", sortable: false, render: (row) => row.observationDetail || "-" },
-          { key: "updatedAt", label: "Observed", render: (row) => formatDateTime(row.updatedAt) }
+          { key: "request", type: "code", label: "Request", sortable: false, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
+          { key: "seriesNumber", type: "code", label: "Voucher", render: (row) => <div className="primary-cell"><strong>{t(row.voucherType)} {row.seriesNumber}</strong><span>{row.rucIssuer}</span></div> },
+          { key: "xmlAmount", type: "money", label: "Amount", render: (row) => formatCurrency(row.xmlAmount || 0, row.currency || "PEN", language) },
+          { key: "observationDetail", primary: true, minWidth: "240px", label: "Observation", sortable: false, render: (row) => row.observationDetail || "-" },
+          { key: "updatedAt", type: "date", label: "Observed", render: (row) => formatDateTime(row.updatedAt) }
         ]} />
       </div>
       <div hidden={focusView !== "Processing"} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
         <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, onClick: () => openFiscalProcessing(row) }]} columns={[
-          { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-          { key: "supplier", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name}</strong><span>{row.supplier?.rucDni}</span></div> },
+          { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
+          { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name}</strong><span>{row.supplier?.rucDni}</span></div> },
           { key: "requestType", label: "Type" },
           { key: "expenseNature", label: "Expense nature" },
-          { key: "accountingPeriod", label: "Period" },
-          { key: "status", label: "Status", sortable: false, render: (row) => <StatusBadge status={row.status} /> },
-          { key: "totalPENEquivalent", label: "PEN equivalent", align: "right", render: (row) => <strong>{formatCurrency(row.totalPENEquivalent ?? row.penEquivalent ?? 0, "PEN", language)}</strong> }
+          { key: "accountingPeriod", type: "code", label: "Period" },
+          { key: "status", type: "status", label: "Status", sortable: false, render: (row) => <StatusBadge status={row.status} /> },
+          { key: "totalPENEquivalent", type: "money", label: "PEN equivalent", render: (row) => <strong>{formatCurrency(row.totalPENEquivalent ?? row.penEquivalent ?? 0, "PEN", language)}</strong> }
         ]} />
       </div>
 
@@ -187,15 +188,15 @@ export default function AccountingEntries() {
           filters={[{ key: "type", label: "entry types", allLabel: "All entry types", options: ["PROVISION", "ADVANCE", "PAYMENT", "RENDITION", "REVERSAL", "CREDIT_NOTE", "DEBIT_NOTE", "SUPPLIER_CREDIT_APPLICATION", "SUPPLIER_CREDIT_RECOVERY"] }]}
           searchPlaceholder="Search entry, request, account, or description..."
           columns={[
-            { key: "entryNumber", label: "Entry" },
-            { key: "type", label: "Entry type", render: (row) => <span className={`entry-type entry-${row.type.toLowerCase()}`}>{t(row.type)}</span> },
-            { key: "request", label: "Request", sortable: false, getValue: (row) => row.request?.requestNumber, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
-            { key: "accountNumber", label: "Account" },
-            { key: "costCenter", label: "Cost center", sortable: false, getValue: (row) => row.costCenter?.code, render: (row) => row.costCenter?.code || "-" },
+            { key: "entryNumber", type: "code", label: "Entry" },
+            { key: "type", type: "code", label: "Entry type", render: (row) => <span className={`entry-type entry-${row.type.toLowerCase()}`}>{t(row.type)}</span> },
+            { key: "request", type: "code", primary: true, label: "Request", sortable: false, getValue: (row) => row.request?.requestNumber, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
+            { key: "accountNumber", type: "code", primary: true, label: "Account" },
+            { key: "costCenter", type: "code", label: "Cost center", sortable: false, getValue: (row) => row.costCenter?.code, render: (row) => row.costCenter?.code || "-" },
             { key: "description", label: "Description" },
-            { key: "debit", label: "Debit", align: "right", render: (row) => formatCurrency(row.debit || 0, "PEN", language) },
-            { key: "credit", label: "Credit", align: "right", render: (row) => formatCurrency(row.credit || 0, "PEN", language) },
-            { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) }
+            { key: "debit", type: "money", label: "Debit", render: (row) => formatCurrency(row.debit || 0, "PEN", language) },
+            { key: "credit", type: "money", label: "Credit", render: (row) => formatCurrency(row.credit || 0, "PEN", language) },
+            { key: "createdAt", type: "date", label: "Created", render: (row) => formatDateTime(row.createdAt) }
           ]}
         />
       </div>
@@ -203,27 +204,27 @@ export default function AccountingEntries() {
       <div hidden={focusView !== "Consolidation"} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Consolidation summary")}</h3><p>{t("Period totals grouped by cost center, expense account, and currency.")}</p></div><span className="section-count">{preview.length}</span></div>
         <DataTable rows={preview.map((row, index) => ({ ...row, id: `${row.costCenterCode}-${row.expenseAccount}-${row.currency}-${index}` }))} rowKey="id" loading={loading} filters={[{ key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
-          { key: "costCenterCode", label: "CeCo", render: (row) => <div className="primary-cell"><strong>{row.costCenterCode}</strong><span>{row.costCenterName}</span></div> },
-          { key: "expenseAccount", label: "Account", render: (row) => <div className="primary-cell"><strong>{row.expenseAccount}</strong><span>{row.expenseTypeName}</span></div> },
-          { key: "currency", label: "Currency" },
-          { key: "netAmount", label: "Net", align: "right", render: (row) => formatCurrency(row.netAmount || 0, row.currency || "PEN", language) },
-          { key: "igvAmount", label: "IGV", align: "right", render: (row) => formatCurrency(row.igvAmount || 0, row.currency || "PEN", language) },
-          { key: "totalAmount", label: "Total", align: "right", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency || "PEN", language)}</strong> },
-          { key: "penEquivalent", label: "PEN equivalent", align: "right", render: (row) => formatCurrency(row.penEquivalent || 0, "PEN", language) },
-          { key: "debit", label: "Debit", align: "right", render: (row) => formatCurrency(row.debit || 0, row.currency || "PEN", language) },
-          { key: "credit", label: "Credit", align: "right", render: (row) => formatCurrency(row.credit || 0, row.currency || "PEN", language) },
-          { key: "requestCount", label: "Requests" }
+          { key: "costCenterCode", type: "code", label: "CeCo", render: (row) => <div className="primary-cell"><strong>{row.costCenterCode}</strong><span>{row.costCenterName}</span></div> },
+          { key: "expenseAccount", type: "code", label: "Account", render: (row) => <div className="primary-cell"><strong>{row.expenseAccount}</strong><span>{row.expenseTypeName}</span></div> },
+          { key: "currency", type: "code", label: "Currency" },
+          { key: "netAmount", type: "money", label: "Net", render: (row) => formatCurrency(row.netAmount || 0, row.currency || "PEN", language) },
+          { key: "igvAmount", type: "money", label: "IGV", render: (row) => formatCurrency(row.igvAmount || 0, row.currency || "PEN", language) },
+          { key: "totalAmount", type: "money", label: "Total", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency || "PEN", language)}</strong> },
+          { key: "penEquivalent", type: "money", label: "PEN equivalent", render: (row) => formatCurrency(row.penEquivalent || 0, "PEN", language) },
+          { key: "debit", type: "money", label: "Debit", render: (row) => formatCurrency(row.debit || 0, row.currency || "PEN", language) },
+          { key: "credit", type: "money", label: "Credit", render: (row) => formatCurrency(row.credit || 0, row.currency || "PEN", language) },
+          { key: "requestCount", type: "number", label: "Requests" }
         ]} />
       </div>
 
       <div hidden={focusView !== "History"} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Export history")}</h3><p>{t("Previously generated consolidation reports remain available for download.")}</p></div></div>
         <DataTable rows={history} loading={historyTable.loading} remote={historyTable.remote} columns={[
-          { key: "fileName", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
-          { key: "period", label: "Period" },
-          { key: "rowCount", label: "Rows" },
-          { key: "generatedBy", label: "Generated by", getValue: (row) => row.generatedBy?.name, render: (row) => row.generatedBy?.name || "-" },
-          { key: "createdAt", label: "Generated", render: (row) => formatDateTime(row.createdAt) },
+          { key: "fileName", type: "name", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
+          { key: "period", type: "code", label: "Period" },
+          { key: "rowCount", type: "number", primary: true, label: "Rows" },
+          { key: "generatedBy", type: "name", primary: true, label: "Generated by", getValue: (row) => row.generatedBy?.name, render: (row) => row.generatedBy?.name || "-" },
+          { key: "createdAt", type: "date", primary: true, label: "Generated", render: (row) => formatDateTime(row.createdAt) },
           { key: "download", label: "", sortable: false, render: (row) => <ProtectedAssetButton className="icon-button" resourcePath={row.url} fileName={row.fileName} title="Download"><Download size={16} /></ProtectedAssetButton> }
         ]} />
       </div>
@@ -234,10 +235,10 @@ export default function AccountingEntries() {
           <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option value="FACTURA">{t("FACTURA")}</option><option value="BOLETA">{t("BOLETA")}</option><option value="RXH">{t("RXH")}</option></select><small className="field-hint">{t("Credit and debit notes are registered against their original invoice from Accounts Payable.")}</small></label>
           <label className="field"><span>{t("Series")} *</span><input required value={fiscalForm.series} onChange={(event) => setFiscalForm({ ...fiscalForm, series: event.target.value.toUpperCase() })} /></label>
           <label className="field"><span>{t("Document number")} *</span><input required value={fiscalForm.number} onChange={(event) => setFiscalForm({ ...fiscalForm, number: event.target.value })} /></label>
-          <label className="field"><span>{t("Document date")} *</span><input required type="date" value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value, fiscalPeriod: event.target.value.slice(0, 7) })} /></label>
-          <label className="field"><span>{t("Accounting date")} *</span><input required type="date" value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
-          <label className="field"><span>{t("Fiscal period")}</span><input type="month" readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
-          <label className="field"><span>{t("Due date")}</span><input type="date" value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
+          <label className="field"><span>{t("Document date")} *</span><DateInput required value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value, fiscalPeriod: event.target.value.slice(0, 7) })} /></label>
+          <label className="field"><span>{t("Accounting date")} *</span><DateInput required value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
+          <label className="field"><span>{t("Fiscal period")}</span><MonthInput readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
+          <label className="field"><span>{t("Due date")}</span><DateInput value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
           <label className="field"><span>{t("Account number")}</span><input value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("Posting uses the account of each line's Expense Type. A different account number is rejected.")}</small></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>

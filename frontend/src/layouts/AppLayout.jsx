@@ -7,6 +7,7 @@ import {
   BookOpenCheck,
   Building2,
   CalendarRange,
+  Check,
   ChartNoAxesCombined,
   ChevronDown,
   ChevronLeft,
@@ -15,12 +16,15 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   FileArchive,
+  FilePlus2,
+  History,
   Landmark,
   LogOut,
   Menu,
   ReceiptText,
   Search,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   TriangleAlert,
   Users,
@@ -39,7 +43,8 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
-import { canAccessNavigation, navigationForUser } from "../utils/navigationAccess.js";
+import MobileBottomNav from "../components/MobileBottomNav.jsx";
+import { bottomNavigationForUser, canAccessNavigation, counterBadgeText, navigationCount, navigationForUser } from "../utils/navigationAccess.js";
 
 const groups = [
   {
@@ -50,24 +55,24 @@ const groups = [
     label: "Operations",
     items: [
       { label: "Requests", path: "/requests", icon: ReceiptText },
-      { label: "Approval Inbox", path: "/approvals", icon: ClipboardCheck, counter: "approval" },
+      { label: "Approval Inbox", path: "/approvals", icon: ClipboardCheck },
       { label: "A2 Batch Invoices", path: "/batch-invoices", icon: FileArchive }
     ]
   },
   {
     label: "Finance",
     items: [
-      { label: "Accounting Entries", path: "/accounting", icon: FileSpreadsheet, counter: "accounting" },
+      { label: "Accounting Entries", path: "/accounting", icon: FileSpreadsheet },
       { label: "Reimbursement Banking", path: "/reimbursement-bank", icon: CircleDollarSign },
       { label: "Accounts Payable", path: "/accounting/payables", icon: BookOpenCheck },
       { label: "Invoice Observations", path: "/accounting/invoice-observations", icon: TriangleAlert },
-      { label: "Treasury", path: "/treasury", icon: Landmark, counter: "payable" },
+      { label: "Treasury", path: "/treasury", icon: Landmark },
     ]
   },
   {
     label: "Planning and reports",
     items: [
-      { label: "Budget Control", path: "/budget", icon: WalletCards, counter: "budgetExceptions" },
+      { label: "Budget Control", path: "/budget", icon: WalletCards },
       { label: "Accounting Periods", path: "/accounting/periods", icon: CalendarRange },
       { label: "SIRE Export", path: "/accounting/sire", icon: FileSpreadsheet },
       { label: "Management Reports", path: "/reports", icon: ChartNoAxesCombined },
@@ -77,7 +82,7 @@ const groups = [
   {
     label: "Master Data",
     items: [
-      { label: "Suppliers", path: "/suppliers", icon: Building2, counter: "suppliers" },
+      { label: "Suppliers", path: "/suppliers", icon: Building2 },
       { label: "Cost Centers", path: "/cost-centers", icon: CircleDollarSign },
       { label: "Expense Types", path: "/expense-types", icon: Settings2 },
       { label: "Exchange Rates", path: "/exchange-rates", icon: CircleDollarSign },
@@ -95,6 +100,16 @@ const groups = [
     ]
   }
 ];
+
+// Icons for role destinations that are not part of the groups above.
+const routeIcons = {
+  "/requests/new": FilePlus2,
+  "/administration": ShieldCheck,
+  "/treasury/history": History,
+  "/accounting/invoices": ReceiptText,
+  "/my-team": Users
+};
+const navigationIcon = (path) => groups.flatMap((group) => group.items).find((item) => item.path === path)?.icon || routeIcons[path] || Settings2;
 
 const routeTitles = [
   [/^\/management-view/, "Management Portal"],
@@ -133,7 +148,7 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 1080px)");
   const managementViewer = user.role === "ManagementViewer";
-  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead } = useNotificationBell(user._id, !managementViewer);
+  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead, dismiss: dismissNotification } = useNotificationBell(user._id, !managementViewer);
   const [taskOpen, setTaskOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -142,8 +157,13 @@ export default function AppLayout() {
   const sidebarRef = useRef(null);
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
-  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: navigationForUser(user).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || { icon: Settings2 }), label, path })).filter(item => canAccessNavigation(user.role, item.path, user)) }], [user.role, user.hasTeam]);
+  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: navigationForUser(user).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || {}), icon: navigationIcon(path), label, path })).filter(item => canAccessNavigation(user.role, item.path, user)) }], [user.role, user.hasTeam]);
   const commandPages = useMemo(() => visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))), [visibleGroups]);
+  const bottomItems = useMemo(() => bottomNavigationForUser(user).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user.role, user.hasTeam]);
+  // "3 pendientes": the badge's spoken form, also added to the link's name (the collapsed
+  // sidebar hides the text label, so the badge must not be the only place the count lives).
+  const pendingLabel = (count) => t(count === 1 ? "{count} pending item" : "{count} pending items").replace("{count}", count > 99 ? "99+" : count);
+  const openCommandPalette = () => { setTaskOpen(false); setUserOpen(false); setMobileOpen(false); setCommandOpen(true); };
 
   const pageTitle = routeTitles.find(([pattern]) => pattern.test(location.pathname))?.[1] || "Financial Control";
   const breadcrumb = location.pathname === "/" ? [] : [{ label: "Dashboard", path: "/" }, { label: pageTitle }];
@@ -239,19 +259,20 @@ export default function AppLayout() {
               <span className="nav-group-label">{t(group.label)}</span>
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const count = item.counter ? tasks.counters?.[item.counter] : 0;
+                const count = navigationCount(item.path, tasks.counters);
+                const name = count > 0 ? `${t(item.label)} (${pendingLabel(count)})` : t(item.label);
                 return (
                   <NavLink
                     key={item.path}
                     to={item.path}
                     end={item.path === "/" || item.path === "/accounting" || item.path === "/requests" || item.path === "/treasury"}
                     className="nav-item"
-                    data-tooltip={t(item.label)}
-                    aria-label={t(item.label)}
+                    data-tooltip={name}
+                    aria-label={name}
                   >
                     <Icon size={18} aria-hidden="true" />
                     <span className="nav-label">{t(item.label)}</span>
-                    {count > 0 && <span className="nav-counter" aria-label={t("{count} pending tasks").replace("{count}", count)}>{count > 99 ? "99+" : count}</span>}
+                    {count > 0 && <span className="nav-counter" aria-hidden="true">{counterBadgeText(count)}</span>}
                   </NavLink>
                 );
               })}
@@ -299,10 +320,16 @@ export default function AppLayout() {
                   <div className="task-list">
                     <div className="notification-list-heading"><strong>{t("Notifications")}</strong>{notifications.unreadCount > 0 && <button type="button" className="text-button" onClick={markAllRead}>{t("Mark all read")}</button>}</div>
                     {notifications.data.map((item) => (
-                      <Link key={item._id} to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
+                      <div key={item._id} className="notification-row">
+                      <Link to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
                         <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "red" : item.type === "SLA_DUE_SOON" ? "amber" : item.readAt ? "neutral" : "teal"}`} />
                         <span><strong>{notificationTitle(t, item)}</strong><small>{notificationMessage(t, item)}</small></span>
                       </Link>
+                      <span className="notification-row-actions">
+                        {!item.readAt && <button type="button" className="icon-button quiet" title={t("Mark read")} aria-label={t("Mark read")} onClick={() => markNotificationRead(item)}><Check size={15} /></button>}
+                        <button type="button" className="icon-button quiet" title={t("Mark done")} aria-label={t("Mark done")} onClick={() => dismissNotification(item)}><X size={15} /></button>
+                      </span>
+                      </div>
                     ))}
                     {!notifications.data.length && !notificationError && <p className="popover-empty">{t("No notifications yet.")}</p>}
                     <div className="notification-list-heading"><strong>{t("Pending tasks")}</strong></div>
@@ -344,6 +371,12 @@ export default function AppLayout() {
           <Suspense fallback={<WorkspaceSkeleton />}><MotionSurface changeKey={location.pathname}><Outlet /></MotionSurface></Suspense>
         </main>
       </div>
+      <MobileBottomNav
+        items={bottomItems.map((item) => ({ ...item, count: navigationCount(item.path, tasks.counters) }))}
+        onSearch={managementViewer ? undefined : openCommandPalette}
+        suppressed={mobileOpen || commandOpen}
+        pendingLabel={pendingLabel}
+      />
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} pages={commandPages} />
     </div>
   );

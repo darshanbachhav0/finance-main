@@ -1,3 +1,4 @@
+import { MonthInput } from "../components/DateInput.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { CalendarPlus, LockKeyhole, LockOpen, RefreshCw, Save } from "lucide-react";
@@ -77,7 +78,7 @@ export default function AccountingPeriods() {
       { key: "closedAt", label: "Closed", render: (row) => row.closedAt ? formatDateTime(row.closedAt) : "-" }, { key: "closedBy", label: "Closed by", render: (row) => row.closedBy?.name || "-" }, { key: "comments", label: "Comments" }
     ]} /></div>
     <Drawer open={createOpen} title="New accounting period" description="Create an open period before financial activity begins." onClose={() => !processing && setCreateOpen(false)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCreateOpen(false)}>{t("Cancel")}</button><button type="submit" form="period-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><Save size={16} /><span>{t(processing ? "Saving..." : "Create")}</span></button></>}>
-      <DraftPanel busy={processing} draft={draft} onDiscard={() => setCreateOpen(false)}><form id="period-form" className="form-grid" onSubmit={createPeriod}><label className="field"><span>{t("Period")} *</span><input type="month" required value={form.period} onChange={(event) => setForm({ ...form, period: event.target.value })} /></label><label className="field"><span>{t("Opening comments")}</span><textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label></form></DraftPanel>
+      <DraftPanel busy={processing} draft={draft} onDiscard={() => setCreateOpen(false)}><form id="period-form" className="form-grid" onSubmit={createPeriod}><label className="field"><span>{t("Period")} *</span><MonthInput required value={form.period} onChange={(event) => setForm({ ...form, period: event.target.value })} /></label><label className="field"><span>{t("Opening comments")}</span><textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label></form></DraftPanel>
     </Drawer>
     <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm ? [{ label: "Period", value: confirm.row.period }, { label: "Result", value: confirm.action === "close" ? "Status changes to CLOSED only after all financial controls pass." : "Status changes to OPEN and the action is audited." }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={changeStatus} />
   </section>;
