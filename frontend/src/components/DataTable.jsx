@@ -246,6 +246,12 @@ export default function DataTable({
     openRow(row);
   }
 
+  // Rows that already have a "…" menu open their details from it instead of a separate column,
+  // so wide tables (Approvals, Treasury) keep every column on screen.
+  const menuActions = rowActions && secondaryColumns.length
+    ? (row) => [{ label: "Details", icon: PanelRightOpen, onClick: () => setDetailRow(row) }, ...(typeof rowActions === "function" ? rowActions(row) : rowActions)]
+    : rowActions;
+
   return (
     <div aria-busy={loading} className={`data-table density-${density} ${mobileCards ? "mobile-cards" : ""} ${className}`.trim()}>
       {controls && (
@@ -302,7 +308,7 @@ export default function DataTable({
       {showResultCount && (
         <div className="table-result-bar">
           <span role="status">{loading ? t("Loading records...") : t("Showing {shown} of {total} results").replace("{shown}", visibleRows.length).replace("{total}", isRemote ? remote.pagination?.total || 0 : processed.length)}</span>
-          {selection && selectedIds.length > 0 && <strong>{t("{count} selected").replace("{count}", selectedIds.length)}</strong>}
+          {selection && selectedIds.length > 0 && <strong>{t(selectedIds.length === 1 ? "{count} item selected" : "{count} selected").replace("{count}", selectedIds.length)}</strong>}
         </div>
       )}
 
@@ -332,7 +338,7 @@ export default function DataTable({
                   </th>
                 );
               })}
-              {secondaryColumns.length > 0 && <th className="row-details-column">{t("Details")}</th>}
+              {secondaryColumns.length > 0 && !rowActions && <th className="row-details-column">{t("Details")}</th>}
               {rowActions && <th className="actions-column"><span className="sr-only">{t("Actions")}</span></th>}
             </tr>
           </thead>
@@ -364,12 +370,12 @@ export default function DataTable({
                 {primaryColumns.map((column) => (
                   <td key={column.key} className={columnLayout(column).className} data-label={column.label ? t(column.label) : column.type === "checkbox" ? t("Select") : undefined}>{cellValue(column, row)}</td>
                 ))}
-                {secondaryColumns.length > 0 && <td className="row-details-cell" data-label={t("Details")}>
+                {secondaryColumns.length > 0 && !rowActions && <td className="row-details-cell" data-label={t("Details")}>
                   <button type="button" className="row-details-button" aria-haspopup="dialog" aria-label={`${t("Details")}: ${rowTitle(row)}`} onClick={() => setDetailRow(row)}>
                     <PanelRightOpen size={15} aria-hidden="true" /><span>{t("Details")}</span>
                   </button>
                 </td>}
-                {rowActions && <td className="actions-column" data-label={t("More actions")}><RowActionMenu row={row} actions={rowActions} /></td>}
+                {rowActions && <td className="actions-column" data-label={t("More actions")}><RowActionMenu row={row} actions={menuActions} /></td>}
               </tr>
             ))}
           </tbody>

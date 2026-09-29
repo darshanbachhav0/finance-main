@@ -266,9 +266,9 @@ export default function ApprovalInbox() {
           ]}
           columns={[
             { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-            { key: "approvalStage", type: "status", label: "Current stage", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
+            { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
-            { key: "solicitor", type: "name", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
+            { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
             { key: "approvalDueAt", type: "date", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? formatDateTime(row.approvalDueAt) : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", type: "money", sortKey: "totalPENEquivalent", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "decision", primary: true, label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions decision-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "APPROVE") && isChainRow(row) && canForward(row) && <button type="button" className="secondary-button decision-button" title={forwardName(row) ? `${t("Send to my jefe")}: ${forwardName(row)}` : t("Send to my jefe")} onClick={() => openDecision(row, "approve", true)}><Forward size={17} /><span>{t("Send to my jefe")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} aria-label={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} aria-label={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
@@ -277,7 +277,7 @@ export default function ApprovalInbox() {
         {selectedRows.length > 0 && (
           <div className="bulk-bar" role="region" aria-label={t("Bulk approval")}>
             <div className="bulk-bar-summary">
-              <strong>{t("{count} selected").replace("{count}", selectedRows.length)}</strong>
+              <strong>{t(selectedRows.length === 1 ? "{count} item selected" : "{count} selected").replace("{count}", selectedRows.length)}</strong>
               <span>{selectedTotals}</span>
             </div>
             <div className="bulk-bar-actions">

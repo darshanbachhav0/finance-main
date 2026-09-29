@@ -102,7 +102,7 @@ export const navigationCounterKeys = Object.freeze({
   "/accounting": ["accounting"],
   "/accounting/invoice-observations": ["invoiceObservations"],
   "/budget": ["budgetExceptions"],
-  "/requests": ["requestCorrections", "rendition"],
+  "/requests": ["corrections", "rendition"],
   "/suppliers": ["suppliers"]
 });
 

@@ -102,6 +102,14 @@ export default function CommandPalette({ open, onClose, pages }) {
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
+  // The dialog mounts one render after `open` (animated presence), so focus the search box once
+  // it exists; focusing from the open effect alone ran before the input was there.
+  useEffect(() => {
+    if (!open || !shouldRender) return undefined;
+    const frame = window.requestAnimationFrame(() => { if (document.activeElement !== inputRef.current) inputRef.current?.focus({ preventScroll: true }); });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, shouldRender]);
+
   useEffect(() => {
     if (!shouldRender) previousFocus.current?.focus?.({ preventScroll: true });
   }, [shouldRender]);

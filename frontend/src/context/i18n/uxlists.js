@@ -24,5 +24,6 @@ export default {
   "A CXP is created for each invoice once Accounting processes it.": "Se crea una CXP por cada factura cuando Contabilidad la procesa.",
   "No suppliers yet": "Aún no hay proveedores",
   "Propose a supplier to start its RCO-FOR-002 homologation.": "Propón un proveedor para iniciar su homologación RCO-FOR-002.",
-  "Suppliers appear here once they are proposed for homologation.": "Los proveedores aparecen aquí cuando se proponen para homologación."
+  "Suppliers appear here once they are proposed for homologation.": "Los proveedores aparecen aquí cuando se proponen para homologación.",
+  "{count} item selected": "{count} seleccionado"
 };

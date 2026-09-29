@@ -174,11 +174,6 @@ async function buildTasks(user) {
     items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: (await singleRecordPath(confirmation, AccountsPayable, confirmationQuery, (record) => `/treasury?tab=confirm&record=${record._id}`)) || "/treasury?tab=confirm", tone: "amber" });
     items.push({ key: "bouncedPayments", label: "Returned payments to reprogram", count: bounced, path: (await singleRecordPath(bounced, AccountsPayable, bouncedQuery, (record) => `/treasury?tab=returned&record=${record._id}`)) || "/treasury?tab=returned", tone: "red" });
   }
-  // The requester's own requests sent back to them (returned or observed) and waiting for a correction.
-  if (user.role === ROLES.SOLICITOR) {
-    const statuses = [REQUEST_STATUS.RETURNED, REQUEST_STATUS.OBSERVED, REQUEST_STATUS.OBSERVED_BUDGET, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.OBSERVED_BATCH];
-    items.push({ key: "requestCorrections", label: "Requests returned for correction", count: await FinancialRequest.countDocuments({ status: { $in: statuses }, $or: [{ requester: user._id }, { solicitor: user._id }] }), path: `/requests?status=${encodeURIComponent(statuses.join(","))}`, tone: "red" });
-  }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
     const bankReviewQuery = { active: true, verificationStatus: "PENDING" };
     const [employeeBankReviews, supplierBankReviews, suppliers] = await Promise.all([

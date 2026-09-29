@@ -2848,7 +2848,7 @@ select:not([multiple]) {
 
 /* Approvals: decision buttons wrap inside their cell instead of spilling over the next columns. */
 .decision-actions { flex-wrap: wrap; gap: 6px; min-width: 210px; }
-@media (min-width: 1100px) { .table-scroll td:has(> .decision-actions) { min-width: 330px; padding-right: var(--space-4); } }
+@media (min-width: 1100px) { .table-scroll td:has(> .decision-actions) { min-width: 270px; padding-right: var(--space-4); } }
 .decision-actions .decision-button { min-height: var(--control-height-sm); padding: 6px 10px; white-space: nowrap; }
 .decision-actions .icon-button { width: var(--control-height-sm); height: var(--control-height-sm); min-height: var(--control-height-sm); }
 
@@ -3048,6 +3048,7 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
 .table-scroll table { width: 100%; }
 .table-scroll th.checkbox-column { width: 44px; min-width: 44px; max-width: 44px; padding-inline: var(--space-2); }
 .table-scroll td.col-code, .table-scroll td.col-date, .table-scroll td.col-money, .table-scroll td.col-number { white-space: nowrap; }
+.table-scroll td.col-code a, .table-scroll td.col-code .link-button, .table-scroll td.col-date > * { white-space: nowrap; }
 .table-scroll td.col-money, .table-scroll td.col-number { font-variant-numeric: tabular-nums; }
 .table-scroll td .cell-note { display: block; min-width: 12ch; white-space: normal; color: var(--gray-600); font-size: var(--font-xs); }
 

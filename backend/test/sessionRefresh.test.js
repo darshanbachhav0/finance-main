@@ -82,12 +82,13 @@ test("session refresh (POST /auth/refresh) and menu counters", { timeout: 60000 
       const solicitor = await User.findById(user._id);
       const solicitorTasks = await call("/dashboard/tasks", { token: jwt.sign({ id: solicitor._id, tokenVersion: solicitor.tokenVersion }, secret(), { expiresIn: "1h" }) });
       assert.equal(solicitorTasks.status, 200);
-      assert.equal(solicitorTasks.body.counters.requestCorrections, 0, "a requester sees their returned or observed requests");
-      assert.match(solicitorTasks.body.items.find((item) => item.key === "requestCorrections").path, /^\/requests\?status=DEVUELTO%2COBSERVADO/);
+      // One corrections task per requester (the dashboard's "Requests to correct"), which also feeds the menu badge.
+      assert.equal(solicitorTasks.body.counters.corrections, 0, "a requester sees their returned or observed requests");
+      assert.equal(solicitorTasks.body.items.filter((item) => item.key === "requestCorrections").length, 0, "no duplicate corrections task");
       const accountingTasks = await call("/dashboard/tasks", { token: jwt.sign({ id: accountant._id, tokenVersion: 0 }, secret(), { expiresIn: "1h" }) });
       assert.equal(accountingTasks.status, 200);
       assert.equal(accountingTasks.body.counters.invoiceObservations, 0, "Accounting sees open invoice observations");
-      assert.equal(accountingTasks.body.counters.requestCorrections, undefined, "corrections are the requester's own task");
+      assert.equal(accountingTasks.body.counters.corrections, undefined, "corrections are the requester's own task");
     });
   } finally {
     await new Promise((resolve) => server.close(resolve));

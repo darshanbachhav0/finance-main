@@ -9,7 +9,7 @@ const css = source("../src/styles/global.css");
 const shellCss = css.slice(css.indexOf("/* ==== ux: app shell"));
 
 // 1. Menu counters come from the /dashboard/tasks counters.
-const counters = { approval: 3, payable: 2, paymentConfirmation: 1, invoiceObservations: 150, budgetExceptions: 0, rendition: 1, requestCorrections: 2, accounting: -1 };
+const counters = { approval: 3, payable: 2, paymentConfirmation: 1, invoiceObservations: 150, budgetExceptions: 0, rendition: 1, corrections: 2, accounting: -1 };
 assert.equal(navigationCount("/approvals", counters), 3);
 assert.equal(navigationCount("/treasury", counters), 3, "payments ready plus payments awaiting confirmation");
 assert.equal(navigationCount("/accounting/invoice-observations", counters), 150);
