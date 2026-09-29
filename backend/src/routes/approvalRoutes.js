@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { approveRequest, getApprovalInbox, getApprovalOptions, observeRequest, rejectRequest, returnRequest } from "../controllers/approvalController.js";
+import { approveRequest, bulkApproveRequestsHandler, getApprovalInbox, getApprovalOptions, observeRequest, rejectRequest, returnRequest } from "../controllers/approvalController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { ROLES } from "../utils/constants.js";
 
@@ -11,6 +11,8 @@ const router = Router();
 // / isActiveChainApprover), not by this role gate.
 router.use(protect, authorize(...Object.values(ROLES).filter(role => role !== ROLES.MANAGEMENT_VIEWER)));
 router.get("/inbox", getApprovalInbox);
+// Declared before the /:id routes. Approve only; each request is still decided by decideApproval.
+router.post("/bulk", bulkApproveRequestsHandler);
 router.get("/:id/options", getApprovalOptions);
 router.post("/:id/approve", approveRequest);
 router.post("/:id/observe", observeRequest);

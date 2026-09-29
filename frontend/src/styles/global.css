@@ -2940,3 +2940,42 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   .command-group > button > :last-child { display: none; }
   .command-results small { white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* ==== ux: bulk actions ======================================================================
+   Approval inbox bulk approve, Treasury bank-file selection and the bell's per-item actions.
+   The bar follows its table and stays pinned to the bottom of the viewport while it scrolls. */
+.bulk-bar {
+  position: sticky; bottom: var(--space-3); z-index: 12;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-3); padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--uma-primary); border-radius: var(--radius-lg);
+  background: var(--surface-raised, var(--surface-panel)); box-shadow: var(--shadow-md);
+}
+.bulk-bar-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bulk-bar-summary strong { color: var(--gray-950); font-size: var(--font-md); }
+.bulk-bar-summary span { color: var(--gray-600); font-size: var(--font-sm); font-variant-numeric: tabular-nums; }
+.bulk-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.bulk-bar-note { flex-basis: 100%; margin: 0; color: var(--amber-700); font-size: var(--font-xs); line-height: 1.45; }
+.bulk-result {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3);
+  margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--gray-200); border-left: 4px solid var(--green-700); border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+.bulk-result.has-errors { border-left-color: var(--amber-700); }
+.bulk-result > div { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.bulk-result strong { font-size: var(--font-md); }
+.bulk-result span { color: var(--gray-600); font-size: var(--font-sm); }
+.bulk-result-errors { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--gray-700); font-size: var(--font-sm); line-height: 1.5; }
+.bulk-result-errors strong { font-size: var(--font-sm); }
+.notification-row { display: flex; align-items: flex-start; gap: var(--space-1); }
+.notification-row > .notification-item { flex: 1 1 auto; min-width: 0; }
+.notification-row-actions { display: flex; flex-shrink: 0; gap: 2px; padding-top: var(--space-1); }
+.notification-row-actions .icon-button { width: 30px; height: 30px; min-height: 30px; }
+@media (max-width: 760px) {
+  .bulk-bar { bottom: var(--space-2); padding: var(--space-3); }
+  .bulk-bar-actions { width: 100%; }
+  .bulk-bar-actions .primary-button, .bulk-bar-actions .secondary-button { flex: 1 1 auto; justify-content: center; }
+  .notification-row-actions .icon-button { width: var(--touch-target); height: var(--touch-target); min-height: var(--touch-target); }
+}
+@media print { .bulk-bar { display: none !important; } }

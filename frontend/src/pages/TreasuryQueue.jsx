@@ -11,6 +11,7 @@ import {
   Download,
   Eye,
   FileDown,
+  ListChecks,
   LockKeyhole,
   RefreshCw,
   RotateCcw,
@@ -181,15 +182,21 @@ export default function TreasuryQueue({ historyOnly = false }) {
   };
   const selectedRows = rows.filter((row) => selected.includes(String(payableIdOf(row))));
   const selectedTotal = useMemo(() => selectedRows.reduce((sum, row) => sum + netAmountOf(row), 0), [selectedRows]);
+  // Bulk selection: DataTable keys the checkbox column by the CXP id, and only rows with an
+  // eligible account in the file currency can be selected.
+  const queueRows = useMemo(() => rows.map((row) => ({ ...row, selectionKey: String(payableIdOf(row)) })), [rows]);
+  const isSelectable = (row) => matchingAccounts(row).length > 0;
+  const selectableOnPage = queueRows.filter(isSelectable);
+  const allOnPageSelected = selectableOnPage.length > 0 && selectableOnPage.every((row) => selected.includes(row.selectionKey));
+  const selectedByCurrency = Object.entries(selectedRows.reduce((totals, row) => {
+    const code = row.accountsPayable?.currency || row.currency || currency;
+    totals[code] = (totals[code] || 0) + netAmountOf(row);
+    return totals;
+  }, {}));
+  const selectAllVisible = () => setSelected((current) => [...new Set([...current, ...selectableOnPage.map((row) => row.selectionKey)])]);
   const paymentCycles = queueTable.payload.summary?.paymentCycles || [];
   const queueTotals = useMemo(() => Object.fromEntries(Object.entries(queueTable.payload.summary?.totalsByCurrency || {}).map(([key, value]) => [key, Number(value.total || 0)])), [queueTable.payload.summary]);
   const missingBank = Number(queueTable.payload.summary?.missingBankDetails || 0);
-
-  const toggleRow = (row) => {
-    const id = String(payableIdOf(row));
-    if (!matchingAccounts(row).length) return;
-    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  };
 
   async function generate() {
     setProcessing(true);
@@ -209,6 +216,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
         accountSelections: selectedAccounts
       });
       setResult(response.data);
+      // The generated CXPs leave the queue; the selection is cleared so none is sent twice.
       setSelected([]);
       setConfirmOpen(false);
       setActionError("");
@@ -370,7 +378,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const reprogramLetterRequired = reprogramRow?.accountsPayable?.bouncedPayment?.reasonCategory !== "TECHNICAL";
 
   const queueColumns = [
-    { key: "select", label: "", sortable: false, render: (row) => <input type="checkbox" aria-label={t("Select CXP")} checked={selected.includes(String(payableIdOf(row)))} disabled={!matchingAccounts(row).length} onChange={() => toggleRow(row)} /> },
     { key: "requestNumber", label: "Request", sortable: false, render: (row) => <button type="button" className="link-button" onClick={() => setQuickViewId(requestIdOf(row))}>{row.requestNumber}</button> },
     { key: "supplier", label: "Supplier", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.supplier?.legalName || row.supplier?.name || row.requester?.name || "UMA collaborator"}</strong><span>{row.accountsPayable?.voucher?.series ? `${row.accountsPayable.voucher.series}-${row.accountsPayable.voucher.number}` : row.accountsPayable?.supplierIdentifierSnapshot || "-"}</span></div> },
     { key: "flowType", label: "Track", getValue: (row) => row.accountsPayable?.flowType || row.flowType, render: (row) => <StatusBadge status={row.accountsPayable?.flowType || row.flowType} /> },
@@ -409,10 +416,11 @@ export default function TreasuryQueue({ historyOnly = false }) {
     <div hidden={historyOnly || paymentView !== "prepare"}>
     <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3>{t("Bank file preparation")}</h3><p>{t("Select invoices to include in the BBVA payment file.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("UMA source bank")}</span><input value={bank} readOnly aria-readonly="true" /><small className="field-hint">{t("New payment files use BBVA. Beneficiary accounts may use another bank through CCI.")}</small></label><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected([]); }}><option value="PEN">PEN</option><option value="USD">USD</option></select></label><label className="field"><span>{t("Payment date")}</span><input type="date" min={todayKey} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /><small className="field-hint">{t("Payments run on the 15th and the 30th of each month.")}</small></label>{offCycle && <label className="field"><span>{t("Reason for paying off the payment cycle")} *</span><input required value={paymentDateReason} onChange={(event) => setPaymentDateReason(event.target.value)} /></label>}</div>{paymentCycles.length > 0 && <div className="filter-row" aria-label={t("Payment cycles")}>{paymentCycles.map((group) => <span key={group.date} className="badge badge-blue"><CalendarClock size={12} />{formatDate(`${group.date}T12:00:00Z`)} · {group.count} · {Object.entries(group.totals).map(([code, value]) => money(code, value)).join(" / ")}</span>)}</div>}</div>
 
-    {selected.length > 0 && <div className="selection-bar" role="status"><div><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{money(currency, selectedTotal)}</span></div><button type="button" className="primary-button" disabled={offCycle && !paymentDateReason.trim()} onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Generate BBVA TXT")}</span></button></div>}
     {result && <div className="success-result" role="status"><div><strong>{t("Bank instruction generated")}</strong><span>{result.fileName} · {result.notice}</span></div>{result.url && <ProtectedAssetButton className="secondary-button" resourcePath={result.url} fileName={result.fileName}><Download size={16} />{t("Download")}</ProtectedAssetButton>}</div>}
 
-    <div className="workspace-panel section-spacer"><DataTable rows={rows} loading={queueTable.loading} remote={queueTable.remote} filters={[{ key: "requestType", label: "types", allLabel: "All types", options: requestTypes }, { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes }, { key: "paymentPriority", label: "priorities", allLabel: "All priorities", options: ["NORMAL", "PRIORITY"] }]} searchPlaceholder="Search request, supplier, voucher, or cost center..." rowActions={(row) => [{ label: "Open request", icon: Eye, onClick: () => setQuickViewId(requestIdOf(row)) }]} columns={queueColumns} /></div>
+    <div className="workspace-panel section-spacer"><DataTable rows={queueRows} rowKey="selectionKey" selection={{ selected, onChange: setSelected, isRowSelectable: isSelectable }} toolbarActions={<button type="button" className="secondary-button" disabled={!selectableOnPage.length || allOnPageSelected} onClick={selectAllVisible}><ListChecks size={16} /><span>{t("Select all visible")}</span></button>} loading={queueTable.loading} remote={queueTable.remote} filters={[{ key: "requestType", label: "types", allLabel: "All types", options: requestTypes }, { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes }, { key: "paymentPriority", label: "priorities", allLabel: "All priorities", options: ["NORMAL", "PRIORITY"] }]} searchPlaceholder="Search request, supplier, voucher, or cost center..." rowActions={(row) => [{ label: "Open request", icon: Eye, onClick: () => setQuickViewId(requestIdOf(row)) }]} columns={queueColumns} />
+    {selected.length > 0 && <div className="bulk-bar" role="region" aria-label={t("Bank file selection")}><div className="bulk-bar-summary"><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ")}</span></div><div className="bulk-bar-actions"><button type="button" className="primary-button" disabled={processing || (offCycle && !paymentDateReason.trim())} onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Generate file")}</span></button><button type="button" className="text-button" onClick={() => setSelected([])}>{t("Clear selection")}</button></div>{offCycle && !paymentDateReason.trim() && <p className="bulk-bar-note">{t("Enter the reason for paying off the payment cycle to generate the file.")}</p>}</div>}
+    </div>
 
     </div>
     <div hidden={historyOnly || paymentView !== "confirm"} id="treasury-confirm" className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Payment confirmation")}</h3><p>{t("Confirm the item or report the bank rejection. A rejected item becomes PAGO_REBOTADO without cancelling other invoices in the same request.")}</p></div><span className="section-count">{confirmationTable.pagination.total}</span></div><DataTable rows={confirmationTable.rows} loading={confirmationTable.loading} remote={confirmationTable.remote} rowActions={(row) => [{ label: "Confirm payment", icon: CircleCheckBig, onClick: () => openPaymentConfirmation(row) }, { label: "Report bounced payment", icon: XCircle, onClick: () => { setBounceRow(row); setBounceForm({ reason: "", reasonCategory: "", bankReference: "" }); } }, { label: "Remove from bank file", icon: Ban, hidden: row.accountsPayable?.status !== "PAYMENT_FILE_CREATED", onClick: () => { setCancelTarget({ batchId: row.accountsPayable?.paymentBatch?._id, batchNumber: row.accountsPayable?.paymentBatch?.batchNumber, accountsPayableId: payableIdOf(row) }); setCancelReason(""); } }]} columns={[
@@ -465,7 +473,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     ]} /></div>
 
     <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
-    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, ...(offCycle ? [{ label: "Reason for paying off the payment cycle", value: paymentDateReason }] : []), { label: "Total", value: money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
+    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, ...(offCycle ? [{ label: "Reason for paying off the payment cycle", value: paymentDateReason }] : []), { label: "Total", value: selectedByCurrency.length ? selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ") : money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
 
     <Drawer open={Boolean(paymentRow)} title="Confirm actual bank payment" description={paymentRow ? `${paymentRow.requestNumber} - ${paymentRow.supplier?.legalName || paymentRow.supplier?.name || "UMA collaborator"}` : ""} onClose={() => !processing && setPaymentRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setPaymentRow(null)}>{t("Cancel")}</button><button type="submit" form="payment-confirmation-form" className="primary-button" disabled={processing}><CircleCheckBig size={16} />{t(processing ? "Processing..." : "Confirm payment")}</button></>}><div className="document-requirement required"><AlertTriangle size={20} /><div><strong>{t("This settles the selected Accounts Payable record")}</strong><p>{t("Confirmation posts the payment journal and does not infer payment from a downloaded TXT. Enter less than the outstanding amount to record a partial payment; the remaining balance stays open for a later confirmation.")}</p></div></div><DraftPanel busy={processing} draft={paymentDraft} onDiscard={() => setPaymentRow(null)}><form id="payment-confirmation-form" className="form-grid" onSubmit={confirmPayment}><label className="field"><span>{t("Operation number")} *</span><input required value={paymentForm.operationNumber} onChange={(event) => setPaymentForm({ ...paymentForm, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Actual payment date")} *</span><input required type="date" value={paymentForm.paidAt} onChange={(event) => setPaymentForm({ ...paymentForm, paidAt: event.target.value })} /></label><label className="field"><span>{t("Confirmed amount")} *</span><input required type="number" min="0.01" max={paymentRow ? amountOf(paymentRow) : undefined} step="0.01" value={paymentForm.confirmedAmount} onChange={(event) => setPaymentForm({ ...paymentForm, confirmedAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={paymentForm.comments} onChange={(event) => setPaymentForm({ ...paymentForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 
