@@ -19,7 +19,7 @@ import {
   Users,
   X
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../../api/client.js";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import ProtectedAssetButton from "../ProtectedAssetButton.jsx";
@@ -85,6 +85,15 @@ export default function SupplierDetail({
   const { t, language } = useLanguage();
   const [showBankForm, setShowBankForm] = useState(false);
   const [reviewAccount, setReviewAccount] = useState(null);
+  const bankReviewRef = useRef(null);
+  useEffect(() => {
+    if (!reviewAccount) return;
+    const frame = requestAnimationFrame(() => {
+      bankReviewRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      bankReviewRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reviewAccount]);
   const [bankForm, setBankForm] = useState({ bank: "BCP", accountType: "CURRENT", accountNumber: "", cci: "", currency: supplier.currency || "PEN", accountHolderName: supplier.legalName || supplier.name || "" });
   const [bankReview, setBankReview] = useState({ verificationStatus: "VERIFIED", ownershipResult: "MATCH", comments: "" });
   const [taxForm, setTaxForm] = useState({ valid: true, returnedIdentifier: supplier.rucDni || "", returnedLegalName: supplier.legalName || supplier.name || "", comments: "" });
@@ -118,7 +127,7 @@ export default function SupplierDetail({
   const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: setBankForm });
   const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canReview && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
   const financeDraft = useWorkDraft({ scope: "supplier-finance-review", recordId: supplier._id, title: "Supplier Finance review", enabled: permissions.canReview, value: financeReview, restore: setFinanceReview, sourceVersion: supplier.updatedAt });
-  const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canReview && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
+  const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canVerifyBanking && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
   useDraftResume("supplier-bank-review", id => { const account = supplier.bankAccounts?.find(row => row._id === id.split("~")[1]); if (account) setReviewAccount(account); });
   useDraftResume("supplier-bank", () => setShowBankForm(true));
 
@@ -248,7 +257,7 @@ export default function SupplierDetail({
               <div className="bank-review-meta"><small>{t("Account holder")}: {account.accountHolderName || "-"}</small><small>{t("Verification source")}: {account.verificationSource || t("Not reviewed")}</small><small>{displayDate(account.verifiedAt || account.validFrom, language)}</small></div>
               {permissions.canVerifyBanking && account.active && (
                 <div className="bank-actions">
-                  <button type="button" className="icon-button" title={t("Review bank account")} aria-label={t("Review bank account")} onClick={() => { setReviewAccount(account); setBankReview({ verificationStatus: account.verificationStatus === "PENDING" ? "VERIFIED" : account.verificationStatus, ownershipResult: account.ownershipResult === "NOT_REVIEWED" ? "MATCH" : account.ownershipResult, comments: account.verificationComments || "" }); }}><ShieldCheck size={16} /></button>
+                  <button type="button" className="secondary-button compact-button" aria-expanded={reviewAccount?._id === account._id} aria-controls="supplier-bank-review-panel" title={t("Review bank account")} aria-label={t("Review bank account")} onClick={() => { setReviewAccount(account); setBankReview({ verificationStatus: account.verificationStatus === "PENDING" ? "VERIFIED" : account.verificationStatus, ownershipResult: account.ownershipResult === "NOT_REVIEWED" ? "MATCH" : account.ownershipResult, comments: account.verificationComments || "" }); }}><ShieldCheck size={16} /><span>{t("Review bank account")}</span></button>
                   {!account.preferred && <button type="button" className="icon-button" title={t("Set preferred account")} aria-label={t("Set preferred account")} onClick={() => onPreferred(account)}><Star size={16} /></button>}
                   <button type="button" className="icon-button danger-icon" title={t("Deactivate bank account")} aria-label={t("Deactivate bank account")} onClick={() => onDeactivateBank(account)}><Power size={16} /></button>
                 </div>
@@ -264,8 +273,9 @@ export default function SupplierDetail({
           {permissions.canVerifyBanking && <div className="inline-form-actions"><button type="submit" className="secondary-button" disabled={loading || !detractionAccount.trim()}><Save size={15} /><span>{t("Save detracciones account")}</span></button></div>}
         </form>
 
-        {reviewAccount && (
-          <DraftPanel busy={loading} draft={bankReviewDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitBankReview}>
+        {reviewAccount && permissions.canVerifyBanking && (
+          <div id="supplier-bank-review-panel" ref={bankReviewRef} tabIndex={-1} role="region" aria-label={t("Finance bank review")}>
+          <DraftPanel busy={loading} draft={bankReviewDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitBankReview}>
             <div className="inline-form-heading"><div><strong>{t("Finance bank review")}</strong><small>{reviewAccount.bank} · {reviewAccount.accountNumber}</small></div><button type="button" className="icon-button quiet" onClick={() => setReviewAccount(null)} aria-label={t("Close bank review")}><X size={16} /></button></div>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Verification Status")}</span><select value={bankReview.verificationStatus} onChange={(event) => setBankReview((current) => ({ ...current, verificationStatus: event.target.value }))}>{["VERIFIED", "OBSERVED", "REJECTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
@@ -273,8 +283,9 @@ export default function SupplierDetail({
               <label className="field field-span-2"><span>{t("Finance verification comments")}</span><textarea rows="2" value={bankReview.comments} onChange={(event) => setBankReview((current) => ({ ...current, comments: event.target.value }))} /></label>
             </div>
             <p className="section-note">{t("The verification source is recorded as an authorized manual review. No external bank verification is claimed.")}</p>
-            <div className="inline-form-actions"><button type="submit" className="primary-button" disabled={loading}><UserCheck size={15} /><span>{t("Record bank review")}</span></button></div>
+            <div className="inline-form-actions"><button type="submit" className="primary-button" disabled={loading || !bankReviewDraft.ready || bankReviewDraft.status === "conflict"}><UserCheck size={15} /><span>{t("Record bank review")}</span></button></div>
           </form></DraftPanel>
+          </div>
         )}
       </Section>
 
@@ -310,7 +321,7 @@ export default function SupplierDetail({
           <Detail label="Validated By" value={supplier.taxpayerValidation?.validatedBy?.name} />
         </DetailGrid>
         {permissions.canReview && provider.state === "MANUAL" && (
-          <DraftPanel busy={loading} draft={taxDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitTax}>
+          <DraftPanel busy={loading} draft={taxDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitTax}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Manual validation result")}</span><select value={String(taxForm.valid)} onChange={(event) => setTaxForm((current) => ({ ...current, valid: event.target.value === "true" }))}><option value="true">{t("Valid")}</option><option value="false">{t("Invalid")}</option></select></label>
               <label className="field"><span>{t("Returned / reviewed RUC")}</span><input value={taxForm.returnedIdentifier} onChange={(event) => setTaxForm((current) => ({ ...current, returnedIdentifier: event.target.value }))} /></label>
@@ -331,7 +342,7 @@ export default function SupplierDetail({
           <Detail label="Review Comments" value={supplier.complianceReview?.comments} />
         </DetailGrid>
         {permissions.canReview && (
-          <DraftPanel busy={loading} draft={financeDraft} onDiscard={() => window.location.reload()}><form className="supplier-inline-form" onSubmit={submitFinanceReview}>
+          <DraftPanel busy={loading} draft={financeDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitFinanceReview}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Finance Review Result")}</span><select value={financeReview.result} onChange={(event) => setFinanceReview((current) => ({ ...current, result: event.target.value }))}>{["PENDING", "APPROVED", "OBSERVED", "REJECTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
               <label className="field field-span-2"><span>{t("Review Comments")}</span><textarea rows="3" value={financeReview.comments} onChange={(event) => setFinanceReview((current) => ({ ...current, comments: event.target.value }))} /></label>
