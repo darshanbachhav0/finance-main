@@ -1,5 +1,9 @@
 // Spanish copy for UI strings that previously fell back to English.
 export default {
+  "SUNAT automatic lookup temporarily unavailable": "Consulta automática SUNAT temporalmente no disponible",
+  "Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.": "No se pudo consultar Consulta RUC y el Padrón de respaldo no está disponible. Reintentaremos automáticamente; puede continuar completando el formulario.",
+  "Enter an RUC. UMA checks Consulta RUC automatically, using SUNAT Padrón if unavailable.": "Ingrese un RUC. UMA consulta Consulta RUC automáticamente y utiliza el Padrón SUNAT como respaldo si no está disponible.",
+
   "8 digits": "8 dígitos",
   "A signed CCI letter is mandatory before the CXP returns to the payment queue.": "Se requiere una carta CCI firmada antes de que la CXP vuelva a la cola de pagos.",
   "A1 and A2 vouchers, batch outcomes and isolated observations are independently traceable.": "Los comprobantes A1 y A2, los resultados de lote y las observaciones aisladas se rastrean por separado.",

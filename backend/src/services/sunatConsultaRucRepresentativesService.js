@@ -400,7 +400,7 @@ async function clickSearchButton(
           () => false
         )
     ) {
-      await candidate.click();
+      await candidate.click({ noWaitAfter: true });
 
       return true;
     }
@@ -914,6 +914,8 @@ async function lookupInternal(
   let page;
 
   try {
+    // Rendering assets are unnecessary for extracting public taxpayer text.
+    await context.route("**/*", route => ["image", "font", "media"].includes(route.request().resourceType()) ? route.abort() : route.continue());
     page =
       await context.newPage();
 
@@ -995,10 +997,7 @@ async function lookupInternal(
       );
     }
 
-    await waitForRucResult(
-      page,
-      ruc
-    );
+    await waitForRucResult(page, ruc);
 
     if (!profileOnly) await page
       .waitForLoadState(
@@ -1141,7 +1140,7 @@ export function consultaProfileFromFields(ruc, fields) {
   const heading = fields["NUMERO DE RUC"] || "";
   const match = heading.match(/^(\d{11})\s*-\s*(.+)$/);
   if (!match || match[1] !== ruc) throw new Error("SUNAT returned an unrecognized or mismatched RUC profile.");
-  const taxpayerStatus = fields["ESTADO DEL CONTRIBUYENTE"] || "NO_INFORMADO";
+  const taxpayerStatus = (fields["ESTADO DEL CONTRIBUYENTE"] || "NO_INFORMADO").split(/\s+Fecha de Baja\s*:/i)[0].trim();
   const domicileCondition = fields["CONDICION DEL CONTRIBUYENTE"] || "NO_INFORMADO";
   return { found: true, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt: new Date().toISOString(),
     data: { rucDni: ruc, legalName: match[2].trim(), commercialName: fields["NOMBRE COMERCIAL"] === "-" ? "" : fields["NOMBRE COMERCIAL"] || "",

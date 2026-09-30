@@ -26,3 +26,10 @@ test("Website outage falls back to Padron and preserves its evidence and missing
  }
  await assert.rejects(getSupplierAutomaticPrefill(ruc,{consulta:async()=>{throw new Error("Unavailable");},padron:async()=>{throw new Error("Dataset unavailable");}}),/Dataset unavailable/);
 });
+
+test("Consulta RUC keeps inactive status separate from its closure date", () => {
+ const result = consultaProfileFromFields(ruc, {...fields, "ESTADO DEL CONTRIBUYENTE": "BAJA DE OFICIO Fecha de Baja: 31/03/2014"});
+ assert.equal(result.data.taxpayerStatus, "BAJA DE OFICIO");
+ assert.equal(result.data.active, false);
+ assert.equal(result.data.eligibleForHomologation, false);
+});

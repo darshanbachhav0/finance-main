@@ -1018,13 +1018,13 @@ export default function SupplierForm({
             <div>
               <strong>
                 {t(
-                  padronLookup.unavailable ? "SUNAT Padrón temporarily unavailable" : "RUC not found in the current SUNAT Padrón"
+                  padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : "RUC not found in the current SUNAT Padrón"
                 )}
               </strong>
 
               <span>
                 {
-                  (padronLookup.retryable ? t("We will retry automatically and fill untouched fields when SUNAT Padrón becomes available. You can keep completing this form.") : padronLookup.message) ||
+                  (padronLookup.retryable ? t("Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.") : padronLookup.message) ||
                   t(
                     "You can continue entering the proposal manually, but SUNAT validation will still be required before homologation."
                   )

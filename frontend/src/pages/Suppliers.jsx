@@ -863,6 +863,12 @@ export default function Suppliers() {
         true
     });
 
+    // Start independent checks together; catch immediately to avoid an unhandled
+    // rejection if the duplicate check finishes first or finds an existing supplier.
+    const profilePromise = normalized.length === 11
+      ? api.get(`/suppliers/padron/${normalized}`, { timeout: 20000 })
+          .then(response => ({ response }), error => ({ error }))
+      : null;
     try {
       /*
        * STEP 1
@@ -979,11 +985,9 @@ export default function Suppliers() {
         padron: { loading: true, ruc: normalized }
       });
       try {
-        const padronResponse =
-          await api.get(
-            `/suppliers/padron/${normalized}`,
-            { timeout: 20_000 }
-          );
+        const profileResult = await profilePromise;
+        if (profileResult.error) throw profileResult.error;
+        const padronResponse = profileResult.response;
 
         if (
           sequence !==
@@ -1083,7 +1087,7 @@ export default function Suppliers() {
 
             message:
               padronError.message ||
-              "SUNAT Padrón lookup could not be completed."
+              "SUNAT automatic lookup could not be completed."
           },
 
           representatives: {
@@ -1588,7 +1592,7 @@ export default function Suppliers() {
         description={
           drawer.mode ===
           "create"
-            ? "Enter an RUC. UMA checks duplicates, SUNAT Padrón and SUNAT legal representatives automatically."
+            ? "Enter an RUC. UMA checks Consulta RUC automatically, using SUNAT Padrón if unavailable."
             : "Official supplier onboarding and homologation record."
         }
         onClose={
