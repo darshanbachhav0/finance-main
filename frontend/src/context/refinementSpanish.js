@@ -234,6 +234,8 @@ export default {
   "Review every invoice-level CXP independently, including A2 batch origin, Purchase Order balance, SUNAT result, payment priority, and bounced-payment status.": "Revisa cada CXP por comprobante: origen del lote A2, saldo de la OC, resultado SUNAT, prioridad de pago y rebotes.",
   "Review renditions": "Revisar rendiciones",
   "Role / title": "Rol / cargo",
+  "SUNAT Padrón temporarily unavailable": "Padrón SUNAT temporalmente no disponible",
+  "We will retry automatically and fill untouched fields when SUNAT Padrón becomes available. You can keep completing this form.": "Reintentaremos automáticamente y completaremos los campos sin editar cuando el Padrón SUNAT esté disponible. Puede seguir completando el formulario.",
   "RUC not found in the current SUNAT Padrón": "RUC no encontrado en el Padrón SUNAT vigente",
   "Schedule payments": "Programar pagos",
   "School": "Escuela",

@@ -644,6 +644,29 @@ export default function Suppliers() {
     }
     return () => { active = false; };
   }, [supplierDraft.restoration, supplierDraft.ready]);
+  // Retry only temporary failures, with no overlapping calls or updates after RUC/drawer changes.
+  useEffect(() => {
+    if (!drawer.open || drawer.mode !== "create" || !lookup.padron?.retryable || lookup.padron?.ruc !== identifier || !/^\d{11}$/.test(identifier)) return;
+    let stopped = false;
+    let timer;
+    let failures = 0;
+    const retry = async () => {
+      try {
+        const response = await api.get(`/suppliers/padron/${identifier}`, { timeout: 10000 });
+        if (!stopped) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
+      } catch (error) {
+        if (stopped) return;
+        if (error.status && error.status < 500 && error.status !== 429) {
+          setLookup(current => ({ ...current, padron: { ...current.padron, retryable: false, message: error.message } }));
+          return;
+        }
+        failures += 1;
+        timer = setTimeout(retry, Math.min(60000, 15000 * (failures + 1)));
+      }
+    };
+    timer = setTimeout(retry, 15000);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [drawer.open, drawer.mode, identifier, lookup.padron?.retryable, lookup.padron?.ruc]);
   useDraftResume("supplier-bank", id => { void loadSupplier(id, "view"); });
   useDraftResume("supplier-tax-review", id => { void loadSupplier(id, "view"); });
   useDraftResume("supplier-finance-review", id => { void loadSupplier(id, "view"); });
@@ -1050,6 +1073,8 @@ export default function Suppliers() {
             null,
 
           padron: {
+            unavailable: true,
+            retryable: !padronError.status || padronError.status >= 500 || padronError.status === 429,
             found:
               false,
 

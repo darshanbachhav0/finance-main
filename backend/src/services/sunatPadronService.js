@@ -1397,11 +1397,14 @@ function cachePut(
   }
 }
 
-function refreshForLookup() {
+export function refreshForLookup() {
+  if (["false", "off", "0"].includes(String(process.env.SUNAT_PADRON_WORKER_ENABLED || "").toLowerCase())) return;
   if (Date.now() < nextLookupRefreshAt) return;
   nextLookupRefreshAt = Date.now() + 5 * 60_000;
-  void ensureSunatPadron().catch(error => {
-    console.warn("[SUNAT PADRON] Background lookup refresh failed:", error.message);
+  setImmediate(() => {
+    void ensureSunatPadron().catch(error => {
+      console.warn("[SUNAT PADRON] Background lookup refresh failed:", error.message);
+    });
   });
 }
 
