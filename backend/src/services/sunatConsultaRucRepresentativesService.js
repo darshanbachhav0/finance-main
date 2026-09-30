@@ -148,12 +148,12 @@ function cacheKey(
 
 function cacheTtlMs() {
   return (
-    positiveNumber(
+    Math.min(1440, positiveNumber(
       env(
         "SUNAT_CONSULTA_RUC_CACHE_MINUTES"
       ),
       DEFAULT_CACHE_MINUTES
-    ) *
+    )) *
     60 *
     1000
   );
@@ -211,6 +211,7 @@ async function getBrowser() {
         // Supplier autofill must never open a desktop window, including when
         // an older launcher still sets SUNAT_REPRESENTATIVES_HEADLESS=false.
         channel: "chromium",
+        timeout: 10000,
         headless: true
       })
       .then((browser) => {
@@ -886,7 +887,8 @@ async function extractHeading(
 
 async function lookupInternal(
   ruc,
-  legalName
+  legalName,
+  profileOnly = false
 ) {
   const browser =
     await getBrowser();
@@ -908,6 +910,7 @@ async function lookupInternal(
       }
     });
 
+  const deadline = profileOnly ? setTimeout(() => { void context.close().catch(() => {}); }, 8000) : null;
   let page;
 
   try {
@@ -997,7 +1000,7 @@ async function lookupInternal(
       ruc
     );
 
-    await page
+    if (!profileOnly) await page
       .waitForLoadState(
         "networkidle",
         {
@@ -1023,6 +1026,17 @@ async function lookupInternal(
       throw new Error(
         "SUNAT requested interactive verification after the RUC search."
       );
+    }
+
+    if (profileOnly) {
+      const fields = await page.evaluate(() => Object.fromEntries(
+        Array.from(document.querySelectorAll(".list-group-item")).map(row => {
+          const text = (row.innerText || "").replace(/\s+/g, " ").trim();
+          const split = text.indexOf(":");
+          return split < 0 ? ["", ""] : [text.slice(0, split).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim(), text.slice(split + 1).trim()];
+        }).filter(([key]) => key)
+      ));
+      return consultaProfileFromFields(ruc, fields);
     }
 
     console.log(
@@ -1118,8 +1132,36 @@ async function lookupInternal(
           : "SUNAT Consulta RUC loaded correctly but did not return legal representatives."
     };
   } finally {
+    clearTimeout(deadline);
     await context.close();
   }
+}
+
+export function consultaProfileFromFields(ruc, fields) {
+  const heading = fields["NUMERO DE RUC"] || "";
+  const match = heading.match(/^(\d{11})\s*-\s*(.+)$/);
+  if (!match || match[1] !== ruc) throw new Error("SUNAT returned an unrecognized or mismatched RUC profile.");
+  const taxpayerStatus = fields["ESTADO DEL CONTRIBUYENTE"] || "NO_INFORMADO";
+  const domicileCondition = fields["CONDICION DEL CONTRIBUYENTE"] || "NO_INFORMADO";
+  return { found: true, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt: new Date().toISOString(),
+    data: { rucDni: ruc, legalName: match[2].trim(), commercialName: fields["NOMBRE COMERCIAL"] === "-" ? "" : fields["NOMBRE COMERCIAL"] || "",
+      personType: ruc.startsWith("20") ? "LEGAL_ENTITY" : ruc.startsWith("10") ? "NATURAL_PERSON_WITH_BUSINESS" : "",
+      fiscalAddress: fields["DOMICILIO FISCAL"] || "", location: { department: fields["DEPARTAMENTO"] || "", province: fields["PROVINCIA"] || "", district: fields["DISTRITO"] || "", ubigeo: fields["UBIGEO"] || "" },
+      taxpayerStatus, domicileCondition, active: taxpayerStatus === "ACTIVO", habido: domicileCondition === "HABIDO",
+      eligibleForHomologation: taxpayerStatus === "ACTIVO" && domicileCondition === "HABIDO", accountHolderName: match[2].trim() },
+    message: "Supplier information loaded from SUNAT Consulta RUC." };
+}
+
+export async function lookupSunatTaxpayerProfile(rucValue) {
+  const ruc = normalizeRuc(rucValue);
+  if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
+  const key = `profile:${ruc}`;
+  const cached = getCached(key);
+  if (cached) return cached;
+  if (inflight.has(key)) return inflight.get(key);
+  const pending = lookupInternal(ruc, "", true).then(result => { saveCached(key, result); return result; }).finally(() => inflight.delete(key));
+  inflight.set(key, pending);
+  return pending;
 }
 
 export async function lookupSunatLegalRepresentatives(

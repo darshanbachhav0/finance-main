@@ -638,7 +638,7 @@ export default function Suppliers() {
       if (active && response.data.found && drawer.mode === "create") setLookup(current => ({ ...current, result: response.data.data }));
     }).catch(() => {}); // The submission endpoint also enforces RUC uniqueness.
     if (!lookup.checkedAt || Date.now() - new Date(lookup.checkedAt).getTime() > 86400000) {
-      api.get(`/suppliers/padron/${ruc}`, { timeout: 10000 }).then(response => {
+      api.get(`/suppliers/padron/${ruc}`, { timeout: 20000 }).then(response => {
         if (active) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
       }).catch(() => {}); // Cached evidence remains labelled with its original date.
     }
@@ -652,7 +652,7 @@ export default function Suppliers() {
     let failures = 0;
     const retry = async () => {
       try {
-        const response = await api.get(`/suppliers/padron/${identifier}`, { timeout: 10000 });
+        const response = await api.get(`/suppliers/padron/${identifier}`, { timeout: 20000 });
         if (!stopped) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
       } catch (error) {
         if (stopped) return;
@@ -982,7 +982,7 @@ export default function Suppliers() {
         const padronResponse =
           await api.get(
             `/suppliers/padron/${normalized}`,
-            { timeout: 15_000 }
+            { timeout: 20_000 }
           );
 
         if (

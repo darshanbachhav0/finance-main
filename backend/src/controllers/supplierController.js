@@ -4,7 +4,7 @@ import {
 } from "../middleware/asyncHandler.js";
 
 import {
-  getSupplierPadronPrefill
+  getSupplierAutomaticPrefill
 } from "../services/supplierPadronLookupService.js";
 
 import {
@@ -70,7 +70,7 @@ export const lookupSupplierPadron =
       res
     ) => {
       try {
-        res.json(await getSupplierPadronPrefill(req.params.ruc));
+        res.json(await getSupplierAutomaticPrefill(req.params.ruc));
       } catch (error) {
         if (error.statusCode === 503) {
           // Queue a throttled refresh; never download/index millions of rows before responding.

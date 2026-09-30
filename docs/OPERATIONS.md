@@ -249,3 +249,32 @@ These require a real institutional decision or credential this codebase cannot s
 - **The organizational roster's manager-chain (`jefe`) data** — approval routing prefers this over
   configured rules; keeping it current is what keeps most requests off the "no configured rule for
   this dimension" error path (see `ARCHITECTURE.md` §3.3).
+
+
+## Supplier automatic lookup
+
+Supplier proposals query the official Consulta RUC website first, in headless Chromium.
+If the website times out, changes its layout, or requests human verification, lookup falls
+back to the indexed official public Padron. Successful negative taxpayer results are never
+overridden with a positive fallback. The response identifies its source; Padron retains its
+dataset date. This lookup is taxpayer evidence, not invoice validation or bank ownership proof.
+
+Render builds must install Chromium (`npx playwright install chromium`) with
+`PLAYWRIGHT_BROWSERS_PATH=0` at build and runtime, as configured in render.yaml. Existing
+services managed outside the Blueprint need those settings applied in their dashboard too.
+The host must supply Playwright Chromium system libraries; if launch fails, use a supported
+host image with these libraries installed. Lookup still falls back to Padron.
+
+Keep `SUNAT_PADRON_WORKER_ENABLED=true` and `SUNAT_PADRON_DATA_DIR` on persistent storage.
+The existing in-process worker checks at 03:00 America/Lima daily, checks on startup, retries
+failures, and keeps the last usable generation. The service must be running for the scheduled
+check; a suspended service cannot execute background work. Check worker-state.json and
+server logs for the actual last refresh and next check; a schedule alone is not proof of success.
+Website lookups use a short cache (default 30 minutes, maximum 24 hours). This refreshes
+lookup evidence, not historical supplier/request snapshots.
+
+Only fields supplied by the source are autofilled. Legal name, commercial name, fiscal
+address and taxpayer status come from the profile; representative lookup remains separate.
+Location fields are filled when explicitly supplied, not inferred from ambiguous addresses.
+Contact phone/email, banking details, payment terms and internal commercial information
+remain user-provided when absent from SUNAT. Existing user edits are not overwritten.

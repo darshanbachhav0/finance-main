@@ -1,3 +1,4 @@
+import { lookupSunatTaxpayerProfile } from "./sunatConsultaRucRepresentativesService.js";
 import { lookupSunatPadronRuc } from "./sunatPadronService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
@@ -177,4 +178,15 @@ export async function getSupplierPadronPrefill(rucValue) {
             "NO_INFORMADO"
           }.`
   };
+}
+
+// Public web profile first. A fallback never turns absence/unavailability into validation.
+export async function getSupplierAutomaticPrefill(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill } = {}) {
+  const ruc = normalizeRuc(rucValue);
+  if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
+  try { return await consulta(ruc); }
+  catch (error) {
+    const result = await padron(ruc);
+    return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: "CONSULTA_RUC_UNAVAILABLE", queriedAt: new Date().toISOString() };
+  }
 }

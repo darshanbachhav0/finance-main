@@ -943,10 +943,11 @@ export default function SupplierForm({
             <div>
               <strong>
                 {t(
-                  "SUNAT Padrón data loaded automatically"
+                  padronLookup.source === "SUNAT_CONSULTA_RUC" ? "SUNAT Consulta RUC data loaded automatically" : "SUNAT Padrón data loaded automatically"
                 )}
               </strong>
 
+              {padronLookup.fallback && <small>{t("Consulta RUC unavailable. Official Padrón fallback used.")}</small>}
               <span>
                 {
                   padronData

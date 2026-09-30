@@ -11,7 +11,7 @@ services:
     plan: 0.5c-512mb
     repo: https://github.com/darshanbachhav0/finance-main.git
     branch: main
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npx playwright install chromium && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
@@ -20,6 +20,8 @@ services:
       mountPath: /var/data
       sizeGB: 10
     envVars:
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
