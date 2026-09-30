@@ -186,7 +186,37 @@ export async function getSupplierAutomaticPrefill(rucValue, { consulta = lookupS
   if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
   try { return await consulta(ruc); }
   catch (error) {
-    const result = await padron(ruc);
-    return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: "CONSULTA_RUC_UNAVAILABLE", queriedAt: new Date().toISOString() };
+    const failure = classifyConsultaFailure(error);
+    console.warn(`[SUNAT LOOKUP] Consulta RUC failed: ${failure.code}`);
+    try {
+      const result = await padron(ruc);
+      return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: failure.code, queriedAt: new Date().toISOString() };
+    } catch (padronError) {
+      console.warn("[SUNAT LOOKUP] Padrón fallback unavailable.");
+      throw new AppError(503, `${failure.message} The SUNAT Padrón fallback is also unavailable.`, {
+        consultaFailure: failure.code,
+        requiresConfiguration: failure.requiresConfiguration,
+        fallbackState: "UNAVAILABLE"
+      });
+    }
   }
+}
+
+
+// Stable, sanitized diagnostics: never return browser paths, stacks or raw HTML.
+export function classifyConsultaFailure(error) {
+  const message = String(error?.message || "");
+  if (/executable doesn't exist|browser.*not installed/i.test(message)) {
+    return { code: "CONSULTA_BROWSER_MISSING", requiresConfiguration: true, message: "Automatic lookup is not configured on the server: Chromium is missing. Administration must redeploy with the SUNAT browser build check." };
+  }
+  if (/shared libraries|host system is missing dependencies|error while loading/i.test(message)) {
+    return { code: "CONSULTA_BROWSER_DEPENDENCIES", requiresConfiguration: true, message: "The server is missing browser system dependencies. Administration must correct the deployment." };
+  }
+  if (/HTTP 403|HTTP 429|human verification|interactive verification/i.test(message)) {
+    return { code: "CONSULTA_ACCESS_RESTRICTED", requiresConfiguration: false, message: "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now." };
+  }
+  if (/timeout|timed out|has been closed/i.test(message)) {
+    return { code: "CONSULTA_TIMEOUT", requiresConfiguration: false, message: "Consulta RUC did not respond within the lookup time limit." };
+  }
+  return { code: "CONSULTA_UNAVAILABLE", requiresConfiguration: false, message: "Consulta RUC could not return a usable supplier profile." };
 }

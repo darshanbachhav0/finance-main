@@ -1,5 +1,11 @@
 // Spanish copy for UI strings that previously fell back to English.
 export default {
+  "Automatic lookup is not configured on the server: Chromium is missing. Administration must redeploy with the SUNAT browser build check. The SUNAT Padrón fallback is also unavailable.": "La consulta automática no está configurada en el servidor: falta Chromium. Administración debe volver a desplegar con la comprobación del navegador SUNAT. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "The server is missing browser system dependencies. Administration must correct the deployment. The SUNAT Padrón fallback is also unavailable.": "Faltan dependencias del navegador en el servidor. Administración debe corregir el despliegue. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now. The SUNAT Padrón fallback is also unavailable.": "SUNAT está restringiendo el acceso automatizado desde este servidor. No se puede consultar la ficha en este momento. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "Consulta RUC did not respond within the lookup time limit. The SUNAT Padrón fallback is also unavailable.": "Consulta RUC no respondió dentro del tiempo límite. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "Consulta RUC could not return a usable supplier profile. The SUNAT Padrón fallback is also unavailable.": "Consulta RUC no pudo devolver una ficha de proveedor utilizable. El Padrón SUNAT de respaldo tampoco está disponible.",
+
   "SUNAT automatic lookup temporarily unavailable": "Consulta automática SUNAT temporalmente no disponible",
   "Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.": "No se pudo consultar Consulta RUC y el Padrón de respaldo no está disponible. Reintentaremos automáticamente; puede continuar completando el formulario.",
   "Enter an RUC. UMA checks Consulta RUC automatically, using SUNAT Padrón if unavailable.": "Ingrese un RUC. UMA consulta Consulta RUC automáticamente y utiliza el Padrón SUNAT como respaldo si no está disponible.",

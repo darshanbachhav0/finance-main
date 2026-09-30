@@ -278,3 +278,22 @@ address and taxpayer status come from the profile; representative lookup remains
 Location fields are filled when explicitly supplied, not inferred from ambiguous addresses.
 Contact phone/email, banking details, payment terms and internal commercial information
 remain user-provided when absent from SUNAT. Existing user edits are not overwritten.
+
+
+### Render lookup deployment check
+
+Use `npm ci && npm run build` for the service build. The root build now runs
+`scripts/ensureSunatBrowser.js` on Render: it installs Chromium and verifies a
+headless launch. A failed install or missing Linux library fails the build, instead
+of silently deploying broken autofill. If PLAYWRIGHT_BROWSERS_PATH is not set, both
+build and runtime use node_modules/.cache/uma-chromium in the project. An explicit
+value (including 0 from the Blueprint) must stay identical during build and runtime.
+Successful build logs contain `SUNAT Chromium launch check passed.`
+
+Lookup logs expose sanitized CONSULTA_BROWSER_MISSING, CONSULTA_BROWSER_DEPENDENCIES,
+CONSULTA_ACCESS_RESTRICTED, CONSULTA_TIMEOUT or CONSULTA_UNAVAILABLE diagnostics.
+The API preserves the distinction if the Padron fallback also fails. Infrastructure
+failures ask Administration to correct deployment, rather than retry indefinitely.
+No missing profile is treated as valid taxpayer evidence. Browser launch validation
+is not proof that SUNAT accepts traffic from the deployed host: verify a supplier
+lookup on that host after deployment.

@@ -656,7 +656,7 @@ export default function Suppliers() {
         if (!stopped) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
       } catch (error) {
         if (stopped) return;
-        if (error.status && error.status < 500 && error.status !== 429) {
+        if (error.details?.requiresConfiguration || (error.status && error.status < 500 && error.status !== 429)) {
           setLookup(current => ({ ...current, padron: { ...current.padron, retryable: false, message: error.message } }));
           return;
         }
@@ -1078,7 +1078,7 @@ export default function Suppliers() {
 
           padron: {
             unavailable: true,
-            retryable: !padronError.status || padronError.status >= 500 || padronError.status === 429,
+            retryable: !padronError.details?.requiresConfiguration && (!padronError.status || padronError.status >= 500 || padronError.status === 429),
             found:
               false,
 

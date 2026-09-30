@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { chromium } from "playwright";
+
 
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
@@ -204,16 +204,19 @@ async function getBrowser() {
     return browserPromise;
   }
 
-  const pending =
-    chromium
-      .launch({
+  // Match the build hook even when Render is not managed by render.yaml.
+  if (process.env.RENDER === "true") {
+    process.env.PLAYWRIGHT_BROWSERS_PATH ||= path.resolve(BACKEND_ROOT, "../node_modules/.cache/uma-chromium");
+  }
+  const pending = import("playwright").then(({ chromium }) =>
+    chromium.launch({
         // Use full Chromium's unified headless mode, not the headless shell.
         // Supplier autofill must never open a desktop window, including when
         // an older launcher still sets SUNAT_REPRESENTATIVES_HEADLESS=false.
         channel: "chromium",
         timeout: 10000,
         headless: true
-      })
+      }))
       .then((browser) => {
         browser.once("disconnected", () => {
           // Permit the next lookup to recover if Chromium exits unexpectedly.
