@@ -913,7 +913,11 @@ async function lookupInternal(
       }
     });
 
-  const deadline = profileOnly ? setTimeout(() => { void context.close().catch(() => {}); }, 8000) : null;
+  let deadlineExpired = false;
+  const deadline = profileOnly ? setTimeout(() => {
+    deadlineExpired = true;
+    void context.close().catch(() => {});
+  }, profileTimeoutMs()) : null;
   let page;
 
   try {
@@ -1002,18 +1006,6 @@ async function lookupInternal(
 
     await waitForRucResult(page, ruc);
 
-    if (!profileOnly) await page
-      .waitForLoadState(
-        "networkidle",
-        {
-          timeout:
-            5_000
-        }
-      )
-      .catch(
-        () => {}
-      );
-
     await saveDebug(
       page,
       ruc,
@@ -1030,7 +1022,7 @@ async function lookupInternal(
       );
     }
 
-    if (profileOnly) {
+    {
       const fields = await page.evaluate(() => Object.fromEntries(
         Array.from(document.querySelectorAll(".list-group-item")).map(row => {
           const text = (row.innerText || "").replace(/\s+/g, " ").trim();
@@ -1038,7 +1030,15 @@ async function lookupInternal(
           return split < 0 ? ["", ""] : [text.slice(0, split).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim(), text.slice(split + 1).trim()];
         }).filter(([key]) => key)
       ));
-      return consultaProfileFromFields(ruc, fields);
+      // Both operations visit the same company page. Preserve that verified
+      // profile even if the separate representative page later fails.
+      try {
+        const profile = consultaProfileFromFields(ruc, fields);
+        saveCached(`profile:${ruc}`, profile);
+        if (profileOnly) return profile;
+      } catch (error) {
+        if (profileOnly) throw error;
+      }
     }
 
     console.log(
@@ -1133,9 +1133,12 @@ async function lookupInternal(
           ? `${representatives.length} legal representative(s) returned by SUNAT Consulta RUC.`
           : "SUNAT Consulta RUC loaded correctly but did not return legal representatives."
     };
+  } catch (error) {
+    if (deadlineExpired) throw new Error("Consulta RUC profile lookup timed out.");
+    throw error;
   } finally {
     clearTimeout(deadline);
-    await context.close();
+    await context.close().catch(() => {});
   }
 }
 
@@ -1345,4 +1348,10 @@ export async function closeSunatRepresentativesBrowser() {
     .catch(
       () => {}
     );
+}
+
+// Render may be busy indexing Padron; do not abort valid public-page navigation
+// after eight seconds. This is a ceiling, not an artificial wait.
+export function profileTimeoutMs(value = process.env.SUNAT_CONSULTA_RUC_PROFILE_TIMEOUT_MS) {
+  return Math.min(25000, Math.max(10000, positiveNumber(value, 20000)));
 }

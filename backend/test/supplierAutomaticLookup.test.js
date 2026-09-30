@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { consultaProfileFromFields } from "../src/services/sunatConsultaRucRepresentativesService.js";
+import { consultaProfileFromFields, profileTimeoutMs } from "../src/services/sunatConsultaRucRepresentativesService.js";
 import { getSupplierAutomaticPrefill, classifyConsultaFailure } from "../src/services/supplierPadronLookupService.js";
 const ruc = "20550807123";
 const fields = { "NUMERO DE RUC": `${ruc} - TEST UNIVERSITY`, "NOMBRE COMERCIAL": "-", "DOMICILIO FISCAL": "TEST ADDRESS", "ESTADO DEL CONTRIBUYENTE": "ACTIVO", "CONDICION DEL CONTRIBUYENTE": "HABIDO" };
@@ -24,7 +24,7 @@ test("Website outage falls back to Padron and preserves its evidence and missing
  const result=await getSupplierAutomaticPrefill(ruc,{consulta:async()=>{throw new Error("Timeout or challenge");},padron:async()=>({found,source:"SUNAT_PUBLIC_PADRON_RUC",datasetDate:"2026-09-30"})});
  assert.equal(result.found,found);assert.equal(result.fallback,true);assert.equal(result.datasetDate,"2026-09-30");
  }
- await assert.rejects(getSupplierAutomaticPrefill(ruc,{consulta:async()=>{throw new Error("Unavailable");},padron:async()=>{throw new Error("Dataset unavailable");}}),/Padrón fallback is also unavailable/);
+ await assert.rejects(getSupplierAutomaticPrefill(ruc,{consulta:async()=>{throw new Error("Unavailable");},padron:async()=>{throw new Error("Dataset unavailable");}}),/PadrÃ³n fallback is also unavailable/);
 });
 
 test("Consulta RUC keeps inactive status separate from its closure date", () => {
@@ -43,4 +43,11 @@ test("Deployment failures stay actionable without leaking internal paths", async
  }), error => error.statusCode === 503 && error.details.requiresConfiguration && !error.message.includes("/private"));
  assert.equal(classifyConsultaFailure(new Error("HTTP 403")).code, "CONSULTA_ACCESS_RESTRICTED");
  assert.equal(classifyConsultaFailure(new Error("Target page has been closed")).code, "CONSULTA_TIMEOUT");
+});
+
+test("Profile deadline tolerates a slow deployment but remains bounded", () => {
+ assert.equal(profileTimeoutMs(""), 20000);
+ assert.equal(profileTimeoutMs("bad"), 20000);
+ assert.equal(profileTimeoutMs("8000"), 10000);
+ assert.equal(profileTimeoutMs("999999"), 25000);
 });

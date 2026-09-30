@@ -297,3 +297,18 @@ failures ask Administration to correct deployment, rather than retry indefinitel
 No missing profile is treated as valid taxpayer evidence. Browser launch validation
 is not proof that SUNAT accepts traffic from the deployed host: verify a supplier
 lookup on that host after deployment.
+
+
+### Consulta RUC profile deadline and recovery
+
+The company profile deadline defaults to 20 seconds; optionally configure
+`SUNAT_CONSULTA_RUC_PROFILE_TIMEOUT_MS` (bounded to 10–25 seconds). The frontend
+allows 35 seconds including browser startup. The previous eight-second deadline
+was observed terminating Render lookups while representative lookups succeeded.
+This limit is a ceiling, not a delay: available results return immediately.
+
+Representative lookups now cache the verified company profile read on the same
+SUNAT page. A recovered profile lookup also starts the representative lookup in
+the open supplier form. Cached profiles retain their original query timestamp;
+manual form edits remain protected. Successful lookup does not imply taxpayer
+eligibility or verified bank ownership.

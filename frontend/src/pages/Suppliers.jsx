@@ -638,7 +638,7 @@ export default function Suppliers() {
       if (active && response.data.found && drawer.mode === "create") setLookup(current => ({ ...current, result: response.data.data }));
     }).catch(() => {}); // The submission endpoint also enforces RUC uniqueness.
     if (!lookup.checkedAt || Date.now() - new Date(lookup.checkedAt).getTime() > 86400000) {
-      api.get(`/suppliers/padron/${ruc}`, { timeout: 20000 }).then(response => {
+      api.get(`/suppliers/padron/${ruc}`, { timeout: 35000 }).then(response => {
         if (active) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
       }).catch(() => {}); // Cached evidence remains labelled with its original date.
     }
@@ -652,8 +652,13 @@ export default function Suppliers() {
     let failures = 0;
     const retry = async () => {
       try {
-        const response = await api.get(`/suppliers/padron/${identifier}`, { timeout: 20000 });
-        if (!stopped) setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
+        const response = await api.get(`/suppliers/padron/${identifier}`, { timeout: 35000 });
+        if (!stopped) {
+          setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
+          if (response.data?.found && response.data?.data?.legalName) {
+            void loadLegalRepresentatives(lookupSequence.current, identifier, response.data.data.legalName);
+          }
+        }
       } catch (error) {
         if (stopped) return;
         if (error.details?.requiresConfiguration || (error.status && error.status < 500 && error.status !== 429)) {
@@ -866,7 +871,7 @@ export default function Suppliers() {
     // Start independent checks together; catch immediately to avoid an unhandled
     // rejection if the duplicate check finishes first or finds an existing supplier.
     const profilePromise = normalized.length === 11
-      ? api.get(`/suppliers/padron/${normalized}`, { timeout: 20000 })
+      ? api.get(`/suppliers/padron/${normalized}`, { timeout: 35000 })
           .then(response => ({ response }), error => ({ error }))
       : null;
     try {

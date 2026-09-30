@@ -192,8 +192,8 @@ export async function getSupplierAutomaticPrefill(rucValue, { consulta = lookupS
       const result = await padron(ruc);
       return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: failure.code, queriedAt: new Date().toISOString() };
     } catch (padronError) {
-      console.warn("[SUNAT LOOKUP] Padrón fallback unavailable.");
-      throw new AppError(503, `${failure.message} The SUNAT Padrón fallback is also unavailable.`, {
+      console.warn("[SUNAT LOOKUP] PadrÃ³n fallback unavailable.");
+      throw new AppError(503, `${failure.message} The SUNAT PadrÃ³n fallback is also unavailable.`, {
         consultaFailure: failure.code,
         requiresConfiguration: failure.requiresConfiguration,
         fallbackState: "UNAVAILABLE"
