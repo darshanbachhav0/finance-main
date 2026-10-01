@@ -1,3 +1,4 @@
+import { cloudTaxpayerMode } from "../services/taxpayerProfileCache.js";
 // Background workers that run inside the web service process.
 //
 // On Render a persistent disk belongs to exactly one service, so the batch-invoice worker (reads
@@ -24,7 +25,7 @@ export function inProcessWorkerFlags(env = process.env) {
   return {
     batchInvoice: !inline && boolFromEnv(env.BATCH_INVOICE_WORKER_ENABLED, production),
     sla: boolFromEnv(env.SLA_WORKER_ENABLED, production),
-    padron: usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production)
+    padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production)
   };
 }
 
@@ -33,6 +34,10 @@ export function inProcessWorkerFlags(env = process.env) {
 export async function startInProcessWorkers(env = process.env) {
   const flags = inProcessWorkerFlags(env);
   const workers = [];
+  if (usesPublicPadron(env) && cloudTaxpayerMode(env)) {
+    workers.push((await import("./taxpayerCacheWorker.js")).startTaxpayerCacheWorker());
+    console.log("[WORKERS] SUNAT durable taxpayer cache enabled; full Padrón download disabled.");
+  }
   if (flags.batchInvoice) workers.push((await import("./batchInvoiceWorker.js")).startBatchInvoiceWorker());
   if (flags.sla) workers.push((await import("./slaWorker.js")).startSlaWorker());
   if (flags.padron) workers.push((await import("./padronWorker.js")).startPadronWorker());

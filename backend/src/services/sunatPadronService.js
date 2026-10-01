@@ -1398,6 +1398,7 @@ function cachePut(
 }
 
 export function refreshForLookup() {
+  if (String(process.env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO") return;
   if (["false", "off", "0"].includes(String(process.env.SUNAT_PADRON_WORKER_ENABLED || "").toLowerCase())) return;
   if (Date.now() < nextLookupRefreshAt) return;
   nextLookupRefreshAt = Date.now() + 5 * 60_000;

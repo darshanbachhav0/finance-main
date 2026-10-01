@@ -1,3 +1,4 @@
+import { cachedTaxpayerProfile, cloudTaxpayerMode } from "./taxpayerProfileCache.js";
 import { lookupSunatTaxpayerProfile } from "./sunatConsultaRucRepresentativesService.js";
 import { lookupSunatPadronRuc } from "./sunatPadronService.js";
 import { AppError } from "../utils/AppError.js";
@@ -181,7 +182,14 @@ export async function getSupplierPadronPrefill(rucValue) {
 }
 
 // Public web profile first. A fallback never turns absence/unavailability into validation.
-export async function getSupplierAutomaticPrefill(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill } = {}) {
+export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
+  if (cloudTaxpayerMode() && !options.consulta && !options.padron) {
+    return cachedTaxpayerProfile(normalizeRuc(rucValue), () => lookupAutomaticProfile(rucValue));
+  }
+  return lookupAutomaticProfile(rucValue, options);
+}
+
+async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill } = {}) {
   const ruc = normalizeRuc(rucValue);
   if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
   try { return await consulta(ruc); }

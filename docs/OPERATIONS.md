@@ -325,3 +325,49 @@ control. The audit records source, evidence date, result and initiating user.
 Manual and mock provider modes retain their distinct behavior. This taxpayer
 check does not verify an invoice, bank account or Finance compliance review.
 No migration is required; existing pending suppliers can use the retry action.
+
+
+## Render Free: automatic taxpayer lookup without an always-on PC
+
+Set these variables in Render Environment, then deploy the updated code:
+
+```env
+SUNAT_PROVIDER_MODE=PADRON
+SUNAT_TAXPAYER_CACHE_MODE=MONGO
+SUNAT_PADRON_WORKER_ENABLED=false
+```
+
+Keep the existing MONGODB_URI and browser build hook (`npm ci && npm run build`).
+Keep the normal web-service start command. No PC, tunnel, additional paid worker,
+or whole-Padrón import into Atlas is required. MONGO mode also suppresses implicit
+lookup-triggered dataset downloads even if an old worker flag was left enabled.
+
+The first RUC lookup uses official Consulta RUC. Successful official profiles are
+stored in `taxpayerprofilecaches` in the existing database, keyed by RUC. This
+collection contains public taxpayer evidence only. The built-in Mongo `_id` index
+prevents duplicate RUC records; there is no financial-data migration. Supplier
+registration and invoice taxpayer checks share this source in MONGO mode. Original
+source and observation time are retained; cache reads never extend freshness.
+Inactive/non-habido responses remain negative. Cache evidence expires after 24
+hours; expired evidence cannot approve a taxpayer when an upstream refresh fails.
+An existing local Padrón may still provide fallback, but its dataset evidence must
+also meet that freshness limit. This is not a substitute for CPE verification.
+
+The web process starts a serial refresh loop automatically: at startup and every
+five minutes, refresh up to ten expired cached profiles; failed refreshes retry
+in an hour. Interactive requests independently refresh expired entries immediately.
+Render Free sleeps when idle: the worker cannot execute during sleep. Overdue
+refreshes resume after wake; this is daily evidence expiration, not a guaranteed
+03:00 daily job. A guaranteed clock-time schedule requires an independently hosted
+scheduler/worker or an always-on service. The worker does not keep Render awake.
+
+Deployment verification: confirm the `[WORKERS] SUNAT durable taxpayer cache
+enabled` startup log, query a real RUC, verify source/queriedAt, then repeat after a
+restart and confirm a fresh cached result is reused. Do not mark an invoice valid
+merely because its taxpayer lookup succeeded. New or expired RUCs still depend on
+SUNAT being reachable from Render; CAPTCHA/access restrictions are not bypassed.
+No banking, contacts, or compliance declarations are invented from public data.
+
+Rollback: unset SUNAT_TAXPAYER_CACHE_MODE to restore the existing disk-based
+provider. Retain the cache collection or remove it separately if no longer needed;
+no historical supplier/invoice evidence is rewritten by this feature.
