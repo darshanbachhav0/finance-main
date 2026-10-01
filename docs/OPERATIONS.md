@@ -312,3 +312,16 @@ SUNAT page. A recovered profile lookup also starts the representative lookup in
 the open supplier form. Cached profiles retain their original query timestamp;
 manual form edits remain protected. Successful lookup does not imply taxpayer
 eligibility or verified bank ownership.
+
+
+### Automatic supplier taxpayer validation
+
+With `SUNAT_PROVIDER_MODE=PADRON`, saving a new 11-digit RUC proposal now records
+server-fetched Consulta RUC evidence, with official Padron fallback. A result is
+accepted only for ACTIVO/HABIDO and matching RUC/legal name. Unavailable lookups
+leave the saved proposal pending. Accounting/Admin can retry from Supplier Detail
+using "Validate automatically with SUNAT"; final homologation rechecks the same
+control. The audit records source, evidence date, result and initiating user.
+Manual and mock provider modes retain their distinct behavior. This taxpayer
+check does not verify an invoice, bank account or Finance compliance review.
+No migration is required; existing pending suppliers can use the retry action.

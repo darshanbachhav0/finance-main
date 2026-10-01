@@ -1,5 +1,7 @@
 // Spanish copy for UI strings that previously fell back to English.
 export default {
+  "Validate automatically with SUNAT": "Validar automáticamente con SUNAT",
+
   "Automatic lookup is not configured on the server: Chromium is missing. Administration must redeploy with the SUNAT browser build check. The SUNAT Padrón fallback is also unavailable.": "La consulta automática no está configurada en el servidor: falta Chromium. Administración debe volver a desplegar con la comprobación del navegador SUNAT. El Padrón SUNAT de respaldo tampoco está disponible.",
   "The server is missing browser system dependencies. Administration must correct the deployment. The SUNAT Padrón fallback is also unavailable.": "Faltan dependencias del navegador en el servidor. Administración debe corregir el despliegue. El Padrón SUNAT de respaldo tampoco está disponible.",
   "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now. The SUNAT Padrón fallback is also unavailable.": "SUNAT está restringiendo el acceso automatizado desde este servidor. No se puede consultar la ficha en este momento. El Padrón SUNAT de respaldo tampoco está disponible.",
