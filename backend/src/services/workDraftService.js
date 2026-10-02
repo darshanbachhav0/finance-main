@@ -14,12 +14,12 @@ const roles = {
   "batch-invoice": ["Admin", "Accounting", "Solicitor"], "invoice-files": ["Admin", "Accounting", "Solicitor"],
   "invoice-resolution": ["Admin", "Accounting", "Solicitor"]
 };
-const resources = new Set(["cost-centers", "expense-types", "exchange-rates", "projects", "approval-rules", "budget-rules", "budget-allocations", "document-rules", "accounting-mappings", "bank-formats", "finance-configurations", "users"]);
+const resources = new Set(["cost-centers", "expense-types", "exchange-rates", "projects", "approval-rules", "budget-rules", "budget-allocations", "document-rules", "accounting-mappings", "bank-formats", "finance-configurations", "direct-payment-eligibility-rules", "users"]);
 export function assertDraftScope(user, scope) {
   if (typeof scope !== "string") throw new AppError(422, "Invalid draft form.");
   const resource = String(scope).replace(/^resource:/, "");
   const allowed = scope?.startsWith("resource:") && resources.has(resource)
-    ? ["users", "approval-rules", "bank-formats", "finance-configurations"].includes(resource) ? ["Admin"]
+    ? ["users", "approval-rules", "bank-formats", "finance-configurations", "direct-payment-eligibility-rules"].includes(resource) ? ["Admin"]
       : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Budget"] : ["Admin", "Accounting"] : roles[scope];
   if (!allowed?.includes(user.role)) throw new AppError(403, "Draft access is not available for this role.");
 }

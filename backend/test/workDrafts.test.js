@@ -16,12 +16,27 @@ test("private drafts: ownership, encrypted attachments, atomic conflicts, retry,
   await new Promise(resolve => server.on("listening", resolve));
   const base = `http://127.0.0.1:${server.address().port}/api/work-drafts`;
   try {
-    const users = await User.create([{ name: "Draft owner", email: "draft-owner@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Other owner", email: "other@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: "Accounting" }]);
+    const users = await User.create([{ name: "Draft owner", email: "draft-owner@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Other owner", email: "other@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: "Accounting" }, { name: "Admin", email: "admin@test.local", passwordHash: "unused", role: "Admin" }]);
     const token = index => jwt.sign({ id: users[index]._id }, process.env.JWT_SECRET || "dev_secret_change_me");
     const call = async (path, method = "GET", body, index = 0) => {
       const response = await fetch(`${base}${path}`, { method, headers: { Authorization: `Bearer ${token(index)}`, ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body) });
       return { status: response.status, body: await response.json() };
     };
+    // ResourceManager derives its scope from the API endpoint, not the configuration page slug.
+    const eligibilityScope = "resource:direct-payment-eligibility-rules";
+    const eligibilityId = crypto.randomUUID();
+    const eligibilityBody = { scope: eligibilityScope, recordId: "new", route: "/configuration/direct-payment-eligibility", title: "Track B Eligibility", revision: 0, mutationId: crypto.randomUUID(), value: { name: "IT direct payments", area: "IT", expenseNature: "Services", maxAmount: 500, active: true } };
+    assert.equal((await call(`?scope=${eligibilityScope}&recordId=new`, "GET", undefined, 3)).status, 200);
+    assert.equal((await call(`/${eligibilityId}`, "PUT", eligibilityBody, 3)).status, 200);
+    assert.equal((await call(`/${eligibilityId}`, "GET", undefined, 3)).body.data.value.maxAmount, 500);
+    assert.equal((await call(`?scope=${eligibilityScope}&recordId=new`, "GET", undefined, 3)).body.data.length, 1);
+    for (const index of [0, 2]) {
+      assert.equal((await call(`?scope=${eligibilityScope}`, "GET", undefined, index)).status, 403);
+      assert.equal((await call(`/${crypto.randomUUID()}`, "PUT", eligibilityBody, index)).status, 403);
+      assert.equal((await call(`/${eligibilityId}`, "GET", undefined, index)).status, 404);
+    }
+    assert.equal(await mongoose.connection.db.collection("directpaymenteligibilityrules").countDocuments(), 0, "Saving a draft must not enable Track B");
+    assert.equal((await call(`/${eligibilityId}?revision=1`, "DELETE", undefined, 3)).status, 200);
     const id = crypto.randomUUID();
     const body = { scope: "supplier", recordId: "new", route: "/suppliers", title: "Supplier proposal", revision: 0, mutationId: crypto.randomUUID(), value: { identifier: "20123456789", form: { contactName: "Saved contact", bankAccount: "0123456789" } } };
     let result = await call(`/${id}`, "PUT", body);
