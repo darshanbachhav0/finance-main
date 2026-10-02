@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import fs from "fs/promises";
+import path from "path";
 import { XMLParser } from "fast-xml-parser";
 import XmlValidationAttempt from "../models/XmlValidationAttempt.js";
 import { AppError } from "../utils/AppError.js";
@@ -75,13 +76,30 @@ function dateOnly(value) {
   return Number.isNaN(date.getTime()) ? String(value || "").slice(0, 10) : date.toISOString().slice(0, 10);
 }
 
+// An uploaded file recorded on the request but gone from the server's disk (for example storage
+// that was not persistent across a redeploy) is a clear, fixable condition for the user - not a
+// server error. Re-uploading the same document restores it.
+async function readStoredFile(filePath, encoding) {
+  try {
+    return await fs.readFile(filePath, encoding);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    throw new AppError(
+      422,
+      "The invoice XML saved for this request is no longer available on the server. Upload the same XML and PDF again in Documents, then retry.",
+      { file: path.basename(String(filePath || "")) },
+      ERROR_CODES.STORED_FILE_MISSING
+    );
+  }
+}
+
 export async function fileChecksum(filePath) {
-  const content = await fs.readFile(filePath);
+  const content = await readStoredFile(filePath);
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
 export async function parseInvoiceXml(filePath) {
-  const xml = await fs.readFile(filePath, "utf8");
+  const xml = await readStoredFile(filePath, "utf8");
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) {
     throw new AppError(422, "XML document type/entity declarations are not allowed.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }
