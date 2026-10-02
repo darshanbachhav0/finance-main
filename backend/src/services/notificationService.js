@@ -100,6 +100,15 @@ export async function resolveNotification(eventKey) {
   return Notification.updateMany({ eventKey, resolvedAt: null }, { $set: { resolvedAt: new Date() } });
 }
 
+// Closes every open task and alert of a request (e.g. when it is voided): nothing about it is
+// actionable any more.
+export async function resolveRequestNotifications(requestId) {
+  return Notification.updateMany(
+    { resolvedAt: null, $or: [{ entityType: "FinancialRequest", entityId: requestId }, { eventKey: { $regex: `^request:${String(requestId)}:` } }] },
+    { $set: { resolvedAt: new Date() } }
+  );
+}
+
 export async function listUserNotifications(userId, { unreadOnly = false, limit = 50 } = {}) {
   const query = { user: userId, resolvedAt: null };
   if (unreadOnly) query.readAt = null;

@@ -41,7 +41,9 @@ const transitionGraph = Object.freeze({
   CONCILIADO: ["CERRADO"],
   CERRADO: [], RECHAZADO: [], ANULADO: [],
   ...Object.fromEntries([...observationStates, "DEVUELTO"].map(status => [status,
-    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "APROBADO", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "RECHAZADO", "ANULADO"]]))
+    ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "APROBADO", "COMPROMISO_PRESUPUESTAL", "CONTABILIZADO", "DEVUELTO", "RECHAZADO", "ANULADO",
+      // A Track B budget observation, once resolved, can still find its invoice observed by SUNAT.
+      ...(status === "OBSERVADO_PRESUPUESTO" ? ["OBSERVADO_SUNAT"] : [])]]))
 });
 
 const roleTargets = Object.freeze({

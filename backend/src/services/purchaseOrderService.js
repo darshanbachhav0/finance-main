@@ -1,6 +1,7 @@
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import { recordAudit } from "./auditService.js";
+import { resolveNotification } from "./notificationService.js";
 import { nextPurchaseOrderNumber } from "./sequenceService.js";
 import { assertProcurementReady } from "./procurementReadinessService.js";
 import { cancelPurchaseOrderBalance } from "./purchaseOrderMatchingService.js";
@@ -149,10 +150,12 @@ export async function issueProcurementOrder({ requestId, user, req }) {
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   const existing = await PurchaseOrder.findOne({ request: request._id });
   if (existing) return existing;
-  return runFinancialOperation(async (session) => {
-    const order = await generatePurchaseOrder(request, user, req, { session });
-    request.purchaseOrder = order._id;
+  const order = await runFinancialOperation(async (session) => {
+    const created = await generatePurchaseOrder(request, user, req, { session });
+    request.purchaseOrder = created._id;
     await request.save({ session });
-    return order;
+    return created;
   });
+  await resolveNotification(`request:${request._id}:procurement`);
+  return order;
 }

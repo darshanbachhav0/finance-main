@@ -40,10 +40,11 @@ function sameObservedRequestVoucher(duplicate, request) {
   );
 }
 
-async function observeDirectPayment({ request, user, req, detail, code = ERROR_CODES.XML_VALIDATION_FAILED }) {
+async function observeDirectPayment({ request, user, req, detail, code = ERROR_CODES.XML_VALIDATION_FAILED, resolver = "REQUESTER" }) {
   request.observation = {
     code,
     detail,
+    resolver,
     observedAt: new Date(),
     observedBy: user._id,
     resolvedAt: undefined,
@@ -56,7 +57,8 @@ async function observeDirectPayment({ request, user, req, detail, code = ERROR_C
     req,
     action: "DIRECT_PAYMENT_OBSERVED",
     comments: detail,
-    skipControls: true
+    skipControls: true,
+    skipRoleCheck: true
   });
 }
 
@@ -139,18 +141,22 @@ export async function preflightDirectPayment({ request, user, req, observe = tru
     let observedVoucher = placeholder;
     if (observe) {
       observedVoucher = await saveObservedDirectPaymentVoucher({ request, supplier, voucher, detail, code: error.code, user, placeholder });
-      await observeDirectPayment({ request, user, req, detail, code: error.code || ERROR_CODES.XML_VALIDATION_FAILED });
+      // SUNAT could not be reached or is not configured: Accounting decides, not the requester.
+      await observeDirectPayment({ request, user, req, detail, code: error.code || ERROR_CODES.XML_VALIDATION_FAILED, resolver: "ACCOUNTING" });
     }
-    return { valid: false, voucher, detail, code: error.code || ERROR_CODES.XML_VALIDATION_FAILED, integrationError: error, placeholder: observedVoucher };
+    return { valid: false, voucher, detail, code: error.code || ERROR_CODES.XML_VALIDATION_FAILED, integrationError: error, placeholder: observedVoucher, resolver: "ACCOUNTING" };
   }
   if (!sunatResult.valid) {
     const detail = sunatResult.detail || "SUNAT rejected the invoice or the issuer is not HABIDO.";
+    // The supplier is a valid taxpayer but the invoice itself could not be verified: a manual
+    // SUNAT exception (Accounting) is the only resolution. A rejected taxpayer stays with the requester.
+    const resolver = sunatResult.taxpayer?.valid && sunatResult.fiscal ? "ACCOUNTING" : "REQUESTER";
     let observedVoucher = placeholder;
     if (observe) {
       observedVoucher = await saveObservedDirectPaymentVoucher({ request, supplier, voucher, detail, code: sunatResult.status, sunatResult, user, placeholder });
-      await observeDirectPayment({ request, user, req, detail, code: sunatResult.status || ERROR_CODES.XML_VALIDATION_FAILED });
+      await observeDirectPayment({ request, user, req, detail, code: sunatResult.status || ERROR_CODES.XML_VALIDATION_FAILED, resolver });
     }
-    return { valid: false, voucher, sunatResult, detail, code: sunatResult.status || ERROR_CODES.XML_VALIDATION_FAILED, placeholder: observedVoucher };
+    return { valid: false, voucher, sunatResult, detail, code: sunatResult.status || ERROR_CODES.XML_VALIDATION_FAILED, placeholder: observedVoucher, resolver };
   }
   return { valid: true, voucher, sunatResult, placeholder };
 }

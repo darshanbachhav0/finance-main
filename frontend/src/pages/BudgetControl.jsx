@@ -125,7 +125,9 @@ export default function BudgetControl() {
   }
 
   function exceptionActions(row) {
-    if (row.status === "PENDING" && canDecide) return [{ label: "Prepare / review", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "REVIEWED", title: "Review budget exception", description: "Record your recommendation for Management. This does not authorize an overrun.", confirmLabel: "Save review", inputLabel: "Recommendation", inputRequired: true }) }];
+    // Nothing is left to decide once the request itself is finished.
+    if (["CERRADO", "ANULADO", "RECHAZADO"].includes(row.request?.status)) return [];
+    if (row.status === "PENDING" && canDecide && !row.preparedAt) return [{ label: "Prepare / review", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "REVIEWED", title: "Review budget exception", description: "Record your recommendation for Management. This does not authorize an overrun.", confirmLabel: "Save review", inputLabel: "Recommendation", inputRequired: true }) }];
     const id = value => String(value?._id || value || "");
     // Budget reviews first; Management can decide only an exception Budget has reviewed.
     const canApprove = user.role === "Management" && Boolean(row.preparedAt) && ![row.requestedBy, row.preparedBy, row.request?.requester, row.request?.solicitor].some(value => value && id(value) === id(user._id));

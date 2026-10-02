@@ -17,7 +17,12 @@ export async function notifyEmployeeBankReview(account) {
 }
 
 export async function resolveEmployeeBankReview(account) {
+  await resolveNotification(`employee-bank:${account._id}:bounced-review`);
   return resolveNotification(reviewKey(account));
+}
+
+export async function resolveSupplierBankReview(account) {
+  return resolveNotification(`supplier-bank:${account._id}:bounced-review`);
 }
 
 // A BANK_DETAILS bounce flags the destination account OBSERVED; Accounting must re-verify it (or

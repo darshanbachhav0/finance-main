@@ -27,8 +27,31 @@ export function canViewSuppliers(role) {
   return SUPPLIER_VIEW_ROLES.includes(role);
 }
 
+// SUNAT confirmed the supplier but could not verify the individual invoice (SUNAT down, or the
+// Padron-only mode, which can never verify a CPE), or the SUNAT integration failed. Nothing the
+// requester edits changes that: only Accounting's manual SUNAT exception resolves it. Older
+// observations predate observation.resolver and are recognised by their SUNAT status code.
+const SUNAT_UNVERIFIED_CODES = ["PADRON_RUC_VERIFIED_CPE_NOT_VALIDATED", "COMPROBANTE_NO_VERIFICADO"];
+
+// OBSERVADO_PRESUPUESTO: Budget/Management resolve the budget exception (resolver BUDGET); only
+// after Management rejects it does the request go back to its requester (resolver REQUESTER).
+export function observationOwner(request) {
+  const status = canonicalRequestStatus(request?.status);
+  if (status === REQUEST_STATUS.OBSERVED_BUDGET) return request.observation?.resolver || "REQUESTER";
+  if (status !== REQUEST_STATUS.OBSERVED_SUNAT) return undefined;
+  if (request.observation?.resolver) return request.observation.resolver;
+  return SUNAT_UNVERIFIED_CODES.includes(request.observation?.code) ? "ACCOUNTING" : "REQUESTER";
+}
+
+// A request that was ever sent for approval keeps its approval history: it can be voided, not deleted.
+export function wasSubmitted(request) {
+  return (request?.approvalHistory || []).some((entry) => entry.action === "APPROVAL_REQUESTED");
+}
+
 export function canModifyRequest(request, user) {
   if (!request || !user || isTerminalRequest(request.status)) return false;
+  // Resubmitting would only repeat the approvals and end in the same observation.
+  if (["ACCOUNTING", "BUDGET"].includes(observationOwner(request))) return false;
   // An issued order is an approved snapshot. Invoice observations must be
   // corrected through invoice registration, not by restarting request approval.
   if (request.purchaseOrder) return false;

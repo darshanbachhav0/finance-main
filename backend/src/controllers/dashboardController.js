@@ -137,7 +137,9 @@ async function buildTasks(user) {
   if (user.role === ROLES.SOLICITOR) {
     const owner = ownerScope(user);
     const draftQuery = { ...owner, status: REQUEST_STATUS.DRAFT };
-    const correctionQuery = { ...owner, status: { $in: OWNER_CORRECTION_STATUSES } };
+    // Observations waiting on Accounting (manual SUNAT exception) or Budget (budget exception) are
+    // not the requester's task.
+    const correctionQuery = { ...owner, status: { $in: OWNER_CORRECTION_STATUSES }, "observation.resolver": { $nin: ["ACCOUNTING", "BUDGET"] }, "observation.code": { $nin: ["PADRON_RUC_VERIFIED_CPE_NOT_VALIDATED", "COMPROBANTE_NO_VERIFICADO"] } };
     const [drafts, corrections] = await Promise.all([FinancialRequest.countDocuments(draftQuery), FinancialRequest.countDocuments(correctionQuery)]);
     items.push({ key: "drafts", label: "Drafts to finish", count: drafts, path: (await singleRecordPath(drafts, FinancialRequest, draftQuery, (record) => `/requests/${record._id}/edit`)) || `/requests?status=${REQUEST_STATUS.DRAFT}`, tone: "neutral" });
     items.push({ key: "corrections", label: "Requests to correct", count: corrections, path: (await singleRecordPath(corrections, FinancialRequest, correctionQuery, (record) => `/requests/${record._id}`)) || `/requests?status=${OWNER_CORRECTION_STATUSES.join("%2C")}`, tone: "red" });

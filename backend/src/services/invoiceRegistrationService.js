@@ -432,8 +432,9 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
  * Accounting approves a manual SUNAT exception on an observed invoice (SUNAT down, or PADRON-only
  * mode which can never verify a CPE). One Accounting user is enough. The exception is audited and
  * the invoice is posted immediately when it can be: A1 invoices are provisioned to CXP, A2 batch
- * observations are revalidated, adjustment notes are applied. Track B and manually processed
- * requests post on their next processing attempt, which now accepts the exception.
+ * observations are revalidated, adjustment notes are applied. A Track B request whose approvals
+ * are complete continues to budget commitment and CXP immediately, without new approvals.
+ * Manually processed requests post on their next processing attempt, which accepts the exception.
  */
 export async function approveManualSunatException({ requestId, voucherId, reason, evidenceReference, user, req }) {
   const request = await FinancialRequest.findById(requestId).populate("supplier");
@@ -467,6 +468,14 @@ export async function approveManualSunatException({ requestId, voucherId, reason
   }
   if (voucher.accountsPayable) return { ...outcome, provisioned: true };
   try {
+    if (request.flowType === FLOW_TYPE.B && request.status === REQUEST_STATUS.OBSERVED_SUNAT) {
+      // Imported lazily: approvalService depends on this module's neighbours.
+      const { commitApprovedRequestBudget } = await import("./approvalService.js");
+      const current = await FinancialRequest.findById(request._id).select("+attachments.path").populate("supplier");
+      const result = await commitApprovedRequestBudget({ request: current, user, req, automatic: true });
+      if (result.status !== REQUEST_STATUS.ACCOUNTED) return deferredPosting(new Error(result.observation?.detail || "The invoice could not be posted after the manual SUNAT exception."));
+      return { ...outcome, provisioned: true, request: result, accountsPayable: await AccountsPayable.findOne({ request: result._id, status: { $ne: "CANCELLED" } }) };
+    }
     if (voucher.batch) {
       const observation = await InvoiceObservation.findOne({ voucher: voucher._id, resolutionStatus: "OPEN" });
       if (!observation) return outcome;

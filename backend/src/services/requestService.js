@@ -29,7 +29,7 @@ import {
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, notifyApprovalStep, resolveApprovalNotifications, resolveNotification } from "./notificationService.js";
+import { notifyRoles, notifyApprovalStep, resolveApprovalNotifications, resolveNotification, resolveRequestNotifications } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
@@ -48,7 +48,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, requestVisibilityFilter } from "../utils/permissions.js";
+import { canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
@@ -993,6 +993,7 @@ export async function voidFinancialRequest({ id, user, req, comments }) {
     await cancelProcurementOnVoid({ request, user, req, reason, session });
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.VOIDED, user, req, action: "VOIDED", comments: reason, session });
   });
+  await resolveRequestNotifications(request._id);
   await request.populate(requestPopulate);
   return request;
 }
@@ -1016,6 +1017,9 @@ export async function deleteFinancialRequest({ id, user, req }) {
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
   if (!canModifyRequest(request, user) || request.status !== REQUEST_STATUS.DRAFT) {
     throw new AppError(403, "Only permitted draft requests can be deleted.", { status: request.status }, ERROR_CODES.FORBIDDEN);
+  }
+  if (wasSubmitted(request)) {
+    throw new AppError(409, "This request was already sent for approval; its history is kept. Void it instead of deleting it.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "DELETE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await recordAudit({ entityType: "FinancialRequest", entity: request, action: "DELETED", user, req, module: "REQUESTS", oldValues: { status: request.status, requestNumber: request.requestNumber } });
@@ -1107,6 +1111,7 @@ export function publicRequestPayload(value, user, actionContext) {
   const object = value?.toObject ? value.toObject() : plainClone(value);
   if (object?.status) object.status = canonicalRequestStatus(object.status);
   if (object && user && !object.allowedActions) object.allowedActions = allowedRequestActions(value, user, actionContext);
+  if (object) object.observationOwner = observationOwner(value);
   for (const attachment of object?.attachments || []) delete attachment.path;
   return object;
 }

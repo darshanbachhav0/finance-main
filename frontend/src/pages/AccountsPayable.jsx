@@ -358,7 +358,8 @@ export default function AccountsPayable() {
               icon: FileDiff,
               onClick: () => openNote(row)
             }] : []),
-            ...(["OPEN", "SCHEDULED"].includes(row.status) ? [{
+            // The server refuses cancellation once notes, credits or the SPOT deposit were applied.
+            ...(["OPEN", "SCHEDULED"].includes(row.status) && !row.adjustments?.length && !row.supplierCreditApplications?.length && row.detraction?.status !== "DEPOSITED" ? [{
               label: "Cancel unpaid CXP",
               icon: Ban,
               tone: "danger",

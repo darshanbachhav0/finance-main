@@ -5,7 +5,7 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { recordAudit } from "./auditService.js";
 import { applyBudgetExceptionIncrease } from "./budgetPlanService.js";
-import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
+import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { runFinancialOperation } from "./transactionService.js";
 
 // Configurable, per-dimension authority: Budget/Admin always prepare an
@@ -50,6 +50,9 @@ export function exceptionReviewed(exception) {
 
 export function assertExceptionDecisionAllowed(exception, request, user, action, approverRole = ROLES.MANAGEMENT) {
   if (exception.status !== "PENDING") throw new AppError(409, "This exception has already been decided.");
+  if ([REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED].includes(request?.status)) {
+    throw new AppError(409, "The request of this exception is already closed, voided or rejected; there is nothing left to decide.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
   if (action === "REVIEWED") {
     if (!["Budget", "Admin"].includes(user.role)) throw new AppError(403, "Budget review permission is required.");
     return;
@@ -101,7 +104,7 @@ export async function recordBudgetExceptionDecision(id, action, comments, user, 
   if (!String(comments || "").trim()) throw new AppError(422, "Review/decision comments are required.");
   const exception = await BudgetException.findById(id);
   if (!exception) throw new AppError(404, "Budget exception not found.");
-  const request = await FinancialRequest.findById(exception.request).select("requester solicitor requestNumber accountingPeriod status");
+  const request = await FinancialRequest.findById(exception.request).select("requester solicitor requestNumber accountingPeriod status observation");
   const approverRole = await resolveExceptionApproverRole(exception);
   assertExceptionDecisionAllowed(exception, request, user, action, approverRole);
   const at = new Date();
@@ -123,6 +126,21 @@ export async function recordBudgetExceptionDecision(id, action, comments, user, 
     await recordAudit({ entityType: "BudgetException", entity: decided, requestId: decided.request, action, user, req, module: "BUDGET", comments, oldValues: { status: exception.status }, newValues: { status: decided.status, approverRole, ...fields, appliedIncrease: decided.appliedIncrease?.amount !== undefined ? decided.appliedIncrease : undefined }, session });
     return decided;
   });
+  if (action === "REJECTED" && request?.status === REQUEST_STATUS.OBSERVED_BUDGET) {
+    await FinancialRequest.updateOne({ _id: request._id, status: REQUEST_STATUS.OBSERVED_BUDGET }, {
+      $set: { "observation.resolver": "REQUESTER", "observation.detail": `Management rejected the budget exception: ${comments}` }
+    });
+    await notifyUser({
+      userId: request.requester || request.solicitor,
+      eventKey: `request:${request._id}:budget-exception-rejected:${updated._id}`,
+      type: "REQUEST_OBSERVED",
+      title: notificationText("Budget exception rejected"),
+      message: notificationText("{requestNumber}: Management rejected the budget exception. Adjust the request (for example the amount) and submit it for approval again.", { requestNumber: request.requestNumber }),
+      path: `/requests/${request._id}/edit`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  }
   await notifyAfterDecision(updated, request, action);
   return updated;
 }
