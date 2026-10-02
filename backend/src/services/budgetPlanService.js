@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import CostCenter from "../models/CostCenter.js";
-import ExpenseType from "../models/ExpenseType.js";
 import { recordAudit } from "./auditService.js";
 import { budgetAvailable, budgetLimits, findBudgetAllocation, isBudgetPlan } from "./budgetAllocationService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -46,7 +45,7 @@ export function serializeBudgetPlan(plan) {
 
 export async function getBudgetPlan(id) {
   if (!mongoose.isValidObjectId(id)) throw invalid("Select a valid budget plan.");
-  const plan = await BudgetAllocation.findById(id).populate("costCenter expenseType");
+  const plan = await BudgetAllocation.findById(id).populate("costCenter");
   if (!isBudgetPlan(plan)) throw new AppError(404, "Budget plan not found.", undefined, ERROR_CODES.NOT_FOUND);
   return serializeBudgetPlan(plan);
 }
@@ -55,20 +54,20 @@ export async function createBudgetPlan(payload, user, req) {
   assertManager(user);
   if (!validBudgetYear(payload.year)) throw invalid("Enter a budget year between 2000 and 2199.");
   if (!Object.hasOwn(BUDGET_PLANNING_MODES, payload.planningMode)) throw invalid("Select a valid budget planning mode.");
-  if (!mongoose.isValidObjectId(payload.costCenter) || !mongoose.isValidObjectId(payload.expenseType)) throw invalid("Select a Cost Center and expense account.");
+  if (!mongoose.isValidObjectId(payload.costCenter)) throw invalid("Select a Cost Center.");
   if (payload.project !== undefined && (typeof payload.project !== "string" || payload.project.length > 150)) throw invalid("Enter a project of at most 150 characters.");
   const project = (payload.project || "").trim();
   const annual = amount(payload.assignedAmount);
   if (annual <= 0) throw invalid("The annual budget must be greater than zero.");
   const notes = reason(payload.reason);
-  const [center, expense] = await Promise.all([CostCenter.findById(payload.costCenter), ExpenseType.findById(payload.expenseType)]);
-  if (!center?.active || !expense?.active) throw invalid("Select an active Cost Center and expense account.");
-  const dimension = { costCenter: center._id, expenseType: expense._id, project };
+  const center = await CostCenter.findById(payload.costCenter);
+  if (!center?.active) throw invalid("Select an active Cost Center.");
+  const dimension = { costCenter: center._id, project };
   const year = String(payload.year);
   const existing = await BudgetAllocation.findOne({ ...dimension, period: new RegExp(`^${year}(?:-|$)`) });
-  if (existing) throw new AppError(409, "An allocation already exists for this year and dimension. Existing allocations remain unchanged; choose another year or dimension.", { allocation: existing._id }, ERROR_CODES.CONFLICT);
-  const historical = await BudgetCommitment.exists({ period: new RegExp(`^${year}-`), lines: { $elemMatch: { costCenter: center._id, expenseType: expense._id, project: project || { $in: ["", null] } } } });
-  if (historical) throw new AppError(409, "This dimension already has budget activity in the selected year. Create a plan for a new year to preserve its recorded usage.", undefined, ERROR_CODES.CONFLICT);
+  if (existing) throw new AppError(409, "This Cost Center already has a budget for this year. Existing budgets remain unchanged; adjust it from Budget Control or choose another year.", { allocation: existing._id }, ERROR_CODES.CONFLICT);
+  const historical = await BudgetCommitment.exists({ period: new RegExp(`^${year}-`), lines: { $elemMatch: { costCenter: center._id, project: project || { $in: ["", null] } } } });
+  if (historical) throw new AppError(409, "This Cost Center already has budget activity in the selected year. Create a plan for a new year to preserve its recorded usage.", undefined, ERROR_CODES.CONFLICT);
   let distributed = Array(12).fill(0);
   if (payload.planningMode === "ANNUAL_MONTHLY") {
     if (payload.distribution === "EQUAL") distributed = distributeAnnualBudget(annual);
@@ -137,7 +136,7 @@ export async function assertLegacyAllocationChange(payload, current) {
   const candidate = { ...(current?.toObject?.() || {}), ...payload };
   const year = String(candidate.period || "").slice(0, 4);
   if (!validBudgetYear(year)) throw invalid("Enter a valid budget year or month.");
-  const plan = await BudgetAllocation.exists({ period: year, costCenter: candidate.costCenter, expenseType: candidate.expenseType, project: candidate.project || "", planningMode: { $in: Object.keys(BUDGET_PLANNING_MODES) } });
+  const plan = await BudgetAllocation.exists({ period: year, costCenter: candidate.costCenter, project: candidate.project || "", planningMode: { $in: Object.keys(BUDGET_PLANNING_MODES) } });
   if (plan) throw new AppError(409, "A linked annual budget already controls this dimension. Use Budget Control to adjust it.", undefined, ERROR_CODES.CONFLICT);
 }
 
@@ -152,7 +151,7 @@ const positive = (value) => roundMoney(Math.max(0, Number(value) || 0));
 export async function applyBudgetExceptionIncrease(exception, request, user, req, { session } = {}) {
   const period = request?.accountingPeriod;
   if (!validBudgetPeriod(period)) throw invalid("The request needs a valid accounting month before its budget can be increased.");
-  const line = { costCenter: exception.costCenter, expenseType: exception.expenseType, project: exception.project || "" };
+  const line = { costCenter: exception.costCenter, project: exception.project || "" };
   const required = roundMoney(exception.requestedAmount || 0);
   const reasonText = `Budget increase approved by Management through the budget exception of request ${request.requestNumber || exception.request}.`;
   const base = { appliedAt: new Date(), appliedBy: user._id, costCenter: exception.costCenter };
@@ -188,12 +187,12 @@ export async function applyBudgetExceptionIncrease(exception, request, user, req
 
 const OPEN_COMMITMENT_STATUSES = [BUDGET_STATUS.COMMITTED, BUDGET_STATUS.PARTIALLY_EXECUTED, BUDGET_STATUS.EXECUTED, BUDGET_STATUS.PARTIALLY_PAID];
 const CARRY_OVER_REASON = "YEAR_END_CARRY_OVER";
-const dimensionOf = (allocation) => ({ costCenter: allocation.costCenter, expenseType: allocation.expenseType || null, project: allocation.project || "" });
-const sameDimensionQuery = (allocation) => ({ costCenter: allocation.costCenter, expenseType: allocation.expenseType || null, project: allocation.project || { $in: ["", null] } });
+const dimensionOf = (allocation) => ({ costCenter: allocation.costCenter, project: allocation.project || "" });
+const sameDimensionQuery = (allocation) => ({ costCenter: allocation.costCenter, project: allocation.project || { $in: ["", null] } });
 
 // The next year's home for a carried commitment: an existing linked plan for the same
 // dimension, otherwise an existing legacy allocation for that year, otherwise a new plan in the
-// source plan's mode (or a new legacy annual allocation when the source had no expense account).
+// source plan's mode (or a new legacy annual allocation when the source was a legacy one).
 async function carryOverTarget(source, toYear, user, session, created) {
   const dimension = sameDimensionQuery(source);
   const plan = await BudgetAllocation.findOne({ ...dimension, period: toYear, planningMode: { $in: Object.keys(BUDGET_PLANNING_MODES) } }).session(session || null);
@@ -201,7 +200,7 @@ async function carryOverTarget(source, toYear, user, session, created) {
   const legacy = await BudgetAllocation.findOne({ ...dimension, period: toYear }).session(session || null)
     || await BudgetAllocation.findOne({ ...dimension, period: `${toYear}-01` }).session(session || null);
   if (legacy) return legacy;
-  const planningMode = isBudgetPlan(source) && source.expenseType ? source.planningMode : "LEGACY";
+  const planningMode = isBudgetPlan(source) ? source.planningMode : "LEGACY";
   const values = {
     ...dimensionOf(source), period: toYear, planningMode, assignedAmount: 0, active: true,
     ...(planningMode === "LEGACY" ? {} : {

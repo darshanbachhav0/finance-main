@@ -2,7 +2,6 @@ import { recordBudgetExceptionDecision } from "../services/budgetExceptionServic
 import BudgetException from "../models/BudgetException.js";
 import BudgetCommitment from "../models/BudgetCommitment.js";
 import CostCenter from "../models/CostCenter.js";
-import ExpenseType from "../models/ExpenseType.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { commitApprovedRequestBudget, resolveBudgetCommitmentFailure } from "../services/approvalService.js";
@@ -47,7 +46,6 @@ export const listBudgetCommitments = asyncHandler(async (req, res) => {
     BudgetCommitment.find(query)
       .populate("request", "requestNumber requestType status priority requesterArea requestingArea project")
       .populate("lines.costCenter", "code name area budgetMode")
-      .populate("lines.expenseType", "code name accountNumber category")
       .populate("lines.budgetException")
       .populate("createdBy", "name role")
       .sort(sort).skip(skip).limit(pageSize),
@@ -75,17 +73,15 @@ export const listBudgetExceptions = asyncHandler(async (req, res) => {
   }
   if (req.query.search) {
     const search = new RegExp(escapedRegex(req.query.search), "i");
-    const [requestIds, costCenterIds, expenseTypeIds] = await Promise.all([
+    const [requestIds, costCenterIds] = await Promise.all([
       FinancialRequest.find({ requestNumber: search }).distinct("_id"),
-      CostCenter.find({ $or: [{ code: search }, { name: search }] }).distinct("_id"),
-      ExpenseType.find({ $or: [{ code: search }, { name: search }, { accountNumber: search }] }).distinct("_id")
+      CostCenter.find({ $or: [{ code: search }, { name: search }] }).distinct("_id")
     ]);
     clauses.push({ $or: [
       { dimensionKey: search },
       { strategy: search },
       { request: { $in: requestIds } },
-      { costCenter: { $in: costCenterIds } },
-      { expenseType: { $in: expenseTypeIds } }
+      { costCenter: { $in: costCenterIds } }
     ] });
   }
   const query = clauses.length ? { $and: clauses } : {};
@@ -94,7 +90,6 @@ export const listBudgetExceptions = asyncHandler(async (req, res) => {
     BudgetException.find(query)
       .populate("request", "requestNumber requestType status totalPENEquivalent accountingPeriod requester solicitor")
       .populate("costCenter", "code name area")
-      .populate("expenseType", "code name accountNumber")
       .populate("requestedBy reviewedBy preparedBy", "name role")
       .sort(sort).skip(skip).limit(pageSize),
     BudgetException.countDocuments(query)

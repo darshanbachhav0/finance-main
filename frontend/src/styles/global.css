@@ -963,7 +963,7 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .repeatable-line { display: grid; align-items: end; gap: 8px; padding: 10px; border: 1px solid var(--gray-200); border-radius: 6px; background: var(--gray-50); }
 .repeatable-line.mobility-line { grid-template-columns: 22px minmax(105px, .8fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(180px, 1.4fr) minmax(100px, .7fr) 34px; }
 .repeatable-line.unsupported-line { grid-template-columns: 22px minmax(105px, .7fr) minmax(240px, 2fr) minmax(130px, .8fr) minmax(105px, .7fr) 34px; }
-.repeatable-line.accounting-rendition-line { grid-template-columns: 22px minmax(170px, 1.4fr) minmax(180px, 1.4fr) repeat(3, minmax(90px, .65fr)); }
+.repeatable-line.accounting-rendition-line { grid-template-columns: 22px minmax(170px, 1.4fr) repeat(3, minmax(90px, .65fr)); }
 .repeatable-line.has-warning { border-color: #dfc073; background: var(--surface-tint-fffaf0); }
 .line-number { display: grid; width: 22px; height: 22px; place-items: center; align-self: center; border-radius: 50%; color: white; background: var(--navy-700); font-size: 12px; font-weight: 800; }
 .repeatable-line .field { gap: 4px; }
@@ -991,6 +991,9 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .checkbox-row.acknowledgment { padding: 12px; border: 1px solid #b8d8d5; border-radius: 6px; background: var(--surface-tint-f2f9f8); }
 .checkbox-row.acknowledgment span { display: grid; gap: 2px; }
 .checkbox-row.acknowledgment small { color: var(--gray-600); }
+.checkbox-row.with-hint span { display: grid; gap: 2px; }
+.checkbox-row.with-hint strong { font-weight: 600; }
+.checkbox-row.with-hint small { color: var(--gray-600); }
 .rendition-submit-bar { display: grid; grid-template-columns: minmax(210px, .8fr) minmax(240px, 1fr) auto; align-items: end; gap: 10px; padding: 14px 0 18px; border-top: 1px solid var(--gray-200); }
 .finance-review-row { display: grid; grid-template-columns: 130px 170px minmax(180px, 1fr); gap: 14px; align-items: start; }
 .finance-review-row > div { display: grid; gap: 5px; min-width: 0; }

@@ -16,7 +16,6 @@ const budgetRuleSchema = new mongoose.Schema(
     exceptionEscalationAmount: { type: Number, min: 0 },
     exceptionEscalationApproverRole: { type: String, enum: [ROLES.MANAGEMENT] },
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter" },
-    expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType" },
     project: { type: String, trim: true, default: "*" },
     active: { type: Boolean, default: true },
     effectiveFrom: Date,
@@ -25,7 +24,7 @@ const budgetRuleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-budgetRuleSchema.index({ active: 1, costCenter: 1, expenseType: 1, project: 1 });
+budgetRuleSchema.index({ active: 1, costCenter: 1, project: 1 });
 
 export default mongoose.model("BudgetRule", budgetRuleSchema);
 

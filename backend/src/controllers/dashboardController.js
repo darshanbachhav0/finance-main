@@ -107,7 +107,6 @@ async function openBudgetExceptions({ awaitingDecision = false } = {}) {
   const exceptions = await BudgetException.find(query)
     .populate({ path: "request", select: "requestNumber requestType status totalAmount currency totalPENEquivalent requester solicitor requesterArea requestingArea", populate: { path: "requester", select: "name area" } })
     .populate("costCenter", "code name area")
-    .populate("expenseType", "code name accountNumber")
     .populate("requestedBy preparedBy", "name role")
     .sort({ preparedAt: 1, createdAt: 1 });
   return exceptions.filter((exception) => exception.request && !TERMINAL_REQUEST_STATUSES.includes(exception.request.status));

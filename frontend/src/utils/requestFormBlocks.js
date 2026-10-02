@@ -18,9 +18,9 @@ export const REQUEST_FORM_BLOCKS = [
   {
     id: "budget",
     title: "Budget",
-    description: "Where the spend is charged: area, CECO, month, currency and expense category.",
-    fields: ["requesterCostCenter", "issueDate", "accountingPeriod", "currency", "defaultExpenseType"],
-    linePattern: /^lines\.\d+\.(costCenter|expenseType)$/
+    description: "Where the spend is charged: area, CECO, month and currency.",
+    fields: ["requesterCostCenter", "issueDate", "accountingPeriod", "currency"],
+    linePattern: /^lines\.\d+\.costCenter$/
   },
   {
     id: "items",

@@ -84,14 +84,13 @@ export default function MasterConfiguration() {
   const { resource = "approval-rules" } = useParams();
   const { user } = useAuth();
   const { t, language } = useLanguage();
-  const [masters, setMasters] = useState({ costCenters: [], expenseTypes: [] });
+  const [masters, setMasters] = useState({ costCenters: [] });
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      api.get("/cost-centers", { params: { pageSize: 100 } }),
-      api.get("/expense-types", { params: { pageSize: 100 } })
-    ]).then(([centers, expenses]) => setMasters({ costCenters: centers.data.data, expenseTypes: expenses.data.data })).catch((err) => setError(err.message));
+    api.get("/cost-centers", { params: { pageSize: 100 } })
+      .then((centers) => setMasters({ costCenters: centers.data.data }))
+      .catch((err) => setError(err.message));
   }, []);
 
   const configs = useMemo(() => ({
@@ -140,25 +139,23 @@ export default function MasterConfiguration() {
         { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
         { name: "exceptionStrategy", label: "Exception strategy", type: "select", options: ["REJECT", "REQUEST_BUDGET_INCREASE", "EXTRAORDINARY_APPROVAL"], defaultValue: "REJECT" },
         { type: "section", label: "Applies to" }, { name: "costCenter", label: "Cost center", type: "select", options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
-        { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project", defaultValue: "*" },
         { type: "section", label: "Exception authority" }, { name: "exceptionApproverRole", label: "Exception approver role", type: "select", defaultValue: "Management", options: ["Management"], hint: "Only Management/Rectorate authority may decide a budget exception - Admin cannot approve on Management's behalf." },
         { name: "exceptionEscalationAmount", label: "Escalate above amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Optional. Above this requested amount, a different (higher) authority is required instead." },
         { name: "exceptionEscalationApproverRole", label: "Escalated approver role", type: "select", options: ["Management"], hint: "Required only when an escalation amount is set. Same Management-only restriction applies." },
         { type: "section", label: "Validity" }, { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "active", label: "Status" }]
+      columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "active", label: "Status" }]
     },
     "budget-allocations": {
       label: "Budget Allocations", roles: ["Admin", "Budget"], endpoint: "/budget-allocations",
-      description: "Maintain assigned budget by period, Cost Center, expense classification, and project.",
+      description: "Maintain assigned budget by period, Cost Center, and project.",
       fields: [
         { name: "period", label: "Period / year", required: true, placeholder: "YYYY or YYYY-MM" },
         { name: "costCenter", label: "Cost center", type: "select", required: true, options: masters.costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}` })) },
-        { name: "expenseType", label: "Expense type", type: "select", options: masters.expenseTypes.map((item) => ({ value: item._id, label: `${item.accountNumber} - ${item.name}` })) },
         { name: "project", label: "Project" }, { name: "assignedAmount", label: "Assigned amount", type: "number", min: 0, step: "0.01", required: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "expenseType", label: "Expense type", render: (row) => row.expenseType?.accountNumber || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
+      columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
     },
     "accounting-mappings": {
       label: "Accounting Mappings", roles: ["Admin", "Accounting"], endpoint: "/accounting-mappings",

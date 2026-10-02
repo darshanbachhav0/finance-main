@@ -162,7 +162,7 @@ export default function RequestDetail() {
   const [related, setRelated] = useState(emptyRelated);
   const [requirements, setRequirements] = useState([]);
   const [documentStatus, setDocumentStatus] = useState({ currentPhase: "SUBMISSION", phases: {} });
-  const [masters, setMasters] = useState({ costCenters: [], expenseTypes: [] });
+  const [masters, setMasters] = useState({ costCenters: [] });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -177,18 +177,14 @@ export default function RequestDetail() {
       const nextRequest = { ...response.data.data, status: canonicalRequestStatus(response.data.data.status) };
       setRequest(nextRequest);
       setRelated({ ...emptyRelated, ...(response.data.related || {}) });
-      const [requirementsResponse, centersResponse, expensesResponse] = await Promise.all([
+      const [requirementsResponse, centersResponse] = await Promise.all([
         api.get(`/requests/${id}/document-requirements`),
-        api.get("/cost-centers", { params: { pageSize: 100, active: true } }),
-        api.get("/expense-types", { params: { pageSize: 100, active: true } })
+        api.get("/cost-centers", { params: { pageSize: 100, active: true } })
       ]);
       const nextDocumentStatus = requirementsResponse.data.data || { currentPhase: "SUBMISSION", phases: {} };
       setDocumentStatus(nextDocumentStatus);
       setRequirements(nextDocumentStatus.phases?.SUBMISSION?.requirements || []);
-      setMasters({
-        costCenters: centersResponse.data.data || [],
-        expenseTypes: expensesResponse.data.data || []
-      });
+      setMasters({ costCenters: centersResponse.data.data || [] });
       setError("");
     } catch (err) {
       setError(err.message);
@@ -573,7 +569,8 @@ export default function RequestDetail() {
               columns={[
                 { key: "itemDescription", label: "Description" },
                 { key: "costCenter", label: "Cost center", render: (row) => `${row.costCenterSnapshot?.code || row.costCenter?.code || "-"} · ${row.costCenterSnapshot?.name || row.costCenter?.name || ""}` },
-                { key: "expenseType", label: "Expense type / account", render: (row) => `${row.expenseType?.code || row.expenseTypeSnapshot?.code || "-"} · ${row.expenseType?.accountNumber || row.expenseTypeSnapshot?.accountNumber || ""}` },
+                // Accounting accounts are Accounting's decision; requesters and approvers never see them.
+                ...(["Accounting", "Admin"].includes(user?.role) ? [{ key: "expenseType", label: "Accounting account", render: (row) => `${row.expenseType?.accountNumber || row.expenseTypeSnapshot?.accountNumber || "-"} · ${row.expenseType?.name || row.expenseTypeSnapshot?.name || ""}` }] : []),
                 { key: "quantity", label: "Qty", align: "right" },
                 { key: "unitPrice", label: "Unit price", align: "right", render: (row) => formatCurrency(row.unitPrice, row.currency || request.currency, language) },
                 { key: "netAmount", label: "Net", align: "right", render: (row) => formatCurrency(row.netAmount, row.currency || request.currency, language) },
@@ -630,7 +627,7 @@ export default function RequestDetail() {
               {(related.budgetPreview?.lines || []).length > 0 && (
                 <DataTable
                   controls={false}
-                  rows={related.budgetPreview.lines.map((row, index) => ({ ...row, _id: `${row.costCenter}-${row.expenseType}-${index}` }))}
+                  rows={related.budgetPreview.lines.map((row, index) => ({ ...row, _id: `${row.costCenter}-${row.project || ""}-${index}` }))}
                   columns={[
                     { key: "costCenterSnapshot", label: "Cost center", render: (row) => `${row.costCenterSnapshot?.code || "-"} · ${row.costCenterSnapshot?.name || ""}` },
                     { key: "mode", label: "Mode", render: (row) => <StatusBadge status={row.mode} /> },

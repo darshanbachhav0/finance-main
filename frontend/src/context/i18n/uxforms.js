@@ -25,7 +25,7 @@ export default {
   "Track, classification and a clear description of the requirement.": "Ruta, clasificación y una descripción clara del requerimiento.",
   "Why?": "¿Por qué?",
   "The business reason and what happens if it is not approved.": "La razón de negocio y qué pasa si no se aprueba.",
-  "Where the spend is charged: area, CECO, month, currency and expense category.": "Dónde se imputa el gasto: área, CECO, mes, moneda y categoría de gasto.",
+  "Where the spend is charged: area, CECO, month and currency.": "Dónde se imputa el gasto: área, CECO, mes y moneda.",
   "Items and amounts": "Ítems y montos",
   "Complete": "Completo",
   "Optional": "Opcional",
@@ -37,7 +37,6 @@ export default {
   // Field messages shown while filling the form
   "The issue date must fall within an open accounting period.": "La fecha de emisión debe estar dentro de un período contable abierto.",
   "The date must fall within an open accounting period.": "La fecha debe estar dentro de un período contable abierto.",
-  "Select an expense category.": "Selecciona una categoría de gasto.",
   "Select CAPEX or OPEX.": "Selecciona CAPEX u OPEX.",
   "At least one request line is required.": "Agrega al menos un ítem.",
   "Item description is required.": "La descripción del ítem es obligatoria.",

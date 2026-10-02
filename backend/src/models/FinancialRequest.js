@@ -36,7 +36,11 @@ const lineSchema = new mongoose.Schema(
     priceIncludesIGV: { type: Boolean, default: undefined },
     commercialTotal: { type: Number, min: 0, default: 0 },
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter", required: true },
-    expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType", required: true },
+    // Accounting account (PCGE) of the line. Requesters never choose it: the platform suggests
+    // one from the request type and expense nature, and Accounting confirms or replaces it when
+    // processing the invoice. It plays no part in budget control.
+    expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType" },
+    accountSource: { type: String, enum: ["SUGGESTED", "ACCOUNTING"] },
     budgetItem: { type: String, trim: true, default: "" },
     projectId: { type: String, trim: true, default: "" },
     subAccount: { type: String, trim: true, default: "" },
@@ -366,6 +370,9 @@ const financialRequestSchema = new mongoose.Schema(
       fiscalPeriod: { type: String, match: /^\d{4}-\d{2}$/ },
       accountNumber: { type: String, trim: true },
       subaccountNumber: { type: String, trim: true },
+      igvDeductible: { type: Boolean, default: undefined },
+      spotConfirmed: Boolean,
+      spotCategoryCode: { type: String, trim: true },
       comments: String,
       processedAt: Date,
       processedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }

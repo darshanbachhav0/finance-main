@@ -21,9 +21,8 @@ export async function budgetAllocationRows(filters = {}) {
   const query = { active: true };
   if (filters.period) query.period = new RegExp(`^${String(filters.period).slice(0, 4)}(?:-|$)`);
   if (filters.costCenter) query.costCenter = filters.costCenter;
-  if (filters.expenseType) query.expenseType = filters.expenseType;
   if (filters.project) query.project = filters.project;
-  const documents = await BudgetAllocation.find(query).select("-adjustments").populate("costCenter expenseType").sort({ period: -1, createdAt: -1 }).lean();
+  const documents = await BudgetAllocation.find(query).select("-adjustments").populate("costCenter").sort({ period: -1, createdAt: -1 }).lean();
   const monthly = Boolean(filters.period && validBudgetPeriod(filters.period));
   const month = monthly ? Number(filters.period.slice(5)) : null;
   const rows = [];
@@ -38,7 +37,7 @@ export async function budgetAllocationRows(filters = {}) {
         unallocatedAmount: allocation.planningMode === "ANNUAL_MONTHLY" ? subtractMoney(allocation.assignedAmount, sumMoney(allocation.months.map((entry) => entry.assignedAmount))) : null,
         source: "LINKED_ANNUAL_PLAN", reportingScope: limited ? "PERIOD" : "ANNUAL_ONLY_ACTIVITY" });
     } else {
-      const key = [allocation.period.slice(0, 4), allocation.costCenter?._id, allocation.expenseType?._id, allocation.project || ""].join("|");
+      const key = [allocation.period.slice(0, 4), allocation.costCenter?._id, allocation.project || ""].join("|");
       legacyGroups.set(key, [...(legacyGroups.get(key) || []), allocation]);
     }
   }
@@ -67,7 +66,7 @@ export async function budgetAllocationRows(filters = {}) {
         availableAmount: subtractMoney(subtractMoney(center.annualBudget, center.committedAmount), center.executedAmount), source: "TRANSITIONAL_COST_CENTER", reportingScope: "UNDATED_LEGACY" });
     }
   }
-  return rows.filter((row) => (!filters.source || row.source === filters.source) && (!filters.search || `${row.costCenter?.code} ${row.costCenter?.name} ${row.expenseType?.name} ${row.expenseType?.accountNumber} ${row.project} ${row.period}`.toLowerCase().includes(String(filters.search).toLowerCase())));
+  return rows.filter((row) => (!filters.source || row.source === filters.source) && (!filters.search || `${row.costCenter?.code} ${row.costCenter?.name} ${row.project} ${row.period}`.toLowerCase().includes(String(filters.search).toLowerCase())));
 }
 
 // TRANSITIONAL (Phase 1) lines never touch pooled Cost Center / allocation balances, so the
@@ -107,8 +106,8 @@ export async function budgetOverview(filters = {}) {
     const period = budgetPeriodFilter(filters.period);
     const requests = period ? await FinancialRequest.find({ accountingPeriod: period }).distinct("_id") : null;
     [commitments, exceptions] = await Promise.all([
-      BudgetCommitment.find(period ? { period } : {}).populate("request lines.costCenter lines.expenseType createdBy").sort({ createdAt: -1 }).limit(500),
-      BudgetException.find({ ...(requests ? { request: { $in: requests } } : {}), ...(filters.exceptionStatus ? { status: filters.exceptionStatus } : {}) }).populate("request costCenter expenseType requestedBy reviewedBy").sort({ createdAt: -1 }).limit(200)
+      BudgetCommitment.find(period ? { period } : {}).populate("request lines.costCenter createdBy").sort({ createdAt: -1 }).limit(500),
+      BudgetException.find({ ...(requests ? { request: { $in: requests } } : {}), ...(filters.exceptionStatus ? { status: filters.exceptionStatus } : {}) }).populate("request costCenter requestedBy reviewedBy").sort({ createdAt: -1 }).limit(200)
     ]);
   }
   return { totals, allocations: rows, commitments, exceptions, warnings,

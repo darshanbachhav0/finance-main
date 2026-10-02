@@ -17,8 +17,8 @@ import {
 import { authorize, authorizePermission, protect } from "../middleware/auth.js";
 import { PERMISSIONS, ROLES } from "../utils/constants.js";
 
-function bindCrud(router, controller, writeRoles = [ROLES.ADMIN, ROLES.ACCOUNTING]) {
-  router.get("/", protect, controller.list);
+function bindCrud(router, controller, writeRoles = [ROLES.ADMIN, ROLES.ACCOUNTING], readRoles) {
+  router.get("/", protect, ...(readRoles ? [authorize(...readRoles)] : []), controller.list);
   router.post("/", protect, authorize(...writeRoles), controller.create);
   router.put("/:id", protect, authorize(...writeRoles), controller.update);
   router.delete("/:id", protect, authorize(...writeRoles), controller.remove);
@@ -28,7 +28,8 @@ export const costCenterRouter = Router();
 bindCrud(costCenterRouter, costCenters);
 
 export const expenseTypeRouter = Router();
-bindCrud(expenseTypeRouter, expenseTypes);
+// The accounting account catalog is Accounting's tool: requesters never see or choose accounts.
+bindCrud(expenseTypeRouter, expenseTypes, [ROLES.ADMIN, ROLES.ACCOUNTING], [ROLES.ADMIN, ROLES.ACCOUNTING]);
 
 export const exchangeRateRouter = Router();
 exchangeRateRouter.get("/current", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), exchangeRates.current);

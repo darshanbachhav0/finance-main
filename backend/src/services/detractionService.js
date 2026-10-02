@@ -2,16 +2,14 @@
 // retention is ever computed here; the only deduction is the detraccion deposit, owed when the
 // purchased good or service belongs to a SPOT category (R.S. 183-2004/SUNAT and its annexes)
 // and the operation exceeds the category's minimum amount.
-import mongoose from "mongoose";
-import ExpenseType from "../models/ExpenseType.js";
 import SpotCategory from "../models/SpotCategory.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import { recordAudit } from "./auditService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, FLOW_TYPE, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+import { ERROR_CODES, FLOW_TYPE, LEGACY_EXPENSE_NATURE_MAP, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 import { multiplyMoney, roundMoney } from "../utils/money.js";
-import { SPOT_DEFAULT_CATEGORIES, SPOT_DEFAULT_EFFECTIVE_FROM, detractionAmountPen } from "../../../shared/spotCategories.mjs";
+import { SPOT_DEFAULT_CATEGORIES, SPOT_DEFAULT_EFFECTIVE_FROM, detractionAmountPen, suggestedSpotCategoryCode } from "../../../shared/spotCategories.mjs";
 
 const NON_SPOT_REQUEST_TYPES = new Set([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_CON_SUSTENTO, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
 // Receipts for independent work (4th category), advances and internal receipts are outside SPOT.
@@ -81,22 +79,25 @@ export function pendingDetractionAmount(accountsPayable) {
   return accountsPayable?.detraction?.status === "PENDING" ? roundMoney(accountsPayable.detraction.amount || 0) : 0;
 }
 
-// Works out whether a CXP is subject to SPOT. The category comes from the expense types of the
-// request lines; when lines carry different categories the highest rate is applied to the whole
-// invoice (conservative: an under-deposit is what SUNAT penalises).
+// The SPOT category of an invoice: the one Accounting confirmed when processing it (an empty
+// confirmed code means "not subject to SPOT"), otherwise the suggestion for the request's
+// expense nature.
+export function spotCategoryCodeFor({ request, accountsPayable }) {
+  const treatment = accountsPayable?.accountingTreatment;
+  if (treatment?.spotConfirmed) return treatment.spotCategoryCode || "";
+  if (request?.fiscalData?.spotConfirmed) return request.fiscalData.spotCategoryCode || "";
+  return suggestedSpotCategoryCode(LEGACY_EXPENSE_NATURE_MAP[request?.expenseNature] || request?.expenseNature);
+}
+
+// Works out whether a CXP is subject to SPOT, from the category above.
 export async function determineDetraction({ request, accountsPayable, session }) {
   const notApplicable = { status: "NOT_APPLICABLE", determinedAt: new Date() };
   if (!accountsPayable?.supplier || accountsPayable.flowType === FLOW_TYPE.C || NON_SPOT_REQUEST_TYPES.has(request?.requestType)) return notApplicable;
   if (NON_SPOT_VOUCHER_TYPES.has(String(accountsPayable.voucher?.voucherType || "").toUpperCase())) return notApplicable;
-  const expenseTypeIds = (request.lines || []).map((line) => line.expenseType?._id || line.expenseType).filter((value) => mongoose.isValidObjectId(value));
-  if (!expenseTypeIds.length) return notApplicable;
-  const expenseTypes = await ExpenseType.find({ _id: { $in: expenseTypeIds }, spotCategoryCode: { $nin: ["", null] } }).select("spotCategoryCode").session(session || null).lean();
+  const code = spotCategoryCodeFor({ request, accountsPayable });
+  if (!code) return notApplicable;
   const at = accountsPayable.voucher?.documentDate || request.issueDate || new Date();
-  let category = null;
-  for (const code of new Set(expenseTypes.map((item) => item.spotCategoryCode))) {
-    const candidate = await findSpotCategory(code, at, { session });
-    if (candidate && (!category || candidate.rate > category.rate)) category = candidate;
-  }
+  const category = await findSpotCategory(code, at, { session });
   if (!category) return notApplicable;
   const exchangeRate = Number(accountsPayable.exchangeRate || 1);
   const baseAmountPen = roundMoney(accountsPayable.penEquivalent ?? multiplyMoney(accountsPayable.originalAmount, exchangeRate));

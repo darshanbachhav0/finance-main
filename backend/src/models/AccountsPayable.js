@@ -125,6 +125,16 @@ const accountsPayableSchema = new mongoose.Schema(
       by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       at: Date
     },
+    // Tax treatment Accounting sets when processing the invoice. igvDeductible undefined means
+    // "follow the document" (boletas/tickets are never creditable). spotConfirmed with an empty
+    // spotCategoryCode means Accounting confirmed the invoice is not subject to SPOT.
+    accountingTreatment: {
+      igvDeductible: { type: Boolean, default: undefined },
+      spotConfirmed: { type: Boolean, default: false },
+      spotCategoryCode: { type: String, trim: true, default: "", match: /^(\d{3})?$/ },
+      confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      confirmedAt: Date
+    },
     // SPOT detraccion. UMA is not an IGV withholding agent, so there is no retention - only the
     // detraccion deposit to the supplier's Banco de la Nacion account when the good/service is
     // subject to SPOT. The CXP is PAID only after both the net transfer and the deposit.

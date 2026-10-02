@@ -17,6 +17,12 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
+import { SPOT_CATEGORY_OPTIONS, suggestedSpotCategoryCode } from "../../../shared/spotCategories.mjs";
+
+const NON_CREDITABLE_DOCUMENTS = ["BOLETA"];
+// The account category a request type books to (mirrors accountingDimensionService).
+const accountCategory = (requestType) => requestType === "CAPEX" ? "CAPEX" : requestType === "REEMBOLSO_SIN_SUSTENTO" ? "NON_DEDUCTIBLE" : "OPEX";
+const accountsFor = (accounts, requestType) => accounts.filter((item) => item.active !== false && item.category === accountCategory(requestType) && (!item.permittedRequestTypes?.length || item.permittedRequestTypes.includes(requestType)));
 
 export default function AccountingEntries() {
   const [focusView, setFocusView] = useState("Processing");
@@ -30,7 +36,8 @@ export default function AccountingEntries() {
   const [exporting, setExporting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [fiscalForm, setFiscalForm] = useState({ documentType: "FACTURA", series: "", number: "", documentDate: "", accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: new Date().toISOString().slice(0, 7), dueDate: "", accountNumber: "", subaccountNumber: "", comments: "" });
+  const [fiscalForm, setFiscalForm] = useState({ documentType: "FACTURA", series: "", number: "", documentDate: "", accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: new Date().toISOString().slice(0, 7), dueDate: "", accountingAccount: "", igvDeductible: true, spotCategoryCode: "", subaccountNumber: "", comments: "" });
+  const [accountingAccounts, setAccountingAccounts] = useState([]);
   const entriesTable = usePaginatedResource("/accounting/entries", { fixedParams: { period } });
   const pendingTable = usePaginatedResource("/accounting/pending", { fixedParams: { period } });
   const historyTable = usePaginatedResource("/accounting/exports");
@@ -112,18 +119,36 @@ export default function AccountingEntries() {
   const draft = useWorkDraft({ scope: "fiscal", recordId: selectedRequest?._id || "new", title: "Fiscal processing", enabled: Boolean(selectedRequest), value: fiscalForm, restore: setFiscalForm, sourceVersion: selectedRequest?.updatedAt });
   useDraftResume("fiscal", async id => { try { const response = await api.get(`/requests/${id}`); openFiscalProcessing(response.data.data); } catch (err) { setActionError(err.message); } });
 
+  useEffect(() => {
+    api.get("/expense-types", { params: { pageSize: 100, active: true } })
+      .then((response) => setAccountingAccounts(response.data.data || []))
+      .catch((err) => setActionError(err.message));
+  }, []);
+
+  // The platform suggests the account (from the request type and expense nature) and the SPOT
+  // category (from the expense nature); Accounting confirms or changes both here.
   function openFiscalProcessing(request) {
     const documentDate = request.issueDate?.slice(0, 10) || "";
+    const suggestedAccount = request.lines?.[0]?.expenseType?._id || request.lines?.[0]?.expenseType || "";
     setSelectedRequest(request);
-    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountNumber: request.lines?.[0]?.expenseType?.accountNumber || "", subaccountNumber: "", comments: "" });
+    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountingAccount: String(suggestedAccount), igvDeductible: true, spotCategoryCode: suggestedSpotCategoryCode(request.expenseNature), subaccountNumber: "", comments: "" });
   }
+
+  const creditableDocument = !NON_CREDITABLE_DOCUMENTS.includes(fiscalForm.documentType);
+  const accountOptions = useMemo(() => selectedRequest ? accountsFor(accountingAccounts, selectedRequest.requestType) : [], [accountingAccounts, selectedRequest]);
 
   async function processRequest(event) {
     event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
     try {
-      await api.post(`/accounting/requests/${selectedRequest._id}/process`, { ...fiscalForm, fiscalPeriod: fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod });
+      const { igvDeductible, ...fiscal } = fiscalForm;
+      await api.post(`/accounting/requests/${selectedRequest._id}/process`, {
+        ...fiscal,
+        fiscalPeriod: fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod,
+        // Boletas never give tax credit; the override only applies to creditable documents.
+        ...(creditableDocument ? { igvDeductible } : {})
+      });
       await draft.complete();
       notify("Fiscal document validated and account payable created.");
       setSelectedRequest(null);
@@ -138,7 +163,7 @@ export default function AccountingEntries() {
   return (
     <section>
       <PageHeader title="Accounting Entries" description="Process fiscal documents, post balanced journals, reconcile the month, and retain export history." actions={<><Link className="secondary-button" to="/accounting/payables">{t("Accounts Payable")}</Link><Link className="secondary-button" to="/accounting/periods">{t("Manage periods")}</Link></>} />
-      <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Accounting Mappings", "/configuration/accounting-mappings"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Expense Types", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Management Reports", "/reports"]]} />
+      <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Accounting Mappings", "/configuration/accounting-mappings"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Accounting Accounts", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Management Reports", "/reports"]]} />
       <Message type="error">{actionError || entriesTable.error || pendingTable.error || historyTable.error}</Message>
 
       <div className="period-toolbar">
@@ -239,7 +264,9 @@ export default function AccountingEntries() {
           <label className="field"><span>{t("Accounting date")} *</span><DateInput required value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
           <label className="field"><span>{t("Fiscal period")}</span><MonthInput readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
           <label className="field"><span>{t("Due date")}</span><DateInput value={fiscalForm.dueDate} onChange={(event) => setFiscalForm({ ...fiscalForm, dueDate: event.target.value })} /><small>{t("Optional override. Otherwise use the agreed terms; milestone payments require a confirmed payment date.")}</small></label>
-          <label className="field"><span>{t("Account number")}</span><input value={fiscalForm.accountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, accountNumber: event.target.value })} /><small className="field-hint">{t("Posting uses the account of each line's Expense Type. A different account number is rejected.")}</small></label>
+          <label className="field"><span>{t("Accounting account")} *</span><select required value={fiscalForm.accountingAccount} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingAccount: event.target.value })}><option value="">{t("Select")}</option>{accountOptions.map((item) => <option key={item._id} value={item._id}>{item.accountNumber} - {item.name}</option>)}</select><small className="field-hint">{t("Suggested from the request type and the nature of the expense. Requesters never see accounts.")}</small></label>
+          <label className="field"><span>{t("Detraction (SPOT)")}</span><select value={fiscalForm.spotCategoryCode} onChange={(event) => setFiscalForm({ ...fiscalForm, spotCategoryCode: event.target.value })}><option value="">{t("Not subject to SPOT")}</option>{SPOT_CATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small className="field-hint">{t("Suggested from the nature of the expense. Confirm it for this invoice.")}</small></label>
+          <label className="checkbox-row with-hint form-span-two"><input type="checkbox" checked={creditableDocument && fiscalForm.igvDeductible} disabled={!creditableDocument} onChange={(event) => setFiscalForm({ ...fiscalForm, igvDeductible: event.target.checked })} /><span><strong>{t("IGV is deductible (tax credit)")}</strong><small>{t(creditableDocument ? "Clear it when this invoice's IGV cannot be claimed: it is then booked as cost." : "Boletas do not give tax credit; the IGV is booked as cost.")}</small></span></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>
         </form></DraftPanel>

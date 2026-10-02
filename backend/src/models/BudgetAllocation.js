@@ -32,8 +32,9 @@ const budgetAllocationSchema = new mongoose.Schema(
     planningMode: { type: String, enum: ["LEGACY", ...Object.keys(BUDGET_PLANNING_MODES)], default: "LEGACY" },
     months: { type: [monthlyBudgetSchema], default: undefined },
     adjustments: { type: [adjustmentSchema], default: undefined },
+    // Budget is held per Cost Center only (optionally narrowed by project). Requests draw on it
+    // without choosing an expense category; the accounting account is set later by Accounting.
     costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter", required: true },
-    expenseType: { type: mongoose.Schema.Types.ObjectId, ref: "ExpenseType" },
     project: { type: String, trim: true, default: "" },
     assignedAmount: { type: Number, required: true, min: 0, default: 0 },
     committedAmount: { type: Number, min: 0, default: 0 },
@@ -47,15 +48,17 @@ const budgetAllocationSchema = new mongoose.Schema(
 budgetAllocationSchema.pre("validate", function validatePlan() {
   if (this.planningMode === "LEGACY") return;
   if (!validBudgetYear(this.period)) this.invalidate("period", "A valid budget year is required.");
-  if (!this.expenseType) this.invalidate("expenseType", "Select an expense account.");
   if (this.months?.length !== 12 || this.months.some((month, index) => month.month !== index + 1)) this.invalidate("months", "A plan must contain January through December in order.");
   const distributed = (this.months || []).reduce((sum, month) => sum + Math.round(month.assignedAmount * 100), 0);
   if (distributed > Math.round(this.assignedAmount * 100)) this.invalidate("months", "Monthly allocations cannot exceed the annual budget.");
 });
 
+// The former { period, costCenter, expenseType, project } index ("budget_dimension_unique") is
+// dropped by scripts/migrateCostCenterBudgets.js, which also merges the per-expense-type rows.
+export const LEGACY_DIMENSION_INDEX = "budget_dimension_unique";
 budgetAllocationSchema.index(
-  { period: 1, costCenter: 1, expenseType: 1, project: 1 },
-  { unique: true, name: "budget_dimension_unique" }
+  { period: 1, costCenter: 1, project: 1 },
+  { unique: true, name: "budget_cost_center_unique" }
 );
 budgetAllocationSchema.index({ active: 1, period: 1 });
 

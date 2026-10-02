@@ -41,10 +41,10 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
       assert.equal((await BudgetAllocation.findById(allocation._id)).committedAmount, 0);
     });
 
-    await t.test("a specific zero allocation cannot borrow from the general pool", async () => {
+    await t.test("a specific zero project allocation cannot borrow from the Cost Center's general pool", async () => {
       const pooled = await CostCenter.findOne({ code: "30007-POOL" });
-      const specific = await BudgetAllocation.create({ period: "2043-09", costCenter: pooled._id, expenseType: expense._id, assignedAmount: 0 });
-      const draftRequest = request("2043-09", 8000, { lines: [{ costCenter: pooled._id, expenseType: expense._id, totalAmount: 8000 }] });
+      const specific = await BudgetAllocation.create({ period: "2043-09", costCenter: pooled._id, project: "ZERO-PROJECT", assignedAmount: 0 });
+      const draftRequest = request("2043-09", 8000, { project: "ZERO-PROJECT", lines: [{ costCenter: pooled._id, totalAmount: 8000 }] });
       const preview = await previewBudget(draftRequest);
       assert.equal(String(preview.lines[0].allocation), String(specific._id));
       assert.equal(preview.status, "INSUFFICIENT");

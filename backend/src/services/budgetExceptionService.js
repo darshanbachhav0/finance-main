@@ -32,10 +32,9 @@ export async function resolveExceptionApproverRole(exception) {
     active: true,
     $and: [
       { $or: [{ costCenter: exception.costCenter }, { costCenter: null }, { costCenter: { $exists: false } }] },
-      { $or: [{ expenseType: exception.expenseType }, { expenseType: null }, { expenseType: { $exists: false } }] },
       { $or: [{ project: exception.project || "" }, { project: "*" }, { project: "" }] }
     ]
-  }).sort({ costCenter: -1, expenseType: -1, project: -1 }).limit(1);
+  }).sort({ costCenter: -1, project: -1 }).limit(1);
   const rule = rules[0];
   if (rule?.exceptionEscalationApproverRole && rule.exceptionEscalationAmount !== undefined && Number(exception.requestedAmount) > Number(rule.exceptionEscalationAmount)) {
     return safeApproverRole(rule.exceptionEscalationApproverRole);

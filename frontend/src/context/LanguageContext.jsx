@@ -1402,7 +1402,6 @@ const phase3RequestSpanish = {
   "CAPEX financial information": "Información financiera CAPEX",
   "OPEX financial information": "Información financiera OPEX",
   "Planning information is recorded only; no depreciation or NPV calculation is generated.": "La información es solo de planificación; no se genera depreciación ni cálculo de VAN.",
-  "The expense account remains controlled by the configured accounting master.": "La cuenta de gasto continúa controlada por el maestro contable configurado.",
   "Project / PEP": "Proyecto / PEP",
   "Fixed asset category": "Categoría de activo fijo",
   "Useful life (years)": "Vida útil (años)",
@@ -1847,7 +1846,7 @@ Object.assign(spanishDictionary, {"My Requests": "Mis solicitudes", "Approvals":
 
 Object.assign(spanishDictionary, { "SUNAT administration": "Administración SUNAT", "Sections": "Secciones", "Processing": "Por procesar", "Entries": "Asientos", "Consolidation": "Consolidación", "Exceptions": "Excepciones", "Commitments": "Compromisos", "Invoices": "Comprobantes", "Pending payments": "Pagos pendientes", "Generate BBVA TXT": "Generar TXT BBVA" });
 Object.assign(spanishDictionary, { "Current phase only": "Solo etapa actual", "All document phases": "Todas las etapas documentales" });
-Object.assign(spanishDictionary, { "Expense category for these items": "Categoría de gasto para estos ítems", "Search expense category...": "Buscar categoría de gasto...", "Choose the expense category for these items.": "Seleccione la categoría de gasto de estos ítems.", "Request month": "Mes de la solicitud", "Hide optional documents": "Ocultar documentos opcionales", "Additional documents": "Documentos adicionales" });
+Object.assign(spanishDictionary, { "Request month": "Mes de la solicitud", "Hide optional documents": "Ocultar documentos opcionales", "Additional documents": "Documentos adicionales" });
 const LanguageContext = createContext(null);
 Object.assign(spanishDictionary, {
   "Please complete or correct:": "Completa o corrige lo siguiente:",
