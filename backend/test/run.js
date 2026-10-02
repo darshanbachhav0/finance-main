@@ -64,3 +64,7 @@ import "./globalSearch.test.js";
 import "./dashboardTasks.test.js";
 
 import "./sessionRefresh.test.js";
+
+import "./supplierAutomaticLookup.test.js";
+
+import "./taxpayerProfileCache.test.js";

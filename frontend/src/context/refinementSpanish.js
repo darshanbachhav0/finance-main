@@ -1,5 +1,17 @@
 // Spanish copy for UI strings that previously fell back to English.
 export default {
+  "Validate automatically with SUNAT": "Validar automáticamente con SUNAT",
+
+  "Automatic lookup is not configured on the server: Chromium is missing. Administration must redeploy with the SUNAT browser build check. The SUNAT Padrón fallback is also unavailable.": "La consulta automática no está configurada en el servidor: falta Chromium. Administración debe volver a desplegar con la comprobación del navegador SUNAT. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "The server is missing browser system dependencies. Administration must correct the deployment. The SUNAT Padrón fallback is also unavailable.": "Faltan dependencias del navegador en el servidor. Administración debe corregir el despliegue. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now. The SUNAT Padrón fallback is also unavailable.": "SUNAT está restringiendo el acceso automatizado desde este servidor. No se puede consultar la ficha en este momento. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "Consulta RUC did not respond within the lookup time limit. The SUNAT Padrón fallback is also unavailable.": "Consulta RUC no respondió dentro del tiempo límite. El Padrón SUNAT de respaldo tampoco está disponible.",
+  "Consulta RUC could not return a usable supplier profile. The SUNAT Padrón fallback is also unavailable.": "Consulta RUC no pudo devolver una ficha de proveedor utilizable. El Padrón SUNAT de respaldo tampoco está disponible.",
+
+  "SUNAT automatic lookup temporarily unavailable": "Consulta automática SUNAT temporalmente no disponible",
+  "Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.": "No se pudo consultar Consulta RUC y el Padrón de respaldo no está disponible. Reintentaremos automáticamente; puede continuar completando el formulario.",
+  "Enter an RUC. UMA checks Consulta RUC automatically, using SUNAT Padrón if unavailable.": "Ingrese un RUC. UMA consulta Consulta RUC automáticamente y utiliza el Padrón SUNAT como respaldo si no está disponible.",
+
   "8 digits": "8 dígitos",
   "A signed CCI letter is mandatory before the CXP returns to the payment queue.": "Se requiere una carta CCI firmada antes de que la CXP vuelva a la cola de pagos.",
   "A1 and A2 vouchers, batch outcomes and isolated observations are independently traceable.": "Los comprobantes A1 y A2, los resultados de lote y las observaciones aisladas se rastrean por separado.",
@@ -234,6 +246,10 @@ export default {
   "Review every invoice-level CXP independently, including A2 batch origin, Purchase Order balance, SUNAT result, payment priority, and bounced-payment status.": "Revisa cada CXP por comprobante: origen del lote A2, saldo de la OC, resultado SUNAT, prioridad de pago y rebotes.",
   "Review renditions": "Revisar rendiciones",
   "Role / title": "Rol / cargo",
+  "SUNAT Consulta RUC data loaded automatically": "Datos de Consulta RUC SUNAT cargados automáticamente",
+  "Consulta RUC unavailable. Official Padrón fallback used.": "Consulta RUC no disponible. Se utilizó el Padrón oficial como respaldo.",
+  "SUNAT Padrón temporarily unavailable": "Padrón SUNAT temporalmente no disponible",
+  "We will retry automatically and fill untouched fields when SUNAT Padrón becomes available. You can keep completing this form.": "Reintentaremos automáticamente y completaremos los campos sin editar cuando el Padrón SUNAT esté disponible. Puede seguir completando el formulario.",
   "RUC not found in the current SUNAT Padrón": "RUC no encontrado en el Padrón SUNAT vigente",
   "Schedule payments": "Programar pagos",
   "School": "Escuela",

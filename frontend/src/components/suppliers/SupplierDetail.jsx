@@ -12,6 +12,7 @@ import {
   Landmark,
   Plus,
   Power,
+  RefreshCw,
   Save,
   ShieldCheck,
   Star,
@@ -320,6 +321,13 @@ export default function SupplierDetail({
           <Detail label="Validated At" value={displayDate(supplier.taxpayerValidation?.validatedAt, language)} />
           <Detail label="Validated By" value={supplier.taxpayerValidation?.validatedBy?.name} />
         </DetailGrid>
+        {permissions.canReview && provider.variant === "PADRON" && (
+          <div className="inline-form-actions">
+            <button type="button" className="primary-button" disabled={loading} onClick={() => onTaxValidation({})}>
+              <RefreshCw size={15} /><span>{t("Validate automatically with SUNAT")}</span>
+            </button>
+          </div>
+        )}
         {permissions.canReview && provider.state === "MANUAL" && (
           <DraftPanel busy={loading} draft={taxDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitTax}>
             <div className="form-grid supplier-form-grid">

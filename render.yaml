@@ -20,6 +20,8 @@ services:
       mountPath: /var/data
       sizeGB: 10
     envVars:
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI

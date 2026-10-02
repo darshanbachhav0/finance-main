@@ -24,7 +24,7 @@
     "migrate:official-formats:apply": "npm run migrate:official-formats:apply --workspace backend",
     "verify:data": "npm run verify:data --workspace backend",
     "verify:uma-demo": "npm run verify:uma-demo --workspace backend",
-    "build": "npm run build --workspace frontend",
+    "build": "node scripts/ensureSunatBrowser.js && npm run build --workspace frontend",
     "start": "npm start --workspace backend",
     "start:public": "npm run start:public --workspace backend",
     "share": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/share-cloudflare.ps1 start",

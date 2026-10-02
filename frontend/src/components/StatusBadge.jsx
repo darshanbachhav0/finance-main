@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
@@ -12,7 +13,7 @@ const classes = {
   OBSERVADO_MONTO_EXCEDIDO: "badge badge-amber",
   OBSERVADO_CARGA_MASIVA: "badge badge-amber",
   PAGO_REBOTADO: "badge badge-red",
-  PAGADO_CERRADO: "badge badge-dark",
+  PAGADO_CERRADO: "badge badge-green badge-complete",
   DEVUELTO: "badge badge-amber",
   APROBADO: "badge badge-blue",
   APROBADO_DIRECTOR: "badge badge-blue",
@@ -26,7 +27,7 @@ const classes = {
   PAGADO: "badge badge-green",
   CONCILIADO: "badge badge-green",
   RENDICION_PENDIENTE: "badge badge-amber",
-  CERRADO: "badge badge-dark",
+  CERRADO: "badge badge-green badge-complete",
   ANULADO: "badge badge-red",
   PENDING_VALIDATION: "badge badge-amber",
   OBSERVED: "badge badge-amber",
@@ -105,5 +106,5 @@ const classes = {
 export default function StatusBadge({ status }) {
   if (status !== "RENDICION_PENDIENTE") status = canonicalRequestStatus(status);
   const { t } = useLanguage();
-  return <span className={classes[status] || "badge badge-gray"}><span className="badge-label">{t(status || "N/A")}</span></span>;
+  return <span className={classes[status] || "badge badge-gray"}>{status === "CERRADO" && <Check size={13} aria-hidden="true" />}<span className="badge-label">{t(status || "N/A")}</span></span>;
 }

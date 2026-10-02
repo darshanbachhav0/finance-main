@@ -6,6 +6,7 @@ import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js"
 import { paginatedPayload, parsePagination, parseSort, escapedRegex } from "./queryService.js";
 import { nextSupplierCode } from "./sequenceService.js";
 import { sunatService } from "./sunatService.js";
+import { getSupplierAutomaticPrefill } from "./supplierPadronLookupService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { AppError } from "../utils/AppError.js";
@@ -674,7 +675,15 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
         newValues: { documentKinds: uploadedDocuments.map((item) => item.kind) }
       });
     }
-    return { supplier, warnings: bankResult.warnings || [] };
+    const warnings = bankResult.warnings || [];
+    if (sunatService.status().variant === "PADRON" && identifier.length === 11) {
+      try { await validateAutomaticSupplierTaxpayer(supplier, user, req); }
+      catch (error) {
+        warnings.push({ code: "TAXPAYER_VALIDATION_PENDING", message: "Supplier saved. Automatic SUNAT validation is pending; Accounting can retry it from Taxpayer Validation." });
+        console.warn("[SUPPLIER] Automatic taxpayer review pending:", error.code || error.name);
+      }
+    }
+    return { supplier, warnings };
   } catch (error) {
     await cleanupUploadedFiles(persistedFiles);
     await SupplierBankAccount.deleteMany({ supplier: supplier._id }).catch(() => undefined);
@@ -938,6 +947,7 @@ export async function validateSupplierTaxpayer({ supplierId, payload, user, req 
   assertFinanceUser(user, "Only Accounting or Admin can validate supplier taxpayer information.");
   const supplier = await loadSupplier(supplierId);
   const provider = sunatService.status();
+  if (provider.variant === "PADRON") return validateAutomaticSupplierTaxpayer(supplier, user, req);
   const result = await sunatService.validateTaxpayer(supplier.normalizedIdentifier || supplier.rucDni, {
     authorizedDecision: provider.mode === "MANUAL",
     valid: parseBoolean(payload.valid),
@@ -946,12 +956,17 @@ export async function validateSupplierTaxpayer({ supplierId, payload, user, req 
     comments: payload.comments,
     user
   });
+  return recordSupplierTaxpayerResult({ supplier, result, provider, user, req, payload });
+}
+
+async function recordSupplierTaxpayerResult({ supplier, result, provider, user, req, payload = {} }) {
   const returnedIdentifier = result.returnedIdentifier || result.identifier || result.ruc || "";
   const returnedLegalName = result.returnedLegalName || result.legalName || result.name || "";
   const identifierMatch = matchResult(supplier.normalizedIdentifier || supplier.rucDni, normalizeSupplierIdentifier(returnedIdentifier));
   const legalNameMatch = matchResult(supplier.legalName || supplier.name, returnedLegalName);
+  const valid = result.valid && identifierMatch === "MATCH" && legalNameMatch === "MATCH";
   supplier.taxpayerValidation = {
-    status: result.valid ? "VALID" : "INVALID",
+    status: valid ? "VALID" : "INVALID",
     providerMode: provider.state,
     providerConfigured: provider.configured,
     source: result.source || provider.state,
@@ -964,10 +979,10 @@ export async function validateSupplierTaxpayer({ supplierId, payload, user, req 
     comments: String(result.comments || payload.comments || "").trim()
   };
   const authoritative = provider.mode === "MANUAL" || (provider.mode === "PRODUCTION" && provider.configured);
-  supplier.taxpayerStatus = result.valid && authoritative
+  supplier.taxpayerStatus = valid && authoritative
     ? (provider.mode === "MANUAL" ? "MANUALLY_VALIDATED" : "ACTIVE")
-    : result.valid ? "PENDING" : "INACTIVE";
-  supplier.compliance.taxpayerActive = Boolean(result.valid && authoritative);
+    : result.valid && !authoritative ? "PENDING" : "INACTIVE";
+  supplier.compliance.taxpayerActive = Boolean(valid && authoritative);
   supplier.compliance.validatedAt = new Date();
   supplier.compliance.validatedBy = user._id;
   await supplier.save();
@@ -988,6 +1003,28 @@ export async function validateSupplierTaxpayer({ supplierId, payload, user, req 
     }
   });
   return supplier;
+}
+
+// Only server-fetched official taxpayer evidence is accepted here. This never
+// validates invoices, bank ownership or the separate Finance compliance review.
+export async function validateAutomaticSupplierTaxpayer(supplier, user, req, lookupProfile = getSupplierAutomaticPrefill) {
+  const lookup = await lookupProfile(supplier.normalizedIdentifier || supplier.rucDni);
+  const result = automaticTaxpayerResult(lookup);
+  return recordSupplierTaxpayerResult({ supplier, result,
+    provider: { mode: "PRODUCTION", state: "PRODUCTION", configured: true }, user, req });
+}
+
+export function automaticTaxpayerResult(lookup) {
+  const official = lookup?.officialSource === true && ["SUNAT_CONSULTA_RUC", "SUNAT_PUBLIC_PADRON_RUC"].includes(lookup.source);
+  const data = lookup?.data || {};
+  if (!official) throw new AppError(503, "Official taxpayer evidence is unavailable. Automatic validation remains pending.");
+  return {
+    valid: lookup.found === true && data.active === true && data.habido === true,
+    returnedIdentifier: data.rucDni || lookup.ruc,
+    returnedLegalName: data.legalName || "",
+    source: lookup.source,
+    comments: `Automatic taxpayer review. Source: ${lookup.source}. Status: ${data.taxpayerStatus || "UNKNOWN"}. Condition: ${data.domicileCondition || "UNKNOWN"}. Evidence date: ${lookup.datasetDate || lookup.queriedAt || "unavailable"}.`
+  };
 }
 
 export async function reviewSupplierCompliance({ supplierId, payload, user, req }) {
@@ -1167,6 +1204,9 @@ export async function homologateSupplier({ supplierId, user, req }) {
   let supplier = await loadSupplier(supplierId);
   if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active && !isHomologationExpired(supplier)) {
     return { supplier, assignedCode: false, readiness: { valid: true, issues: [], warnings: supplierDeclarationWarnings(supplier) } };
+  }
+  if (sunatService.status().variant === "PADRON") {
+    supplier = await validateAutomaticSupplierTaxpayer(supplier, user, req);
   }
   const readiness = await assertSupplierCanBeHomologated(supplier);
   const oldValues = { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil };

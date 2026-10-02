@@ -249,3 +249,125 @@ These require a real institutional decision or credential this codebase cannot s
 - **The organizational roster's manager-chain (`jefe`) data** — approval routing prefers this over
   configured rules; keeping it current is what keeps most requests off the "no configured rule for
   this dimension" error path (see `ARCHITECTURE.md` §3.3).
+
+
+## Supplier automatic lookup
+
+Supplier proposals query the official Consulta RUC website first, in headless Chromium.
+If the website times out, changes its layout, or requests human verification, lookup falls
+back to the indexed official public Padron. Successful negative taxpayer results are never
+overridden with a positive fallback. The response identifies its source; Padron retains its
+dataset date. This lookup is taxpayer evidence, not invoice validation or bank ownership proof.
+
+Render builds must install Chromium (`npx playwright install chromium`) with
+`PLAYWRIGHT_BROWSERS_PATH=0` at build and runtime, as configured in render.yaml. Existing
+services managed outside the Blueprint need those settings applied in their dashboard too.
+The host must supply Playwright Chromium system libraries; if launch fails, use a supported
+host image with these libraries installed. Lookup still falls back to Padron.
+
+Keep `SUNAT_PADRON_WORKER_ENABLED=true` and `SUNAT_PADRON_DATA_DIR` on persistent storage.
+The existing in-process worker checks at 03:00 America/Lima daily, checks on startup, retries
+failures, and keeps the last usable generation. The service must be running for the scheduled
+check; a suspended service cannot execute background work. Check worker-state.json and
+server logs for the actual last refresh and next check; a schedule alone is not proof of success.
+Website lookups use a short cache (default 30 minutes, maximum 24 hours). This refreshes
+lookup evidence, not historical supplier/request snapshots.
+
+Only fields supplied by the source are autofilled. Legal name, commercial name, fiscal
+address and taxpayer status come from the profile; representative lookup remains separate.
+Location fields are filled when explicitly supplied, not inferred from ambiguous addresses.
+Contact phone/email, banking details, payment terms and internal commercial information
+remain user-provided when absent from SUNAT. Existing user edits are not overwritten.
+
+
+### Render lookup deployment check
+
+Use `npm ci && npm run build` for the service build. The root build now runs
+`scripts/ensureSunatBrowser.js` on Render: it installs Chromium and verifies a
+headless launch. A failed install or missing Linux library fails the build, instead
+of silently deploying broken autofill. If PLAYWRIGHT_BROWSERS_PATH is not set, both
+build and runtime use node_modules/.cache/uma-chromium in the project. An explicit
+value (including 0 from the Blueprint) must stay identical during build and runtime.
+Successful build logs contain `SUNAT Chromium launch check passed.`
+
+Lookup logs expose sanitized CONSULTA_BROWSER_MISSING, CONSULTA_BROWSER_DEPENDENCIES,
+CONSULTA_ACCESS_RESTRICTED, CONSULTA_TIMEOUT or CONSULTA_UNAVAILABLE diagnostics.
+The API preserves the distinction if the Padron fallback also fails. Infrastructure
+failures ask Administration to correct deployment, rather than retry indefinitely.
+No missing profile is treated as valid taxpayer evidence. Browser launch validation
+is not proof that SUNAT accepts traffic from the deployed host: verify a supplier
+lookup on that host after deployment.
+
+
+### Consulta RUC profile deadline and recovery
+
+The company profile deadline defaults to 20 seconds; optionally configure
+`SUNAT_CONSULTA_RUC_PROFILE_TIMEOUT_MS` (bounded to 10–25 seconds). The frontend
+allows 35 seconds including browser startup. The previous eight-second deadline
+was observed terminating Render lookups while representative lookups succeeded.
+This limit is a ceiling, not a delay: available results return immediately.
+
+Representative lookups now cache the verified company profile read on the same
+SUNAT page. A recovered profile lookup also starts the representative lookup in
+the open supplier form. Cached profiles retain their original query timestamp;
+manual form edits remain protected. Successful lookup does not imply taxpayer
+eligibility or verified bank ownership.
+
+
+### Automatic supplier taxpayer validation
+
+With `SUNAT_PROVIDER_MODE=PADRON`, saving a new 11-digit RUC proposal now records
+server-fetched Consulta RUC evidence, with official Padron fallback. A result is
+accepted only for ACTIVO/HABIDO and matching RUC/legal name. Unavailable lookups
+leave the saved proposal pending. Accounting/Admin can retry from Supplier Detail
+using "Validate automatically with SUNAT"; final homologation rechecks the same
+control. The audit records source, evidence date, result and initiating user.
+Manual and mock provider modes retain their distinct behavior. This taxpayer
+check does not verify an invoice, bank account or Finance compliance review.
+No migration is required; existing pending suppliers can use the retry action.
+
+
+## Render Free: automatic taxpayer lookup without an always-on PC
+
+Set these variables in Render Environment, then deploy the updated code:
+
+```env
+SUNAT_PROVIDER_MODE=PADRON
+SUNAT_TAXPAYER_CACHE_MODE=MONGO
+SUNAT_PADRON_WORKER_ENABLED=false
+```
+
+Keep the existing MONGODB_URI and browser build hook (`npm ci && npm run build`).
+Keep the normal web-service start command. No PC, tunnel, additional paid worker,
+or whole-Padrón import into Atlas is required. MONGO mode also suppresses implicit
+lookup-triggered dataset downloads even if an old worker flag was left enabled.
+
+The first RUC lookup uses official Consulta RUC. Successful official profiles are
+stored in `taxpayerprofilecaches` in the existing database, keyed by RUC. This
+collection contains public taxpayer evidence only. The built-in Mongo `_id` index
+prevents duplicate RUC records; there is no financial-data migration. Supplier
+registration and invoice taxpayer checks share this source in MONGO mode. Original
+source and observation time are retained; cache reads never extend freshness.
+Inactive/non-habido responses remain negative. Cache evidence expires after 24
+hours; expired evidence cannot approve a taxpayer when an upstream refresh fails.
+An existing local Padrón may still provide fallback, but its dataset evidence must
+also meet that freshness limit. This is not a substitute for CPE verification.
+
+The web process starts a serial refresh loop automatically: at startup and every
+five minutes, refresh up to ten expired cached profiles; failed refreshes retry
+in an hour. Interactive requests independently refresh expired entries immediately.
+Render Free sleeps when idle: the worker cannot execute during sleep. Overdue
+refreshes resume after wake; this is daily evidence expiration, not a guaranteed
+03:00 daily job. A guaranteed clock-time schedule requires an independently hosted
+scheduler/worker or an always-on service. The worker does not keep Render awake.
+
+Deployment verification: confirm the `[WORKERS] SUNAT durable taxpayer cache
+enabled` startup log, query a real RUC, verify source/queriedAt, then repeat after a
+restart and confirm a fresh cached result is reused. Do not mark an invoice valid
+merely because its taxpayer lookup succeeded. New or expired RUCs still depend on
+SUNAT being reachable from Render; CAPTCHA/access restrictions are not bypassed.
+No banking, contacts, or compliance declarations are invented from public data.
+
+Rollback: unset SUNAT_TAXPAYER_CACHE_MODE to restore the existing disk-based
+provider. Retain the cache collection or remove it separately if no longer needed;
+no historical supplier/invoice evidence is rewritten by this feature.

@@ -1,3 +1,5 @@
+import { cloudTaxpayerMode } from "../../services/taxpayerProfileCache.js";
+import { getSupplierAutomaticPrefill } from "../../services/supplierPadronLookupService.js";
 import { AppError } from "../../utils/AppError.js";
 import { ERROR_CODES } from "../../utils/constants.js";
 import { getSunatPadronStatus, lookupSunatPadronRuc } from "../../services/sunatPadronService.js";
@@ -119,6 +121,24 @@ export class PublicPadronSunatProvider extends SunatProvider {
 
         message:
           "The SUNAT public Padrón validates 11-digit RUC values only."
+      };
+    }
+
+    if (cloudTaxpayerMode()) {
+      const profile = await getSupplierAutomaticPrefill(ruc);
+      const data = profile.data || {};
+      return {
+        valid: profile.found === true && data.active === true && data.habido === true,
+        official: profile.officialSource === true, source: profile.source,
+        publicDataset: profile.source === "SUNAT_PUBLIC_PADRON_RUC",
+        status: data.taxpayerStatus || "NO_ENCONTRADO", condition: data.domicileCondition || "NO_ENCONTRADO",
+        taxpayerStatus: data.taxpayerStatus, returnedIdentifier: data.rucDni || ruc,
+        returnedLegalName: data.legalName || "", legalName: data.legalName || "",
+        fiscalAddress: data.fiscalAddress, ubigeo: data.location?.ubigeo,
+        datasetDate: profile.datasetDate, queriedAt: profile.queriedAt,
+        cacheExpiresAt: profile.cacheExpiresAt,
+        comments: `Official taxpayer lookup: ${profile.source}; ${profile.queriedAt || profile.datasetDate}`,
+        message: profile.message
       };
     }
 

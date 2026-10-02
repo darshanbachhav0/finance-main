@@ -20,6 +20,7 @@ import {
   supplierDeclarationWarnings,
   updateSupplierProposal,
   validateSupplierTaxpayer,
+  validateAutomaticSupplierTaxpayer,
   verifySupplierBankAccount
 } from "../src/services/supplierService.js";
 import { ROLES } from "../src/utils/constants.js";
@@ -268,6 +269,29 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       const readiness = await getSupplierHomologationReadiness(supplier._id);
       assert.equal(readiness.legacyCompatible, true);
       assert.equal((await SupplierBankAccount.findById(account._id)).verificationStatus, "LEGACY_ACCEPTED");
+    });
+
+    await t.test("automatic official taxpayer validation is persisted, audited, and requires matching identity", async () => {
+      const supplier = await completeSupplier({ taxpayerStatus: "PENDING", compliance: { taxpayerActive: false } });
+      const profile = { found: true, officialSource: true, source: "SUNAT_CONSULTA_RUC", queriedAt: new Date().toISOString(),
+        data: { rucDni: supplier.rucDni, legalName: supplier.legalName, active: true, habido: true, taxpayerStatus: "ACTIVO", domicileCondition: "HABIDO" } };
+      await validateAutomaticSupplierTaxpayer(supplier, users.accounting, req, async () => profile);
+      const saved = await Supplier.findById(supplier._id);
+      assert.equal(saved.taxpayerStatus, "ACTIVE");
+      assert.equal(saved.taxpayerValidation.source, "SUNAT_CONSULTA_RUC");
+      assert.equal(saved.taxpayerValidation.identifierMatch, "MATCH");
+      assert.ok(await AuditLog.exists({ entityId: supplier._id, action: "TAXPAYER_VALIDATION_RECORDED" }));
+      await validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => ({ ...profile, data: { ...profile.data, legalName: "OTHER COMPANY" } }));
+      assert.equal(saved.compliance.taxpayerActive, false);
+      assert.equal(saved.taxpayerValidation.legalNameMatch, "MISMATCH");
+      await validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => ({ ...profile, data: { ...profile.data, active: false, taxpayerStatus: "BAJA DE OFICIO" } }));
+      assert.equal(saved.taxpayerStatus, "INACTIVE");
+      await assert.rejects(validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => ({ ...profile, officialSource: false })), /Official taxpayer evidence/);
+      await assert.rejects(validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => { throw new Error("SUNAT unavailable"); }), /SUNAT unavailable/);
+      assert.equal((await Supplier.findById(saved._id)).taxpayerStatus, "INACTIVE");
+      await validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => ({ ...profile, source: "SUNAT_PUBLIC_PADRON_RUC", datasetDate: "2026-10-01" }));
+      assert.equal(saved.taxpayerStatus, "ACTIVE");
+      assert.match(saved.taxpayerValidation.comments, /2026-10-01/);
     });
 
     await t.test("23. manual, mock and not-configured taxpayer validation report their real source", async () => {

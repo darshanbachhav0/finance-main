@@ -943,10 +943,11 @@ export default function SupplierForm({
             <div>
               <strong>
                 {t(
-                  "SUNAT Padrón data loaded automatically"
+                  padronLookup.source === "SUNAT_CONSULTA_RUC" ? "SUNAT Consulta RUC data loaded automatically" : "SUNAT Padrón data loaded automatically"
                 )}
               </strong>
 
+              {padronLookup.fallback && <small>{t("Consulta RUC unavailable. Official Padrón fallback used.")}</small>}
               <span>
                 {
                   padronData
@@ -1017,14 +1018,13 @@ export default function SupplierForm({
             <div>
               <strong>
                 {t(
-                  "RUC not found in the current SUNAT Padrón"
+                  padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : "RUC not found in the current SUNAT Padrón"
                 )}
               </strong>
 
               <span>
                 {
-                  padronLookup
-                    .message ||
+                  (padronLookup.message ? t(padronLookup.message) : t("Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.")) ||
                   t(
                     "You can continue entering the proposal manually, but SUNAT validation will still be required before homologation."
                   )

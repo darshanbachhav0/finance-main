@@ -1,9 +1,10 @@
+import { refreshForLookup } from "../services/sunatPadronService.js";
 import {
   asyncHandler
 } from "../middleware/asyncHandler.js";
 
 import {
-  getSupplierPadronPrefill
+  getSupplierAutomaticPrefill
 } from "../services/supplierPadronLookupService.js";
 
 import {
@@ -68,11 +69,17 @@ export const lookupSupplierPadron =
       req,
       res
     ) => {
-      res.json(
-        await getSupplierPadronPrefill(
-          req.params.ruc
-        )
-      );
+      try {
+        res.json(await getSupplierAutomaticPrefill(req.params.ruc));
+      } catch (error) {
+        if (error.statusCode === 503) {
+          // Queue a throttled refresh; never download/index millions of rows before responding.
+          refreshForLookup();
+          res.set("Retry-After", "15");
+          error.details = { ...error.details, lookupState: "UNAVAILABLE", retryAfterSeconds: 15 };
+        }
+        throw error;
+      }
     }
   );
 

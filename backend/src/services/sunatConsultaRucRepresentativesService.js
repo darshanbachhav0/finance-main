@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { chromium } from "playwright";
+
 
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
@@ -148,12 +148,12 @@ function cacheKey(
 
 function cacheTtlMs() {
   return (
-    positiveNumber(
+    Math.min(1440, positiveNumber(
       env(
         "SUNAT_CONSULTA_RUC_CACHE_MINUTES"
       ),
       DEFAULT_CACHE_MINUTES
-    ) *
+    )) *
     60 *
     1000
   );
@@ -204,15 +204,19 @@ async function getBrowser() {
     return browserPromise;
   }
 
-  const pending =
-    chromium
-      .launch({
+  // Match the build hook even when Render is not managed by render.yaml.
+  if (process.env.RENDER === "true") {
+    process.env.PLAYWRIGHT_BROWSERS_PATH ||= path.resolve(BACKEND_ROOT, "../node_modules/.cache/uma-chromium");
+  }
+  const pending = import("playwright").then(({ chromium }) =>
+    chromium.launch({
         // Use full Chromium's unified headless mode, not the headless shell.
         // Supplier autofill must never open a desktop window, including when
         // an older launcher still sets SUNAT_REPRESENTATIVES_HEADLESS=false.
         channel: "chromium",
+        timeout: 10000,
         headless: true
-      })
+      }))
       .then((browser) => {
         browser.once("disconnected", () => {
           // Permit the next lookup to recover if Chromium exits unexpectedly.
@@ -399,7 +403,7 @@ async function clickSearchButton(
           () => false
         )
     ) {
-      await candidate.click();
+      await candidate.click({ noWaitAfter: true });
 
       return true;
     }
@@ -886,7 +890,8 @@ async function extractHeading(
 
 async function lookupInternal(
   ruc,
-  legalName
+  legalName,
+  profileOnly = false
 ) {
   const browser =
     await getBrowser();
@@ -908,9 +913,16 @@ async function lookupInternal(
       }
     });
 
+  let deadlineExpired = false;
+  const deadline = profileOnly ? setTimeout(() => {
+    deadlineExpired = true;
+    void context.close().catch(() => {});
+  }, profileTimeoutMs()) : null;
   let page;
 
   try {
+    // Rendering assets are unnecessary for extracting public taxpayer text.
+    await context.route("**/*", route => ["image", "font", "media"].includes(route.request().resourceType()) ? route.abort() : route.continue());
     page =
       await context.newPage();
 
@@ -992,22 +1004,7 @@ async function lookupInternal(
       );
     }
 
-    await waitForRucResult(
-      page,
-      ruc
-    );
-
-    await page
-      .waitForLoadState(
-        "networkidle",
-        {
-          timeout:
-            5_000
-        }
-      )
-      .catch(
-        () => {}
-      );
+    await waitForRucResult(page, ruc);
 
     await saveDebug(
       page,
@@ -1023,6 +1020,25 @@ async function lookupInternal(
       throw new Error(
         "SUNAT requested interactive verification after the RUC search."
       );
+    }
+
+    {
+      const fields = await page.evaluate(() => Object.fromEntries(
+        Array.from(document.querySelectorAll(".list-group-item")).map(row => {
+          const text = (row.innerText || "").replace(/\s+/g, " ").trim();
+          const split = text.indexOf(":");
+          return split < 0 ? ["", ""] : [text.slice(0, split).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim(), text.slice(split + 1).trim()];
+        }).filter(([key]) => key)
+      ));
+      // Both operations visit the same company page. Preserve that verified
+      // profile even if the separate representative page later fails.
+      try {
+        const profile = consultaProfileFromFields(ruc, fields);
+        saveCached(`profile:${ruc}`, profile);
+        if (profileOnly) return profile;
+      } catch (error) {
+        if (profileOnly) throw error;
+      }
     }
 
     console.log(
@@ -1117,9 +1133,40 @@ async function lookupInternal(
           ? `${representatives.length} legal representative(s) returned by SUNAT Consulta RUC.`
           : "SUNAT Consulta RUC loaded correctly but did not return legal representatives."
     };
+  } catch (error) {
+    if (deadlineExpired) throw new Error("Consulta RUC profile lookup timed out.");
+    throw error;
   } finally {
-    await context.close();
+    clearTimeout(deadline);
+    await context.close().catch(() => {});
   }
+}
+
+export function consultaProfileFromFields(ruc, fields) {
+  const heading = fields["NUMERO DE RUC"] || "";
+  const match = heading.match(/^(\d{11})\s*-\s*(.+)$/);
+  if (!match || match[1] !== ruc) throw new Error("SUNAT returned an unrecognized or mismatched RUC profile.");
+  const taxpayerStatus = (fields["ESTADO DEL CONTRIBUYENTE"] || "NO_INFORMADO").split(/\s+Fecha de Baja\s*:/i)[0].trim();
+  const domicileCondition = fields["CONDICION DEL CONTRIBUYENTE"] || "NO_INFORMADO";
+  return { found: true, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt: new Date().toISOString(),
+    data: { rucDni: ruc, legalName: match[2].trim(), commercialName: fields["NOMBRE COMERCIAL"] === "-" ? "" : fields["NOMBRE COMERCIAL"] || "",
+      personType: ruc.startsWith("20") ? "LEGAL_ENTITY" : ruc.startsWith("10") ? "NATURAL_PERSON_WITH_BUSINESS" : "",
+      fiscalAddress: fields["DOMICILIO FISCAL"] || "", location: { department: fields["DEPARTAMENTO"] || "", province: fields["PROVINCIA"] || "", district: fields["DISTRITO"] || "", ubigeo: fields["UBIGEO"] || "" },
+      taxpayerStatus, domicileCondition, active: taxpayerStatus === "ACTIVO", habido: domicileCondition === "HABIDO",
+      eligibleForHomologation: taxpayerStatus === "ACTIVO" && domicileCondition === "HABIDO", accountHolderName: match[2].trim() },
+    message: "Supplier information loaded from SUNAT Consulta RUC." };
+}
+
+export async function lookupSunatTaxpayerProfile(rucValue) {
+  const ruc = normalizeRuc(rucValue);
+  if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
+  const key = `profile:${ruc}`;
+  const cached = getCached(key);
+  if (cached) return cached;
+  if (inflight.has(key)) return inflight.get(key);
+  const pending = lookupInternal(ruc, "", true).then(result => { saveCached(key, result); return result; }).finally(() => inflight.delete(key));
+  inflight.set(key, pending);
+  return pending;
 }
 
 export async function lookupSunatLegalRepresentatives(
@@ -1301,4 +1348,10 @@ export async function closeSunatRepresentativesBrowser() {
     .catch(
       () => {}
     );
+}
+
+// Render may be busy indexing Padron; do not abort valid public-page navigation
+// after eight seconds. This is a ceiling, not an artificial wait.
+export function profileTimeoutMs(value = process.env.SUNAT_CONSULTA_RUC_PROFILE_TIMEOUT_MS) {
+  return Math.min(25000, Math.max(10000, positiveNumber(value, 20000)));
 }
