@@ -100,5 +100,9 @@ export default {
   "Rendition balance updated": "Saldo de rendición actualizado",
   "{requestNumber}: {amount} regularized; {remaining} remains.": "{requestNumber}: {amount} regularizados; quedan {remaining}.",
   "Rendition recovery recorded": "Recupero de rendición registrado",
-  "{requestNumber}: {amount} recovered; {remaining} remains.": "{requestNumber}: {amount} recuperados; quedan {remaining}."
+  "{requestNumber}: {amount} recovered; {remaining} remains.": "{requestNumber}: {amount} recuperados; quedan {remaining}.",
+  "{requestNumber}: SUNAT could not verify the invoice. Accounting will review it; you do not need to submit the request again.": "{requestNumber}: SUNAT no pudo verificar el comprobante. Contabilidad lo revisará; no necesitas enviar la solicitud otra vez.",
+  "Manual SUNAT exception needed": "Se requiere una excepción manual SUNAT",
+  "{requestNumber}: Management rejected the budget exception. Adjust the request (for example the amount) and submit it for approval again.": "{requestNumber}: Gerencia rechazó la excepción presupuestal. Ajusta la solicitud (por ejemplo, el monto) y envíala otra vez a aprobación.",
+  "{requestNumber}: SUNAT could not verify the invoice. Review it and approve a manual SUNAT exception so the payment can continue.": "{requestNumber}: SUNAT no pudo verificar el comprobante. Revíselo y apruebe una excepción manual SUNAT para que el pago continúe."
 };

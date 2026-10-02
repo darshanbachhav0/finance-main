@@ -421,6 +421,13 @@ export default function RequestDetail() {
       && new Date(voucher.manualOverride?.overriddenAt) > new Date(request.observation?.observedAt));
   const nextAction = invoiceCorrection
     ? ["Correct the invoice documents. Existing approvals and the issued order remain valid; do not submit the request for approval again.", "Documents", "#request-section-documents-and-fiscal-validation"]
+    : request.observationOwner === "BUDGET" && !permissions.canCommitBudget
+    ? ["Budget is reviewing an exception for this request's budget. You do not need to submit it again; you will be notified of the decision.", "General", "#request-actions"]
+    : request.observationOwner === "ACCOUNTING"
+    ? [user?.role === "Accounting" || user?.role === "Admin"
+      ? "SUNAT could not verify this invoice. Review it in Accounting > SUNAT exceptions; once the exception is approved the payment continues without new approvals."
+      : "SUNAT could not verify this invoice. Accounting will review it; once it approves a manual SUNAT exception the payment continues on its own. You do not need to submit the request again.", "Documents", "#request-section-documents-and-fiscal-validation"]
+    : permissions.canCommitBudget ? ["Review budget availability and commit the approved request.", "Available actions", "#request-actions"]
     : permissions.modifiable
     ? (missingDocuments.length ? ["Complete the required documents before submitting.", "Documents", "#request-section-documents-and-fiscal-validation"] : ["Your request is ready for your submission review.", "Available actions", "#request-actions"])
     : permissions.canApprove ? ["Review the supporting documents and record your decision.", "Available actions", "#request-actions"]
@@ -460,8 +467,8 @@ export default function RequestDetail() {
     ? (isChainApprovalStep
       ? { label: "Approve and finalize", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button" }
       : { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve") })
-    : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
     : permissions.canCommitBudget ? { label: "Commit budget", icon: CheckCircle2, onClick: confirmCommitBudget }
+    : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
     : permissions.canIssueOrder ? { label: "Issue order", icon: ShoppingCart, onClick: confirmIssueOrder }
     : permissions.canClose ? { label: "Close request", icon: CheckCircle2, onClick: confirmClose }
     : nextAction?.[1] === "Documents" ? { label: "Open documents", icon: FileText, href: nextAction[2], onClick: () => setActiveTab("Documents") }

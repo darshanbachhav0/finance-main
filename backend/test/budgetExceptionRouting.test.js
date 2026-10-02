@@ -5,8 +5,11 @@ import BudgetException from "../src/models/BudgetException.js";
 import BudgetRule from "../src/models/BudgetRule.js";
 import CostCenter from "../src/models/CostCenter.js";
 import ExpenseType from "../src/models/ExpenseType.js";
+import FinancialRequest from "../src/models/FinancialRequest.js";
 import User from "../src/models/User.js";
+import { commitApprovedRequestBudget } from "../src/services/approvalService.js";
 import { recordBudgetExceptionDecision, resolveExceptionApproverRole } from "../src/services/budgetExceptionService.js";
+import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
 import { ROLES } from "../src/utils/constants.js";
 
 test("Budget exception authority is configurable per dimension and amount, defaulting to Management unchanged", { timeout: 60000 }, async (t) => {
@@ -89,6 +92,35 @@ test("Budget exception authority is configurable per dimension and amount, defau
       const reviewed = await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget recommends funding", budgetOfficer, {});
       assert.equal(reviewed.status, "PENDING");
       assert.equal(String(reviewed.preparedBy), String(budgetOfficer._id));
+    });
+
+    await t.test("a budget observation stays with Budget/Management; only a rejected exception sends the request back to its requester", async () => {
+      const requester = await User.create({ name: "Requester", email: "exc-routing-owner@test.local", role: ROLES.SOLICITOR, passwordHash: "unused" });
+      const center = await CostCenter.create({ code: "CC-EXC-OWNER", name: "Owner flow", area: "Finance", active: true });
+      const [request] = await FinancialRequest.collection.insertMany([{
+        requestNumber: "SOL-EXC-OWNER", status: "OBSERVADO_PRESUPUESTO", flowType: "A1", requestType: "OPEX", requester: requester._id, solicitor: requester._id,
+        approvalStage: "COMPLETE", approvalRouteSnapshot: [{ sequence: 1, approvalLevel: "AREA_DIRECTOR", required: true, status: "APPROVED" }],
+        approvalHistory: [{ action: "APPROVAL_REQUESTED" }], observation: { code: "INSUFFICIENT_BUDGET", resolver: "BUDGET" }
+      }]).then((result) => FinancialRequest.find({ _id: { $in: Object.values(result.insertedIds) } }));
+      // While the exception is open, resubmitting would only repeat the approvals.
+      const ownerActions = allowedRequestActions(request, requester);
+      assert.ok(!ownerActions.includes("EDIT") && !ownerActions.includes("SUBMIT"), `owner actions: ${ownerActions}`);
+      assert.ok(allowedRequestActions(request, budgetOfficer).includes("COMMIT_BUDGET"));
+
+      const exception = await makeException({ costCenter: center._id });
+      exception.request = request._id;
+      await exception.save();
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
+      await recordBudgetExceptionDecision(exception._id, "REJECTED", "No funds this year; reduce the scope.", management, {});
+      const rejected = await FinancialRequest.findById(request._id);
+      assert.equal(rejected.observation.resolver, "REQUESTER");
+      const afterRejection = allowedRequestActions(rejected, requester);
+      assert.ok(afterRejection.includes("EDIT") && afterRejection.includes("SUBMIT"));
+      // Withdrawn back to draft after an earlier submission, it can be voided but not hard-deleted.
+      assert.ok(!allowedRequestActions({ ...rejected.toObject(), status: "BORRADOR" }, requester).includes("DELETE"));
+      // Committing the rejected figures would bypass Management's decision.
+      assert.ok(!allowedRequestActions(rejected, budgetOfficer).includes("COMMIT_BUDGET"));
+      await assert.rejects(() => commitApprovedRequestBudget({ request: rejected, user: budgetOfficer, req: {} }), /rejected the budget exception/);
     });
   } finally {
     await mongoose.connection.dropDatabase();

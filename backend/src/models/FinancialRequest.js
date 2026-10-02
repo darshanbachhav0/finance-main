@@ -342,6 +342,10 @@ const financialRequestSchema = new mongoose.Schema(
     observation: {
       code: { type: String, trim: true },
       detail: { type: String, trim: true },
+      // Who can clear it: REQUESTER (correct the request and resubmit), ACCOUNTING (approve a manual
+      // SUNAT exception) or BUDGET (decide the budget exception). With ACCOUNTING or BUDGET the
+      // request continues without new approvals.
+      resolver: { type: String, enum: ["REQUESTER", "ACCOUNTING", "BUDGET"] },
       observedAt: Date,
       observedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       resolvedAt: Date,

@@ -1,4 +1,5 @@
 import AuditLog from "../models/AuditLog.js";
+import { resolveSupplierBankReview } from "./bankNotificationService.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import { recordAudit } from "./auditService.js";
@@ -842,6 +843,7 @@ export async function verifySupplierBankAccount({ supplierId, accountId, payload
       verificationDocument
     }
   });
+  await resolveSupplierBankReview(account);
   return account;
 }
 

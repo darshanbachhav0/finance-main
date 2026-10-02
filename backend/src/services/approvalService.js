@@ -41,7 +41,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canApproveStage, hasPermission } from "../utils/permissions.js";
+import { canApproveStage, hasPermission, observationOwner } from "../utils/permissions.js";
 import { allowedRequestActions } from "./requestActionPolicy.js";
 
 const activeApprovalStatuses = [
@@ -238,7 +238,8 @@ export async function resolveBudgetCommitmentFailure({ request, error, user, req
       entityId: request._id
     });
   } else if (error.code === ERROR_CODES.INSUFFICIENT_BUDGET && request.status !== REQUEST_STATUS.OBSERVED_BUDGET) {
-    request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, observedAt: new Date(), observedBy: user._id };
+    // Budget/Management decide the exception; the requester is not asked to resubmit meanwhile.
+    request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, resolver: "BUDGET", observedAt: new Date(), observedBy: user._id };
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.OBSERVED_BUDGET, user, req, action: "BUDGET_OBSERVED", comments: error.message, skipControls: true, skipRoleCheck: true });
   }
   await recordAudit({
@@ -257,7 +258,13 @@ export async function resolveBudgetCommitmentFailure({ request, error, user, req
 // automatic: the commitment runs as the system consequence of the final approval,
 // so the approver's own role (often a Solicitor jefe) is not what authorizes it.
 export async function commitApprovedRequestBudget({ request, user, req, automatic = false }) {
-  if (![REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status) || activeApprovalStep(request)) {
+  // A Track B request observed by SUNAT resumes here once Accounting approved the manual SUNAT
+  // exception; its approvals are already complete and are not repeated.
+  if (request.status === REQUEST_STATUS.OBSERVED_BUDGET && observationOwner(request) === "REQUESTER") {
+    throw new AppError(409, "Management rejected the budget exception. The requester must correct the request and submit it for approval again.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  const resumableStatuses = [REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.OBSERVED_BUDGET, ...(request.flowType === FLOW_TYPE.B ? [REQUEST_STATUS.OBSERVED_SUNAT] : [])];
+  if (!resumableStatuses.includes(request.status) || activeApprovalStep(request)) {
     throw new AppError(409, "Financial handoff can only run after every required approval is complete or after a budget observation is resolved.", { status: request.status, approvalStage: request.approvalStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
 
@@ -277,16 +284,31 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
   if (request.flowType === FLOW_TYPE.B) {
     directPaymentPreflight = await preflightDirectPayment({ request, user, req, observe: true });
     if (!directPaymentPreflight.valid) {
+      const accountingDecides = directPaymentPreflight.resolver === "ACCOUNTING";
       await notifyUser({
         userId: request.requester?._id || request.requester || request.solicitor,
         eventKey: `request:${request._id}:direct-payment-observed:${Date.now()}`,
         type: "REQUEST_OBSERVED",
         title: notificationText("Direct-payment invoice observed"),
-        message: notificationText("{requestNumber}: {detail}", { requestNumber: request.requestNumber, detail: directPaymentPreflight.detail }),
-        path: `/requests/${request._id}/edit`,
+        message: accountingDecides
+          ? notificationText("{requestNumber}: SUNAT could not verify the invoice. Accounting will review it; you do not need to submit the request again.", { requestNumber: request.requestNumber })
+          : notificationText("{requestNumber}: {detail}", { requestNumber: request.requestNumber, detail: directPaymentPreflight.detail }),
+        path: accountingDecides ? `/requests/${request._id}` : `/requests/${request._id}/edit`,
         entityType: "FinancialRequest",
         entityId: request._id
       });
+      if (accountingDecides) {
+        await notifyRoles({
+          roles: [ROLES.ACCOUNTING],
+          eventKey: `request:${request._id}:sunat-exception`,
+          type: "SUNAT_EXCEPTION",
+          title: notificationText("Manual SUNAT exception needed"),
+          message: notificationText("{requestNumber}: SUNAT could not verify the invoice. Review it and approve a manual SUNAT exception so the payment can continue.", { requestNumber: request.requestNumber }),
+          path: "/accounting?view=sunat-exceptions",
+          entityType: "FinancialRequest",
+          entityId: request._id
+        });
+      }
       return request;
     }
   }
@@ -298,6 +320,8 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);
+  await resolveNotification(`request:${request._id}:sunat-exception`);
+  await resolveNotification(`request:${request._id}:budget-commitment`);
   await notifyRoles({
     roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.PROCUREMENT],
     eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,

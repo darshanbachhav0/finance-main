@@ -311,6 +311,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     request.approvalHistory.push(workflowEvent({ action: "RENDITION_OBSERVED", from: request.status, to: request.status, user, req, comments: reviewComments, request }));
     await request.save();
     await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_OBSERVED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "OBSERVED" } });
+    await resolveNotification(`request:${request._id}:rendition-review`);
     await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-observed:${Date.now()}`, type: "RENDITION_OBSERVED", title: notificationText("Rendition observed"), message: notificationText("{requestNumber}: {comments}", { requestNumber: request.requestNumber, comments: reviewComments }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     await request.populate(requestPopulate);
     return request;
@@ -342,6 +343,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       await request.save({ session });
       await recordAudit({ entityType: "FinancialRequest", entity: request, action: "RENDITION_FINANCE_REJECTED", user, req, module: "RENDITION", comments: reviewComments, newValues: { financeReview: "REJECTED", renditionStatus: "REJECTED", advanceAmount, returnedAmount, recoveryOutstanding: outstandingAmount, returnJournal: returnJournal?.entryNumber }, session });
     });
+    await resolveNotification(`request:${request._id}:rendition-review`);
     await notifyUser({ userId: requestOwnerId(request), eventKey: `request:${request._id}:rendition-rejected:${Date.now()}`, type: "RENDITION_REJECTED", title: notificationText("Rendition rejected"), message: notificationText("{requestNumber}: {comments}", { requestNumber: request.requestNumber, comments: reviewComments }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
     if (outstandingAmount > 0) {
       await notifyRoles({ roles: [ROLES.ACCOUNTING, ROLES.TREASURY], eventKey: `request:${request._id}:rendition-recovery`, type: "RENDITION_RECOVERY_REQUIRED", title: notificationText("Advance recovery required"), message: notificationText("{requestNumber}: rendition rejected, {amount} must be recovered from the beneficiary.", { requestNumber: request.requestNumber, amount: outstandingAmount.toFixed(2) }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });

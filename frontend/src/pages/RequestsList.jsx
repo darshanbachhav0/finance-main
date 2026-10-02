@@ -61,12 +61,13 @@ export default function RequestsList() {
     return user.role === "Admin" || (row.requester?._id || row.solicitor?._id) === user._id;
   }
 
+  // The server decides what each row allows (status, issued order, who must resolve an observation).
   function canModify(row) {
-    return ["BORRADOR", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA", "DEVUELTO"].includes(row.status) && isOwner(row);
+    return Boolean(row.allowedActions?.includes("EDIT")) && isOwner(row);
   }
 
   function canDelete(row) {
-    return ["BORRADOR"].includes(row.status) && isOwner(row);
+    return Boolean(row.allowedActions?.includes("DELETE")) && isOwner(row);
   }
 
   async function removeRequest() {
@@ -147,7 +148,8 @@ export default function RequestsList() {
               label: "Withdraw", icon: Undo2,
               primary: (row.allowedActions || []).includes("WITHDRAW"),
               // Shown but disabled once an approver has acted, so the requester learns why.
-              hidden: !(row.allowedActions || []).includes("WITHDRAW") && !(row.status === "PENDIENTE_APROBACION" && isOwner(row)),
+              // The disabled hint is for the requester only, not for Admin on everyone's requests.
+              hidden: !(row.allowedActions || []).includes("WITHDRAW") && !(row.status === "PENDIENTE_APROBACION" && (row.requester?._id || row.solicitor?._id) === user._id),
               disabled: !(row.allowedActions || []).includes("WITHDRAW"),
               disabledReason: (row.allowedActions || []).includes("WITHDRAW") ? undefined : "An approver has already acted on this request; it can no longer be withdrawn.",
               onClick: () => setWithdrawRow(row)

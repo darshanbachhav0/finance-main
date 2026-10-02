@@ -33,6 +33,9 @@ import { createMassUploadBatch, processMassUploadBatch } from "../src/services/b
 import { reserveBudget } from "../src/services/budgetService.js";
 import { syncFinancialProgress } from "../src/services/financialProgressService.js";
 import { approveManualSunatException, registerA1Invoice, supersedeObservedInvoice } from "../src/services/invoiceRegistrationService.js";
+import { commitApprovedRequestBudget } from "../src/services/approvalService.js";
+import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
+import { observationOwner } from "../src/utils/permissions.js";
 import { closeAccountingPeriod } from "../src/services/periodAdministrationService.js";
 import { periodFromDate } from "../src/services/periodService.js";
 import { consumePurchaseOrderBalance } from "../src/services/purchaseOrderMatchingService.js";
@@ -295,6 +298,55 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
       const gapVoucher = invoice({ totalAmount: 119 });
       const gapEvidence = await fiscalFixture(residualRequest, supplier, gapVoucher, admin, files);
       await assert.rejects(() => createAccountsPayableFromVoucher({ request: residualRequest, supplier, voucher: gapVoucher, sunatVoucher: gapEvidence.stored, flowType: "A1", user: admin }), error => error.code === "XML_AMOUNT_MISMATCH");
+    });
+
+    await t.test("1b. Track B invoice SUNAT cannot verify: the requester is not asked to resubmit; Accounting's exception continues the payment without new approvals", async () => {
+      const padronDir = await fs.mkdtemp(path.join(os.tmpdir(), "uma-padron-empty-"));
+      const previousMode = process.env.SUNAT_PROVIDER_MODE;
+      const previousDir = process.env.SUNAT_PADRON_DATA_DIR;
+      process.env.SUNAT_PROVIDER_MODE = "PADRON";
+      process.env.SUNAT_PADRON_DATA_DIR = padronDir;
+      try {
+        const voucher = invoice({ netAmount: 1000, igvAmount: 180, totalAmount: 1180 });
+        const xml = await writeTemp("track-b.xml", invoiceXml(voucher));
+        const request = await makeRequest({
+          flowType: "B", status: "APROBADO",
+          attachments: [
+            { kind: "XML", originalName: "track-b.xml", filename: xml.filename, url: "/test/track-b.xml", path: xml.path, mimetype: "application/xml", size: xml.size },
+            ...["PDF", "CONTRACT", "CONFORMITY"].map((kind) => ({ kind, originalName: `${kind}.pdf`, filename: `${kind}.pdf`, url: `/test/${kind}.pdf`, mimetype: "application/pdf", size: 12 }))
+          ],
+          xmlValidation: { status: "VALID", validated: true, data: { ruc: voucher.ruc, invoiceNumber: `${voucher.series}-${voucher.number}`, issueDate: voucher.issueDate, currency: "PEN", netAmount: 1000, igvAmount: 180, totalAmount: 1180 } }
+        });
+        const loaded = await FinancialRequest.findById(request._id).select("+attachments.path").populate("supplier");
+        await commitApprovedRequestBudget({ request: loaded, user: admin, req, automatic: true });
+        const observed = await FinancialRequest.findById(request._id);
+        assert.equal(observed.status, "OBSERVADO_SUNAT");
+        assert.equal(observed.observation.resolver, "ACCOUNTING");
+        assert.equal(observationOwner(observed), "ACCOUNTING");
+        // The bug: the requester was offered Edit/Submit, and resubmitting only repeated approvals.
+        const ownerActions = allowedRequestActions(observed, owner);
+        assert.ok(!ownerActions.includes("SUBMIT") && !ownerActions.includes("EDIT"), `owner actions: ${ownerActions}`);
+        assert.ok(!allowedRequestActions(observed, admin).includes("SUBMIT"));
+        const approvalsBefore = observed.approvalHistory.length;
+
+        const stored = await SunatVoucher.findOne({ request: request._id });
+        const result = await approveManualSunatException({ requestId: request._id, voucherId: stored._id, reason: "SUNAT CPE service unavailable; PDF checked on the supplier portal.", user: accounting, req });
+        assert.equal(result.provisioned, true, result.detail);
+        const resumed = await FinancialRequest.findById(request._id);
+        assert.equal(resumed.status, "CONTABILIZADO");
+        assert.equal(resumed.observation?.code, undefined);
+        assert.ok(!resumed.approvalHistory.slice(approvalsBefore).some((entry) => ["APPROVAL_REQUESTED", "CHAIN_APPROVED_FINAL"].includes(entry.action)), "no approval is repeated");
+        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
+
+        // Observations the requester can fix stay with the requester; older records are classified by code.
+        assert.equal(observationOwner({ status: "OBSERVADO_SUNAT", observation: { code: "PADRON_RUC_VERIFIED_CPE_NOT_VALIDATED" } }), "ACCOUNTING");
+        assert.equal(observationOwner({ status: "OBSERVADO_SUNAT", observation: { code: "DUPLICATE_VOUCHER" } }), "REQUESTER");
+        assert.equal(observationOwner({ status: "OBSERVADO", observation: { code: "PADRON_RUC_VERIFIED_CPE_NOT_VALIDATED" } }), undefined);
+      } finally {
+        if (previousMode === undefined) delete process.env.SUNAT_PROVIDER_MODE; else process.env.SUNAT_PROVIDER_MODE = previousMode;
+        if (previousDir === undefined) delete process.env.SUNAT_PADRON_DATA_DIR; else process.env.SUNAT_PADRON_DATA_DIR = previousDir;
+        await fs.rm(padronDir, { recursive: true, force: true });
+      }
     });
 
     await t.test("6. cancelling a CXP restores the PO, annuls the voucher, re-syncs the request and posts the reversal now", async () => {

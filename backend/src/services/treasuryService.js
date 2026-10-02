@@ -681,6 +681,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
     });
     for (const item of items) {
       await resolveNotification(`request:${item.request._id}:treasury`);
+      await resolveNotification(`request:${item.request._id}:treasury:${item.accountsPayable._id}`);
       await notifyRoles({
         roles: ["Treasury"],
         eventKey: `request:${item.request._id}:payment-confirmation:${item.accountsPayable._id}`,

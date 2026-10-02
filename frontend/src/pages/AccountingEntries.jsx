@@ -4,7 +4,7 @@ import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWor
 import DraftPanel from "../components/DraftPanel.jsx";
 import { Download, Eye, FileCheck2, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
@@ -25,7 +25,9 @@ const accountCategory = (requestType) => requestType === "CAPEX" ? "CAPEX" : req
 const accountsFor = (accounts, requestType) => accounts.filter((item) => item.active !== false && item.category === accountCategory(requestType) && (!item.permittedRequestTypes?.length || item.permittedRequestTypes.includes(requestType)));
 
 export default function AccountingEntries() {
-  const [focusView, setFocusView] = useState("Processing");
+  // ?view=sunat-exceptions opens the manual SUNAT exception queue (linked from notifications).
+  const [searchParams] = useSearchParams();
+  const [focusView, setFocusView] = useState(searchParams.get("view") === "sunat-exceptions" ? "SUNAT exceptions" : "Processing");
   const { t, language } = useLanguage();
   const { notify } = useToast();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));

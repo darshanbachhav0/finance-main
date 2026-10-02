@@ -1260,8 +1260,14 @@ export async function cancelAccountsPayable({ accountsPayableId, reason, user, r
   if (accountsPayable.adjustments?.length || accountsPayable.supplierCreditApplications?.length) {
     throw new AppError(409, "This CXP already has credit/debit notes or supplier credits applied. Register a credit note for the remaining balance instead of cancelling it.", { accountsPayableId }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
+  if (accountsPayable.detraction?.status === "DEPOSITED") {
+    throw new AppError(409, "Money was already paid on this CXP (a transfer or the SPOT detraccion deposit). Register a credit note instead of cancelling it.", { accountsPayableId }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
   const request = await FinancialRequest.findById(accountsPayable.request);
   if (!request) throw new AppError(404, "Financial request not found.", { requestId: accountsPayable.request }, ERROR_CODES.NOT_FOUND);
+  if ((request.payment?.confirmations || []).some((item) => String(item.accountsPayable || "") === String(accountsPayable._id))) {
+    throw new AppError(409, "A payment was already confirmed on this CXP. Register a credit note instead of cancelling it.", { accountsPayableId }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
   const reversalPeriod = periodFromDate(new Date());
   await guardAccountingPeriod({ period: reversalPeriod, action: "POST", user, req, module: "ACCOUNTING", entityType: "AccountsPayable", entityId: accountsPayable._id, requestId: request._id });
 
@@ -1312,5 +1318,7 @@ export async function cancelAccountsPayable({ accountsPayableId, reason, user, r
     });
     return { accountsPayable, reversalJournal, request, purchaseOrder, voucher, progress };
   });
+  await resolveNotification(`request:${result.request._id}:treasury:${result.accountsPayable._id}`);
+  await resolveNotification(`request:${result.request._id}:payment-confirmation:${result.accountsPayable._id}`);
   return result;
 }

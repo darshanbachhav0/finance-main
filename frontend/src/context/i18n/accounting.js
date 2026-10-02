@@ -1,5 +1,8 @@
 // Spanish copy for the accounting area. Keys are the English UI strings passed to t().
 export default {
+  "Budget is reviewing an exception for this request's budget. You do not need to submit it again; you will be notified of the decision.": "Presupuesto está revisando una excepción para el presupuesto de esta solicitud. No necesitas enviarla otra vez; se te notificará la decisión.",
+  "SUNAT could not verify this invoice. Review it in Accounting > SUNAT exceptions; once the exception is approved the payment continues without new approvals.": "SUNAT no pudo verificar este comprobante. Revíselo en Contabilidad > Excepciones SUNAT; al aprobar la excepción, el pago continúa sin nuevas aprobaciones.",
+  "SUNAT could not verify this invoice. Accounting will review it; once it approves a manual SUNAT exception the payment continues on its own. You do not need to submit the request again.": "SUNAT no pudo verificar este comprobante. Contabilidad lo revisará; cuando apruebe una excepción manual SUNAT, el pago continuará solo. No necesitas enviar la solicitud otra vez.",
   "Accounting Accounts": "Cuentas contables",
   "Accounting account": "Cuenta contable",
   "PCGE accounts Accounting books invoices to. The platform suggests one from the request type and the nature of the expense.": "Cuentas PCGE en las que Contabilidad registra los comprobantes. La plataforma sugiere una según el tipo de solicitud y la naturaleza del gasto.",
