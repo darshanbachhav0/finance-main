@@ -34,11 +34,11 @@ export function assertRequestLines(lines) {
     throw new AppError(422, "At least one request line is required.", { field: "lines" }, ERROR_CODES.VALIDATION_ERROR);
   }
   for (const [index, line] of lines.entries()) {
-    if (!line.costCenter || !line.expenseType) {
+    if (!line.costCenter) {
       throw new AppError(
         422,
-        `Line ${index + 1} must include Cost Center and Expense Type / Accounting Account.`,
-        { index, missing: [!line.costCenter ? "costCenter" : null, !line.expenseType ? "expenseType" : null].filter(Boolean) },
+        `Line ${index + 1} must include a Cost Center.`,
+        { index, missing: ["costCenter"] },
         ERROR_CODES.VALIDATION_ERROR
       );
     }

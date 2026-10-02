@@ -240,10 +240,15 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.equal(await BudgetException.countDocuments({ request: lowRequest._id, status: "PENDING" }), 1);
     });
 
-    await t.test("12-14. missing dimensions are blocked and account taxonomy is enforced", async () => {
-      assert.throws(() => assertRequestLines([{ costCenter: center._id, netAmount: 1, igvAmount: 0, totalAmount: 1 }]), /Expense Type/);
-      await assert.rejects(() => validateAccountingDimensions({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, lines: [{ costCenter: center._id, expenseType: capex._id }], user: users.accounting }), /OPEX/);
-      await assert.rejects(() => validateAccountingDimensions({ requestType: REQUEST_TYPE.CAPEX, expenseNature: EXPENSE_NATURE.EQUIPMENT, lines: [{ costCenter: center._id, expenseType: opex._id }], user: users.accounting }), /CAPEX/);
+    await t.test("12-14. missing dimensions are blocked, accounts are suggested and Accounting's account taxonomy is enforced", async () => {
+      assert.throws(() => assertRequestLines([{ netAmount: 1, igvAmount: 0, totalAmount: 1 }]), /Cost Center/);
+      await assert.rejects(() => validateAccountingDimensions({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, lines: [{ costCenter: center._id, expenseType: capex._id, accountSource: "ACCOUNTING" }], user: users.accounting }), /OPEX/);
+      await assert.rejects(() => validateAccountingDimensions({ requestType: REQUEST_TYPE.CAPEX, expenseNature: EXPENSE_NATURE.EQUIPMENT, lines: [{ costCenter: center._id, expenseType: opex._id, accountSource: "ACCOUNTING" }], user: users.accounting }), /CAPEX/);
+      // An account sent by anyone but Accounting is ignored: the platform suggests one instead.
+      const requesterLines = [{ costCenter: center._id, expenseType: capex._id }];
+      await validateAccountingDimensions({ requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, lines: requesterLines, user: users.accounting });
+      assert.equal(requesterLines[0].accountSource, "SUGGESTED");
+      assert.equal(requesterLines[0].expenseTypeSnapshot.category, "OPEX");
     });
 
     let payable;

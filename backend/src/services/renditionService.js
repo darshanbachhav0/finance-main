@@ -177,7 +177,7 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
     balanceOutstanding = subtractMoney(subtractMoney(amountAdvanced, amountRendered), amountReturned);
     if (balanceOutstanding < 0) throw new AppError(422, "Rendered plus returned amounts cannot exceed the advance.", { amountAdvanced, amountRendered, amountReturned }, ERROR_CODES.VALIDATION_ERROR);
   } else {
-    lines = (request.lines || []).map((line) => ({ costCenter: line.costCenter?._id || line.costCenter, expenseType: line.expenseType?._id || line.expenseType, netAmount: line.netAmount, igvAmount: line.igvAmount, totalAmount: line.totalAmount, subAccount: line.subAccount }));
+    lines = (request.lines || []).map((line) => ({ costCenter: line.costCenter?._id || line.costCenter, expenseType: line.expenseType?._id || line.expenseType, accountSource: line.accountSource, netAmount: line.netAmount, igvAmount: line.igvAmount, totalAmount: line.totalAmount, subAccount: line.subAccount }));
     amountRendered = roundMoney(request.totalAmount);
     amountReturned = 0;
     amountAdvanced = 0;

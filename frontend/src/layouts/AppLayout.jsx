@@ -84,7 +84,7 @@ const groups = [
     items: [
       { label: "Suppliers", path: "/suppliers", icon: Building2 },
       { label: "Cost Centers", path: "/cost-centers", icon: CircleDollarSign },
-      { label: "Expense Types", path: "/expense-types", icon: Settings2 },
+      { label: "Accounting Accounts", path: "/expense-types", icon: Settings2 },
       { label: "Exchange Rates", path: "/exchange-rates", icon: CircleDollarSign },
       { label: "Configuration", path: "/configuration/approval-rules", icon: SlidersHorizontal },
       { label: "Budget Rules", path: "/configuration/budget-rules", icon: SlidersHorizontal },
@@ -134,7 +134,7 @@ const routeTitles = [
   [/^\/accounting/, "Accounting Entries"],
   [/^\/suppliers/, "Suppliers"],
   [/^\/cost-centers/, "Cost Centers"],
-  [/^\/expense-types/, "Expense Types"],
+  [/^\/expense-types/, "Accounting Accounts"],
   [/^\/exchange-rates/, "Exchange Rates"],
   [/^\/users/, "Users"],
   [/^\/configuration/, "Configuration"]

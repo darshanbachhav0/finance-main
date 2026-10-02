@@ -9,10 +9,11 @@ import { BUDGET_STATUS, ERROR_CODES } from "../utils/constants.js";
 import { addMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
 import { budgetLimits, changeAllocationUsage, findBudgetAllocation as findAllocation, isBudgetPlan } from "./budgetAllocationService.js";
 
+// Budget is controlled per Cost Center (and optional project); the accounting account of a line
+// never splits or redirects the budget it draws on.
 function dimensionKey(line, project) {
   return [
     String(line.costCenter?._id || line.costCenter),
-    String(line.expenseType?._id || line.expenseType),
     String(line.budgetItem || ""),
     String(line.projectId || project || "")
   ].join("|");
@@ -24,7 +25,6 @@ export function groupBudgetLines(lines = [], project = "") {
     const key = dimensionKey(line, project);
     const current = grouped.get(key) || {
       costCenter: line.costCenter?._id || line.costCenter,
-      expenseType: line.expenseType?._id || line.expenseType,
       budgetItem: line.budgetItem || "",
       project: line.projectId || project || "",
       amount: 0
@@ -52,7 +52,7 @@ export async function previewBudget(request) {
 
   for (const line of grouped) {
     const center = centerMap.get(String(line.costCenter));
-    if (!center?.active || !line.expenseType) {
+    if (!center?.active) {
       lines.push({
         ...line,
         status: "PENDING_VALIDATION",
@@ -111,12 +111,11 @@ async function resolveRule(line, center, requestDate) {
     active: true,
     $and: [
       { $or: [{ costCenter: line.costCenter }, { costCenter: null }, { costCenter: { $exists: false } }] },
-      { $or: [{ expenseType: line.expenseType }, { expenseType: null }, { expenseType: { $exists: false } }] },
       { $or: [{ project: line.project || "" }, { project: "*" }, { project: "" }] },
       { $or: [{ effectiveFrom: { $exists: false } }, { effectiveFrom: { $lte: date } }] },
       { $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: { $gte: date } }] }
     ]
-  }).sort({ costCenter: -1, expenseType: -1, project: -1 }).limit(1);
+  }).sort({ costCenter: -1, project: -1 }).limit(1);
   return rules[0] || {
     mode: center.budgetMode === "ACTIVE" ? "ACTIVE" : "TRANSITIONAL",
     exceptionStrategy: "REJECT"
@@ -158,7 +157,6 @@ export async function findOrOpenBudgetException({ request, key, line, strategy, 
     request: request._id,
     dimensionKey: key,
     costCenter: line.costCenter,
-    expenseType: line.expenseType,
     budgetItem: line.budgetItem,
     project: line.project,
     strategy,
@@ -347,7 +345,6 @@ export async function reserveBudget(request, userId, { session, additionalAmount
         allocation: line.allocation?._id,
         budgetMonth: line.budgetMonth,
         costCenter: line.costCenter,
-        expenseType: line.expenseType,
         budgetItem: line.budgetItem,
         project: line.project,
         amount: line.amount,
@@ -741,7 +738,6 @@ export async function executeDeferredBudget(request, userId, { session, lines } 
   const grouped = lines ? groupBudgetLines(lines, request.project) : commitment.lines.map((line) => ({
     allocation: line.allocation,
     costCenter: line.costCenter,
-    expenseType: line.expenseType,
     budgetItem: line.budgetItem || "",
     project: line.project || "",
     amount: line.amount,

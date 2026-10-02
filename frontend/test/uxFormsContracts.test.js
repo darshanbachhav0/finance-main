@@ -54,7 +54,9 @@ test("request step 1 is grouped into four blocks with a completion badge", () =>
   assert.equal(uxformsSpanish.Complete, "Completo");
   for (const field of ["flowType", "requestType", "expenseNature", "title", "detailedDescription"]) assert.equal(blockForField(field), "need");
   for (const field of ["businessJustification", "nonApprovalRisk"]) assert.equal(blockForField(field), "why");
-  for (const field of ["requesterCostCenter", "issueDate", "accountingPeriod", "currency", "defaultExpenseType", "lines.0.costCenter", "lines.2.expenseType"]) assert.equal(blockForField(field), "budget");
+  for (const field of ["requesterCostCenter", "issueDate", "accountingPeriod", "currency", "lines.0.costCenter", "lines.2.costCenter"]) assert.equal(blockForField(field), "budget");
+  // Requesters never choose an accounting account (tipo de gasto): Accounting sets it at invoice time.
+  assert.doesNotMatch(source("../src/pages/RequestCreate.jsx"), /expenseType|expense-types|ExpenseType/);
   for (const field of ["lines", "lines.0.quantity", "lines.1.unitPrice", "lines.0.itemDescription", "lines.0.totalAmount"]) assert.equal(blockForField(field), "items");
   assert.deepEqual(OPTIONAL_REQUEST_FIELDS, ["priority", "areaCorrelative", "schoolOrDepartment"]);
 
@@ -74,7 +76,7 @@ test("request step 1 is grouped into four blocks with a completion badge", () =>
 
 test("every existing request field and the submission payload are unchanged", () => {
   const page = source("../src/pages/RequestCreate.jsx");
-  for (const field of ["flowType", "requestType", "expenseNature", "priority", "requesterCostCenter", "defaultExpenseType", "schoolOrDepartment", "areaCorrelative", "issueDate", "accountingPeriod", "currency", "title", "detailedDescription", "businessJustification", "nonApprovalRisk"]) {
+  for (const field of ["flowType", "requestType", "expenseNature", "priority", "requesterCostCenter", "schoolOrDepartment", "areaCorrelative", "issueDate", "accountingPeriod", "currency", "title", "detailedDescription", "businessJustification", "nonApprovalRisk"]) {
     assert.match(page, new RegExp(`value=\\{form\\.${field}`), `${field} still has an input`);
   }
   for (const field of ["projectId", "assetCategory", "usefulLifeYears", "npvAmount", "npvCurrency", "paybackValue", "paybackUnit"]) assert.match(page, new RegExp(`value=\\{capex\\.${field}\\}`));

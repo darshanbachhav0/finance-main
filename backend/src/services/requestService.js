@@ -205,7 +205,6 @@ export function parseRequestLines(value) {
       unitPrice: line.unitPrice === "" || line.unitPrice === undefined || line.unitPrice === null ? undefined : Number(line.unitPrice),
       priceIncludesIGV: line.priceIncludesIGV,
       costCenter: line.costCenter?._id || line.costCenter,
-      expenseType: line.expenseType?._id || line.expenseType,
       budgetItem: line.budgetItem || line.budgetItemId || "",
       projectId: line.projectId || "",
       subAccount: line.subAccount || "",

@@ -207,7 +207,7 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
       assert.equal(summary.carriedCommitments, 2);
       assert.equal(summary.carriedAmount, 250);
       assert.equal(summary.createdAllocations.length, 1);
-      const next = await BudgetAllocation.findOne({ period: "2027", costCenter: planCenter._id, expenseType: opex._id });
+      const next = await BudgetAllocation.findOne({ period: "2027", costCenter: planCenter._id });
       assert.equal(next.planningMode, "ANNUAL_MONTHLY");
       assert.equal(next.assignedAmount, 250);
       assert.equal(next.committedAmount, 250);

@@ -55,7 +55,7 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
     for (const value of new Set([period, cycle.slice(0, 7)])) await AccountingPeriod.create({ period: value, status: "OPEN" });
     const center = await CostCenter.create({ code: "CC-TRE-PAY", name: "Treasury payments", area: "Operations", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
     const plainExpense = await ExpenseType.create({ code: "EXP-TRE-PLAIN", name: "Supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "656101", permittedRequestTypes: [REQUEST_TYPE.OPEX], active: true });
-    const spotExpense = await ExpenseType.create({ code: "EXP-TRE-SPOT", name: "Consulting", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", permittedRequestTypes: [REQUEST_TYPE.OPEX], spotCategoryCode: "022", active: true });
+    const spotExpense = await ExpenseType.create({ code: "EXP-TRE-SPOT", name: "Consulting", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", permittedRequestTypes: [REQUEST_TYPE.OPEX], active: true });
     const admin = await User.create({ name: "Admin", email: "admin-pay@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" });
     const accounting = await User.create({ name: "Accounting", email: "accounting-pay@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" });
     const treasury = await User.create({ name: "Treasury", email: "treasury-pay@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" });
@@ -87,10 +87,12 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
     }
 
     let sequence = 0;
-    async function makePayable({ supplier, amount = 118, currency = "PEN", rate = 1, expenseType = plainExpense, request: existing } = {}) {
+    // SPOT follows the expense nature (CONSULTING suggests 022) unless Accounting confirmed a
+    // category on the CXP (accountingTreatment).
+    async function makePayable({ supplier, amount = 118, currency = "PEN", rate = 1, expenseType = plainExpense, request: existing, accountingTreatment } = {}) {
       sequence += 1;
       const request = existing || await FinancialRequest.create({
-        requestNumber: `REQ-2026-7${String(sequence).padStart(4, "0")}`, requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.SERVICES,
+        requestNumber: `REQ-2026-7${String(sequence).padStart(4, "0")}`, requestType: REQUEST_TYPE.OPEX, expenseNature: expenseType === spotExpense ? EXPENSE_NATURE.CONSULTING : EXPENSE_NATURE.SERVICES,
         issueDate: today, accountingPeriod: period, currency, supplier: supplier._id, solicitor: solicitor._id, requester: solicitor._id,
         description: "Treasury payment test", status: REQUEST_STATUS.ACCOUNTED,
         lines: [{ costCenter: center._id, expenseType: expenseType._id, netAmount: amount, igvAmount: 0, totalAmount: amount }]
@@ -99,7 +101,7 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       const ap = await AccountsPayable.create({
         request: request._id, flowType: "B", supplier: supplier._id, supplierIdentifierSnapshot: supplier.rucDni,
         voucher: { voucherType: "FACTURA", documentType: "FACTURA", series: "F001", number: String(sequence), documentDate: new Date(today) },
-        originalAmount: amount, currency, exchangeRate: rate, penEquivalent: pen, outstandingAmount: amount, status: AP_STATUS.OPEN
+        originalAmount: amount, currency, exchangeRate: rate, penEquivalent: pen, outstandingAmount: amount, status: AP_STATUS.OPEN, accountingTreatment
       });
       const provision = await JournalEntry.create({
         request: request._id, accountsPayable: ap._id, period, entryType: "PROVISION", sourceTransaction: `CXP:${request.requestNumber}:${ap._id}`,
@@ -442,9 +444,15 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       const { ap: small } = await makePayable({ supplier, amount: 700, expenseType: spotExpense });
       const { ap: plain } = await makePayable({ supplier, amount: 5000 });
       const { ap: missingAccount } = await makePayable({ supplier, amount: 2000, expenseType: spotExpense });
-      await schedulePayments({ payableIds: [small, plain, missingAccount].map((ap) => String(ap._id)), bank: "BBVA", currency: "PEN", user: treasury, req });
+      // Accounting's confirmation at invoice time wins over the nature's suggestion, both ways.
+      const { ap: clearedByAccounting } = await makePayable({ supplier, amount: 2000, expenseType: spotExpense, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" } });
+      const { ap: setByAccounting } = await makePayable({ supplier, amount: 1000, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "037" } });
+      await schedulePayments({ payableIds: [small, plain, missingAccount, clearedByAccounting, setByAccounting].map((ap) => String(ap._id)), bank: "BBVA", currency: "PEN", user: treasury, req });
       assert.equal((await reload(small)).detraction.status, "NOT_APPLICABLE", "S/ 700 does not exceed the threshold");
       assert.equal((await reload(plain)).detraction.status, "NOT_APPLICABLE");
+      assert.equal((await reload(clearedByAccounting)).detraction.status, "NOT_APPLICABLE");
+      assert.equal((await reload(setByAccounting)).detraction.categoryCode, "037");
+      assert.equal((await reload(setByAccounting)).detraction.amountPen, 120);
       assert.equal((await reload(missingAccount)).detraction.amount, 240);
       await assert.rejects(() => recordDetractionDeposit({ accountsPayableId: missingAccount._id, payload: { constancyNumber: "C-9", depositDate: today, amount: 240 }, user: treasury, req }), (error) => error.code === "BANK_DETAILS_MISSING");
       await assert.rejects(() => recordDetractionDeposit({ accountsPayableId: plain._id, payload: { constancyNumber: "C-8", depositDate: today, amount: 1 }, user: treasury, req }), (error) => error.statusCode === 409);

@@ -322,8 +322,6 @@ async function seedExpenseTypes() {
       category: "OPEX",
       accountingClass: "CLASS_6",
       accountNumber: "634301",
-      // SPOT Anexo 3, 020 - Mantenimiento y reparación de bienes muebles (12% above PEN 700).
-      spotCategoryCode: "020",
       permittedRequestTypes: [REQUEST_TYPE.OPEX, REQUEST_TYPE.PAGO_CON_COTIZACION],
       permittedExpenseNatures: [EXPENSE_NATURE.MAINTENANCE, EXPENSE_NATURE.INFRASTRUCTURE]
     },
@@ -799,7 +797,7 @@ async function seedBbvaFormat(currency) {
   });
 }
 
-async function seedRulesAndMappings({ costCenters, expenseTypes }) {
+async function seedRulesAndMappings({ costCenters }) {
   for (const area of [AREAS.HEALTH, AREAS.PHARMACY, AREAS.ENGINEERING]) {
     await upsert(ApprovalRule, { name: `Dirección de Área - ${area}` }, {
       approvalLevel: APPROVAL_STAGES.AREA_DIRECTOR,
@@ -946,32 +944,26 @@ async function seedRulesAndMappings({ costCenters, expenseTypes }) {
     }
   }
 
+  // Budget is held per Cost Center (one pool per project where a project has its own funds).
   const budgetDimensions = [
-    ["Presupuesto Salud - suministros", costCenters.health, expenseTypes.laboratorySupplies, "", 360000, "REJECT"],
-    ["Presupuesto Salud - servicios", costCenters.health, expenseTypes.professionalServices, "", 220000, "REJECT"],
-    ["Presupuesto Salud - mantenimiento", costCenters.health, expenseTypes.maintenance, "", 180000, "REJECT"],
-    ["Presupuesto Salud - viajes", costCenters.health, expenseTypes.travel, "", 20000, "REJECT"],
-    ["Presupuesto Salud - no deducible", costCenters.health, expenseTypes.nonDeductible, "", 10000, "REJECT"],
-    ["Presupuesto Farmacia - reactivos", costCenters.pharmacy, expenseTypes.laboratorySupplies, "", 320000, "REJECT"],
-    ["Presupuesto Farmacia - servicios", costCenters.pharmacy, expenseTypes.professionalServices, "", 160000, "REJECT"],
-    ["Presupuesto Ingeniería - tecnología", costCenters.engineering, expenseTypes.technologyAssets, "PRJ-CAMPUS-DIGITAL-2026", 850000, "REJECT"],
-    ["Presupuesto Ingeniería - servicios", costCenters.engineering, expenseTypes.professionalServices, "", 150000, "REJECT"],
-    ["Presupuesto Investigación - equipos", costCenters.research, expenseTypes.laboratoryAssets, "PRJ-INV-BIOMED-2026", 1000, "EXTRAORDINARY_APPROVAL"],
-    ["Presupuesto Finanzas - servicios", costCenters.finance, expenseTypes.professionalServices, "", 220000, "REJECT"]
+    ["Presupuesto Salud", costCenters.health, "", 790000, "REJECT"],
+    ["Presupuesto Farmacia", costCenters.pharmacy, "", 480000, "REJECT"],
+    ["Presupuesto Ingeniería - Campus Digital", costCenters.engineering, "PRJ-CAMPUS-DIGITAL-2026", 850000, "REJECT"],
+    ["Presupuesto Ingeniería", costCenters.engineering, "", 150000, "REJECT"],
+    ["Presupuesto Investigación - Biomédica", costCenters.research, "PRJ-INV-BIOMED-2026", 1000, "EXTRAORDINARY_APPROVAL"],
+    ["Presupuesto Finanzas", costCenters.finance, "", 220000, "REJECT"]
   ];
-  for (const [name, costCenter, expenseType, project, assignedAmount, exceptionStrategy] of budgetDimensions) {
+  for (const [name, costCenter, project, assignedAmount, exceptionStrategy] of budgetDimensions) {
     await upsert(BudgetRule, { name }, {
       mode: "ACTIVE",
       exceptionStrategy,
       costCenter: costCenter._id,
-      expenseType: expenseType._id,
       project: project || "*",
       active: true
     });
     await upsert(BudgetAllocation, {
       period: currentPeriod,
       costCenter: costCenter._id,
-      expenseType: expenseType._id,
       project
     }, {
       assignedAmount,
@@ -1120,7 +1112,9 @@ async function seedRequest({
     description,
     lines: [{
       costCenter: costCenter._id,
+      // The account the platform would suggest for this request type and expense nature.
       expenseType: expenseType._id,
+      accountSource: "SUGGESTED",
       projectId: project,
       netAmount: net,
       igvAmount: igv,
@@ -1335,9 +1329,11 @@ async function moveToAccounting(request, users, sequence, accountNumber) {
     await addAttachment(current, "CONFORMITY", `conformidad-${current.requestNumber}.pdf`, minimalPdf(`Acta de conformidad - ${current.requestNumber}`), userById(users, current.requester));
     await current.save();
   }
+  // Accounting confirms the scenario's accounting account while processing the invoice.
+  const account = await ExpenseType.findOne({ accountNumber }).select("_id");
   await processAccountsPayable({
     requestId: current._id,
-    payload: accountingPayload(current, sequence, accountNumber),
+    payload: { ...accountingPayload(current, sequence, accountNumber), accountingAccount: account?._id },
     user: users.accounting,
     req: fakeReq
   });
@@ -2177,7 +2173,7 @@ export async function seed() {
   const suppliers = await seedSuppliers(users.admin);
   await seedPeriodsAndRates(users.admin);
   await ensureSpotCategories();
-  await seedRulesAndMappings({ costCenters, expenseTypes });
+  await seedRulesAndMappings({ costCenters });
   await seedScenarios({ users, suppliers, costCenters, expenseTypes });
   await Counter.updateOne(
     { key: "financial-request", year: Number(currentPeriod.slice(0, 4)) },

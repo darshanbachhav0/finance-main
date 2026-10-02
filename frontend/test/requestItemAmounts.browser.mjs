@@ -62,10 +62,7 @@ try {
     }
   }, { user, form, initialLine });
   await page.goto("http://127.0.0.1:5192/requests/new");
-  const account = page.getByRole("button", { name: "Expense category for these items", exact: false });
-  assert.match(await account.innerText(), /Select/, "Ambiguous accounts are not silently guessed");
-  await account.click();
-  await page.getByRole("option", { name: "Supplies", exact: true }).click();
+  assert.equal(await page.getByRole("button", { name: "Expense category for these items", exact: false }).count(), 0, "requesters never choose an accounting account");
   const card = page.locator(".request-item-card").first();
   const total = card.getByLabel("Final total", { exact: true });
   const includes = card.getByRole("checkbox");
@@ -108,7 +105,7 @@ try {
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await page.waitForURL("**/requests/saved");
   assert.equal(submittedLines[0].priceIncludesIGV, false);
-  assert.equal(submittedLines[0].expenseType, "expense");
+  assert.equal(submittedLines[0].expenseType, undefined);
   assert.equal(submittedLines[0].costCenter, "center");
   assert.equal(saved.totalAmount, 3540);
   await page.goto("http://127.0.0.1:5192/requests/saved/edit");

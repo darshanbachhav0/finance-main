@@ -21,13 +21,13 @@ test("Track C submission can be saved without invoice files", () => {
   assert.doesNotThrow(() => assertMandatoryDocuments({ flowType: "C", requestType: "ENTREGA_RENDIR", attachments: [] }));
 });
 
-test("every request needs at least one fully dimensioned accounting line", () => {
+test("every request needs at least one line with a Cost Center; requesters never choose an account", () => {
   assert.throws(() => assertRequestLines([]), (error) => error.statusCode === 422);
   assert.throws(
-    () => assertRequestLines([{ costCenter: "cost-1" }]),
-    (error) => error.statusCode === 422 && /Expense Type/.test(error.message)
+    () => assertRequestLines([{ expenseType: "expense-1" }]),
+    (error) => error.statusCode === 422 && /Cost Center/.test(error.message)
   );
-  assert.doesNotThrow(() => assertRequestLines([{ costCenter: "cost-1", expenseType: "expense-1" }]));
+  assert.doesNotThrow(() => assertRequestLines([{ costCenter: "cost-1" }]));
 });
 
 test("goods submission requires at least one quotation (three are not compulsory) while invoice documents belong to the invoice phase", () => {

@@ -79,7 +79,7 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
     const owner = await User.create({ name: "Fix owner", email: "fix.owner@test.local", passwordHash: "unused", role: "Solicitor", area: "Operations" });
     const center = await CostCenter.create({ code: "FIX-CC", name: "Fixes", area: "Operations", budgetMode: "ACTIVE", annualBudget: 10000000, active: true });
     const opex = await ExpenseType.create({ code: "FIX-OPEX", name: "Service", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", active: true });
-    const nonIgv = await ExpenseType.create({ code: "FIX-NOIGV", name: "IGV not creditable", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "659101", igvDeductible: false, active: true });
+    const nonIgv = await ExpenseType.create({ code: "FIX-NOIGV", name: "IGV not creditable", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "659101", active: true });
     const capex = await ExpenseType.create({ code: "FIX-CAPEX", name: "Equipment", category: "CAPEX", accountingClass: "CLASS_3", accountNumber: "336101", active: true });
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20555555551", normalizedIdentifier: "20555555551", legalName: "Fix Supplier", name: "Fix Supplier", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, paymentTerms: { option: "CREDIT_30", days: 30 } });
     let sequence = 0;
@@ -252,17 +252,18 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
       assert.equal(result.journal.period, "2026-08");
     });
 
-    await t.test("10. a typed posting account must be the Expense Type account", async () => {
+    await t.test("10. a typed posting account must be the accounting account selected for the invoice", async () => {
       const request = { lines: [{ expenseType: { accountNumber: "632101" } }] };
       assert.doesNotThrow(() => assertPostingAccount(request, "632101"));
       assert.doesNotThrow(() => assertPostingAccount(request, ""));
-      assert.throws(() => assertPostingAccount(request, "999999"), /not the account configured/);
+      assert.throws(() => assertPostingAccount(request, "999999"), /not the accounting account selected/);
     });
 
-    await t.test("5. non-recoverable IGV: boletas, non-deductible expense types and CAPEX asset cost; residuals on the expense line", async () => {
-      assert.equal(igvIsRecoverable("BOLETA", opex), false);
-      assert.equal(igvIsRecoverable("FACTURA", nonIgv), false);
-      assert.equal(igvIsRecoverable("FACTURA", opex), true);
+    await t.test("5. non-recoverable IGV: boletas, Accounting's per-invoice override and CAPEX asset cost; residuals on the expense line", async () => {
+      assert.equal(igvIsRecoverable("BOLETA"), false);
+      assert.equal(igvIsRecoverable("BOLETA", true), false, "an override cannot make a boleta creditable");
+      assert.equal(igvIsRecoverable("FACTURA", false), false);
+      assert.equal(igvIsRecoverable("FACTURA"), true);
       const boletaRequest = await makeRequest();
       await reserveBudget(boletaRequest, admin._id);
       const { ap: boleta } = await payable(boletaRequest, invoice({ voucherType: "BOLETA", series: "B001" }));
@@ -270,9 +271,10 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
       assert.equal(boletaJournal.lines.some(line => line.accountNumber === "401111"), false);
       assert.equal(boletaJournal.lines.find(line => line.accountNumber === "632101").debit, 118);
 
-      const ndRequest = await makeRequest({ lines: [{ costCenter: center._id, expenseType: nonIgv._id, netAmount: 1000, igvAmount: 180, totalAmount: 1180 }] });
+      const ndRequest = await makeRequest({ lines: [{ costCenter: center._id, expenseType: nonIgv._id, accountSource: "ACCOUNTING", netAmount: 1000, igvAmount: 180, totalAmount: 1180 }] });
       await reserveBudget(ndRequest, admin._id);
-      const { ap: nd } = await payable(ndRequest, invoice());
+      const { ap: nd } = await payable(ndRequest, invoice(), { accountingTreatment: { igvDeductible: false } });
+      assert.equal(nd.accountingTreatment.igvDeductible, false);
       const ndJournal = await JournalEntry.findById(nd.provisionJournal);
       assert.equal(ndJournal.lines.find(line => line.accountNumber === "659101").debit, 118);
       assert.equal(ndJournal.totalDebit, ndJournal.totalCredit);

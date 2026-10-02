@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import { assertBudgetBeforePosting, executeBudgetAmount, reverseBudgetExecution } from "./budgetService.js";
 import SunatVoucher from "../models/SunatVoucher.js";
@@ -11,6 +12,7 @@ import {
   voucherIdentity
 } from "./sunatVoucherService.js";
 import AccountsPayable from "../models/AccountsPayable.js";
+import ExpenseType from "../models/ExpenseType.js";
 import { resolvePayablePaymentTerms, resolvePayableDueDate } from "./payablePaymentTermsService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
@@ -101,8 +103,9 @@ function fiscalPayload(body, supplierIdentifier) {
   };
 }
 
-// The posting account of a provision comes from each line's Expense Type. An account number typed
-// by Accounting is only accepted when it is one of those configured accounts.
+// The posting account of a provision is the accounting account on each line: the platform's
+// suggestion, or the one Accounting chose while processing the invoice. A free-typed account
+// number is only accepted when it is one of those accounts.
 export function assertPostingAccount(request, accountNumber) {
   const typed = String(accountNumber || "").trim();
   if (!typed) return;
@@ -110,11 +113,47 @@ export function assertPostingAccount(request, accountNumber) {
   if (configured.length && !configured.includes(typed)) {
     throw new AppError(
       422,
-      `Account ${typed} is not the account configured for this request's expense types (${configured.join(", ")}). The posting account comes from the Expense Type master.`,
+      `Account ${typed} is not the accounting account selected for this invoice (${configured.join(", ")}). Choose the account from the accounting account catalog.`,
       { accountNumber: typed, configured },
       ERROR_CODES.VALIDATION_ERROR
     );
   }
+}
+
+// Accounting picks the account while processing the invoice; it replaces the platform suggestion
+// on every line (or only on the lines listed in lineAccounts).
+export async function applyAccountingAccounts(request, { accountingAccount, lineAccounts } = {}) {
+  const byLine = new Map((Array.isArray(lineAccounts) ? lineAccounts : []).filter((item) => item?.line && item?.account).map((item) => [String(item.line), String(item.account)]));
+  if (!accountingAccount && !byLine.size) return false;
+  const chosen = [...new Set([accountingAccount, ...byLine.values()].filter(Boolean).map(String))];
+  if (chosen.some((id) => !mongoose.isValidObjectId(id))) throw new AppError(422, "Select a valid accounting account.", { accountingAccount, lineAccounts }, ERROR_CODES.VALIDATION_ERROR);
+  const accounts = new Map((await ExpenseType.find({ _id: { $in: chosen }, active: true })).map((item) => [String(item._id), item]));
+  for (const line of request.lines || []) {
+    const id = byLine.get(String(line._id)) || (accountingAccount ? String(accountingAccount) : "");
+    if (!id) continue;
+    const account = accounts.get(id);
+    if (!account) throw new AppError(422, "Select an active accounting account.", { account: id }, ERROR_CODES.VALIDATION_ERROR);
+    line.expenseType = account;
+    line.accountSource = "ACCOUNTING";
+  }
+  return true;
+}
+
+function optionalBoolean(value) {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return undefined;
+}
+
+// SPOT and IGV treatment Accounting confirms for the invoice. Missing values keep the defaults:
+// IGV follows the document type and SPOT follows the expense nature (see detractionService).
+export function accountingTreatmentPayload(payload = {}, user) {
+  const igvDeductible = optionalBoolean(payload.igvDeductible);
+  const spotConfirmed = payload.spotCategoryCode !== undefined || optionalBoolean(payload.spotConfirmed) === true;
+  const spotCategoryCode = String(payload.spotCategoryCode ?? "").trim();
+  if (spotCategoryCode && !/^\d{3}$/.test(spotCategoryCode)) throw new AppError(422, "Select a valid SPOT category.", { spotCategoryCode }, ERROR_CODES.VALIDATION_ERROR);
+  if (igvDeductible === undefined && !spotConfirmed) return undefined;
+  return { igvDeductible, spotConfirmed, spotCategoryCode: spotConfirmed ? spotCategoryCode : "", confirmedBy: user?._id || user, confirmedAt: new Date() };
 }
 
 function debitLine({ accountNumber, subAccount = "", description, costCenter, expenseType, amount }) {
@@ -125,11 +164,17 @@ function creditLine({ accountNumber, subAccount = "", description, costCenter, e
   return { accountNumber, subAccount, description, costCenter, expenseType, debit: 0, credit: roundMoney(amount) };
 }
 
-// IGV is recoverable tax credit only for creditable vouchers (not boletas/tickets) and expense types
-// whose IGV is deductible. Otherwise the gross amount is cost (or, for CAPEX, part of the asset cost).
-export function igvIsRecoverable(voucherType, expenseType) {
+// IGV deductibility is decided by the document: boletas/tickets never give tax credit. On a
+// creditable document Accounting may still mark the invoice's IGV as non-deductible
+// (igvDeductible === false). Non-recoverable IGV is cost (or, for CAPEX, part of the asset cost).
+export function igvIsRecoverable(voucherType, igvDeductible) {
   if (NON_CREDITABLE_IGV_VOUCHER_TYPES.includes(canonicalVoucherType(voucherType, ""))) return false;
-  return expenseType?.igvDeductible !== false;
+  return igvDeductible !== false;
+}
+
+function requireLineAccount(request, line) {
+  if (line.expenseType?.accountNumber) return line.expenseType;
+  throw new AppError(422, `Select the accounting account of request ${request.requestNumber} before posting.`, { line: line._id }, ERROR_CODES.VALIDATION_ERROR);
 }
 
 function expenseDescription(prefix, requestNumber, expenseType, nonRecoverableIgv) {
@@ -171,7 +216,7 @@ function settleResidual(lines, target, expenseLines = []) {
   receiver.debit = addMoney(receiver.debit, difference);
 }
 
-async function provisionJournalLines(request, { voucherType } = {}) {
+async function provisionJournalLines(request, { voucherType, igvDeductible } = {}) {
   await request.populate("lines.expenseType");
   const total = request.totalPENEquivalent ?? request.penEquivalent;
   const payable = await requireAccountingMapping("ACCOUNTS_PAYABLE", request);
@@ -188,6 +233,7 @@ async function provisionJournalLines(request, { voucherType } = {}) {
     }));
   } else if (request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) {
     for (const line of request.lines) {
+      requireLineAccount(request, line);
       const expense = debitLine({
         accountNumber: line.expenseType.accountNumber,
         subAccount: line.subAccount || "",
@@ -201,12 +247,13 @@ async function provisionJournalLines(request, { voucherType } = {}) {
     }
   } else {
     const documentType = voucherType || request.fiscalData?.voucherType;
-    const recoverable = (line) => igvIsRecoverable(documentType, line.expenseType);
+    const recoverable = () => igvIsRecoverable(documentType, igvDeductible ?? request.fiscalData?.igvDeductible);
     const igvMapping = (request.lines || []).some((line) => Number(line.igvAmount) > 0 && recoverable(line)) ? await requireAccountingMapping("IGV", request) : null;
     for (const line of request.lines) {
       const netPen = multiplyMoney(line.netAmount, request.exchangeRate);
       const igvPen = multiplyMoney(line.igvAmount, request.exchangeRate);
       const igvToCost = recoverable(line) ? 0 : igvPen;
+      requireLineAccount(request, line);
       if (addMoney(netPen, igvToCost) > 0) {
         const expense = debitLine({
           accountNumber: line.expenseType.accountNumber,
@@ -311,7 +358,7 @@ export async function createProvisionJournal(request, accountsPayable, userId, {
     accountsPayable,
     entryType,
     sourceTransaction: `CXP:${request.requestNumber}`,
-    lines: await provisionJournalLines(request, { voucherType: accountsPayable?.voucher?.voucherType }),
+    lines: await provisionJournalLines(request, { voucherType: accountsPayable?.voucher?.voucherType, igvDeductible: accountsPayable?.accountingTreatment?.igvDeductible }),
     userId,
     session
   });
@@ -349,7 +396,8 @@ async function provisionJournalLinesForVoucher(request, voucherAmount) {
   let recoverableIgv = 0;
   let igvAnchor;
   for (const [index, line] of requestLines.entries()) {
-    const recoverable = igvIsRecoverable(voucherAmount.voucherType, line.expenseType);
+    requireLineAccount(request, line);
+    const recoverable = igvIsRecoverable(voucherAmount.voucherType, voucherAmount.igvDeductible);
     const igvToCost = recoverable ? 0 : igvShares[index];
     if (recoverable && igvShares[index] > 0) {
       recoverableIgv = addMoney(recoverableIgv, igvShares[index]);
@@ -401,7 +449,7 @@ export async function createProvisionJournalForVoucher(request, accountsPayable,
     sourceTransaction: `CXP:${request.requestNumber}:${accountsPayable._id}`,
     lines: request.requestType === REQUEST_TYPE.ENTREGA_RENDIR
       ? await provisionJournalLines(request)
-      : await provisionJournalLinesForVoucher(request, { ...voucherAmount, voucherType: voucherAmount.voucherType || accountsPayable?.voucher?.voucherType, exchangeRate }),
+      : await provisionJournalLinesForVoucher(request, { ...voucherAmount, voucherType: voucherAmount.voucherType || accountsPayable?.voucher?.voucherType, igvDeductible: voucherAmount.igvDeductible ?? accountsPayable?.accountingTreatment?.igvDeductible, exchangeRate }),
     userId,
     originalAmount: totalAmount,
     exchangeRate,
@@ -509,6 +557,7 @@ export async function createAccountsPayableFromVoucher({
   user,
   paymentPriority = "NORMAL",
   flowType,
+  accountingTreatment,
   session
 }) {
   await assertPostingAllowed(request, { user });
@@ -595,6 +644,7 @@ export async function createAccountsPayableFromVoucher({
     }),
     paymentTermsSnapshot,
     paymentPriority,
+    accountingTreatment,
     status: AP_STATUS.OPEN,
     history: [{ status: AP_STATUS.OPEN, by: user?._id || user, comments: hasManualSunatException(validatedVoucher) ? "CXP created under an approved manual SUNAT exception." : "CXP created after automated fiscal validation." }]
   }], session ? { session } : undefined);
@@ -603,7 +653,8 @@ export async function createAccountsPayableFromVoucher({
     igvAmount: voucher.igvAmount,
     totalAmount: total,
     exchangeRate,
-    voucherType
+    voucherType,
+    igvDeductible: accountingTreatment?.igvDeductible
   }, user?._id || user, { session });
   accountsPayable.provisionJournal = journal._id;
   if (request.flowType !== FLOW_TYPE.C && !accountsPayable.budgetExecutedAt) {
@@ -625,7 +676,7 @@ export async function createAccountsPayableFromVoucher({
 export async function createRenditionJournal(request, accountsPayable, userId, { session } = {}) {
   await request.populate("rendition.lines.expenseType");
   const deductibleLines = (request.rendition.lines || []).filter((line) => line.expenseType?.deductible !== false);
-  const recoverableIgv = deductibleLines.reduce((sum, line) => (igvIsRecoverable(undefined, line.expenseType) ? addMoney(sum, line.igvAmount) : sum), 0);
+  const recoverableIgv = deductibleLines.reduce((sum, line) => (igvIsRecoverable(undefined) ? addMoney(sum, line.igvAmount) : sum), 0);
   const [transit, igvMapping, returnedMapping] = await Promise.all([
     requireAccountingMapping("ADVANCE_TRANSIT", request),
     Number(recoverableIgv) > 0 ? requireAccountingMapping("IGV", request) : Promise.resolve(null),
@@ -636,7 +687,8 @@ export async function createRenditionJournal(request, accountsPayable, userId, {
   for (const line of deductibleLines) {
     const netPen = multiplyMoney(line.netAmount, request.exchangeRate);
     const igvPen = multiplyMoney(line.igvAmount, request.exchangeRate);
-    const igvToCost = igvIsRecoverable(undefined, line.expenseType) ? 0 : igvPen;
+    const igvToCost = igvIsRecoverable(undefined) ? 0 : igvPen;
+    requireLineAccount(request, line);
     if (addMoney(netPen, igvToCost) > 0) {
       const expense = debitLine({
         accountNumber: line.expenseType.accountNumber,
@@ -865,6 +917,9 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   // The invoice lands in its document date's period; the request's creation month is irrelevant.
   await guardAccountingPeriod({ period: fiscal.fiscalPeriod, action: "ACCOUNT", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   await request.populate("lines.expenseType");
+  // Accounting sets the account (replacing the platform suggestion) and confirms SPOT / IGV here.
+  await applyAccountingAccounts(request, payload);
+  const treatment = accountingTreatmentPayload(payload, user);
   assertPostingAccount(request, fiscal.accountNumber);
   const duplicate = await AccountsPayable.findOne({
     request: { $ne: request._id },
@@ -913,7 +968,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     }
     request.fiscalValidation = validation;
   }
-  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, user });
+  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, user, requireAccount: true });
   await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING);
   if (MANDATORY_XML_TYPES.includes(request.requestType) && !request.xmlValidation?.validated) {
     throw new AppError(422, "A valid XML fiscal document is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
@@ -922,7 +977,14 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier: request.supplier });
 
   const result = await runFinancialOperation(async (session) => {
-    request.fiscalData = { ...fiscal, processedAt: new Date(), processedBy: user._id };
+    request.fiscalData = {
+      ...fiscal,
+      igvDeductible: treatment?.igvDeductible,
+      spotConfirmed: treatment?.spotConfirmed || undefined,
+      spotCategoryCode: treatment?.spotConfirmed ? treatment.spotCategoryCode : undefined,
+      processedAt: new Date(),
+      processedBy: user._id
+    };
     // A cancelled CXP never counts as the existing payable of the request.
     let accountsPayable = await AccountsPayable.findOne({ request: request._id, status: { $ne: AP_STATUS.CANCELLED } }).session(session || null);
     if (!accountsPayable) {
@@ -951,11 +1013,12 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
         sunatValidation: invoiceBased ? (sunatValidationSnapshot(manualEvidence) || { status: "VALID" }) : undefined,
         dueDate: resolvePayableDueDate({ dueDate: payload.dueDate, voucher: fiscal, paymentTermsSnapshot, flowType: request.flowType }),
         paymentTermsSnapshot,
+        accountingTreatment: treatment,
         status: AP_STATUS.OPEN,
         history: [{ status: AP_STATUS.OPEN, by: user._id, comments: manualEvidence ? "CXP created under an approved manual SUNAT exception." : "CXP created after fiscal validation." }]
       }], session ? { session } : undefined);
       if (purchaseOrder) await consumePurchaseOrderBalance(purchaseOrder._id, request.totalAmount, { session });
-    }
+    } else if (treatment) accountsPayable.accountingTreatment = treatment;
     if (invoiceBased) {
       const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };
       let evidence = await findDuplicateVoucher(voucher, { session });
@@ -969,7 +1032,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
       accountsPayable.sunatVoucher = evidence._id;
     }
     const journal = invoiceBased
-      ? await createProvisionJournalForVoucher(request, accountsPayable, { netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount, exchangeRate, voucherType: fiscal.voucherType }, user._id, { session })
+      ? await createProvisionJournalForVoucher(request, accountsPayable, { netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount, exchangeRate, voucherType: fiscal.voucherType, igvDeductible: treatment?.igvDeductible }, user._id, { session })
       : await createProvisionJournal(request, accountsPayable, user._id, { session });
     accountsPayable.provisionJournal = journal._id;
     if (request.flowType !== FLOW_TYPE.C && !accountsPayable.budgetExecutedAt) {

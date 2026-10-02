@@ -57,7 +57,7 @@ try {
   const drawer = page.getByRole("dialog");
   await drawer.getByLabel("Budget year", { exact: true }).fill("2038");
   await drawer.getByLabel("Cost center", { exact: true }).selectOption(String(center._id));
-  await drawer.getByLabel("Expense account", { exact: true }).selectOption(String(expense._id));
+  assert.equal(await drawer.getByLabel("Expense account", { exact: true }).count(), 0, "budget is held per Cost Center only");
   await drawer.getByLabel("Annual budget", { exact: true }).fill("120000");
   assert.equal(await drawer.getByLabel("Monthly distribution", { exact: true }).count(), 0);
   await drawer.getByLabel("Budget planning mode", { exact: true }).selectOption("ANNUAL_MONTHLY");
@@ -104,7 +104,6 @@ try {
 
   await page.getByRole("button", { name: "Create annual budget", exact: true }).click();
   await drawer.getByLabel("Cost center", { exact: true }).selectOption(String(center._id));
-  await drawer.getByLabel("Expense account", { exact: true }).selectOption(String(expense._id));
   await drawer.getByLabel("Project", { exact: true }).fill("ANNUAL-ONLY");
   await drawer.getByLabel("Annual budget", { exact: true }).fill("60000");
   await drawer.getByLabel("Reason / approval reference").fill("Approved annual-only plan");

@@ -49,6 +49,22 @@ export const SPOT_CATEGORY_OPTIONS = Object.freeze(SPOT_DEFAULT_CATEGORIES.map((
   label: `${item.code} - ${item.description} (${item.rate}%)`
 })));
 
+// SPOT category suggested from the nature of the expense. Only a suggestion: Accounting confirms
+// (or clears) it when processing the invoice. Natures that are goods outside Anexos 1-2, travel,
+// petty cash and reimbursements have no suggestion; neither do generic SERVICES, which may or
+// may not fall under 037 - Accounting selects 037 for them when it applies.
+export const SPOT_SUGGESTION_BY_EXPENSE_NATURE = Object.freeze({
+  PROFESSIONAL_FEES: "022",
+  CONSULTING: "022",
+  ADVERTISING: "022",
+  MAINTENANCE: "020",
+  INFRASTRUCTURE: "030"
+});
+
+export function suggestedSpotCategoryCode(expenseNature) {
+  return SPOT_SUGGESTION_BY_EXPENSE_NATURE[expenseNature] || "";
+}
+
 // SUNAT requires the deposit in whole soles (R.S. 343-2014/SUNAT): round half up.
 export function detractionAmountPen(baseAmountPen, rate) {
   return Math.round((Number(baseAmountPen) * Number(rate)) / 100);

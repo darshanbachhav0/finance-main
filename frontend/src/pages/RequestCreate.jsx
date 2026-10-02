@@ -64,7 +64,7 @@ const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierId = (value) => value?._id || value || "";
 const attachmentId = (value) => value?._id || value || "";
 
-const emptyLine = (costCenter = "", expenseType = "") => ({
+const emptyLine = (costCenter = "") => ({
   clientId: `${Date.now()}-${Math.random()}`,
   itemDescription: "",
   quantity: "1",
@@ -73,7 +73,6 @@ const emptyLine = (costCenter = "", expenseType = "") => ({
   priceIncludesIGV: true,
   subtotal: 0,
   costCenter,
-  expenseType,
   budgetItem: "",
   projectId: "",
   netAmount: 0,
@@ -106,7 +105,6 @@ function initialForm() {
     expenseNature: "SERVICES",
     priority: "MEDIA",
     requesterCostCenter: "",
-    defaultExpenseType: "",
     schoolOrDepartment: "",
     areaCorrelative: "",
     issueDate: today,
@@ -154,7 +152,7 @@ export default function RequestCreate() {
   const location = useLocation();
   const isEditing = Boolean(id);
   const draftKey = `erp_request_autosave_${user._id}_${id || "new"}`;
-  const [masters, setMasters] = useState({ suppliers: [], costCenters: [], expenseTypes: [], projects: [], periods: [] });
+  const [masters, setMasters] = useState({ suppliers: [], costCenters: [], projects: [], periods: [] });
   const [form, setForm] = useState(initialForm);
   const [capex, setCapex] = useState(initialCapex);
   const [opexFrequency, setOpexFrequency] = useState("ONE_OFF");
@@ -189,17 +187,15 @@ export default function RequestCreate() {
         const calls = [
           api.get("/suppliers", { params: { pageSize: 100 } }),
           api.get("/requests/authorized-cost-centers"),
-          api.get("/expense-types", { params: { pageSize: 100, active: true } }),
           api.get("/projects", { params: { pageSize: 100, active: true } }),
           api.get("/accounting-periods", { params: { pageSize: 100 } })
         ];
         if (isEditing) calls.push(api.get(`/requests/${id}`));
-        const [suppliersResponse, centersResponse, expensesResponse, projectsResponse, periodsResponse, requestResponse] = await Promise.all(calls);
+        const [suppliersResponse, centersResponse, projectsResponse, periodsResponse, requestResponse] = await Promise.all(calls);
         if (!active) return;
         const nextMasters = {
           suppliers: suppliersResponse.data.data,
           costCenters: centersResponse.data.data,
-          expenseTypes: expensesResponse.data.data.filter((item) => item.active),
           projects: projectsResponse.data.data.filter((item) => item.active),
           periods: periodsResponse.data.data
         };
@@ -221,7 +217,6 @@ export default function RequestCreate() {
             expenseNature: request.expenseNature || "SERVICES",
             priority: request.priority || "MEDIA",
             requesterCostCenter: supplierId(request.requesterCostCenter),
-            defaultExpenseType: supplierId(request.lines?.[0]?.expenseType),
             schoolOrDepartment: request.schoolOrDepartment || "",
             areaCorrelative: request.areaCorrelative || "",
             issueDate: request.issueDate.slice(0, 10),
@@ -243,7 +238,6 @@ export default function RequestCreate() {
             unitPrice: line.unitPrice ?? "",
             priceIncludesIGV: line.priceIncludesIGV,
             costCenter: supplierId(line.costCenter),
-            expenseType: supplierId(line.expenseType),
             budgetItem: line.budgetItem || "",
             projectId: line.projectId || "",
             netAmount: line.netAmount,
@@ -366,7 +360,7 @@ export default function RequestCreate() {
   }), [form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, capex.projectPep, capex.projectId, masters.projects, lines]);
 
   useEffect(() => {
-    if (!hydrated || !form.accountingPeriod || lines.some((line) => !line.costCenter || !line.expenseType || !(Number(line.totalAmount) > 0))) {
+    if (!hydrated || !form.accountingPeriod || lines.some((line) => !line.costCenter || !(Number(line.totalAmount) > 0))) {
       setBudgetPreview({ status: "PENDING_VALIDATION", lines: [] });
       setBudgetLoading(false);
       return undefined;
@@ -394,29 +388,10 @@ export default function RequestCreate() {
     const status = supplierStatus(supplier);
     return !["REJECTED", "INACTIVE"].includes(status) || supplier._id === form.supplier;
   }), [masters.suppliers, form.supplier]);
-  const allowedExpenseTypes = useMemo(() => masters.expenseTypes.filter((item) => {
-    const typeAllowed = !item.permittedRequestTypes?.length || item.permittedRequestTypes.includes(form.requestType);
-    const natureAllowed = !item.permittedExpenseNatures?.length || item.permittedExpenseNatures.includes(form.expenseNature);
-    const categoryAllowed = !["CAPEX", "OPEX"].includes(form.requestType) || item.category === form.requestType;
-    return typeAllowed && natureAllowed && categoryAllowed;
-  }), [masters.expenseTypes, form.requestType, form.expenseNature]);
   const totals = useMemo(() => {
     const cents = lines.reduce((result, line) => ({ net: result.net + Math.round(Number(line.netAmount || 0) * 100), igv: result.igv + Math.round(Number(line.igvAmount || 0) * 100), total: result.total + Math.round(Number(line.totalAmount || 0) * 100) }), { net: 0, igv: 0, total: 0 });
     return { net: cents.net / 100, igv: cents.igv / 100, total: cents.total / 100 };
   }, [lines]);
-  useEffect(() => {
-    if (!hydrated) return;
-    const selected = allowedExpenseTypes.find(item => item._id === form.defaultExpenseType)?._id;
-    const automatic = selected || (allowedExpenseTypes.length === 1 ? allowedExpenseTypes[0]._id : "");
-    if (automatic && !form.defaultExpenseType) setForm(current => ({ ...current, defaultExpenseType: automatic }));
-    if (automatic) setLines(current => current.some(line => !line.expenseType) ? current.map(line => line.expenseType ? line : { ...line, expenseType: automatic }) : current);
-  }, [hydrated, form.defaultExpenseType, allowedExpenseTypes]);
-
-  function setDefaultExpenseType(value) {
-    const previous = form.defaultExpenseType;
-    setForm(current => ({ ...current, defaultExpenseType: value }));
-    setLines(current => current.map(line => !line.expenseType || line.expenseType === previous ? { ...line, expenseType: value } : line));
-  }
 
   function setHeaderCostCenter(value) {
     setForm((current) => {
@@ -479,7 +454,6 @@ export default function RequestCreate() {
       lines.forEach((line, lineIndex) => {
         if (!String(line.itemDescription || "").trim() && (!line.legacyAmounts || officialRequest && submitting)) next[`lines.${lineIndex}.itemDescription`] = "Item description is required.";
         if (!line.costCenter) next[`lines.${lineIndex}.costCenter`] = "Select a Cost Center.";
-        if (!line.expenseType || !allowedExpenseTypes.some(item => item._id === line.expenseType)) next[`lines.${lineIndex}.expenseType`] = "Select an expense account.";
         if (!(Number(line.totalAmount) > 0)) next[`lines.${lineIndex}.totalAmount`] = "Total must be greater than zero.";
         if (!line.legacyAmounts) {
           if (!(Number(line.quantity) > 0) || !Number.isFinite(Number(line.quantity))) next[`lines.${lineIndex}.quantity`] = "Enter a valid quantity.";
@@ -529,7 +503,6 @@ export default function RequestCreate() {
       const outside = openPeriodError(form.issueDate, masters.periods, "The issue date must fall within an open accounting period.");
       if (outside) problems.issueDate = outside;
     }
-    if (!form.defaultExpenseType && lines.some((line) => !line.expenseType)) problems.defaultExpenseType = "Select an expense category.";
     return problems;
   }
 
@@ -566,7 +539,7 @@ export default function RequestCreate() {
       fixed.forEach((key) => delete next[key]);
       return next;
     });
-  }, [hydrated, form, lines, masters.periods, allowedExpenseTypes, officialRequest]);
+  }, [hydrated, form, lines, masters.periods, officialRequest]);
 
   function validateQuotationAmount(index) {
     setFieldError(`quotations.${index}.amount`, positiveAmountError(quotations[index]?.amount, { required: quotationPolicy.enabled, message: "Quotation amount must be greater than zero." }));
@@ -715,8 +688,6 @@ export default function RequestCreate() {
             <label className={`field${errors.currency ? " field-error" : ""}`}><span>{t("Currency")} *</span><select value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))} onBlur={() => validateField("currency")}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select>{errors.currency && <small className="field-error-text">{t(errors.currency)}</small>}</label>
           </div>
 
-          <div className="official-subsection request-default-account"><SearchSelect label="Expense category for these items" value={form.defaultExpenseType || ""} options={allowedExpenseTypes} onChange={setDefaultExpenseType} getOptionLabel={item => item.name} searchPlaceholder="Search expense category..." error={errors.defaultExpenseType} required /><p className="section-note">{t("Choose the expense category for these items.")}</p></div>
-
           {form.requestType === "CAPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("CAPEX financial information")}</h3><p>{t("Planning information is recorded only; no depreciation or NPV calculation is generated.")}</p></div></div><div className="form-grid three-column-form">
             <label className="field"><span>{t("Project / PEP")}</span><select value={capex.projectId} onChange={(event) => { const project = masters.projects.find((item) => item._id === event.target.value); setCapex((current) => ({ ...current, projectId: event.target.value, projectPep: project?.code || current.projectPep })); }}><option value="">{t("No project")}</option>{masters.projects.map((project) => <option key={project._id} value={project._id}>{project.code} - {project.name}</option>)}</select></label>
             <label className="field"><span>{t("Fixed asset category")}</span><select value={capex.assetCategory} onChange={(event) => setCapex((current) => ({ ...current, assetCategory: event.target.value }))}><option value="">{t("Select")}</option>{["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"].map((value) => <option key={value} value={value}>{t(value)}</option>)}</select></label>
@@ -726,17 +697,17 @@ export default function RequestCreate() {
             <div className="field"><span>{t("Payback")}</span><div className="compound-field"><input aria-label={t("Payback value")} type="number" min="0" step="0.01" value={capex.paybackValue} onChange={(event) => setCapex((current) => ({ ...current, paybackValue: event.target.value }))} /><select aria-label={t("Payback unit")} value={capex.paybackUnit} onChange={(event) => setCapex((current) => ({ ...current, paybackUnit: event.target.value }))}><option value="MONTHS">{t("Months")}</option><option value="YEARS">{t("Years")}</option></select></div></div>
           </div></div>}
 
-          {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("The expense account remains controlled by the configured accounting master.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="EVERY_3_MONTHS">{language === "es" ? "Cada 3 meses" : "Every 3 months"}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
+          {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("Accounting assigns the accounting account when it processes the invoice.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="EVERY_3_MONTHS">{language === "es" ? "Cada 3 meses" : "Every 3 months"}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
           </RequestFormBlock>
 
-          <RequestFormBlock {...blockInfo.items} status={blockStatuses.items} action={<button type="button" className="secondary-button" onClick={() => setLines(current => [...current, emptyLine(form.requesterCostCenter, form.defaultExpenseType)])}><Plus size={16} /><span>{t("Add line")}</span></button>}>
+          <RequestFormBlock {...blockInfo.items} status={blockStatuses.items} action={<button type="button" className="secondary-button" onClick={() => setLines(current => [...current, emptyLine(form.requesterCostCenter)])}><Plus size={16} /><span>{t("Add line")}</span></button>}>
           {errors.lines && <small className="field-error-text">{t(errors.lines)}</small>}
           <MotionList className="official-line-list">{lines.map((line, index) => <RequestItemLine key={line.clientId} line={line} index={index} currency={form.currency} errors={errors} onChange={patch => updateLine(index, patch)} onFieldBlur={field => validateField(`lines.${index}.${field}`)} canRemove={lines.length > 1} onRemove={() => setLines(current => current.filter((_, currentIndex) => currentIndex !== index))} />)}</MotionList>
           <div className="request-items-total"><span>{t("Request total")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div>
-          <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.(costCenter|expenseType)/.test(key)) ? true : undefined}>
+          <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.costCenter/.test(key)) ? true : undefined}>
             <summary>{t("Adjust budget allocation")}</summary>
-            <p className="section-note">{t("Items inherit the request's cost center and expense account. Adjust only when an item uses a different budget.")}</p>
-            {lines.map((line, index) => <div className="request-budget-line" key={line.clientId}><strong>{t("Item")} {index + 1}: {line.itemDescription || t("Item / service description")}</strong><div className="form-grid two-column-form"><SearchSelect label="Cost Center / CECO" value={line.costCenter} options={masters.costCenters} onChange={value => updateLine(index, { costCenter: value })} getOptionLabel={item => item.code + " - " + item.name} error={errors["lines." + index + ".costCenter"]} required searchPlaceholder="Search authorized CECO..." /><SearchSelect label="Expense type" value={line.expenseType} options={allowedExpenseTypes} onChange={value => updateLine(index, { expenseType: value })} getOptionLabel={item => item.name} error={errors["lines." + index + ".expenseType"]} required searchPlaceholder="Search expense category..." /></div></div>)}
+            <p className="section-note">{t("Items inherit the request's cost center. Adjust only when an item uses a different cost center budget.")}</p>
+            {lines.map((line, index) => <div className="request-budget-line" key={line.clientId}><strong>{t("Item")} {index + 1}: {line.itemDescription || t("Item / service description")}</strong><div className="form-grid two-column-form"><SearchSelect label="Cost Center / CECO" value={line.costCenter} options={masters.costCenters} onChange={value => updateLine(index, { costCenter: value })} getOptionLabel={item => item.code + " - " + item.name} error={errors["lines." + index + ".costCenter"]} required searchPlaceholder="Search authorized CECO..." /></div></div>)}
           </details>
           </RequestFormBlock>
 
@@ -767,7 +738,7 @@ export default function RequestCreate() {
             <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => { setForm((current) => ({ ...current, supplierSelectionReason: event.target.value })); if (event.target.value.trim()) setFieldError("supplierSelectionReason", ""); }} onBlur={() => quotationPolicy.enabled && setFieldError("supplierSelectionReason", requiredError(form.supplierSelectionReason, "Supplier selection reason is required."))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
 
-          <BudgetRemainingSummary payload={budgetPayload} preview={budgetPreview} loading={budgetLoading} onRefresh={() => setBudgetRefresh(value => value + 1)} expenseTypes={masters.expenseTypes} />
+          <BudgetRemainingSummary payload={budgetPayload} preview={budgetPreview} loading={budgetLoading} onRefresh={() => setBudgetRefresh(value => value + 1)} />
         </div>}
 
         {step === 2 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Supporting documents")}</h3><p>{t("Quotation evidence is attached to each supplier above; other configured evidence is uploaded here.")}</p></div></div><div className="document-requirement required"><FileText size={20} /><div><strong>{t("Mandatory document checklist")}</strong><p>{formPolicy.documentRequirements.length ? formPolicy.documentRequirements.map((rule) => `${t(rule.labelKey)} x ${rule.minCount}`).join(" - ") : t("No additional configured evidence for this classification.")}</p></div></div><button type="button" className="text-button" aria-expanded={showOptionalDocuments} onClick={() => setShowOptionalDocuments(value => !value)}>{t(showOptionalDocuments ? "Hide optional documents" : "Additional documents")}</button><div className="document-grid">{documentDefinitions.map((document) => {
@@ -777,7 +748,7 @@ export default function RequestCreate() {
           return <label hidden={!showOptionalDocuments && !rule && !attached && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{rule ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{t(attached ? "Files attached" : rule ? "Required document" : "Optional document")}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: Array.from(event.target.files || []) }))} /><div className="file-list">{existing.map((file) => <span key={file._id}>{file.originalName} - {t("Already uploaded")}</span>)}{files[document.key].map((file) => <span key={`${file.name}-${file.size}`}>{file.name} - {(file.size / 1024).toFixed(0)} KB</span>)}</div>{errors[document.key] && <small className="field-error-text">{t(errors[document.key])}</small>}</label>;
         })}</div></div>}
 
-        {step === 3 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div>{form.flowType === "A1" && quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}<div className="review-layout"><div className="review-section"><div className="section-heading compact"><h3>{t("Requirement")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Operational track")}</dt><dd>{t(optionLabel(form.flowType, flowTypeLabels))}</dd></div><div><dt>CAPEX / OPEX</dt><dd>{form.flowType === "C" ? t(form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "Non-deductible - undocumented reimbursement" : "Defined at rendition validation") : t(form.requestType)}</dd></div>{form.flowType === "C" && <div><dt>{t("Track C request type")}</dt><dd>{t(trackCRequestTypeLabels[form.requestType] || form.requestType)}</dd></div>}<div><dt>{t("CECO")}</dt><dd>{masters.costCenters.find((item) => item._id === form.requesterCostCenter)?.code || "-"}</dd></div><div><dt>{t("Title")}</dt><dd>{form.title || "-"}</dd></div><div><dt>{t("Priority")}</dt><dd>{t(form.priority)}</dd></div><div className="wide"><dt>{t("Business justification")}</dt><dd>{form.businessJustification || "-"}</dd></div><div className="wide"><dt>{t("Risk if not approved")}</dt><dd>{form.nonApprovalRisk || "-"}</dd></div></dl></div><div className="review-section"><div className="section-heading compact"><h3>{t("Items and totals")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><div className="review-lines">{lines.map((line, index) => <div key={line.clientId}><span>{index + 1}</span><div><strong>{line.itemDescription || t("Accounting line")}</strong><small>{masters.costCenters.find((item) => item._id === line.costCenter)?.code} - {masters.expenseTypes.find((item) => item._id === line.expenseType)?.name}</small></div><strong>{formatCurrency(line.totalAmount, form.currency, language)}</strong></div>)}</div><div className="review-total"><span>{t("Total amount")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div></div>{form.flowType !== "C" && <div className="review-section"><div className="section-heading compact"><h3>{t("Recommended supplier")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div>{selectedSupplier ? <div className="recommended-summary"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /><p>{form.supplierSelectionReason || "-"}</p></div> : <p>{t("No recommended supplier selected.")}</p>}</div>}<div className="review-section"><div className="section-heading compact"><h3>{t("Budget and documents")}</h3><button type="button" className="text-button" onClick={() => setStep(2)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Budget status")}</dt><dd><StatusBadge status={budgetPreview.status} /></dd></div><div><dt>{t("Quotation evidence")}</dt><dd>{quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length}/{quotations.length}</dd></div><div><dt>{t("Other documents")}</dt><dd>{existingAttachments.filter((item) => item.kind !== "QUOTATION").length + Object.values(files).flat().length}</dd></div></dl></div></div></div>}
+        {step === 3 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div>{form.flowType === "A1" && quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}<div className="review-layout"><div className="review-section"><div className="section-heading compact"><h3>{t("Requirement")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Operational track")}</dt><dd>{t(optionLabel(form.flowType, flowTypeLabels))}</dd></div><div><dt>CAPEX / OPEX</dt><dd>{form.flowType === "C" ? t(form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "Non-deductible - undocumented reimbursement" : "Defined at rendition validation") : t(form.requestType)}</dd></div>{form.flowType === "C" && <div><dt>{t("Track C request type")}</dt><dd>{t(trackCRequestTypeLabels[form.requestType] || form.requestType)}</dd></div>}<div><dt>{t("CECO")}</dt><dd>{masters.costCenters.find((item) => item._id === form.requesterCostCenter)?.code || "-"}</dd></div><div><dt>{t("Title")}</dt><dd>{form.title || "-"}</dd></div><div><dt>{t("Priority")}</dt><dd>{t(form.priority)}</dd></div><div className="wide"><dt>{t("Business justification")}</dt><dd>{form.businessJustification || "-"}</dd></div><div className="wide"><dt>{t("Risk if not approved")}</dt><dd>{form.nonApprovalRisk || "-"}</dd></div></dl></div><div className="review-section"><div className="section-heading compact"><h3>{t("Items and totals")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><div className="review-lines">{lines.map((line, index) => <div key={line.clientId}><span>{index + 1}</span><div><strong>{line.itemDescription || t("Accounting line")}</strong><small>{masters.costCenters.find((item) => item._id === line.costCenter)?.code} - {masters.costCenters.find((item) => item._id === line.costCenter)?.name}</small></div><strong>{formatCurrency(line.totalAmount, form.currency, language)}</strong></div>)}</div><div className="review-total"><span>{t("Total amount")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div></div>{form.flowType !== "C" && <div className="review-section"><div className="section-heading compact"><h3>{t("Recommended supplier")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div>{selectedSupplier ? <div className="recommended-summary"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /><p>{form.supplierSelectionReason || "-"}</p></div> : <p>{t("No recommended supplier selected.")}</p>}</div>}<div className="review-section"><div className="section-heading compact"><h3>{t("Budget and documents")}</h3><button type="button" className="text-button" onClick={() => setStep(2)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Budget status")}</dt><dd><StatusBadge status={budgetPreview.status} /></dd></div><div><dt>{t("Quotation evidence")}</dt><dd>{quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length}/{quotations.length}</dd></div><div><dt>{t("Other documents")}</dt><dd>{existingAttachments.filter((item) => item.kind !== "QUOTATION").length + Object.values(files).flat().length}</dd></div></dl></div></div></div>}
 
         </MotionSurface>
       <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => setStep((current) => Math.max(0, current - 1))}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{step < 3 ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit for approval")}</span></button>}</div></footer>

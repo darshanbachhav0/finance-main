@@ -1,5 +1,19 @@
 // Spanish copy for the accounting area. Keys are the English UI strings passed to t().
 export default {
+  "Accounting Accounts": "Cuentas contables",
+  "Accounting account": "Cuenta contable",
+  "PCGE accounts Accounting books invoices to. The platform suggests one from the request type and the nature of the expense.": "Cuentas PCGE en las que Contabilidad registra los comprobantes. La plataforma sugiere una según el tipo de solicitud y la naturaleza del gasto.",
+  "When it is suggested": "Cuándo se sugiere",
+  "Suggested for expense natures": "Sugerida para naturalezas de gasto",
+  "Suggested from the request type and the nature of the expense. Requesters never see accounts.": "Sugerida según el tipo de solicitud y la naturaleza del gasto. Los solicitantes nunca ven las cuentas.",
+  "Suggested from the nature of the expense. Confirm it for this invoice.": "Sugerida según la naturaleza del gasto. Confírmela para este comprobante.",
+  "IGV is deductible (tax credit)": "El IGV es deducible (crédito fiscal)",
+  "Clear it when this invoice's IGV cannot be claimed: it is then booked as cost.": "Desmárquelo cuando el IGV de este comprobante no pueda usarse como crédito fiscal: se registra entonces como costo.",
+  "Boletas do not give tax credit; the IGV is booked as cost.": "Las boletas no otorgan crédito fiscal; el IGV se registra como costo.",
+  "Accounting assigns the accounting account when it processes the invoice.": "Contabilidad asigna la cuenta contable al procesar el comprobante.",
+  "Items inherit the request's cost center. Adjust only when an item uses a different cost center budget.": "Los ítems heredan el centro de costos de la solicitud. Ajústelo solo cuando un ítem use el presupuesto de otro centro de costos.",
+  "Create a yearly budget for a Cost Center and optional project. Any request from that Cost Center draws on it. Existing allocations and recorded activity remain unchanged.": "Cree un presupuesto anual para un centro de costos y, opcionalmente, un proyecto. Toda solicitud de ese centro de costos lo consume. Las asignaciones existentes y la actividad registrada no cambian.",
+  "Maintain assigned budget by period, Cost Center, and project.": "Mantenga el presupuesto asignado por periodo, centro de costos y proyecto.",
   "Replacement": "Reemplazo",
   "Replaced by": "Reemplazado por",
   "Replace incorrect invoice": "Reemplazar comprobante incorrecto",
@@ -34,7 +48,6 @@ export default {
   // Fiscal processing
   "Credit and debit notes are registered against their original invoice from Accounts Payable.": "Las notas de crédito y débito se registran contra su factura original desde Cuentas por Pagar.",
   "Invoices are booked in the period of their document date.": "Los comprobantes se contabilizan en el periodo de su fecha de emisión.",
-  "Posting uses the account of each line's Expense Type. A different account number is rejected.": "La contabilización usa la cuenta del Tipo de gasto de cada línea. Se rechaza un número de cuenta distinto.",
   FACTURA: "Factura",
   BOLETA: "Boleta",
   RXH: "Recibo por honorarios",

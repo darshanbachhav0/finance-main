@@ -119,7 +119,7 @@ export const costCenters = resourceController({
 export const expenseTypes = resourceController({
   Model: ExpenseType,
   label: "ExpenseType",
-  fields: ["code", "name", "category", "accountingClass", "accountNumber", "permittedRequestTypes", "permittedExpenseNatures", "deductible", "igvDeductible", "spotCategoryCode", "active"],
+  fields: ["code", "name", "category", "accountingClass", "accountNumber", "permittedRequestTypes", "permittedExpenseNatures", "deductible", "active"],
   searchFields: ["code", "name", "accountNumber"],
   sortFields: ["code", "name", "accountNumber", "category", "active"],
   defaultSort: { code: 1 }
@@ -163,10 +163,10 @@ export const approvalRules = resourceController({
 export const budgetRules = resourceController({
   Model: BudgetRule,
   label: "BudgetRule",
-  fields: ["name", "mode", "exceptionStrategy", "costCenter", "expenseType", "project", "exceptionApproverRole", "exceptionEscalationAmount", "exceptionEscalationApproverRole", "active", "effectiveFrom", "effectiveTo"],
+  fields: ["name", "mode", "exceptionStrategy", "costCenter", "project", "exceptionApproverRole", "exceptionEscalationAmount", "exceptionEscalationApproverRole", "active", "effectiveFrom", "effectiveTo"],
   searchFields: ["name", "project"],
   sortFields: ["name", "mode", "active", "createdAt"],
-  populate: ["costCenter", "expenseType"]
+  populate: ["costCenter"]
 });
 
 export const directPaymentEligibilityRules = resourceController({
@@ -181,10 +181,10 @@ export const directPaymentEligibilityRules = resourceController({
 export const budgetAllocations = resourceController({
   Model: BudgetAllocation,
   label: "BudgetAllocation",
-  fields: ["period", "costCenter", "expenseType", "project", "assignedAmount", "active"],
+  fields: ["period", "costCenter", "project", "assignedAmount", "active"],
   searchFields: ["period", "project"],
   sortFields: ["period", "assignedAmount", "active", "createdAt"],
-  populate: ["costCenter", "expenseType"]
+  populate: ["costCenter"]
 });
 
 export const documentRules = resourceController({

@@ -9,7 +9,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget } from "../../../shared/budgetPlanning.mjs";
 
-const initial = (year) => ({ year, costCenter: "", expenseType: "", project: "", planningMode: "ANNUAL_ONLY", assignedAmount: "", distribution: "EQUAL", months: Array(12).fill("0"), reason: "" });
+const initial = (year) => ({ year, costCenter: "", project: "", planningMode: "ANNUAL_ONLY", assignedAmount: "", distribution: "EQUAL", months: Array(12).fill("0"), reason: "" });
 const adjustmentForm = () => ({ operationId: crypto.randomUUID(), action: "TRANSFER", fromMonth: "1", toMonth: "2", amount: "", reason: "" });
 
 export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod, canManage, onClose, onSaved }) {
@@ -18,7 +18,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
   const [form, setForm] = useState(() => initial(year));
   const [adjustment, setAdjustment] = useState(adjustmentForm);
   const [plan, setPlan] = useState(null);
-  const [masters, setMasters] = useState({ centers: [], expenses: [] });
+  const [masters, setMasters] = useState({ centers: [] });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -41,8 +41,8 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
       try {
         if (planId) { const response = await api.get(`/budget/plans/${planId}`); if (active) { setPlan(response.data.data); if (new URLSearchParams(window.location.search).get("workScope") === "budget-adjustment") setShowAdjustment(true); } }
         else {
-          const [centers, expenses] = await Promise.all([fetchAll("/cost-centers"), fetchAll("/expense-types")]);
-          if (active) setMasters({ centers, expenses });
+          const centers = await fetchAll("/cost-centers");
+          if (active) setMasters({ centers });
         }
       } catch (err) { if (active) setError(err.message); }
       finally { if (active) setLoading(false); }
@@ -95,7 +95,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
   return <Drawer open={open} title={planId || plan ? "Annual budget plan" : "Create annual budget"} size="large" onClose={() => !saving && onClose()}>
     <Message type="error">{t(error)}</Message>
     {loading ? <div role="status"><span className="sr-only">{t("Loading...")}</span><ListSkeleton rowCount={4} columnCount={3} /></div> : plan ? <>
-      <div className="budget-plan-heading"><div><strong>{plan.period} · {plan.costCenter?.code} · {plan.expenseType?.accountNumber}</strong><p>{plan.costCenter?.name} / {plan.expenseType?.name}{plan.project ? ` / ${plan.project}` : ""}</p></div><span className="budget-mode-tag">{t(BUDGET_PLANNING_MODES[plan.planningMode])}</span></div>
+      <div className="budget-plan-heading"><div><strong>{plan.period} · {plan.costCenter?.code}</strong><p>{plan.costCenter?.name}{plan.project ? ` / ${plan.project}` : ""}</p></div><span className="budget-mode-tag">{t(BUDGET_PLANNING_MODES[plan.planningMode])}</span></div>
       <dl className="budget-plan-metrics">
         <div><dt>{t("Annual budget")}</dt><dd>{money(plan.assignedAmount)}</dd></div>
         <div><dt>{t("Annual available")}</dt><dd>{money(plan.availableAmount)}</dd></div>
@@ -122,12 +122,11 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
       <h3 className="section-spacer">{t("Budget adjustment history")}</h3>
       <div className="budget-history">{[...plan.adjustments].reverse().map((entry) => <article key={entry.operationId}><div><strong>{t({ CREATED: "Budget created", TRANSFER: "Transfer between months", ALLOCATE_RESERVE: "Allocate annual reserve", INCREASE: "Annual increase" }[entry.action])} · {money(entry.amount)}</strong><span>{entry.fromMonth ? `${t(BUDGET_MONTHS[entry.fromMonth - 1])} → ` : ""}{entry.toMonth ? t(BUDGET_MONTHS[entry.toMonth - 1]) : ""}</span></div><p>{entry.reason}</p><small>{entry.actorName} · {formatDateTime(entry.at, language)}</small></article>)}</div>
     </> : !planId && canManage && <DraftPanel busy={saving} draft={draft} onDiscard={onClose}><form onSubmit={savePlan} className="budget-plan-form">
-      <p>{t("Create a yearly budget for a Cost Center, expense account, and optional project. Existing allocations and recorded activity remain unchanged.")}</p>
+      <p>{t("Create a yearly budget for a Cost Center and optional project. Any request from that Cost Center draws on it. Existing allocations and recorded activity remain unchanged.")}</p>
       <div className="form-grid two-column-form">
         <label className="field"><span>{t("Budget year")} *</span><input aria-label={t("Budget year")} type="number" min="2000" max="2199" step="1" required value={form.year} onChange={(event) => change("year", event.target.value)} /></label>
         <label className="field"><span>{t("Budget planning mode")}</span><select aria-label={t("Budget planning mode")} value={form.planningMode} onChange={(event) => change("planningMode", event.target.value)}>{Object.entries(BUDGET_PLANNING_MODES).map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
         <label className="field"><span>{t("Cost center")} *</span><select aria-label={t("Cost center")} required value={form.costCenter} onChange={(event) => change("costCenter", event.target.value)}><option value="">{t("Select")}</option>{masters.centers.map((center) => <option key={center._id} value={center._id}>{center.code} · {center.name}</option>)}</select></label>
-        <label className="field"><span>{t("Expense account")} *</span><select aria-label={t("Expense account")} required value={form.expenseType} onChange={(event) => change("expenseType", event.target.value)}><option value="">{t("Select")}</option>{masters.expenses.map((expense) => <option key={expense._id} value={expense._id}>{expense.accountNumber} · {expense.name}</option>)}</select></label>
         <label className="field"><span>{t("Project")}</span><input aria-label={t("Project")} maxLength="150" value={form.project} onChange={(event) => change("project", event.target.value)} /></label>
         <label className="field"><span>{t("Annual budget")} · PEN *</span><input aria-label={t("Annual budget")} type="number" min="0.01" step="0.01" required value={form.assignedAmount} onChange={(event) => change("assignedAmount", event.target.value)} /></label>
       </div>

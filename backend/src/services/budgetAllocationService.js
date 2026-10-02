@@ -8,22 +8,11 @@ export const isBudgetPlan = (allocation) => ["ANNUAL_ONLY", "ANNUAL_MONTHLY"].in
 export const budgetAvailable = (allocation) => subtractMoney(subtractMoney(allocation?.assignedAmount || 0, allocation?.committedAmount || 0), allocation?.executedAmount || 0);
 
 export async function findBudgetAllocation(period, line, session) {
-  // Admin's optional expense account means "All", not an unusable dimension.
-  // Prefer specific funds; only fall back to explicitly general pools, never to
-  // another expense account, project or year. An exhausted specific pool wins.
-  const scopes = [
-    [line.expenseType, line.project || ""],
-    [null, line.project || ""],
-    [line.expenseType, ""],
-    [null, ""]
-  ];
-  const seen = new Set();
-  for (const [expenseType, project] of scopes) {
-    const key = `${expenseType || ""}|${project}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const dimension = { costCenter: line.costCenter, expenseType: expenseType || null,
-      project: project || { $in: ["", null] }, active: true };
+  // Budget is held per Cost Center. A project-specific pool is preferred; otherwise the Cost
+  // Center's general pool applies - never another project or year. An exhausted specific pool wins.
+  const scopes = [...new Set([line.project || "", ""])];
+  for (const project of scopes) {
+    const dimension = { costCenter: line.costCenter, project: project || { $in: ["", null] }, active: true };
     const annual = await BudgetAllocation.findOne({ ...dimension, period: String(period).slice(0, 4) }).session(session || null);
     // A linked plan is authoritative for all twelve months, including zero allocations.
     if (isBudgetPlan(annual)) return annual;
