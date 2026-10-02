@@ -1,6 +1,7 @@
 // Spanish copy for row actions (next-step buttons, "More" menu, procedure steps, bulk revalidation).
 export default {
   "More": "Más",
+  "UMA collaborator": "Colaborador UMA",
   "Procedure": "Procedimiento",
   "Detraction deposit": "Depósito de detracción",
   "Payment confirmed (partial)": "Pago confirmado (parcial)",

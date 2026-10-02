@@ -1872,7 +1872,7 @@ export function translateMessage(text, language = "en") {
   if (text === undefined || text === null) return "";
   const display = umaCopy[text] || interfaceCodeLabels[text] || text;
   const result = language === "en" ? display : umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
-  return typeof text === "string" && CODE.test(text) && result !== text && /\s/.test(result) && result === result.toUpperCase() ? sentenceCase(result) : result;
+  return typeof text === "string" && CODE.test(text) && result !== text && result.length > 3 && result === result.toUpperCase() && !ACRONYMS.has(result) && /[A-ZÁÉÍÓÚÑ]/.test(result) ? sentenceCase(result) : result;
 }
 
 export function LanguageProvider({ children }) {
