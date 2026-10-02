@@ -1,3 +1,4 @@
+import { archiveAsset } from "./durableAssetService.js";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -60,6 +61,7 @@ export async function persistUploadedFiles(files = {}, { domain, entityId }) {
         const finalPath = path.join(destination, path.basename(file.filename));
         await fs.rename(file.path, finalPath);
         moved.push(finalPath);
+        await archiveAsset(finalPath);
         result[field].push({
           ...file,
           path: finalPath,

@@ -1,3 +1,4 @@
+import ReadinessPanel from "../components/ReadinessPanel.jsx";
 import DateInput from "../components/DateInput.jsx";
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import SectionNavigation from "../components/SectionNavigation.jsx";
@@ -432,6 +433,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       <PageHeader title={historyOnly ? "Payment History" : "Payments"} description="Schedule and confirm payments." actions={<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
       <WorkspaceTools links={[["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Management Reports", "/reports"]]} />
     <Message type="error">{actionError || resourceError}</Message>
+    {!historyOnly && selected.length > 0 && <ReadinessPanel paymentPayload={{ payableIds: selected, currency, accountSelections }} />}
     {linkActive && <DeepLinkNotice title="Showing the payment linked from your notification" missing={linkMissing} missingDescription="This payment is no longer pending in any Treasury stage. It may already be paid and reconciled." clearLabel="Show all payments" onClear={deepLink.clear} />}
     <div hidden={historyOnly} className="stats-grid"><StatCard label="Payable queue" value={queueTable.pagination.total} tone="amber" /><StatCard label="Missing bank details" value={missingBank} tone={missingBank ? "red" : "green"} /><StatCard label="Payment confirmation" value={confirmationTable.pagination.total} tone="amber" /><StatCard label="Bounced payments" value={bouncedTable.pagination.total} tone={bouncedTable.pagination.total ? "red" : "green"} /></div>
 

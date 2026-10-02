@@ -1,3 +1,4 @@
+import { archiveAsset } from "./durableAssetService.js";
 import { assertRequestActive, assertPostingAllowed, syncFinancialProgress, getFinancialProgress } from "./financialProgressService.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import crypto from "crypto";
@@ -574,6 +575,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
     await fs.mkdir(bankFilesDir, { recursive: true });
     await fs.writeFile(filePath, content, { flag: "wx" });
     fileWritten = true;
+    await archiveAsset(filePath);
     const result = await runFinancialOperation(async (session) => {
       for (const item of items) await scheduleLoadedItem(item, schedule, user, req, session);
       const [batch] = await PaymentBatch.create([{
@@ -1399,4 +1401,26 @@ export async function certifyBankFormatConfiguration({ id, certified, certificat
     newValues: configuration.toObject()
   });
   return configuration;
+}
+
+
+// Read-only preflight: reuse exactly the item loader and serializer used by generation.
+export async function previewPaymentBatch({ payableIds, currency, accountSelections }) {
+  if (!Array.isArray(payableIds) || !payableIds.length || payableIds.length > 100) throw new AppError(422, "Select between 1 and 100 payables.");
+  const issues = [];
+  const items = [];
+  let adapter;
+  try {
+    const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
+    adapter = getBankFileAdapter("BBVA", configuration);
+  } catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Admin / Treasury", code: error.code }); }
+  for (const id of [...new Set(payableIds)]) {
+    try {
+      const loaded = await loadPaymentItems({ payableIds: [id], requestIds: [] }, "BBVA", currency, accountSelections);
+      // Exercise the actual fixed-width serializer as well, without saving or scheduling anything.
+      if (adapter) adapter.generateFile({ currency, items: loaded.map(item => ({ ...item, bankAccount: item.bankAccountSnapshot })) });
+      items.push({ id, ready: Boolean(adapter) });
+    } catch (error) { if (!error.statusCode) throw error; issues.push({ id, message: error.message, owner: "Treasury / Accounting", code: error.code }); }
+  }
+  return { ready: issues.length === 0, items, issues, checkedAt: new Date(), informational: true };
 }

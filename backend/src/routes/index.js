@@ -1,3 +1,4 @@
+import operationsRoutes from "./operationsRoutes.js";
 import padronRoutes from "./padronRoutes.js";
 import { Router } from "express";
 import workDraftRoutes from "./workDraftRoutes.js";
@@ -44,6 +45,7 @@ router.use("/management/v1", externalManagementRoutes);
 // and is refused (403) by every internal route below.
 router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT));
 
+router.use("/operations", operationsRoutes);
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);
 router.use("/dashboard", dashboardRoutes);

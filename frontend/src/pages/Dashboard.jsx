@@ -92,6 +92,7 @@ export default function Dashboard() {
 
   return (
     <section>
+      <Link className="secondary-button" to="/operations">{t("Work review")}</Link>
       <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
 

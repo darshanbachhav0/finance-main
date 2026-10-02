@@ -498,7 +498,7 @@ function trackEligibilityAmount(request) {
   return Number(request.totalPENEquivalent || 0) || multiplyMoney(Number(request.totalAmount || 0), rate);
 }
 
-async function assertTrackEligible(request) {
+export async function assertTrackEligible(request) {
   if (request.flowType !== FLOW_TYPE.B) return;
   const amount = trackEligibilityAmount(request);
   const area = request.requesterArea || request.requestingArea || "General";

@@ -1,3 +1,4 @@
+import { archiveAsset } from "./durableAssetService.js";
 export function toCsv(rows) {
   if (!rows.length) return "";
   const headers = Object.keys(rows[0]);
@@ -39,6 +40,7 @@ export async function persistReportFile(fileName, content) {
     throw new AppError(400, "Invalid report file name.", undefined, ERROR_CODES.VALIDATION_ERROR);
   }
   await fs.writeFile(absolutePath, content, "utf8");
+    await archiveAsset(absolutePath);
   return `/generated/reports/${fileName}`;
 }
 import fs from "fs/promises";

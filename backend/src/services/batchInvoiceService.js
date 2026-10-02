@@ -1,3 +1,4 @@
+import { archiveAsset, materializeAsset } from "./durableAssetService.js";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import crypto from "crypto";
 import fs from "fs/promises";
@@ -321,7 +322,7 @@ async function zipCandidates(batch) {
   await fs.mkdir(directory, { recursive: true });
   let entries;
   try {
-    entries = (await readZipFile(batch.inputFile.path)).filter((entry) => !entry.isDirectory && !entry.entryName.startsWith("__MACOSX/") && !entry.entryName.endsWith(".DS_Store"));
+    entries = (await readZipFile(await materializeAsset(batch.inputFile.path))).filter((entry) => !entry.isDirectory && !entry.entryName.startsWith("__MACOSX/") && !entry.entryName.endsWith(".DS_Store"));
   } catch (error) {
     throw new AppError(422, "The uploaded ZIP cannot be opened.", { reason: error.message }, ERROR_CODES.BATCH_UPLOAD_INVALID);
   }
@@ -336,6 +337,7 @@ async function zipCandidates(batch) {
     const xmlBuffer = entry.getData(ZIP_ENTRY_BYTES);
     const xmlPath = path.join(directory, `${crypto.randomUUID()}-${xmlName}`);
     await fs.writeFile(xmlPath, xmlBuffer);
+    await archiveAsset(xmlPath);
     const xmlFile = {
       originalname: xmlName,
       filename: path.basename(xmlPath),
@@ -352,6 +354,7 @@ async function zipCandidates(batch) {
       const pdfBuffer = matchingPdf.getData(ZIP_ENTRY_BYTES);
       const pdfPath = path.join(directory, `${crypto.randomUUID()}-${pdfName}`);
       await fs.writeFile(pdfPath, pdfBuffer);
+      await archiveAsset(pdfPath);
       pdfFile = {
         originalname: pdfName,
         filename: path.basename(pdfPath),

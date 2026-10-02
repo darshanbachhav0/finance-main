@@ -1,3 +1,4 @@
+import ReadinessPanel from "../components/ReadinessPanel.jsx";
 import RequestStageIndicator from "../components/RequestStageIndicator.jsx";
 import FinancialValidationSummary from "../components/FinancialValidationSummary.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
@@ -510,6 +511,8 @@ export default function RequestDetail() {
       />
 
       <Message type="error">{error}</Message>
+      <ReadinessPanel requestId={id} revision={request.updatedAt} />
+      {["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id) && <Link className="text-button" to={`/operations?source=${id}`}>{t("Prepare recurring drafts")}</Link>}
 
       <dl className="request-overview">
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>

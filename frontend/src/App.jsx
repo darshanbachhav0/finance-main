@@ -6,6 +6,7 @@ import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import { configurationRoles } from "./utils/navigationAccess.js";
 
+const Operations = lazy(() => import("./pages/Operations.jsx"));
 const WorkspaceHub = lazy(() => import("./pages/WorkspaceHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
@@ -54,6 +55,7 @@ export default function App() {
             <Route index element={<ExternalManagementPortal />} />
           </Route>
           <Route path="administration" element={<ProtectedRoute roles={["Admin"]} />}><Route index element={<WorkspaceHub administration />} /></Route>
+          <Route path="operations" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<Operations />} /></Route>
           <Route path="requests" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestsList />} /></Route>
           <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} />}>

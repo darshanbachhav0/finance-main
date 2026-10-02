@@ -34,6 +34,7 @@ export function inProcessWorkerFlags(env = process.env) {
 export async function startInProcessWorkers(env = process.env) {
   const flags = inProcessWorkerFlags(env);
   const workers = [];
+  if (boolFromEnv(env.OPERATIONS_WORKER_ENABLED, env.NODE_ENV === "production")) workers.push((await import("./operationsWorker.js")).startOperationsWorker());
   if (usesPublicPadron(env) && cloudTaxpayerMode(env)) {
     workers.push((await import("./taxpayerCacheWorker.js")).startTaxpayerCacheWorker());
     console.log("[WORKERS] SUNAT durable taxpayer cache enabled; full Padrón download disabled.");

@@ -57,10 +57,13 @@ export function recordLinkFor(path, entityType, entityId) {
   return path;
 }
 
-export async function notifyUser({ userId, eventKey, type, title, message, path: requestedPath, entityType, entityId }) {
+export async function notifyUser({ userId, eventKey, type, title, message, path: requestedPath, entityType, entityId, once = false }) {
   if (!userId) return null;
   const path = recordLinkFor(requestedPath, entityType, entityId);
   const copy = notificationFields({ title, message });
+  if (once) return Notification.findOneAndUpdate({ user: userId, eventKey }, {
+    $setOnInsert: { user: userId, eventKey, type, ...copy, path, entityType, entityId }
+  }, { upsert: true, new: true, setDefaultsOnInsert: true });
   // Re-sent plain-string copy must not keep a previous template (it would render stale text).
   const staleKeys = {};
   if (copy.title !== undefined && !copy.titleKey) staleKeys.titleKey = 1;
@@ -80,12 +83,12 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
   );
 }
 
-export async function notifyRoles({ roles, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas }) {
+export async function notifyRoles({ once = false, roles, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas }) {
   const query = { active: true, role: { $in: roles } };
   if (approvalLevel) query.approvalLevel = approvalLevel;
   if (areas?.length) query.$or = [{ area: { $in: areas } }, { approvalAreas: { $in: [...areas, "*"] } }];
   const users = await User.find(query).select("_id");
-  return Promise.all(users.map((user) => notifyUser({ userId: user._id, eventKey, type, title, message, path, entityType, entityId })));
+  return Promise.all(users.map((user) => notifyUser({ once, userId: user._id, eventKey, type, title, message, path, entityType, entityId })));
 }
 
 // Closes every open approval task and SLA alert of a request (e.g. on withdrawal).

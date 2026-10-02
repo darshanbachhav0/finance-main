@@ -1,3 +1,4 @@
+import { readAsset } from "./durableAssetService.js";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -81,7 +82,7 @@ function dateOnly(value) {
 // server error. Re-uploading the same document restores it.
 async function readStoredFile(filePath, encoding) {
   try {
-    return await fs.readFile(filePath, encoding);
+    return await readAsset(filePath, encoding);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     throw new AppError(

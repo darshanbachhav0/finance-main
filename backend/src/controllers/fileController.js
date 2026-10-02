@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+import { readAsset } from "../services/durableAssetService.js";
 import path from "path";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { assertStoredAssetAccess, resolveStoredAsset } from "../services/fileAccessService.js";
@@ -12,10 +12,9 @@ function safeDownloadName(value, fallback) {
 export const downloadStoredFile = asyncHandler(async (req, res) => {
   const asset = resolveStoredAsset(req.query.path);
   await assertStoredAssetAccess(asset, req.user);
-  try {
-    const stat = await fs.stat(asset.absolutePath);
-    if (!stat.isFile()) throw new Error("Not a file");
-  } catch {
+  let content;
+  try { content = await readAsset(asset.absolutePath); } catch (error) {
+    if (error.code !== "ENOENT") throw error;
     throw new AppError(404, "Stored file was not found.", undefined, ERROR_CODES.NOT_FOUND);
   }
 
@@ -23,5 +22,6 @@ export const downloadStoredFile = asyncHandler(async (req, res) => {
   const fileName = safeDownloadName(req.query.name, path.basename(asset.absolutePath));
   res.setHeader("Cache-Control", "private, no-store");
   res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
-  res.sendFile(asset.absolutePath);
+  res.type(path.extname(asset.absolutePath));
+  res.send(content);
 });

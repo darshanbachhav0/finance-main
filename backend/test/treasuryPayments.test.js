@@ -19,6 +19,8 @@ import Reconciliation from "../src/models/Reconciliation.js";
 import Supplier from "../src/models/Supplier.js";
 import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
+import { importStatement, confirmStatementMatch } from "../src/services/reconciliationSuggestionService.js";
+import { previewPaymentBatch } from "../src/services/treasuryService.js";
 import {
   cancelPaymentBatch,
   confirmTreasuryPayable,
@@ -456,6 +458,28 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       assert.equal((await reload(missingAccount)).detraction.amount, 240);
       await assert.rejects(() => recordDetractionDeposit({ accountsPayableId: missingAccount._id, payload: { constancyNumber: "C-9", depositDate: today, amount: 240 }, user: treasury, req }), (error) => error.code === "BANK_DETAILS_MISSING");
       await assert.rejects(() => recordDetractionDeposit({ accountsPayableId: plain._id, payload: { constancyNumber: "C-8", depositDate: today, amount: 1 }, user: treasury, req }), (error) => error.statusCode === 409);
+    });
+
+    await t.test("preflight is read-only and statement matching uses confirmed bank execution", async () => {
+      const { supplier } = await makeSupplier();
+      const { request, ap } = await makePayable({ supplier, amount: 118 });
+      const count = await PaymentBatch.countDocuments();
+      const preview = await previewPaymentBatch({ payableIds: [String(ap._id)], currency: "PEN" });
+      assert.equal(preview.ready, true);
+      assert.equal((await reload(ap)).status, AP_STATUS.OPEN);
+      assert.equal(await PaymentBatch.countDocuments(), count);
+      const csv = `date,reference,currency,amount\n${today},OP-AUTO-1,PEN,118`;
+      assert.equal((await importStatement(csv, treasury, req)).rows[0].candidates.length, 0);
+      await makeFile([ap]);
+      assert.equal((await importStatement(csv, treasury, req)).rows[0].candidates.length, 0, "TXT generation is not payment");
+      await confirm(ap, "OP-AUTO-1", 118);
+      const imported = await importStatement(csv, treasury, req);
+      assert.equal(imported.rows[0].candidates.length, 1);
+      await confirmStatementMatch({ id: imported.id, rowIndex: 0, payableId: String(ap._id), user: treasury, req });
+      assert.ok((await reload(ap)).reconciliation);
+      assert.equal((await FinancialRequest.findById(request._id)).status, REQUEST_STATUS.RECONCILED);
+      assert.equal((await importStatement(csv, treasury, req)).rows[0].candidates.length, 0);
+      await assert.rejects(confirmStatementMatch({ id: imported.id, rowIndex: 0, payableId: String(ap._id), user: treasury, req }), /already claimed/);
     });
 
     await t.test("request-level reconciliation is grouped by currency", async () => {

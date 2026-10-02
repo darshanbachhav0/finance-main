@@ -1,3 +1,4 @@
+import { archiveAsset } from "./durableAssetService.js";
 /*
  * SIRE - Registro de Compras Electronico (RCE): replacement-of-proposal TXT ("reemplazo de la
  * propuesta"). UMA is the buyer, so this module only produces the RCE, never the RVIE.
@@ -627,6 +628,7 @@ export async function exportSireFile({ period, user }) {
   const directory = path.join(generatedRoot, "reports", "sire-rce", folder);
   await fs.mkdir(directory, { recursive: true });
   await fs.writeFile(path.join(directory, fileName), content, RCE_STRUCTURE.encoding);
+    await archiveAsset(path.join(directory, fileName));
   const url = `/generated/reports/sire-rce/${folder}/${fileName}`;
   const history = await GeneratedFile.create({
     // The GeneratedFile kind enum predates the TXT format; the format is recorded in metadata.

@@ -1,3 +1,5 @@
+import ReadinessPanel from "../components/ReadinessPanel.jsx";
+import InvoiceXmlPreview from "../components/InvoiceXmlPreview.jsx";
 import MotionSurface from "../components/MotionSurface.jsx";
 import { validationSummary } from "../utils/validationMessages.js";
 import MotionList from "../components/MotionList.jsx";
@@ -639,6 +641,9 @@ export default function RequestCreate() {
     />
     <DraftPanel busy={saving} draft={draft} onDiscard={() => { localStorage.removeItem(draftKey); navigate("/requests"); }}>
     <Message type="error">{error}</Message>
+    <ReadinessPanel payload={{ ...form, lines, quotations: quotations.map(q => ({ ...q, attachment: quotationFiles[q.clientId] ? "preview-only" : q.attachment })), attachments: [...existingAttachments, ...Object.values(quotationFiles).filter(Boolean).map(file => ({ kind: "QUOTATION", name: file.name, url: "preview-only" })), ...documentDefinitions.flatMap(def => (files[def.key] || []).map(file => ({ kind: def.kind, name: file.name, url: "preview-only" })))] }} />
+    {step === 2 && <InvoiceXmlPreview expected={{ ruc: selectedSupplier?.rucDni, currency: form.currency, netAmount: totals.net, igvAmount: totals.igv, totalAmount: totals.total }} />}
+
     <div className="request-wizard official-request-wizard">
       <WorkflowStepper steps={steps} current={step} completedSteps={completedSteps} maxAccessible={maxStep} onSelect={(next) => next <= maxStep && setStep(next)} />
       <div className="wizard-financial-context"><span>{t("Step {step} of {total}").replace("{step}", step + 1).replace("{total}", steps.length)} · {t(steps[step])}</span><span>{t("Total amount")}<strong>{formatCurrency(totals.total, form.currency, language)}</strong></span><small>{t("Fields marked * are required.")}</small></div>
