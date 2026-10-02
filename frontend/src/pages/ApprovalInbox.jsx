@@ -258,9 +258,8 @@ export default function ApprovalInbox() {
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
 
-            { label: isChainRow(row) ? "Approve and finalize" : "Approve", icon: CheckCircle2, hidden: !hasAction(row, "APPROVE"), onClick: () => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
-            { label: "Send to my jefe", icon: Forward, hidden: !hasAction(row, "APPROVE") || !isChainRow(row) || !canForward(row), onClick: () => openDecision(row, "approve", true) },
-            { label: "Observe", icon: MessageSquareWarning, hidden: !hasAction(row, "OBSERVE"), onClick: () => openDecision(row, "observe") },
+            // Approve, send to my jefe and observe are visible in the Decision column; the menu keeps
+            // only what isn't shown there, with Reject last.
             { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") },
             { label: "Reject", icon: XCircle, tone: "danger", hidden: !hasAction(row, "REJECT"), onClick: () => openDecision(row, "reject") }
           ]}

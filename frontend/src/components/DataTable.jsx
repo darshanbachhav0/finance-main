@@ -35,6 +35,19 @@ function compare(left, right) {
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
 }
 
+// Where the record is in its procedure, shown at the top of the details panel:
+// steps: [{ label, state: "done" | "current" | "todo" }].
+function ProcedureSteps({ steps, t }) {
+  const items = (steps || []).filter(Boolean);
+  if (!items.length) return null;
+  return <ol className="procedure-steps" aria-label={t("Procedure")}>
+    {items.map((step, index) => <li key={`${step.label}-${index}`} className={`is-${step.state || "todo"}`} aria-current={step.state === "current" ? "step" : undefined}>
+      <span className="procedure-step-marker" aria-hidden="true">{step.state === "done" ? "✓" : index + 1}</span>
+      <span>{t(step.label)}</span>
+    </li>)}
+  </ol>;
+}
+
 export default function DataTable({
   className = "",
   columns,
@@ -49,6 +62,7 @@ export default function DataTable({
   initialFilters = {},
   selection,
   rowActions,
+  detailSteps,
   onRowClick,
   toolbarActions,
   tableId,
@@ -249,7 +263,7 @@ export default function DataTable({
   // Rows that already have a "…" menu open their details from it instead of a separate column,
   // so wide tables (Approvals, Treasury) keep every column on screen.
   const menuActions = rowActions && secondaryColumns.length
-    ? (row) => [{ label: "Details", icon: PanelRightOpen, onClick: () => setDetailRow(row) }, ...(typeof rowActions === "function" ? rowActions(row) : rowActions)]
+    ? (row) => [{ label: "Details", icon: PanelRightOpen, utility: true, onClick: () => setDetailRow(row) }, ...(typeof rowActions === "function" ? rowActions(row) : rowActions)]
     : rowActions;
 
   return (
@@ -384,7 +398,15 @@ export default function DataTable({
       </div>
 
       {secondaryColumns.length > 0 && (
-        <Drawer open={Boolean(detailRecord)} size="small" title={detailRecord ? rowTitle(detailRecord) : "Details"} description="Additional information for this record." onClose={() => setDetailRow(null)}>
+        <Drawer
+          open={Boolean(detailRecord)}
+          size="small"
+          title={detailRecord ? rowTitle(detailRecord) : "Details"}
+          description="Additional information for this record."
+          onClose={() => setDetailRow(null)}
+          footer={detailRecord && rowActions ? <RowActionMenu row={detailRecord} actions={rowActions} variant="bar" onBeforeAction={() => setDetailRow(null)} /> : undefined}
+        >
+          {detailRecord && detailSteps && <ProcedureSteps steps={detailSteps(detailRecord)} t={t} />}
           {detailRecord && <dl className="row-detail-list">
             {secondaryColumns.map((column) => {
               const value = cellValue(column, detailRecord);

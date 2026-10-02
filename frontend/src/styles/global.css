@@ -3282,3 +3282,51 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   .field .date-input:has(.date-input-clear) .date-input-control input { padding-right: 76px; }
   .date-picker-day { height: var(--touch-target); }
 }
+
+/* ==== ux: row actions ======================================================================
+   Each row shows its next step as a visible button; secondary and destructive actions live in
+   a labelled "Más (n)" menu (destructive last). The details panel repeats the same actions in
+   its footer under a procedure-step indicator. */
+.row-menu { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-2); white-space: nowrap; }
+.row-primary-action {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-height-sm); padding: 6px 12px;
+  color: var(--uma-primary); background: var(--surface-panel); border: 1px solid var(--uma-primary); border-radius: var(--radius-md);
+  font-size: var(--font-sm); font-weight: 650; white-space: nowrap; cursor: pointer;
+}
+.row-primary-action:hover:not(:disabled) { color: #fff; background: var(--uma-primary); }
+.row-primary-action:disabled { color: var(--gray-500); border-color: var(--gray-300); cursor: not-allowed; }
+.row-primary-action.danger { color: var(--red-700); border-color: var(--red-700); }
+.row-primary-action.danger:hover:not(:disabled) { color: #fff; background: var(--red-700); }
+.row-menu-trigger {
+  display: inline-flex; align-items: center; gap: 5px; min-height: var(--control-height-sm); padding: 6px 10px;
+  color: var(--gray-700); background: var(--surface-panel); border: 1px solid var(--gray-300); border-radius: var(--radius-md);
+  font-size: var(--font-sm); font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.row-menu-trigger:hover, .row-menu-trigger[aria-expanded="true"] { color: var(--gray-950); border-color: var(--gray-400); background: var(--gray-50); }
+.row-menu-count { min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 5px; border-radius: 999px; background: var(--gray-150); color: var(--gray-700); font-size: 11px; font-weight: 700; }
+.table-scroll td.actions-column { width: 1%; white-space: nowrap; }
+
+/* Details panel: procedure steps on top, actions in the footer. */
+.procedure-steps { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-4); padding: 0; list-style: none; }
+.procedure-steps li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--gray-100); color: var(--gray-600); font-size: var(--font-xs); font-weight: 600; }
+.procedure-step-marker { width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 50%; background: var(--surface-panel); border: 1px solid var(--gray-300); font-size: 11px; }
+.procedure-steps li.is-done { color: var(--green-700); background: var(--green-100); }
+.procedure-steps li.is-done .procedure-step-marker { color: #fff; background: var(--green-700); border-color: var(--green-700); }
+.procedure-steps li.is-current { color: var(--uma-primary); background: var(--uma-soft); }
+.procedure-steps li.is-current .procedure-step-marker { color: #fff; background: var(--uma-primary); border-color: var(--uma-primary); }
+.row-menu-bar { display: flex; width: 100%; justify-content: flex-end; }
+.row-menu-bar .row-primary-action.primary-button { color: #fff; background: var(--uma-primary); }
+.row-menu-bar .row-primary-action { min-height: var(--control-height); }
+.row-menu-bar .row-menu-trigger { min-height: var(--control-height); }
+
+/* Phone cards: the next step fills the card's bottom row next to "Más". */
+@media (max-width: 640px) {
+  .mobile-cards tbody td.actions-column { display: block; padding-top: var(--space-2); }
+  .mobile-cards tbody td.actions-column::before { content: none; }
+  .mobile-cards .row-menu { display: flex; width: 100%; }
+  .mobile-cards .row-primary-action { flex: 1 1 auto; justify-content: center; min-height: var(--touch-target); }
+  .mobile-cards .row-menu-trigger { min-height: var(--touch-target); }
+  .row-menu-bar .row-primary-action { flex: 1 1 auto; justify-content: center; }
+}
+[data-theme="dark"] .row-primary-action { background: transparent; }
+[data-theme="dark"] .row-menu-trigger { background: transparent; color: var(--gray-300, #c9ced6); }

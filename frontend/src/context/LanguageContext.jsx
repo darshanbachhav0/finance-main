@@ -15,6 +15,7 @@ import uxbulkSpanish from "./i18n/uxbulk.js";
 import uxformsSpanish from "./i18n/uxforms.js";
 import uxlistsSpanish from "./i18n/uxlists.js";
 import uxshellSpanish from "./i18n/uxshell.js";
+import rowactionsSpanish from "./i18n/rowactions.js";
 import notificationsSpanish from "./i18n/notifications.js";
 import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
@@ -1834,7 +1835,7 @@ const quotationPaymentSpanish = {
   "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...uxhomeSpanish, ...uxsearchSpanish, ...uxbulkSpanish, ...uxformsSpanish, ...uxlistsSpanish, ...uxshellSpanish, ...notificationsSpanish };
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...uxhomeSpanish, ...uxsearchSpanish, ...uxbulkSpanish, ...uxformsSpanish, ...uxlistsSpanish, ...uxshellSpanish, ...rowactionsSpanish, ...notificationsSpanish };
 Object.assign(spanishDictionary, {
   "Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed.": "Generar una instrucción BBVA de ancho fijo. El pago queda pendiente hasta confirmar la ejecución bancaria.",
   "BBVA confirmed configuration (JSON)": "Configuración BBVA confirmada (JSON)",
@@ -1871,7 +1872,7 @@ export function translateMessage(text, language = "en") {
   if (text === undefined || text === null) return "";
   const display = umaCopy[text] || interfaceCodeLabels[text] || text;
   const result = language === "en" ? display : umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
-  return typeof text === "string" && CODE.test(text) && result !== text && /\s/.test(result) && result === result.toUpperCase() ? sentenceCase(result) : result;
+  return typeof text === "string" && CODE.test(text) && result !== text && result.length > 3 && result === result.toUpperCase() && !ACRONYMS.has(result) && /[A-ZÁÉÍÓÚÑ]/.test(result) ? sentenceCase(result) : result;
 }
 
 export function LanguageProvider({ children }) {

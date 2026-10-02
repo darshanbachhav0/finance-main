@@ -16,6 +16,7 @@ import { ChevronRight, MoreHorizontal, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { getMenuNavigationIndex } from "../utils/menuNavigation.js";
+import { splitRowActions } from "../utils/rowActions.js";
 
 const OPEN_EVENT = "erp:row-action-menu-open";
 const MOBILE_QUERY = "(max-width: 640px)";
@@ -34,7 +35,9 @@ function useMediaQuery(query) {
   return matches;
 }
 
-export default function RowActionMenu({ row, actions }) {
+// `variant="bar"` lays the same actions out for a panel footer (details drawer); the grouping
+// rules live in utils/rowActions.js.
+export default function RowActionMenu({ row, actions, variant = "row", onBeforeAction }) {
   const { t } = useLanguage();
   const menuId = useId();
   const triggerId = useId();
@@ -45,10 +48,7 @@ export default function RowActionMenu({ row, actions }) {
   const pendingFocusIndex = useRef(-1);
   const wasOpen = useRef(false);
 
-  const visible = useMemo(() => {
-    const source = typeof actions === "function" ? actions(row) : actions;
-    return (source || []).filter((action) => !action.hidden);
-  }, [actions, row]);
+  const { primary, menu: visible } = useMemo(() => splitRowActions(typeof actions === "function" ? actions(row) : actions), [actions, row]);
 
   const { refs, floatingStyles, context } = useFloating({
     open,
@@ -108,7 +108,7 @@ export default function RowActionMenu({ row, actions }) {
     return () => window.cancelAnimationFrame(frame);
   }, [open, refs.reference, returnFocus]);
 
-  if (!visible.length) return null;
+  if (!visible.length && !primary) return null;
 
   function requestOpenFocus(key = "Home") {
     pendingFocusIndex.current = getMenuNavigationIndex(visible, -1, key);
@@ -165,8 +165,23 @@ export default function RowActionMenu({ row, actions }) {
     if (action.disabled) return;
     setReturnFocus(false);
     setOpen(false);
+    onBeforeAction?.(action);
     window.setTimeout(() => action.onClick(row), 0);
   }
+
+  const PrimaryIcon = primary?.icon || ChevronRight;
+  const primaryButton = primary && (
+    <button
+      type="button"
+      className={`row-primary-action${primary.tone === "danger" ? " danger" : ""}${variant === "bar" ? " primary-button" : ""}`}
+      disabled={primary.disabled}
+      title={primary.disabledReason ? t(primary.disabledReason) : t(primary.label)}
+      onClick={(event) => { event.stopPropagation(); if (!primary.disabled) { onBeforeAction?.(primary); primary.onClick(row); } }}
+    >
+      <PrimaryIcon size={15} aria-hidden="true" />
+      <span>{t(primary.label)}</span>
+    </button>
+  );
 
   const menuItems = (
     <div id={menuId} className="row-menu-items" role="menu" aria-labelledby={triggerId} onKeyDown={handleMenuKeyDown}>
@@ -198,13 +213,14 @@ export default function RowActionMenu({ row, actions }) {
   );
 
   return (
-    <div className="row-menu">
-      <button
+    <div className={`row-menu${variant === "bar" ? " row-menu-bar" : ""}`}>
+      {primaryButton}
+      {visible.length > 0 && <button
         ref={refs.setReference}
         id={triggerId}
         type="button"
-        className="icon-button quiet"
-        aria-label={t("Row actions")}
+        className="row-menu-trigger"
+        aria-label={`${t("More actions")} (${visible.length})`}
         aria-expanded={open}
         aria-haspopup="menu"
         aria-controls={isMounted ? menuId : undefined}
@@ -213,10 +229,12 @@ export default function RowActionMenu({ row, actions }) {
           onKeyDown: handleTriggerKeyDown
         })}
       >
-        <MoreHorizontal size={18} />
-      </button>
+        <MoreHorizontal size={16} aria-hidden="true" />
+        <span>{t("More")}</span>
+        <span className="row-menu-count" aria-hidden="true">{visible.length}</span>
+      </button>}
 
-      {isMounted && (
+      {isMounted && visible.length > 0 && (
         <FloatingPortal>
           {isMobile ? (
             <FloatingOverlay
