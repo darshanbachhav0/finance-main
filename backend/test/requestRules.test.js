@@ -17,6 +17,13 @@ test("mandatory invoice request types require both XML and PDF", () => {
   }));
 });
 
+test("a stored invoice XML missing from disk is a clear 422, never a server error", async () => {
+  const { parseInvoiceXml, fileChecksum } = await import("../src/services/xmlValidationService.js");
+  for (const read of [parseInvoiceXml, fileChecksum]) {
+    await assert.rejects(() => read("/tmp/uma-finance/uploads/requests/missing/gone.xml"), (error) => error.statusCode === 422 && error.code === "STORED_FILE_MISSING" && /Upload the same XML/.test(error.message));
+  }
+});
+
 test("Track C submission can be saved without invoice files", () => {
   assert.doesNotThrow(() => assertMandatoryDocuments({ flowType: "C", requestType: "ENTREGA_RENDIR", attachments: [] }));
 });

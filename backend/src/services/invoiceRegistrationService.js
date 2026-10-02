@@ -442,7 +442,7 @@ export async function approveManualSunatException({ requestId, voucherId, reason
   const voucher = await applyManualSunatOverride({ request, voucherId, reason, evidenceReference, user, req });
   const outcome = { voucher, provisioned: false };
   async function deferredPosting(error) {
-    const detail = error.code === "ENOENT"
+    const detail = ["ENOENT", ERROR_CODES.STORED_FILE_MISSING].includes(error.code)
       ? "The saved invoice file is no longer available. Re-upload the same XML and PDF in Documents and retry invoice validation. The manual SUNAT exception is already recorded."
       : error.message;
     // Preserve the exception and history, but do not leave the requester looking at the
