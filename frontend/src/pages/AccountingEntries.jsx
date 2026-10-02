@@ -158,7 +158,7 @@ export default function AccountingEntries() {
       <div hidden={focusView !== "SUNAT exceptions"} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("Invoices SUNAT could not validate")}</h3><p>{t("When SUNAT is down or the platform runs in Padrón-only mode, one Accounting user can approve a manual SUNAT exception. The reason is required and audited, and the exception stays visible on the invoice and its CXP.")}</p></div><span className="section-count">{sunatTable.pagination.total}</span></div>
         {sunatTable.payload.sunat?.variant === "PADRON" && <div className="document-requirement"><FileCheck2 size={20} /><div><strong>{t("Padrón-only mode")}</strong><p>{t("The public Padrón checks the supplier's RUC status but never verifies an individual invoice, so every invoice needs a manual SUNAT exception.")}</p></div></div>}
-        <DataTable rows={sunatTable.rows} loading={sunatTable.loading} remote={sunatTable.remote} searchPlaceholder="Search request, RUC, or voucher..." rowActions={(row) => [{ label: "Approve manual SUNAT exception", icon: ShieldCheck, onClick: () => openException(row) }]} columns={[
+        <DataTable rows={sunatTable.rows} loading={sunatTable.loading} remote={sunatTable.remote} searchPlaceholder="Search request, RUC, or voucher..." rowActions={(row) => [{ label: "Approve manual SUNAT exception", icon: ShieldCheck, primary: true, onClick: () => openException(row) }]} columns={[
           { key: "request", type: "code", label: "Request", sortable: false, render: (row) => row.request ? <Link to={`/requests/${row.request._id}`}>{row.request.requestNumber}</Link> : "-" },
           { key: "seriesNumber", type: "code", label: "Voucher", render: (row) => <div className="primary-cell"><strong>{t(row.voucherType)} {row.seriesNumber}</strong><span>{row.rucIssuer}</span></div> },
           { key: "xmlAmount", type: "money", label: "Amount", render: (row) => formatCurrency(row.xmlAmount || 0, row.currency || "PEN", language) },
@@ -168,7 +168,7 @@ export default function AccountingEntries() {
       </div>
       <div hidden={focusView !== "Processing"} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
-        <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, onClick: () => openFiscalProcessing(row) }]} columns={[
+        <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, primary: true, onClick: () => openFiscalProcessing(row) }]} columns={[
           { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
           { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name}</strong><span>{row.supplier?.rucDni}</span></div> },
           { key: "requestType", label: "Type" },

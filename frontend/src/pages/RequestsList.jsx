@@ -141,8 +141,17 @@ export default function RequestsList() {
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
             { label: "Open full details", icon: Eye, onClick: () => navigate(`/requests/${row._id}`) },
-            { label: "Edit request", icon: Pencil, hidden: !canModify(row), onClick: () => navigate(`/requests/${row._id}/edit`) },
-            { label: "Withdraw", icon: Undo2, hidden: !(row.allowedActions || []).includes("WITHDRAW"), onClick: () => setWithdrawRow(row) },
+            // Next step: edit a draft or returned request; withdraw one still waiting for the jefe.
+            { label: "Edit request", icon: Pencil, primary: true, hidden: !canModify(row), onClick: () => navigate(`/requests/${row._id}/edit`) },
+            {
+              label: "Withdraw", icon: Undo2,
+              primary: (row.allowedActions || []).includes("WITHDRAW"),
+              // Shown but disabled once an approver has acted, so the requester learns why.
+              hidden: !(row.allowedActions || []).includes("WITHDRAW") && !(row.status === "PENDIENTE_APROBACION" && isOwner(row)),
+              disabled: !(row.allowedActions || []).includes("WITHDRAW"),
+              disabledReason: (row.allowedActions || []).includes("WITHDRAW") ? undefined : "An approver has already acted on this request; it can no longer be withdrawn.",
+              onClick: () => setWithdrawRow(row)
+            },
             { label: "Delete permanently", icon: Trash2, tone: "danger", hidden: !canDelete(row), onClick: () => setDeleteRow(row) }
           ]}
           columns={[

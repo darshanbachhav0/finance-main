@@ -342,6 +342,8 @@ export default function AccountsPayable() {
               label:
                 "View CXP details",
 
+              primary: true,
+
               icon:
                 Eye,
 
