@@ -15,7 +15,7 @@ const block = css.slice(css.indexOf("/* ==== ux: lists"));
 test("row details open in an accessible side panel instead of an inline disclosure", () => {
   assert.doesNotMatch(table, /className="row-details"/, "the per-row <details> disclosure is gone");
   assert.match(table, /import Drawer from "\.\/Drawer\.jsx"/);
-  assert.match(table, /<Drawer open=\{Boolean\(detailRecord\)\}/);
+  assert.match(table, /<Drawer\s+open=\{Boolean\(detailRecord\)\}/);
   assert.match(table, /className="row-details-button" aria-haspopup="dialog"/);
   assert.match(table, /secondaryColumns\.map\(\(column\) => \{\s*const value = cellValue\(column, detailRecord\)/, "the panel lists every secondary field");
   // Rows open the panel on click unless the page opens its own quick view; controls inside do not.

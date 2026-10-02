@@ -3,6 +3,7 @@ import DraftPanel from "../components/DraftPanel.jsx";
 import { Download, RefreshCw, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api from "../api/client.js";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
 import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import Drawer from "../components/Drawer.jsx";
@@ -26,6 +27,11 @@ export default function InvoiceObservations() {
   const [xml, setXml] = useState(null);
   const [pdf, setPdf] = useState(null);
   const [acceptXmlValues, setAcceptXmlValues] = useState(false);
+  // Bulk revalidation: retry several observed invoices with their stored documents (e.g. after a
+  // PO addendum or once SUNAT is reachable again). Corrected files are still uploaded one by one.
+  const [bulkIds, setBulkIds] = useState([]);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkRunning, setBulkRunning] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
 
@@ -69,6 +75,29 @@ export default function InvoiceObservations() {
     }
   }
 
+  async function revalidateSelected() {
+    setBulkRunning(true);
+    const failures = [];
+    let succeeded = 0;
+    for (const id of bulkIds) {
+      const data = new FormData();
+      data.append("acceptXmlValues", "false");
+      try {
+        await api.post(`/batch-invoices/observations/${id}/resolve`, data, { headers: { "Content-Type": "multipart/form-data" } });
+        succeeded += 1;
+      } catch (err) {
+        const row = table.rows.find((item) => item._id === id);
+        failures.push(`${row?.seriesNumber || id}: ${err.message}`);
+      }
+    }
+    setBulkRunning(false);
+    setBulkConfirmOpen(false);
+    setBulkIds([]);
+    table.reload();
+    const summary = t("{ok} revalidated, {failed} still observed").replace("{ok}", succeeded).replace("{failed}", failures.length);
+    notify(failures.length ? `${summary}: ${failures.slice(0, 3).join(" · ")}${failures.length > 3 ? " …" : ""}` : summary, failures.length ? "error" : "success");
+  }
+
   async function retry(event) {
     event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
@@ -94,7 +123,7 @@ export default function InvoiceObservations() {
       <Message type="error">{table.error}</Message>
       {deepLink.active && <DeepLinkNotice title={deepLink.link.record ? "Showing the observed invoice linked from your notification" : "Showing the observed invoices of the linked batch"} missing={!table.loading && !table.rows.length} missingDescription="No open observation remains for this link. The invoices may already have been revalidated." clearLabel="Show all observations" onClear={deepLink.clear} />}
       <div className="workspace-panel">
-        <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, onClick: () => open(row) }]} columns={[
+        <DataTable selection={{ selected: bulkIds, onChange: setBulkIds }} rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, primary: true, onClick: () => open(row) }]} columns={[
           { key: "request", type: "code", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },
           { key: "purchaseOrder", type: "code", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
           { key: "rucIssuer", type: "code", label: "RUC" },
@@ -104,6 +133,28 @@ export default function InvoiceObservations() {
           { key: "observationDetail", primary: true, minWidth: "240px", label: "Observation", sortable: false, render: (row) => row.observationDetail || row.errorDetail || "-" },
           { key: "batch", type: "code", label: "Batch", sortable: false, render: (row) => row.batch?.batchCode || "-" }
         ]} />
+        {bulkIds.length > 0 && (
+          <div className="bulk-bar" role="region" aria-label={t("Bulk revalidation")}>
+            <div className="bulk-bar-summary">
+              <strong>{t(bulkIds.length === 1 ? "{count} item selected" : "{count} selected").replace("{count}", bulkIds.length)}</strong>
+              <span>{t("Retried with their stored XML and PDF.")}</span>
+            </div>
+            <div className="bulk-bar-actions">
+              <button type="button" className="primary-button" disabled={bulkRunning} onClick={() => setBulkConfirmOpen(true)}><RotateCcw size={16} /><span>{t("Revalidate selected")}</span></button>
+              <button type="button" className="text-button" onClick={() => setBulkIds([])}>{t("Clear selection")}</button>
+            </div>
+          </div>
+        )}
+        <ConfirmDialog
+          open={bulkConfirmOpen}
+          title="Revalidate the selected invoices?"
+          description="Each invoice is validated again with its stored documents. Invoices that still fail stay in this inbox with their reason; to correct one, open it and attach the new XML or PDF."
+          details={[{ label: "Invoices", value: String(bulkIds.length) }]}
+          confirmLabel="Revalidate selected"
+          loading={bulkRunning}
+          onClose={() => !bulkRunning && setBulkConfirmOpen(false)}
+          onConfirm={revalidateSelected}
+        />
       </div>
       <Drawer open={Boolean(selected)} title="Revalidate observed invoice" description={selected ? `${selected.seriesNumber} · ${selected.purchaseOrder?.poNumber || ""}` : ""} onClose={() => !processing && setSelected(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelected(null)}>{t("Cancel")}</button><button className="primary-button" form="observation-resolution-form" type="submit" disabled={processing || !draft.ready || draft.status === "conflict"}><RotateCcw size={16} /><span>{t(processing ? "Processing..." : "Revalidate")}</span></button></>}>
         {selected && <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelected(null)}><form id="observation-resolution-form" className="form-grid" onSubmit={retry}>
