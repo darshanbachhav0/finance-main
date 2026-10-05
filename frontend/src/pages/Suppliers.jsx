@@ -102,14 +102,9 @@ export default function Suppliers() {
   ] =
     useSearchParams();
 
+  // Every internal user can propose a supplier; Accounting validates and homologates it.
   const canPropose =
-    [
-      "Admin",
-      "Accounting",
-      "Solicitor"
-    ].includes(
-      user.role
-    ) || (user.permissions || []).includes("supplier:propose");
+    user.role !== "ManagementViewer";
 
   const canFinance =
     [

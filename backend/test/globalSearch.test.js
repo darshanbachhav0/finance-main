@@ -47,7 +47,8 @@ test("global search: grouped records, strictly scoped to what the caller may ope
     await t.test("groups follow the list endpoints' role gates", () => {
       assert.deepEqual(searchGroupsFor(admin), ["requests", "suppliers", "vouchers", "payables", "users"]);
       assert.deepEqual(searchGroupsFor(alice), ["requests", "suppliers", "vouchers"]);
-      assert.deepEqual(searchGroupsFor(director), ["requests", "vouchers"]);
+      // Every internal user can open Suppliers (to propose one), so the group follows.
+      assert.deepEqual(searchGroupsFor(director), ["requests", "suppliers", "vouchers"]);
       assert.deepEqual(searchGroupsFor(accounting), ["requests", "suppliers", "vouchers", "payables"]);
       assert.deepEqual(searchGroupsFor(treasury), ["requests", "suppliers", "vouchers"]);
       assert.deepEqual(searchGroupsFor(viewer), []);

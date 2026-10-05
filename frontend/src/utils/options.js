@@ -108,7 +108,6 @@ export const permissions = [
   { value: "request:create", label: "Create requests", hint: "Raise and submit their own requests (Solicitors already have it)." },
   { value: "request:view-all", label: "View all requests" },
   { value: "request:void", label: "Void requests" },
-  { value: "supplier:propose", label: "Propose suppliers", hint: "Solicitors already have it." },
   { value: "supplier:bank-view", label: "View supplier bank data" },
   { value: "budget:view", label: "View budget" },
   { value: "report:view", label: "View reports" },

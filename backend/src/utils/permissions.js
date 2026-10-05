@@ -3,6 +3,8 @@ import { activeApprovalStep } from "../services/approvalRuleService.js";
 import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
 export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT];
+// Roles that work with every supplier (not only the proposals they made themselves).
+export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
 
 export function permissionsFor(userOrRole) {
@@ -30,10 +32,10 @@ export function actsAsRequester(user) {
   return user?.role === ROLES.SOLICITOR || extraGrants(user).includes(PERMISSIONS.REQUEST_CREATE);
 }
 
-// A person who proposes suppliers without being Accounting/Admin: proposals stay theirs to correct.
+// A person who proposes suppliers without being Accounting/Admin (every other internal user):
+// their proposals stay theirs to correct.
 export function actsAsSupplierProposer(user) {
-  return ![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user?.role)
-    && (user?.role === ROLES.SOLICITOR || extraGrants(user).includes(PERMISSIONS.SUPPLIER_PROPOSE));
+  return ![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user?.role) && hasPermission(user, PERMISSIONS.SUPPLIER_PROPOSE);
 }
 
 export function canCreateRequest(role) {
@@ -43,7 +45,7 @@ export function canCreateRequest(role) {
 export function canViewSuppliers(userOrRole) {
   const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
   if (SUPPLIER_VIEW_ROLES.includes(role)) return true;
-  return typeof userOrRole === "object" && [PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW].some((permission) => extraGrants(userOrRole).includes(permission));
+  return [PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW].some((permission) => hasPermission(userOrRole, permission));
 }
 
 // SUNAT confirmed the supplier but could not verify the individual invoice (SUNAT down, or the
