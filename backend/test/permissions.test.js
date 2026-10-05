@@ -64,3 +64,62 @@ test("permission catalog preserves existing roles and adds Budget and Management
   assert.equal(hasPermission({ role: ROLES.SOLICITOR }, PERMISSIONS.PAYMENT_CONFIRM), false);
   assert.equal(hasPermission({ role: ROLES.ADMIN }, PERMISSIONS.AUDIT_VIEW), true);
 });
+
+test("Additional permissions granted by Admin are real grants on top of the role", async () => {
+  const { GRANTABLE_PERMISSIONS } = await import("../src/utils/constants.js");
+  const { actsAsRequester, actsAsSupplierProposer, extraGrants } = await import("../src/utils/permissions.js");
+  const { authorizeAccess, authorizePermission } = await import("../src/middleware/auth.js");
+  const { allowedRequestActions } = await import("../src/services/requestActionPolicy.js");
+  const pass = (middleware, user) => { try { middleware({ user }, {}, () => {}); return true; } catch (error) { if (error.statusCode === 403) return false; throw error; } };
+
+  const treasury = { _id: "t-1", role: ROLES.TREASURY, permissions: [] };
+  const treasuryRequester = { _id: "t-2", role: ROLES.TREASURY, permissions: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.BUDGET_VIEW] };
+  // Without the grant the role decides; with it the feature opens for that person only.
+  assert.equal(pass(authorizePermission(PERMISSIONS.REQUEST_CREATE), treasury), false);
+  assert.equal(pass(authorizePermission(PERMISSIONS.REQUEST_CREATE), treasuryRequester), true);
+  assert.equal(pass(authorizePermission(PERMISSIONS.BUDGET_VIEW), treasuryRequester), true);
+  assert.equal(pass(authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), treasury), false);
+  assert.equal(pass(authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), treasuryRequester), true);
+  assert.equal(actsAsRequester(treasuryRequester), true);
+  assert.equal(actsAsRequester(treasury), false);
+  assert.equal(actsAsSupplierProposer(treasuryRequester), true);
+  assert.equal(canViewSuppliers(treasuryRequester), true);
+  assert.equal(canViewSuppliers({ _id: "b", role: ROLES.BUDGET, permissions: [] }), false);
+  assert.equal(canViewSuppliers({ _id: "b", role: ROLES.BUDGET, permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), true);
+  // A requester by grant edits and submits their own draft like a Solicitor.
+  const ownDraft = { requester: "t-2", status: REQUEST_STATUS.DRAFT, approvalHistory: [] };
+  assert.equal(canModifyRequest(ownDraft, treasuryRequester), true);
+  assert.ok(allowedRequestActions(ownDraft, treasuryRequester).includes("SUBMIT"));
+  assert.equal(canModifyRequest({ ...ownDraft, requester: "someone-else" }, treasuryRequester), false);
+
+  // Department duties are not grantable: a stored legacy value never widens access.
+  const legacy = { _id: "s-9", role: ROLES.SOLICITOR, permissions: [PERMISSIONS.ACCOUNTING_PROCESS, PERMISSIONS.PAYMENT_CONFIRM, PERMISSIONS.USER_MANAGE] };
+  assert.deepEqual(extraGrants(legacy), []);
+  for (const duty of [PERMISSIONS.ACCOUNTING_PROCESS, PERMISSIONS.PAYMENT_CONFIRM, PERMISSIONS.USER_MANAGE]) assert.equal(hasPermission(legacy, duty), false);
+  // A ManagementViewer stays portal-only even with a grantable value stored.
+  assert.equal(hasPermission({ role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.REPORT_VIEW] }, PERMISSIONS.REPORT_VIEW), false);
+
+  // Role defaults keep today's access: Accounting voids requests, Procurement issues orders.
+  assert.equal(hasPermission(ROLES.ACCOUNTING, PERMISSIONS.REQUEST_VOID), true);
+  assert.equal(hasPermission(ROLES.PROCUREMENT, PERMISSIONS.PROCUREMENT_ORDER_CREATE), true);
+  assert.equal(hasPermission(ROLES.PROCUREMENT, PERMISSIONS.SUPPLIER_BANK_VIEW), false, "Procurement never saw full supplier bank data");
+
+  // Every permission Admin can grant is enforced somewhere in the server (no decorative checkbox).
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(path.join(dir, entry.name)) : entry.name.endsWith(".js") ? [path.join(dir, entry.name)] : []);
+  const code = walk(srcDir).filter((file) => !file.endsWith(path.join("utils", "constants.js"))).map((file) => fs.readFileSync(file, "utf8")).join(String.fromCharCode(10));
+  const keyOf = Object.fromEntries(Object.entries(PERMISSIONS).map(([key, value]) => [value, key]));
+  for (const permission of GRANTABLE_PERMISSIONS) {
+    const key = keyOf[permission];
+    const enforced = [
+      String.raw`(authorizePermission|authorizeAccess|hasPermission)\([^)]*PERMISSIONS\.` + key + String.raw`\b`,
+      String.raw`permissions: \[[^\]]*PERMISSIONS\.` + key + String.raw`\b`,
+      String.raw`_PERMISSIONS = Object\.freeze\(\[[^\]]*PERMISSIONS\.` + key + String.raw`\b`,
+      String.raw`extraGrants\(user[^)]*\)\.includes\(PERMISSIONS\.` + key + String.raw`\)`
+    ].some((pattern) => new RegExp(pattern).test(code));
+    assert.ok(enforced, `${permission} is grantable but nothing in the server enforces it`);
+  }
+});

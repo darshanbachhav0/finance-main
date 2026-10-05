@@ -1,6 +1,6 @@
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
-import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
+import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
 export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
@@ -8,23 +8,42 @@ export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
 export function permissionsFor(userOrRole) {
   const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
   const rolePermissions = ROLE_PERMISSIONS[role] || [];
-  let customPermissions = typeof userOrRole === "object" ? userOrRole.permissions || [] : [];
-  // ManagementViewer is portal-only: a stored extra grant (e.g. from before this rule) never
-  // widens it.
-  if (role === ROLES.MANAGEMENT_VIEWER) customPermissions = customPermissions.filter((permission) => MANAGEMENT_VIEWER_PERMISSIONS.includes(permission));
-  return [...new Set([...rolePermissions, ...customPermissions])];
+  return [...new Set([...rolePermissions, ...extraGrants(userOrRole)])];
+}
+
+// The extra grants that are in force for a user: only grantable permissions (a stored legacy
+// value such as "accounting:process" never widens access), and nothing beyond the portal for a
+// ManagementViewer.
+export function extraGrants(user) {
+  if (!user || typeof user !== "object") return [];
+  const allowed = user.role === ROLES.MANAGEMENT_VIEWER ? MANAGEMENT_VIEWER_PERMISSIONS : GRANTABLE_PERMISSIONS;
+  return (user.permissions || []).filter((permission) => allowed.includes(permission));
 }
 
 export function hasPermission(userOrRole, permission) {
   return permissionsFor(userOrRole).includes(permission);
 }
 
+// A person who raises their own requests: every Solicitor, plus anyone granted "Create requests".
+// Requester controls (only own requests, only authorized cost centers) apply to them.
+export function actsAsRequester(user) {
+  return user?.role === ROLES.SOLICITOR || extraGrants(user).includes(PERMISSIONS.REQUEST_CREATE);
+}
+
+// A person who proposes suppliers without being Accounting/Admin: proposals stay theirs to correct.
+export function actsAsSupplierProposer(user) {
+  return ![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user?.role)
+    && (user?.role === ROLES.SOLICITOR || extraGrants(user).includes(PERMISSIONS.SUPPLIER_PROPOSE));
+}
+
 export function canCreateRequest(role) {
   return REQUEST_CREATOR_ROLES.includes(role);
 }
 
-export function canViewSuppliers(role) {
-  return SUPPLIER_VIEW_ROLES.includes(role);
+export function canViewSuppliers(userOrRole) {
+  const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
+  if (SUPPLIER_VIEW_ROLES.includes(role)) return true;
+  return typeof userOrRole === "object" && [PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW].some((permission) => extraGrants(userOrRole).includes(permission));
 }
 
 // SUNAT confirmed the supplier but could not verify the individual invoice (SUNAT down, or the
@@ -59,7 +78,7 @@ export function canModifyRequest(request, user) {
   if (user.role === ROLES.ADMIN) return true;
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
   return (
-    user.role === ROLES.SOLICITOR &&
+    actsAsRequester(user) &&
     String(ownerId) === String(user._id) &&
     [
       REQUEST_STATUS.DRAFT,

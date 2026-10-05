@@ -336,8 +336,8 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
   }
   await assertPostingAllowed(request, { user, req });
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
-  if (user.role === ROLES.SOLICITOR && String(ownerId) !== String(user._id)) {
-    throw new AppError(403, "Solicitors can register invoices only for their own requests.", undefined, ERROR_CODES.FORBIDDEN);
+  if (![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) && String(ownerId) !== String(user._id)) {
+    throw new AppError(403, "Requesters can register invoices only for their own requests.", undefined, ERROR_CODES.FORBIDDEN);
   }
   if (![REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {
     throw new AppError(409, "Track A1 invoice can only be registered after PO/budget approval.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);

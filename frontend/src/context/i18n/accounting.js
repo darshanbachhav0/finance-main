@@ -1,5 +1,9 @@
 // Spanish copy for the accounting area. Keys are the English UI strings passed to t().
 export default {
+  "Raise and submit their own requests (Solicitors already have it).": "Crear y enviar sus propias solicitudes (los solicitantes ya lo tienen).",
+  "Solicitors already have it.": "Los solicitantes ya lo tienen.",
+  "Needed to receive advances and reimbursements (Solicitors already have it).": "Necesario para recibir anticipos y reembolsos (los solicitantes ya lo tienen).",
+  "Extras on top of the user's role. The role already includes its own access; department duties such as accounting, payments or budget management come only with the role.": "Permisos adicionales al rol del usuario. El rol ya incluye sus propios accesos; las funciones de un área, como contabilidad, pagos o gestión presupuestal, solo vienen con el rol.",
   "The invoice XML saved for this request is no longer available on the server. Upload the same XML and PDF again in Documents, then retry.": "El XML del comprobante guardado para esta solicitud ya no está disponible en el servidor. Vuelve a cargar el mismo XML y PDF en Documentos y reintenta.",
   "Budget is reviewing an exception for this request's budget. You do not need to submit it again; you will be notified of the decision.": "Presupuesto está revisando una excepción para el presupuesto de esta solicitud. No necesitas enviarla otra vez; se te notificará la decisión.",
   "SUNAT could not verify this invoice. Review it in Accounting > SUNAT exceptions; once the exception is approved the payment continues without new approvals.": "SUNAT no pudo verificar este comprobante. Revíselo en Contabilidad > Excepciones SUNAT; al aprobar la excepción, el pago continúa sin nuevas aprobaciones.",

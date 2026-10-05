@@ -3,14 +3,17 @@ import User from "../models/User.js";
 import { recordAudit } from "./auditService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, ROLES } from "../utils/constants.js";
+import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { hasPermission } from "../utils/permissions.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
 import { notifyEmployeeBankDecision, notifyEmployeeBankReview, resolveEmployeeBankReview } from "./bankNotificationService.js";
 import { plainClone } from "../utils/plainClone.js";
 
-const OWNER_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR]);
-const REVIEW_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
-const READ_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR, ROLES.ACCOUNTING, ROLES.TREASURY]);
+// Role defaults: Solicitors manage their own profiles, Accounting reviews, Accounting/Treasury see
+// payment destinations; Admin has all. Admin can also grant the first two to any employee.
+const OWNER_PERMISSIONS = Object.freeze([PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN]);
+const REVIEW_PERMISSIONS = Object.freeze([PERMISSIONS.EMPLOYEE_BANK_REVIEW]);
+const READ_PERMISSIONS = Object.freeze([PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.EMPLOYEE_BANK_REVIEW, PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT]);
 const PROTECTED_FIELDS = Object.freeze([
   "verificationStatus",
   "verifiedBy",
@@ -26,8 +29,8 @@ const PROTECTED_FIELDS = Object.freeze([
   "user"
 ]);
 
-function assertRole(user, roles, message) {
-  if (!roles.includes(user?.role)) throw new AppError(403, message, undefined, ERROR_CODES.FORBIDDEN);
+function assertAllowed(user, permissions, message) {
+  if (!permissions.some((permission) => hasPermission(user, permission))) throw new AppError(403, message, undefined, ERROR_CODES.FORBIDDEN);
 }
 
 function assertNoProtectedFields(payload) {
@@ -46,7 +49,7 @@ function mask(value, visible = 4) {
 function bankPayload(account, user) {
   const value = account?.toObject ? account.toObject() : plainClone(account);
   const owns = String(value.user?._id || value.user) === String(user?._id);
-  const canReadFull = owns || [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user?.role);
+  const canReadFull = owns || hasPermission(user, PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT);
   value.accountNumberMasked = mask(value.accountNumber);
   value.cciMasked = mask(value.cci);
   if (!canReadFull) {
@@ -78,9 +81,10 @@ function normalizedFacts(payload) {
 }
 
 export async function listEmployeeReimbursementBankAccounts({ query = {}, user }) {
-  assertRole(user, READ_ROLES, "You do not have access to employee reimbursement banking.");
+  assertAllowed(user, READ_PERMISSIONS, "You do not have access to employee reimbursement banking.");
   const filter = {};
-  if (user.role === ROLES.SOLICITOR) filter.user = user._id;
+  // Without a review/payment duty a user sees only their own profiles.
+  if (!hasPermission(user, PERMISSIONS.EMPLOYEE_BANK_REVIEW) && !hasPermission(user, PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT)) filter.user = user._id;
   else if (query.user) filter.user = query.user;
   if (query.active !== undefined && query.active !== "") filter.active = String(query.active) === "true";
   if (query.verificationStatus) filter.verificationStatus = query.verificationStatus;
@@ -93,7 +97,7 @@ export async function listEmployeeReimbursementBankAccounts({ query = {}, user }
 }
 
 export async function createEmployeeReimbursementBankAccount({ payload, user, req }) {
-  assertRole(user, OWNER_ROLES, "Only an employee or Admin can add an employee reimbursement bank profile.");
+  assertAllowed(user, OWNER_PERMISSIONS, "Only an employee or Admin can add an employee reimbursement bank profile.");
   assertNoProtectedFields(payload);
   const ownerId = user.role === ROLES.ADMIN && payload.ownerId ? payload.ownerId : user._id;
   const owner = await User.findById(ownerId).select("name role");
@@ -136,7 +140,7 @@ export async function createEmployeeReimbursementBankAccount({ payload, user, re
 }
 
 export async function updateEmployeeReimbursementBankAccount({ accountId, payload, user, req }) {
-  assertRole(user, OWNER_ROLES, "Only an employee or Admin can update an employee reimbursement bank profile.");
+  assertAllowed(user, OWNER_PERMISSIONS, "Only an employee or Admin can update an employee reimbursement bank profile.");
   assertNoProtectedFields(payload);
   const current = await EmployeeReimbursementBankAccount.findById(accountId).select(accountSelector());
   if (!current) throw new AppError(404, "Employee bank profile was not found.", { accountId }, ERROR_CODES.NOT_FOUND);
@@ -189,7 +193,7 @@ export async function updateEmployeeReimbursementBankAccount({ accountId, payloa
 }
 
 export async function setPreferredEmployeeReimbursementBankAccount({ accountId, user, req }) {
-  assertRole(user, OWNER_ROLES, "Only an employee or Admin can select a preferred reimbursement account.");
+  assertAllowed(user, OWNER_PERMISSIONS, "Only an employee or Admin can select a preferred reimbursement account.");
   const account = await EmployeeReimbursementBankAccount.findById(accountId).select(accountSelector());
   if (!account) throw new AppError(404, "Employee bank profile was not found.", { accountId }, ERROR_CODES.NOT_FOUND);
   assertOwner(account, user);
@@ -209,7 +213,7 @@ export async function setPreferredEmployeeReimbursementBankAccount({ accountId, 
 }
 
 export async function deactivateEmployeeReimbursementBankAccount({ accountId, user, req }) {
-  assertRole(user, OWNER_ROLES, "Only an employee or Admin can deactivate an employee reimbursement account.");
+  assertAllowed(user, OWNER_PERMISSIONS, "Only an employee or Admin can deactivate an employee reimbursement account.");
   const account = await EmployeeReimbursementBankAccount.findById(accountId).select(accountSelector());
   if (!account) throw new AppError(404, "Employee bank profile was not found.", { accountId }, ERROR_CODES.NOT_FOUND);
   assertOwner(account, user);
@@ -224,7 +228,7 @@ export async function deactivateEmployeeReimbursementBankAccount({ accountId, us
 }
 
 export async function reviewEmployeeReimbursementBankAccount({ accountId, payload, user, req }) {
-  assertRole(user, REVIEW_ROLES, "Only Accounting or Admin can review employee reimbursement banking.");
+  assertAllowed(user, REVIEW_PERMISSIONS, "Only Accounting or Admin can review employee reimbursement banking.");
   const account = await EmployeeReimbursementBankAccount.findById(accountId).select(accountSelector());
   if (!account) throw new AppError(404, "Employee bank profile was not found.", { accountId }, ERROR_CODES.NOT_FOUND);
   if (!account.active) throw new AppError(409, "Inactive accounts cannot be verified.", undefined, ERROR_CODES.CONFLICT);

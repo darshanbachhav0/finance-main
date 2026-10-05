@@ -8,7 +8,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canUseCostCenter } from "../utils/permissions.js";
+import { actsAsRequester, canUseCostCenter } from "../utils/permissions.js";
 
 function canonicalRequestType(value) {
   return LEGACY_REQUEST_TYPE_MAP[value] || value;
@@ -107,7 +107,7 @@ export async function validateAccountingDimensions({ requestType, expenseNature,
         ERROR_CODES.INVALID_COST_CENTER_LINE
       );
     }
-    if (user?.role === ROLES.SOLICITOR && !canUseCostCenter(user, center._id)) {
+    if (actsAsRequester(user) && user.role !== ROLES.ADMIN && !canUseCostCenter(user, center._id)) {
       throw new AppError(
         403,
         `Line ${lineNumber} uses CECO ${center.code} - ${center.name}. This Cost Center is not assigned to the current requester.`,

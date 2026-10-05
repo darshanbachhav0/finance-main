@@ -6,9 +6,11 @@ import { assertSupplierEligibleForRequestReview } from "./supplierService.js";
 import { activeApprovalStep } from "./approvalRuleService.js";
 import { assertClosureAllowed } from "./financialProgressService.js";
 import { AppError } from "../utils/AppError.js";
+import { PERMISSIONS } from "../utils/constants.js";
+import { hasPermission } from "../utils/permissions.js";
 
 export async function submissionReadiness(payload, user) {
-  if (!["Admin", "Solicitor"].includes(user.role)) throw new AppError(403, "Request preparation is not available for this role.");
+  if (!hasPermission(user, PERMISSIONS.REQUEST_CREATE)) throw new AppError(403, "Request preparation is not available for this role.");
   const request = { ...payload, requesterArea: user.role === "Admin" ? payload.requesterArea || user.area : user.area, status: "BORRADOR" };
   request.lines = Array.isArray(payload.lines) ? payload.lines : [];
   request.attachments = Array.isArray(payload.attachments) ? payload.attachments : [];

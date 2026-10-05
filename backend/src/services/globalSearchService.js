@@ -31,7 +31,7 @@ export const SEARCH_GROUPS = Object.freeze(["requests", "suppliers", "vouchers",
 export function searchGroupsFor(user) {
   if (!user || user.active === false || !INTERNAL_ROLES.includes(user.role)) return [];
   return SEARCH_GROUPS.filter((group) => {
-    if (group === "suppliers") return canViewSuppliers(user.role);
+    if (group === "suppliers") return canViewSuppliers(user);
     if (group === "payables") return PAYABLE_ROLES.includes(user.role);
     if (group === "users") return USER_ROLES.includes(user.role);
     return true;

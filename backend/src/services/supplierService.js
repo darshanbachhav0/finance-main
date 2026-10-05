@@ -11,7 +11,8 @@ import { getSupplierAutomaticPrefill } from "./supplierPadronLookupService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, ROLES } from "../utils/constants.js";
+import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { actsAsSupplierProposer, hasPermission } from "../utils/permissions.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
 
 const FINANCE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
@@ -285,10 +286,10 @@ function assertProposalEditable(supplier, user) {
       ERROR_CODES.INVALID_STATUS_TRANSITION
     );
   }
-  if (user.role === ROLES.SOLICITOR && String(idOf(supplier.proposedBy)) !== String(user._id)) {
-    throw new AppError(403, "Solicitors may correct only supplier proposals they created.", undefined, ERROR_CODES.FORBIDDEN);
+  if (actsAsSupplierProposer(user) && String(idOf(supplier.proposedBy)) !== String(user._id)) {
+    throw new AppError(403, "You may correct only supplier proposals you created.", undefined, ERROR_CODES.FORBIDDEN);
   }
-  if (![ROLES.SOLICITOR, ...FINANCE_ROLES].includes(user.role)) {
+  if (!FINANCE_ROLES.includes(user.role) && !actsAsSupplierProposer(user)) {
     throw new AppError(403, "You do not have permission to edit supplier proposals.", undefined, ERROR_CODES.FORBIDDEN);
   }
 }
@@ -304,8 +305,8 @@ function idOf(value) {
 }
 
 function canViewFullBankData(supplier, user) {
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user?.role)) return true;
-  return user?.role === ROLES.SOLICITOR
+  if (hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) return true;
+  return actsAsSupplierProposer(user)
     && String(idOf(supplier.proposedBy)) === String(user._id)
     && EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus);
 }
@@ -347,9 +348,9 @@ function supplierPermissions(supplier, user) {
   const financeMayCorrectHomologated = finance && supplier.homologationStatus === "HOMOLOGATED";
   const proposerOwns = String(idOf(supplier.proposedBy)) === String(user?._id || "");
   return {
-    canEditProposal: (editable || financeMayCorrectHomologated) && (finance || (user?.role === ROLES.SOLICITOR && proposerOwns)),
-    canUploadDocuments: editable && (finance || (user?.role === ROLES.SOLICITOR && proposerOwns)),
-    canAddBankAccount: finance || (editable && user?.role === ROLES.SOLICITOR && proposerOwns),
+    canEditProposal: (editable || financeMayCorrectHomologated) && (finance || (actsAsSupplierProposer(user) && proposerOwns)),
+    canUploadDocuments: editable && (finance || (actsAsSupplierProposer(user) && proposerOwns)),
+    canAddBankAccount: finance || (editable && actsAsSupplierProposer(user) && proposerOwns),
     canReview: finance && supplier.homologationStatus !== "HOMOLOGATED",
     canVerifyBanking: finance,
     // Fix 2: an expired homologation must be renewable again even though homologationStatus is still
@@ -694,7 +695,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
 }
 
 export async function updateSupplierProposal({ supplierId, payload, files = {}, user, req }) {
-  if (user.role === ROLES.SOLICITOR) {
+  if (actsAsSupplierProposer(user)) {
     assertFieldsAreNotPresent(payload, protectedSupplierFields, "Solicitors cannot set supplier review, status or PRV fields.");
     assertFieldsAreNotPresent(payload, protectedBankReviewFields, "Solicitors cannot set bank review fields.");
   }
@@ -776,7 +777,7 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
 
 export async function addSupplierBankAccount({ supplierId, payload, user, req }) {
   const supplier = await loadSupplier(supplierId);
-  if (user.role === ROLES.SOLICITOR) assertProposalEditable(supplier, user);
+  if (actsAsSupplierProposer(user)) assertProposalEditable(supplier, user);
   else assertFinanceUser(user, "Only an authorized proposer, Accounting or Admin can add supplier bank accounts.");
   return createBankAccountRecord({ supplier, payload, user, req });
 }

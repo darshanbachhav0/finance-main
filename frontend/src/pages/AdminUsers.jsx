@@ -52,7 +52,7 @@ export default function AdminUsers() {
         { name: "role", label: "Role", type: "toggle-group", required: true, options: roles, onSelect: (value) => value === "AreaDirector" ? { approvalLevel: "AREA_DIRECTOR" } : value === "ViceRector" ? { approvalLevel: "VICE_RECTOR" } : undefined },
         { name: "approvalLevel", label: "Approval level", type: "toggle-group", defaultValue: "AREA_DIRECTOR", options: approvalLevels },
         { name: "approvalAreas", label: "Approval areas", type: "tags", placeholder: "Area, or * for all", getValue: (row) => row.approvalAreas || [] },
-        { name: "permissions", label: "Additional permissions", type: "toggle-list", defaultValue: [], options: permissions, getValue: (row) => row.permissions || [] },
+        { name: "permissions", label: "Additional permissions", type: "toggle-list", defaultValue: [], options: permissions, getValue: (row) => row.permissions || [], hint: "Extras on top of the user's role. The role already includes its own access; department duties such as accounting, payments or budget management come only with the role." },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true, hint: "Deactivating moves this user's pending approvals to their nearest available jefe." },
         { name: "onLeave", label: "On leave", type: "checkbox", defaultValue: false, hint: "While on leave, pending approvals move to this user's nearest available jefe and new requests route past them." },
         { name: "leaveUntil", label: "On leave until", type: "date" },

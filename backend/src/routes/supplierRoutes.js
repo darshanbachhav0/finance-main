@@ -24,12 +24,18 @@ import {
 
 import {
   authorize,
+  authorizeAccess,
   protect
 } from "../middleware/auth.js";
 
 import {
+  PERMISSIONS,
   ROLES
 } from "../utils/constants.js";
+
+// Proposing a supplier: Accounting/Admin by role, every Solicitor and anyone granted
+// "Propose suppliers" by permission.
+const proposeSupplier = authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] });
 
 import {
   SUPPLIER_VIEW_ROLES
@@ -44,9 +50,10 @@ const router =
 
 router.use(
   protect,
-  authorize(
-    ...SUPPLIER_VIEW_ROLES
-  )
+  authorizeAccess({
+    roles: SUPPLIER_VIEW_ROLES,
+    permissions: [PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW]
+  })
 );
 
 router.get(
@@ -64,31 +71,19 @@ router.get(
  */
 router.get(
   "/padron/:ruc",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING,
-    ROLES.SOLICITOR
-  ),
+  proposeSupplier,
   lookupSupplierPadron
 );
 
 router.get(
   "/consulta-ruc/:ruc/representatives",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING,
-    ROLES.SOLICITOR
-  ),
+  proposeSupplier,
   lookupSupplierLegalRepresentatives
 );
 
 router.post(
   "/",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING,
-    ROLES.SOLICITOR
-  ),
+  proposeSupplier,
   uploadFields,
   createSupplier
 );
@@ -105,22 +100,14 @@ router.get(
 
 router.patch(
   "/:id/proposal",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING,
-    ROLES.SOLICITOR
-  ),
+  proposeSupplier,
   uploadFields,
   updateSupplierProposalFields
 );
 
 router.post(
   "/:id/bank-accounts",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING,
-    ROLES.SOLICITOR
-  ),
+  proposeSupplier,
   addBankAccount
 );
 

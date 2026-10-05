@@ -20,7 +20,7 @@ import { budgetOverview } from "../services/budgetReportingService.js";
 import { isEligibleSupplierPaymentAccount, usesEmployeeReimbursementDestination } from "../services/paymentDestinationService.js";
 import { budgetExceptionPath, countPendingBudgetExceptions } from "../services/budgetExceptionService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
-import { requestVisibilityFilter } from "../utils/permissions.js";
+import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
 
 function currentPeriod() {
@@ -134,8 +134,9 @@ async function buildTasks(user) {
     const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope({ role: ROLES.ADMIN }) : query;
     items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "red", ...(user.role === ROLES.MANAGEMENT ? {} : { partOf: "approval" }) });
   }
-  if (user.role === ROLES.SOLICITOR) {
-    const owner = ownerScope(user);
+  // Requester tasks for every Solicitor and for anyone granted "Create requests".
+  if (actsAsRequester(user)) {
+    const owner = { $or: [{ requester: user._id }, { solicitor: user._id }] };
     const draftQuery = { ...owner, status: REQUEST_STATUS.DRAFT };
     // Observations waiting on Accounting (manual SUNAT exception) or Budget (budget exception) are
     // not the requester's task.

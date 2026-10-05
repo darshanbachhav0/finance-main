@@ -21,7 +21,8 @@ for (const path of ["/suppliers", "/accounting/invoice-observations", "/accounti
   assert.ok(menu("Accounting").includes(path), `Accounting menu has ${path}`);
 }
 const app = read("../src/App.jsx");
-assert.match(app, /path="configuration\/:resource" element=\{<ProtectedRoute roles=\{configurationRoles\} \/>\}/);
+// "Certify bank formats" granted to a user also opens the configuration route (bank formats only).
+assert.match(app, /path="configuration\/:resource" element=\{<ProtectedRoute roles=\{configurationRoles\} permissions=\{\["bank-format:certify"\]\} \/>\}/);
 // The per-resource roles mirror the configuration page.
 const master = read("../src/pages/MasterConfiguration.jsx");
 for (const [resource, roles] of Object.entries(configurationAccess)) {

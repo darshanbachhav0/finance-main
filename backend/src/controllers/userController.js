@@ -6,7 +6,7 @@ import { recordAudit } from "../services/auditService.js";
 import { reassignPendingApprovalsFor } from "../services/approvalService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { APPROVAL_STAGES, ERROR_CODES, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
+import { APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
@@ -23,6 +23,9 @@ const IMPLIED_APPROVAL_LEVEL = Object.freeze({
 function editablePayload(body) {
   const payload = Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
   if (payload.role && IMPLIED_APPROVAL_LEVEL[payload.role]) payload.approvalLevel = IMPLIED_APPROVAL_LEVEL[payload.role];
+  // Only grantable extras are stored; a legacy, non-grantable value (which never had any effect)
+  // is dropped the next time the user is saved.
+  if (Array.isArray(payload.permissions)) payload.permissions = [...new Set(payload.permissions.filter((permission) => GRANTABLE_PERMISSIONS.includes(permission)))];
   return payload;
 }
 

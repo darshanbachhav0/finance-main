@@ -1,7 +1,7 @@
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "./approvalRuleService.js";
 import { canTransition } from "./workflowService.js";
-import { canApproveStage, canModifyRequest, canWithdrawRequest, hasPermission, isActiveChainApprover, observationOwner, wasSubmitted } from "../utils/permissions.js";
+import { actsAsRequester, canApproveStage, canModifyRequest, canWithdrawRequest, hasPermission, isActiveChainApprover, observationOwner, wasSubmitted } from "../utils/permissions.js";
 import { APPROVAL_ROUTING_MODE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 export const REQUEST_ACTION = Object.freeze({
@@ -80,7 +80,7 @@ export function allowedRequestActions(request, user, context = {}) {
     for (const action of [REQUEST_ACTION.APPROVE, REQUEST_ACTION.OBSERVE, REQUEST_ACTION.RETURN, REQUEST_ACTION.REJECT]) actions.add(action);
   }
 
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)
+  if (hasPermission(user, PERMISSIONS.REQUEST_VOID)
       && context.hasActiveObligations === false
       && canTransition(status, REQUEST_STATUS.VOIDED)) actions.add(REQUEST_ACTION.CANCEL);
 
@@ -89,9 +89,9 @@ export function allowedRequestActions(request, user, context = {}) {
   // again; committing it as it stands would bypass that decision.
   if ([ROLES.ADMIN, ROLES.BUDGET].includes(user.role) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(status)
       && !activeApprovalStep(request) && !(status === REQUEST_STATUS.OBSERVED_BUDGET && observationOwner(request) === "REQUESTER")) actions.add(REQUEST_ACTION.COMMIT_BUDGET);
-  if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role) && context.procurementReady === true) actions.add(REQUEST_ACTION.ISSUE_ORDER);
+  if (hasPermission(user, PERMISSIONS.PROCUREMENT_ORDER_CREATE) && context.procurementReady === true) actions.add(REQUEST_ACTION.ISSUE_ORDER);
   if (request.flowType === "A1" && request.purchaseOrder && invoiceStatuses.has(status)
-      && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (user.role === ROLES.SOLICITOR && owner))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
+      && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
 
   return [...actions];
 }

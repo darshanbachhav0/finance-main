@@ -32,8 +32,8 @@ export default function EmployeeReimbursementBanking() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [confirm, setConfirm] = useState(null);
-  const canManage = ["Admin", "Solicitor"].includes(user.role);
-  const canReview = ["Admin", "Accounting"].includes(user.role);
+  const canManage = ["Admin", "Solicitor"].includes(user.role) || (user.permissions || []).includes("employee-bank:manage-own");
+  const canReview = ["Admin", "Accounting"].includes(user.role) || (user.permissions || []).includes("employee-bank:review");
   // Segregation of duties: a reviewer never verifies the account they are paid into or bank details they entered.
   const ownReviewConflict = (row) => String(row.user?._id || row.user || "") === String(user._id) || String(row.createdBy?._id || row.createdBy || "") === String(user._id);
   const canReviewRow = (row) => canReview && !ownReviewConflict(row);

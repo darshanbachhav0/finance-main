@@ -321,6 +321,7 @@ export default function ResourceManager({
                         key={value}
                         type="button"
                         aria-pressed={selected}
+                        title={option.hint ? t(option.hint) : undefined}
                         className={`toggle-chip${selected ? " is-active" : ""}`}
                         onClick={() => {
                           const current = Array.isArray(form[field.name]) ? form[field.name] : [];

@@ -10,7 +10,7 @@ import SunatVoucher from "../models/SunatVoucher.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
 import AccountsPayable from "../models/AccountsPayable.js";
 import JournalEntry from "../models/JournalEntry.js";
-import { requestVisibilityFilter } from "../utils/permissions.js";
+import { actsAsSupplierProposer, requestVisibilityFilter } from "../utils/permissions.js";
 import { requestReadiness } from "./operationsReadinessService.js";
 import { evaluateSupplierHomologation } from "./supplierService.js";
 import { periodCloseBlockers } from "./periodAdministrationService.js";
@@ -35,7 +35,7 @@ export async function operationsQueue(user, query = {}) {
 
 export async function supplierReviewQueue(user) {
   const query = { homologationStatus: { $in: ["PENDING_VALIDATION", "OBSERVED"] } };
-  if (user.role === "Solicitor") query.proposedBy = user._id;
+  if (actsAsSupplierProposer(user)) query.proposedBy = user._id;
   else if (!["Admin", "Accounting", "Procurement", "Treasury"].includes(user.role)) throw new AppError(403, "Supplier review is not available for this role.");
   const suppliers = await Supplier.find(query).sort({ updatedAt: 1 }).limit(50);
   const data = [];

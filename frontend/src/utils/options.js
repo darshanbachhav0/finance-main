@@ -100,32 +100,21 @@ export const approvalLevels = ["AREA_DIRECTOR", "VICE_RECTOR", "RECTORATE", "GEN
 export const banks = ["BCP", "BBVA", "INTERBANK", "SCOTIABANK"];
 export const roles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"];
 
-// Extra grants beyond a role's default set - an exception, not the everyday path.
+// Extra grants beyond a role's default set - an exception, not the everyday path. Only
+// self-contained features are grantable (mirrors GRANTABLE_PERMISSIONS in the backend); a
+// department's duties (accounting, payments, budget management, users, master data...) come with
+// the role, so they are not offered here.
 export const permissions = [
-  { value: "request:create", label: "Create requests" },
+  { value: "request:create", label: "Create requests", hint: "Raise and submit their own requests (Solicitors already have it)." },
   { value: "request:view-all", label: "View all requests" },
-  { value: "request:approve", label: "Approve requests" },
   { value: "request:void", label: "Void requests" },
-  { value: "supplier:propose", label: "Propose suppliers" },
-  { value: "supplier:homologate", label: "Homologate suppliers" },
+  { value: "supplier:propose", label: "Propose suppliers", hint: "Solicitors already have it." },
   { value: "supplier:bank-view", label: "View supplier bank data" },
   { value: "budget:view", label: "View budget" },
-  { value: "budget:manage", label: "Manage budget" },
-  { value: "accounting:process", label: "Process accounting" },
-  { value: "period:manage", label: "Manage periods" },
-  { value: "treasury:schedule", label: "Schedule payments" },
-  { value: "treasury:file", label: "Generate bank files" },
-  { value: "payment:confirm", label: "Confirm payments" },
-  { value: "payment:reconcile", label: "Reconcile payments" },
-  { value: "payment:reprocess", label: "Reprocess payments" },
   { value: "report:view", label: "View reports" },
   { value: "management-portal:view", label: "View management portal" },
-  { value: "audit:view", label: "View audit" },
-  { value: "master-data:manage", label: "Manage master data" },
-  { value: "user:manage", label: "Manage users" },
-  { value: "employee-bank:manage-own", label: "Manage own bank account" },
+  { value: "employee-bank:manage-own", label: "Manage own bank account", hint: "Needed to receive advances and reimbursements (Solicitors already have it)." },
   { value: "employee-bank:review", label: "Review employee bank accounts" },
-  { value: "employee-bank:view-payment", label: "View payment bank data" },
   { value: "rendition:review", label: "Review renditions" },
   { value: "procurement-order:create", label: "Create purchase orders" },
   { value: "batch-invoice:upload", label: "Upload batch invoices" },

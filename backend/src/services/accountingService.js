@@ -968,7 +968,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     }
     request.fiscalValidation = validation;
   }
-  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, user, requireAccount: true });
+  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, requireAccount: true });
   await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING);
   if (MANDATORY_XML_TYPES.includes(request.requestType) && !request.xmlValidation?.validated) {
     throw new AppError(422, "A valid XML fiscal document is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);

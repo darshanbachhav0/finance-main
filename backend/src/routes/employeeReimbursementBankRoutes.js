@@ -7,17 +7,18 @@ import {
   selectPreferred,
   updateAccount
 } from "../controllers/employeeReimbursementBankController.js";
-import { authorize, protect } from "../middleware/auth.js";
-import { ROLES } from "../utils/constants.js";
+import { authorizePermission, protect } from "../middleware/auth.js";
+import { PERMISSIONS } from "../utils/constants.js";
 
 const router = Router();
 
 router.use(protect);
-router.get("/", authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.ACCOUNTING, ROLES.TREASURY), listAccounts);
-router.post("/", authorize(ROLES.ADMIN, ROLES.SOLICITOR), createAccount);
-router.patch("/:id", authorize(ROLES.ADMIN, ROLES.SOLICITOR), updateAccount);
-router.post("/:id/preferred", authorize(ROLES.ADMIN, ROLES.SOLICITOR), selectPreferred);
-router.post("/:id/review", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), reviewAccount);
-router.delete("/:id", authorize(ROLES.ADMIN, ROLES.SOLICITOR), deactivateAccount);
+const manageOwn = authorizePermission(PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN);
+router.get("/", authorizePermission(PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.EMPLOYEE_BANK_REVIEW, PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT), listAccounts);
+router.post("/", manageOwn, createAccount);
+router.patch("/:id", manageOwn, updateAccount);
+router.post("/:id/preferred", manageOwn, selectPreferred);
+router.post("/:id/review", authorizePermission(PERMISSIONS.EMPLOYEE_BANK_REVIEW), reviewAccount);
+router.delete("/:id", manageOwn, deactivateAccount);
 
 export default router;
