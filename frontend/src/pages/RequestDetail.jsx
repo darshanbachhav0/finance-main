@@ -98,6 +98,20 @@ function entityName(value, fallback = "-") {
   return value?.legalName || value?.commercialName || value?.name || fallback;
 }
 
+// Labels for the values RequestCreate stores in opexDetails.expenseFrequency.
+const opexFrequencyLabels = { ONE_OFF: "One-off", MONTHLY_RECURRING: "Monthly recurring", EVERY_3_MONTHS: "Every 3 months", ANNUAL_RENEWAL: "Annual renewal" };
+
+// capexDetails.projectSnapshot carries code and name once the backend resolves the project.
+function capexProjectLabel(capexDetails = {}) {
+  const snapshot = capexDetails.projectSnapshot || {};
+  const named = [snapshot.code, snapshot.name].filter(Boolean).join(" - ");
+  return named || capexDetails.projectPep || null;
+}
+
+function hasValue(value) {
+  return value !== undefined && value !== null && value !== "";
+}
+
 function requesterName(request) {
   return request?.requester?.name || request?.solicitor?.name || request?.rendition?.beneficiarySnapshot?.name || "-";
 }
@@ -551,12 +565,11 @@ export default function RequestDetail() {
           {request.requestType === "CAPEX" && (
             <Section title="CAPEX financial information" description="Investment classification and financial evaluation captured in the official request.">
               <DefinitionGrid>
-                <Definition label="Asset category">{request.capexDetails?.assetCategory || "-"}</Definition>
-                <Definition label="Project">{request.capexDetails?.projectSnapshot?.id || request.capexDetails?.projectId || request.project || "-"}</Definition>
-                <Definition label="Useful life">{request.capexDetails?.usefulLifeYears ? `${request.capexDetails.usefulLifeYears} ${t("years")}` : "-"}</Definition>
-                <Definition label="Payback period">{request.capexDetails?.paybackPeriod ? `${request.capexDetails.paybackPeriod} ${request.capexDetails?.paybackUnit || ""}` : "-"}</Definition>
-                <Definition label="Expected benefit">{request.capexDetails?.expectedBenefit || "-"}</Definition>
-                <Definition label="Technical justification">{request.capexDetails?.technicalJustification || "-"}</Definition>
+                <Definition label="Project / PEP">{capexProjectLabel(request.capexDetails) || "-"}</Definition>
+                <Definition label="Fixed asset category">{request.capexDetails?.assetCategory ? t(request.capexDetails.assetCategory) : "-"}</Definition>
+                <Definition label="Useful life (years)">{hasValue(request.capexDetails?.usefulLifeYears) ? request.capexDetails.usefulLifeYears : "-"}</Definition>
+                <Definition label="NPV / VAN amount">{hasValue(request.capexDetails?.npv?.amount) ? formatCurrency(request.capexDetails.npv.amount, request.capexDetails.npv.currency || request.currency, language) : "-"}</Definition>
+                <Definition label="Payback">{hasValue(request.capexDetails?.payback?.value) ? `${request.capexDetails.payback.value} ${t(request.capexDetails.payback.unit === "YEARS" ? "Years" : "Months")}` : "-"}</Definition>
               </DefinitionGrid>
             </Section>
           )}
@@ -564,10 +577,7 @@ export default function RequestDetail() {
           {request.requestType === "OPEX" && (
             <Section title="OPEX financial information" description="Operating expense frequency and controlled recurrence.">
               <DefinitionGrid>
-                <Definition label="Expense frequency">{request.opexDetails?.frequency || "-"}</Definition>
-                <Definition label="Service period">{request.opexDetails?.servicePeriod || "-"}</Definition>
-                <Definition label="Renewal date">{formatDate(request.opexDetails?.renewalDate, language)}</Definition>
-                <Definition label="Recurring commitment">{request.opexDetails?.recurringCommitment ? t("Yes") : t("No")}</Definition>
+                <Definition label="Expense frequency">{request.opexDetails?.expenseFrequency ? t(opexFrequencyLabels[request.opexDetails.expenseFrequency] || request.opexDetails.expenseFrequency) : "-"}</Definition>
               </DefinitionGrid>
             </Section>
           )}

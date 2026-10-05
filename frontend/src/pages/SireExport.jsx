@@ -11,7 +11,7 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { formatCurrency, formatDateTime, formatNumber } from "../utils/formatters.js";
+import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
 const EMPTY_SUMMARY = { reviewed: 0, eligible: 0, excluded: 0, blockingErrors: 0, cancelledExcluded: 0, warningCount: 0, configurationErrors: [], readyToExport: false, fileName: null, directSubmission: false, providerMode: "EXPORT_ONLY" };
 const TXT_PREVIEW_LINES = 20;
@@ -88,7 +88,15 @@ export default function SireExport() {
   const canExport = summary.readyToExport && previewedPeriod === period;
   const blockingIssues = issues.filter((issue) => issue.severity === "ERROR");
   const otherIssues = issues.filter((issue) => issue.severity !== "ERROR");
-  const total = records.filter((row) => row.eligible).reduce((sum, row) => sum + Number(row.total || 0), 0);
+  // PEN and USD vouchers are totalled separately: adding them together gives a meaningless number.
+  const totalsByCurrency = records.filter((row) => row.eligible).reduce((sums, row) => {
+    const currency = row.currency || "PEN";
+    sums[currency] = (sums[currency] || 0) + Number(row.total || 0);
+    return sums;
+  }, {});
+  const purchaseTotal = Object.keys(totalsByCurrency).length
+    ? Object.entries(totalsByCurrency).map(([currency, amount]) => formatCurrency(amount, currency, language)).join(" · ")
+    : formatCurrency(0, "PEN", language);
   let exportHint;
   if (previewedPeriod !== period) exportHint = t("Run preview and resolve errors before export.");
   else if (!summary.readyToExport) exportHint = t("Every voucher must pass validation before the SUNAT file can be generated.");
@@ -125,7 +133,7 @@ export default function SireExport() {
         <StatCard label="Rows in SUNAT file" value={summary.eligible || 0} tone="green" />
         <StatCard label="Vouchers with errors" value={summary.blockingErrors || 0} tone={summary.blockingErrors ? "red" : "green"} />
         <StatCard label="Excluded (cancelled or duplicate)" value={(summary.excluded || 0) - (summary.blockingErrors || 0)} tone="amber" />
-        <StatCard label="Purchase total" value={formatNumber(total, language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tone="teal" />
+        <StatCard label="Purchase total" value={purchaseTotal} tone="teal" />
       </div>
 
       {blockingIssues.length > 0 && (

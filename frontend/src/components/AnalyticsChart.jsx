@@ -84,7 +84,9 @@ export default function AnalyticsChart({
   const colors = dark ? darkPalette : palette;
   const titleId = useId();
   const chartSeries = series.map((item) => {
-    const color = ({ "#087c75": "#c91545", "#17344c": "#45404e" })[item.color] || item.color;
+    // Retired teal/navy series colors map onto the UMA palette. Teal must not become UMA red:
+    // amounts drawn in red read as alerts (e.g. "Executed" in the budget chart).
+    const color = ({ "#087c75": "#7a5ca3", "#17344c": "#45404e" })[item.color] || item.color;
     return { ...item, label: t(item.label), color: dark && palette.includes(color) ? darkPalette[palette.indexOf(color)] : color };
   });
   // Category colors belong to donuts/single-series bars; grouped bars use their series color.

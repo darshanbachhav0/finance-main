@@ -2536,6 +2536,8 @@ summary:focus-visible { outline: 2px solid var(--uma-primary); outline-offset: 3
 .budget-month-cards { display: none; }
 @media (max-width: 900px) {
  .budget-month-table { display: none; }
+ /* The distribution editor has no card version: keep its inputs, laid out as cards above. */
+ .budget-grid-editor .budget-month-table { display: block; }
  .budget-month-cards { display: grid; gap: 12px; }
  .budget-month-cards article { display: grid; gap: 8px; border: 1px solid var(--gray-200); padding: 12px; border-radius: 8px; }
  .budget-month-cards dl > div { display: flex; justify-content: space-between; gap: 12px; }
