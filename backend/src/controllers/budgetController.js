@@ -12,6 +12,7 @@ import { ERROR_CODES } from "../utils/constants.js";
 import { deepLinkFilter, escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { budgetAllocationRows, budgetOverview, budgetPeriodFilter } from "../services/budgetReportingService.js";
 import { adjustBudgetPlan, carryOverOpenCommitments, createBudgetPlan, getBudgetPlan } from "../services/budgetPlanService.js";
+import { cancelBudgetPlanChange, decideBudgetPlanChange, listBudgetPlanChanges } from "../services/budgetPlanChangeService.js";
 import mongoose from "mongoose";
 
 export const getBudgetOverview = asyncHandler(async (req, res) => {
@@ -31,6 +32,9 @@ export const listBudgetAllocations = asyncHandler(async (req, res) => {
 export const readBudgetPlan = asyncHandler(async (req, res) => res.json({ data: await getBudgetPlan(req.params.id) }));
 export const addBudgetPlan = asyncHandler(async (req, res) => res.status(201).json({ data: await createBudgetPlan(req.body, req.user, req) }));
 export const changeBudgetPlan = asyncHandler(async (req, res) => res.json({ data: await adjustBudgetPlan(req.params.id, req.body, req.user, req) }));
+export const listPlanChanges = asyncHandler(async (req, res) => res.json(await listBudgetPlanChanges(req.query)));
+export const decidePlanChange = asyncHandler(async (req, res) => res.json({ data: await decideBudgetPlanChange(req.params.id, req.body, req.user, req) }));
+export const cancelPlanChange = asyncHandler(async (req, res) => res.json({ data: await cancelBudgetPlanChange(req.params.id, req.user, req) }));
 
 export const listBudgetCommitments = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination(req.query);

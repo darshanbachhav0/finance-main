@@ -44,7 +44,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
-import { bottomNavigationForUser, canAccessNavigation, counterBadgeText, navigationCount, navigationForUser } from "../utils/navigationAccess.js";
+import { bottomNavigationForUser, canAccessNavigation, counterBadgeText, groupNavigation, navigationCount, navigationForUser } from "../utils/navigationAccess.js";
 
 const groups = [
   {
@@ -158,7 +158,9 @@ export default function AppLayout() {
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
   const pendingApprovals = Number(tasks.counters?.approval) || 0;
-  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: navigationForUser(user, { pendingApprovals }).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || {}), icon: navigationIcon(path), label, path })).filter(item => canAccessNavigation(user.role, item.path, user)) }], [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
+  // Grouped into fixed sections (Overview, Requests, Finance, Planning and reports, Master Data,
+  // Administration) so every role reads the menu the same way.
+  const visibleGroups = useMemo(() => groupNavigation(navigationForUser(user, { pendingApprovals }).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || {}), icon: navigationIcon(path), label, path })).filter(item => canAccessNavigation(user.role, item.path, user))), [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
   const commandPages = useMemo(() => visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))), [visibleGroups]);
   const bottomItems = useMemo(() => bottomNavigationForUser(user, { pendingApprovals }).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
   // "3 pendientes": the badge's spoken form, also added to the link's name (the collapsed

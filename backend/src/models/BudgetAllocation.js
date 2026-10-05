@@ -9,17 +9,42 @@ const monthlyBudgetSchema = new mongoose.Schema({
   paidAmount: { type: Number, min: 0, default: 0 }
 }, { _id: false });
 
+const monthChangeSchema = new mongoose.Schema({
+  month: { type: Number, min: 1, max: 12, required: true },
+  before: Number,
+  after: Number
+}, { _id: false });
+
+export const BUDGET_ADJUSTMENT_ACTIONS = Object.freeze([
+  "CREATED", "TRANSFER", "ALLOCATE_RESERVE", "INCREASE", "EXCEPTION_INCREASE", "CARRY_OVER_OUT", "CARRY_OVER_IN",
+  "REDISTRIBUTE", "RELEASE_TO_RESERVE", "DECREASE", "MODE_CHANGE", "ROLL_FORWARD", "SETTINGS"
+]);
+
 const adjustmentSchema = new mongoose.Schema({
   operationId: { type: String, required: true },
   // EXCEPTION_INCREASE: shortfall added automatically when Management approved a
   // REQUEST_BUDGET_INCREASE exception. CARRY_OVER_OUT / CARRY_OVER_IN: open commitments moved
-  // from one budget year into the next by the year-end carry-over.
-  action: { type: String, enum: ["CREATED", "TRANSFER", "ALLOCATE_RESERVE", "INCREASE", "EXCEPTION_INCREASE", "CARRY_OVER_OUT", "CARRY_OVER_IN"], required: true },
+  // from one budget year into the next by the year-end carry-over. REDISTRIBUTE: Admin edited the
+  // monthly distribution (monthChanges holds every month's before/after). RELEASE_TO_RESERVE /
+  // DECREASE: unused money returned to the annual reserve / taken off the year. MODE_CHANGE:
+  // annual-only <-> annual + monthly. ROLL_FORWARD: a month's unused budget moved automatically
+  // to the next month at month end. SETTINGS: the plan's roll-forward switch was changed.
+  action: { type: String, enum: BUDGET_ADJUSTMENT_ACTIONS, required: true },
   amount: Number,
   fromMonth: Number,
   toMonth: Number,
   annualBefore: Number,
   annualAfter: Number,
+  monthChanges: { type: [monthChangeSchema], default: undefined },
+  modeBefore: String,
+  modeAfter: String,
+  rollForwardEnabled: Boolean,
+  // Months of the change that fall in a closed accounting period (Admin may still edit them).
+  closedMonths: { type: [Number], default: undefined },
+  // Set when the change needed, and received, Management approval.
+  changeRequest: { type: mongoose.Schema.Types.ObjectId, ref: "BudgetPlanChange" },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  approvedByName: String,
   reason: { type: String, required: true },
   by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   actorName: String,
@@ -40,6 +65,14 @@ const budgetAllocationSchema = new mongoose.Schema(
     committedAmount: { type: Number, min: 0, default: 0 },
     executedAmount: { type: Number, min: 0, default: 0 },
     paidAmount: { type: Number, min: 0, default: 0 },
+    // Annual + monthly plans only: when a month ends, its unused budget moves to the next month.
+    // lastRolledMonth is the last month already handled, so each month end rolls exactly once.
+    rollForward: {
+      enabled: { type: Boolean, default: false },
+      enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      enabledAt: Date,
+      lastRolledMonth: { type: Number, min: 0, max: 12, default: 0 }
+    },
     active: { type: Boolean, default: true }
   },
   { timestamps: true }

@@ -1226,6 +1226,20 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .budget-month-table table { width: 100%; border-collapse: collapse; white-space: nowrap; font-size: 12px; }
 .budget-month-table th, .budget-month-table td { padding: 10px; border-bottom: 1px solid var(--gray-200); text-align: right; font-variant-numeric: tabular-nums; }
 .budget-month-table th:first-child { text-align: left; }
+/* Flexible plans: month grid editor, closed-period tag, pending approvals. */
+.budget-closed-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: var(--surface-tint-e9edef); color: var(--gray-600); font-size: 11px; font-weight: 650; }
+.budget-month-cards strong svg { margin-left: 4px; color: var(--gray-600); vertical-align: -1px; }
+.budget-grid-editor { display: grid; gap: 12px; }
+.budget-grid-editor input { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.budget-grid-editor tr.is-changed td, .budget-grid-editor tr.is-changed th { background: var(--surface-tint-eef9f7); }
+.budget-grid-editor tr.has-error td, .budget-grid-editor tr.has-error th { background: var(--surface-tint-fff4f5); }
+.budget-grid-editor tr.has-error input { border-color: var(--red-700); }
+.budget-grid-totals { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 12px; border: 1px solid var(--gray-200); border-radius: 7px; font-size: 13px; color: var(--gray-600); }
+.budget-grid-totals strong { color: var(--gray-800); font-variant-numeric: tabular-nums; }
+.budget-pending-changes { display: grid; gap: 6px; margin: 0 0 18px; padding: 11px 13px; border: 1px solid #ead29a; border-left: 4px solid #d89400; border-radius: 5px; background: var(--surface-tint-fff9eb); color: #6d4807; }
+.budget-pending-change { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; }
+.budget-pending-change small { color: var(--gray-600); }
+.plain-list { margin: 0; padding-left: 18px; }
 .budget-month-table thead { background: var(--gray-50); color: var(--gray-600); }
 .budget-form-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .budget-plan-form, .budget-adjustment-form { display: grid; gap: 16px; }

@@ -19,6 +19,7 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { budgetOverview } from "../services/budgetReportingService.js";
 import { isEligibleSupplierPaymentAccount, usesEmployeeReimbursementDestination } from "../services/paymentDestinationService.js";
 import { budgetExceptionPath, countPendingBudgetExceptions } from "../services/budgetExceptionService.js";
+import { countPendingBudgetPlanChanges } from "../services/budgetPlanChangeService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
@@ -201,6 +202,10 @@ async function buildTasks(user) {
     const count = await countPendingBudgetExceptions(management ? { awaitingDecision: true } : {});
     const single = !management && count === 1 ? (await openBudgetExceptions())[0] : null;
     items.push({ key: "budgetExceptions", kind: management ? "decide" : "review", label: management ? "Budget exceptions awaiting your decision" : "Budget exceptions pending", count, path: management ? BUDGET_EXCEPTION_DECISIONS_PATH : single ? budgetExceptionPath(single) : "/budget?tab=exceptions&exceptionStatus=PENDING", tone: "red" });
+  }
+  // Budget plan changes above the approval threshold wait for Management's decision.
+  if (user.role === ROLES.MANAGEMENT) {
+    items.push({ key: "budgetPlanChanges", kind: "decide", label: "Budget changes awaiting your decision", count: await countPendingBudgetPlanChanges(), path: "/budget?tab=changes", tone: "amber" });
   }
   if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role)) {
     const orderQuery = { flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null };
