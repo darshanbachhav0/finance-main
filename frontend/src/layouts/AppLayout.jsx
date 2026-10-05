@@ -157,9 +157,10 @@ export default function AppLayout() {
   const sidebarRef = useRef(null);
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
-  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: navigationForUser(user).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || {}), icon: navigationIcon(path), label, path })).filter(item => canAccessNavigation(user.role, item.path, user)) }], [user.role, user.hasTeam]);
+  const pendingApprovals = Number(tasks.counters?.approval) || 0;
+  const visibleGroups = useMemo(() => [{ label: "Your workspace", items: navigationForUser(user, { pendingApprovals }).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || {}), icon: navigationIcon(path), label, path })).filter(item => canAccessNavigation(user.role, item.path, user)) }], [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
   const commandPages = useMemo(() => visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))), [visibleGroups]);
-  const bottomItems = useMemo(() => bottomNavigationForUser(user).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user.role, user.hasTeam]);
+  const bottomItems = useMemo(() => bottomNavigationForUser(user, { pendingApprovals }).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
   // "3 pendientes": the badge's spoken form, also added to the link's name (the collapsed
   // sidebar hides the text label, so the badge must not be the only place the count lives).
   const pendingLabel = (count) => t(count === 1 ? "{count} pending item" : "{count} pending items").replace("{count}", count > 99 ? "99+" : count);

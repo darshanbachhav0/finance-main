@@ -105,6 +105,17 @@ test("My Team: hierarchy traversal, scoped request listing and the roster endpoi
       await User.updateOne({_id:supervisorA._id},{$set:{role:ROLES.ADMIN}});
       assert.equal((await sessionUser(await User.findById(supervisorA._id))).hasTeam, false);
     });
+    await t.test("session flags an approval step currently assigned to the user (menu shows Approvals)", async () => {
+      const covering = await User.create({ name: "Covering approver", email: "covering.approver@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations" });
+      assert.equal((await sessionUser(covering)).hasPendingApprovals, false);
+      // Only the approval route matters here, so the record is stored directly.
+      const { insertedId } = await FinancialRequest.collection.insertOne({ requestNumber: "SOL-COVER-1", requester: outsider._id, status: REQUEST_STATUS.PENDING_APPROVAL, approvalRouteSnapshot: [{ sequence: 1, approvalLevel: "JEFE", source: "MANAGER_CHAIN", approverUser: covering._id, status: "PENDING", required: true }] });
+      const request = { _id: insertedId };
+      assert.equal((await sessionUser(covering)).hasPendingApprovals, true);
+      // A decided step, or a request no longer in approval, no longer counts.
+      await FinancialRequest.updateOne({ _id: request._id }, { $set: { status: REQUEST_STATUS.APPROVED, "approvalRouteSnapshot.0.status": "APPROVED" } });
+      assert.equal((await sessionUser(covering)).hasPendingApprovals, false);
+    });
   } finally {
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
