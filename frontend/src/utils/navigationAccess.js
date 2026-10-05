@@ -52,7 +52,8 @@ export const navigationAccess = Object.freeze({
   "/accounting/periods": ["Admin", "Accounting"],
   "/accounting/sire": ["Admin", "Accounting"],
   "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
-  "/suppliers": ["Admin", "Accounting", "Treasury", "Solicitor", "Procurement"],
+  // Every internal user can propose suppliers.
+  "/suppliers": internalRoles,
   "/cost-centers": ["Admin", "Accounting"],
   "/expense-types": ["Admin", "Accounting"],
   "/exchange-rates": ["Admin", "Accounting"],
@@ -68,7 +69,6 @@ export const navigationGrants = Object.freeze({
   "/budget": ["budget:view"],
   "/reports": ["report:view"],
   "/management-view": ["management-portal:view"],
-  "/suppliers": ["supplier:propose", "supplier:bank-view"],
   "/reimbursement-bank": ["employee-bank:manage-own", "employee-bank:review"],
   "/batch-invoices": ["batch-invoice:upload", "batch-invoice:review"],
   "/accounting/invoice-observations": ["batch-invoice:review"],
@@ -82,7 +82,6 @@ const grantedNavigation = [
   ["Budget Control", "/budget", ["budget:view"]],
   ["Management Reports", "/reports", ["report:view"]],
   ["Management Portal", "/management-view", ["management-portal:view"]],
-  ["Suppliers", "/suppliers", ["supplier:propose", "supplier:bank-view"]],
   ["Reimbursement Banking", "/reimbursement-bank", ["employee-bank:manage-own", "employee-bank:review"]],
   ["A2 Batch Invoices", "/batch-invoices", ["batch-invoice:upload", "batch-invoice:review"]],
   ["Invoice Observations", "/accounting/invoice-observations", ["batch-invoice:review"]],
@@ -110,6 +109,8 @@ export function visibleNavigationPaths(role, user) {
 export function navigationForUser(user) {
   const items = [...(roleNavigation[user?.role] || [])];
   if (user?.hasTeam === true && !items.some(([, path]) => path === "/my-team")) items.push(["My Team", "/my-team"]);
+  // Proposing suppliers is open to every internal user, so the menu always offers it.
+  if (internalRoles.includes(user?.role) && !items.some(([, path]) => path === "/suppliers")) items.push(["Suppliers", "/suppliers"]);
   for (const [label, path, permissions] of grantedNavigation) {
     if (hasGrant(user, ...permissions) && !items.some(([, existing]) => existing === path)) items.push([label, path]);
   }

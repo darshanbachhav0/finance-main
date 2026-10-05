@@ -3,7 +3,7 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
-import { actsAsSupplierProposer, canViewRequest, canViewSuppliers, hasPermission } from "../utils/permissions.js";
+import { SUPPLIER_WORK_ROLES, canViewRequest, canViewSuppliers, hasPermission } from "../utils/permissions.js";
 import { generatedRoot, uploadRoot } from "./storageService.js";
 
 const generatedAccess = Object.freeze({
@@ -45,7 +45,7 @@ export async function assertStoredAssetAccess(asset, user) {
   }
   if (asset.kind === "uploads" && asset.segments[0] === "suppliers") {
     if (!canViewSuppliers(user)) throw forbidden();
-    if (actsAsSupplierProposer(user) && !hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
+    if (!SUPPLIER_WORK_ROLES.includes(user.role) && !hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
       const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy homologationStatus");
       if (!supplier || String(supplier.proposedBy || "") !== String(user._id) || !["PENDING_VALIDATION", "OBSERVED"].includes(supplier.homologationStatus)) {
         throw forbidden();

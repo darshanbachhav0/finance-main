@@ -53,7 +53,6 @@ export const GRANTABLE_PERMISSIONS = Object.freeze([
   PERMISSIONS.REQUEST_CREATE,
   PERMISSIONS.REQUEST_VIEW_ALL,
   PERMISSIONS.REQUEST_VOID,
-  PERMISSIONS.SUPPLIER_PROPOSE,
   PERMISSIONS.SUPPLIER_BANK_VIEW,
   PERMISSIONS.BUDGET_VIEW,
   PERMISSIONS.REPORT_VIEW,
@@ -67,7 +66,7 @@ export const GRANTABLE_PERMISSIONS = Object.freeze([
   PERMISSIONS.BANK_FORMAT_CERTIFY
 ]);
 
-export const ROLE_PERMISSIONS = Object.freeze({
+const ROLE_BASE_PERMISSIONS = Object.freeze({
   [ROLES.ADMIN]: Object.values(PERMISSIONS),
   [ROLES.SOLICITOR]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.BATCH_INVOICE_UPLOAD],
   // Vice-Rector is a Area Director's escalation target and holds the identical permission
@@ -115,6 +114,13 @@ export const ROLE_PERMISSIONS = Object.freeze({
   // MANAGEMENT_VIEWER_PERMISSIONS below. Do not add permissions here.
   [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]
 });
+
+// Every internal user can propose a supplier (Accounting then validates and homologates it).
+// The portal-only ManagementViewer cannot.
+export const ROLE_PERMISSIONS = Object.freeze(Object.fromEntries(Object.entries(ROLE_BASE_PERMISSIONS).map(([role, permissions]) => [
+  role,
+  role === ROLES.MANAGEMENT_VIEWER ? permissions : [...new Set([...permissions, PERMISSIONS.SUPPLIER_PROPOSE])]
+])));
 
 // The only permissions a ManagementViewer account may ever hold, including per-user extras.
 // User validation rejects anything else and permissionsFor() ignores it for legacy records.

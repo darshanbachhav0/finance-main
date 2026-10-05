@@ -17,9 +17,13 @@ test("only Admin and Solicitor can create financial requests", () => {
   assert.equal(canCreateRequest(ROLES.TREASURY), false);
 });
 
-test("Area Director/Vice-Rector cannot access Suppliers while operational roles can", () => {
-  assert.equal(canViewSuppliers(ROLES.AREA_DIRECTOR), false);
-  assert.equal(canViewSuppliers(ROLES.VICE_RECTOR), false);
+test("every internal role can open Suppliers and propose one; the portal-only viewer cannot", () => {
+  for (const role of Object.values(ROLES).filter((role) => role !== ROLES.MANAGEMENT_VIEWER)) {
+    assert.equal(canViewSuppliers(role), true, role);
+    assert.equal(hasPermission(role, PERMISSIONS.SUPPLIER_PROPOSE), true, role);
+  }
+  assert.equal(canViewSuppliers(ROLES.MANAGEMENT_VIEWER), false);
+  assert.equal(hasPermission(ROLES.MANAGEMENT_VIEWER, PERMISSIONS.SUPPLIER_PROPOSE), false);
   assert.equal(canViewSuppliers(ROLES.ADMIN), true);
   assert.equal(canViewSuppliers(ROLES.SOLICITOR), true);
   assert.equal(canViewSuppliers(ROLES.ACCOUNTING), true);
@@ -78,14 +82,17 @@ test("Additional permissions granted by Admin are real grants on top of the role
   assert.equal(pass(authorizePermission(PERMISSIONS.REQUEST_CREATE), treasury), false);
   assert.equal(pass(authorizePermission(PERMISSIONS.REQUEST_CREATE), treasuryRequester), true);
   assert.equal(pass(authorizePermission(PERMISSIONS.BUDGET_VIEW), treasuryRequester), true);
-  assert.equal(pass(authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), treasury), false);
-  assert.equal(pass(authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), treasuryRequester), true);
+  // Proposing suppliers needs no grant: every internal role has it; the portal viewer does not.
+  assert.equal(pass(authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), treasury), true);
+  assert.equal(pass(authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), { role: ROLES.MANAGEMENT_VIEWER, permissions: [] }), false);
   assert.equal(actsAsRequester(treasuryRequester), true);
   assert.equal(actsAsRequester(treasury), false);
   assert.equal(actsAsSupplierProposer(treasuryRequester), true);
   assert.equal(canViewSuppliers(treasuryRequester), true);
-  assert.equal(canViewSuppliers({ _id: "b", role: ROLES.BUDGET, permissions: [] }), false);
-  assert.equal(canViewSuppliers({ _id: "b", role: ROLES.BUDGET, permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }), true);
+  // Proposing suppliers is a default of every internal role, so it is no longer an extra grant.
+  assert.equal(GRANTABLE_PERMISSIONS.includes(PERMISSIONS.SUPPLIER_PROPOSE), false);
+  assert.equal(actsAsSupplierProposer(treasury), true);
+  assert.equal(actsAsSupplierProposer({ _id: "a", role: ROLES.ACCOUNTING, permissions: [] }), false, "Accounting works as finance, not as a proposer");
   // A requester by grant edits and submits their own draft like a Solicitor.
   const ownDraft = { requester: "t-2", status: REQUEST_STATUS.DRAFT, approvalHistory: [] };
   assert.equal(canModifyRequest(ownDraft, treasuryRequester), true);
