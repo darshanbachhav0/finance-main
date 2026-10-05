@@ -1,16 +1,24 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import FinancialRequest from "../models/FinancialRequest.js";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
-import { ROLES } from "../utils/constants.js";
+import { REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { recordAudit } from "../services/auditService.js";
 
 export async function sessionUser(user) {
   // Recompute on session refresh; never trust a client-supplied or stored capability.
-  const hasTeam = Boolean(await User.exists({ jefe: user._id, active: true, _id: { $ne: user._id } }));
-  return { ...user.toJSON(), hasTeam };
+  const [team, pendingApproval] = await Promise.all([
+    User.exists({ jefe: user._id, active: true, _id: { $ne: user._id } }),
+    // An approval step assigned to this person right now (e.g. covering for a jefe on leave).
+    FinancialRequest.exists({
+      status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] },
+      approvalRouteSnapshot: { $elemMatch: { approverUser: user._id, status: "PENDING" } }
+    })
+  ]);
+  return { ...user.toJSON(), hasTeam: Boolean(team), hasPendingApprovals: Boolean(pendingApproval) };
 }
 
 function signToken(user) {

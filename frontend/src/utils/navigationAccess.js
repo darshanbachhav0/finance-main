@@ -105,9 +105,17 @@ export function visibleNavigationPaths(role, user) {
     .map(([path]) => path);
 }
 
+// Approvals follow the reporting line: a Solicitor approves only as someone's jefe, or when an
+// approval step is assigned to them (e.g. covering a jefe on leave). Other roles that approve keep
+// the entry. pendingApprovals is the live task counter, so an assignment shows up mid-session.
+export function approvesRequests(user, pendingApprovals = 0) {
+  if (user?.role !== "Solicitor") return true;
+  return user.hasTeam === true || user.hasPendingApprovals === true || Number(pendingApprovals) > 0;
+}
+
 // Primary navigation is deliberately smaller than the set of permitted routes.
-export function navigationForUser(user) {
-  const items = [...(roleNavigation[user?.role] || [])];
+export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
+  const items = [...(roleNavigation[user?.role] || [])].filter(([, path]) => path !== "/approvals" || approvesRequests(user, pendingApprovals));
   if (user?.hasTeam === true && !items.some(([, path]) => path === "/my-team")) items.push(["My Team", "/my-team"]);
   // Proposing suppliers is open to every internal user, so the menu always offers it.
   if (internalRoles.includes(user?.role) && !items.some(([, path]) => path === "/suppliers")) items.push(["Suppliers", "/suppliers"]);
@@ -177,8 +185,8 @@ export const bottomNavigationLabels = Object.freeze({
   "/budget": "Budget"
 });
 
-export function bottomNavigationForUser(user) {
-  const items = navigationForUser(user);
+export function bottomNavigationForUser(user, options) {
+  const items = navigationForUser(user, options);
   // A requester who also approves for a team gets Approvals in place of the request list.
   const paths = user?.role === "Solicitor" && user?.hasTeam === true ? ["/", "/approvals", "/requests/new"] : bottomNavigation[user?.role];
   const chosen = paths ? paths.map((path) => items.find(([, itemPath]) => itemPath === path)).filter(Boolean) : items.slice(0, 3);
