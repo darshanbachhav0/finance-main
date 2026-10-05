@@ -16,6 +16,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
+import { actsAsRequester } from "../utils/permissions.js";
 
 const observationStates = [
   REQUEST_STATUS.OBSERVED,
@@ -89,7 +90,9 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
   if (String(adminOverrideReason || "").trim()) throw new AppError(403, "Emergency approval overrides are disabled. Use the assigned approval route.");
   if (!user) throw new AppError(401, "Authentication is required.", undefined, ERROR_CODES.FORBIDDEN);
   const allowedRoles = roleTargets[targetStatus] || [];
-  if (!skipRoleCheck && !allowedRoles.includes(user.role)) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
+  // A requester by grant ("Create requests") may move their request where a Solicitor may.
+  const asRequester = allowedRoles.includes(ROLES.SOLICITOR) && actsAsRequester(user);
+  if (!skipRoleCheck && !allowedRoles.includes(user.role) && !asRequester) throw new AppError(403, "You do not have permission for this workflow transition.", { targetStatus }, ERROR_CODES.FORBIDDEN);
 
   if ([REQUEST_STATUS.DRAFT, REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL].includes(targetStatus)) {
     if (user.role !== ROLES.ADMIN && requesterId(request) !== String(user._id)) throw new AppError(403, "Only the requester can submit this request.", undefined, ERROR_CODES.FORBIDDEN);

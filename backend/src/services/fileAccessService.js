@@ -2,8 +2,8 @@ import path from "path";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, ROLES } from "../utils/constants.js";
-import { canViewRequest, canViewSuppliers } from "../utils/permissions.js";
+import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { actsAsSupplierProposer, canViewRequest, canViewSuppliers, hasPermission } from "../utils/permissions.js";
 import { generatedRoot, uploadRoot } from "./storageService.js";
 
 const generatedAccess = Object.freeze({
@@ -44,8 +44,8 @@ export async function assertStoredAssetAccess(asset, user) {
     return;
   }
   if (asset.kind === "uploads" && asset.segments[0] === "suppliers") {
-    if (!canViewSuppliers(user.role)) throw forbidden();
-    if (user.role === ROLES.SOLICITOR) {
+    if (!canViewSuppliers(user)) throw forbidden();
+    if (actsAsSupplierProposer(user) && !hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
       const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy homologationStatus");
       if (!supplier || String(supplier.proposedBy || "") !== String(user._id) || !["PENDING_VALIDATION", "OBSERVED"].includes(supplier.homologationStatus)) {
         throw forbidden();
@@ -55,7 +55,9 @@ export async function assertStoredAssetAccess(asset, user) {
   }
   if (asset.kind === "generated") {
     const roles = generatedAccess[asset.segments[0]];
-    if (!roles?.includes(user.role)) throw forbidden();
+    // Report files follow "View reports" (role default or granted), like the reports screen.
+    const allowed = asset.segments[0] === "reports" ? hasPermission(user, PERMISSIONS.REPORT_VIEW) : roles?.includes(user.role);
+    if (!allowed) throw forbidden();
     return;
   }
   throw forbidden();

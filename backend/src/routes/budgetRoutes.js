@@ -9,11 +9,12 @@ import {
   runYearEndCarryOver
 } from "../controllers/budgetController.js";
 import { addBudgetPlan, changeBudgetPlan, readBudgetPlan } from "../controllers/budgetController.js";
-import { authorize, protect } from "../middleware/auth.js";
-import { ROLES } from "../utils/constants.js";
+import { authorize, authorizePermission, protect } from "../middleware/auth.js";
+import { PERMISSIONS, ROLES } from "../utils/constants.js";
 
 const router = Router();
-router.use(protect, authorize(ROLES.ADMIN, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.BUDGET, ROLES.MANAGEMENT));
+// "View budget": the roles that hold it by default, plus anyone granted it.
+router.use(protect, authorizePermission(PERMISSIONS.BUDGET_VIEW));
 router.get("/overview", getBudgetOverview);
 router.get("/plans/:id", readBudgetPlan);
 router.post("/plans", authorize(ROLES.ADMIN, ROLES.BUDGET), addBudgetPlan);

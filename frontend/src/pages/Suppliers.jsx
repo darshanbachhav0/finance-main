@@ -109,7 +109,7 @@ export default function Suppliers() {
       "Solicitor"
     ].includes(
       user.role
-    );
+    ) || (user.permissions || []).includes("supplier:propose");
 
   const canFinance =
     [

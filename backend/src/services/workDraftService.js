@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import WorkDraft from "../models/WorkDraft.js";
 import { AppError } from "../utils/AppError.js";
+import { PERMISSIONS } from "../utils/constants.js";
+import { hasPermission } from "../utils/permissions.js";
 
 const roles = {
   request: ["Admin", "Solicitor"], supplier: ["Admin", "Accounting", "Solicitor"],
@@ -14,6 +16,13 @@ const roles = {
   "batch-invoice": ["Admin", "Accounting", "Solicitor"], "invoice-files": ["Admin", "Accounting", "Solicitor"],
   "invoice-resolution": ["Admin", "Accounting", "Solicitor"]
 };
+// A permission granted in Administration > Users opens the drafts of the form it opens.
+const grants = {
+  request: [PERMISSIONS.REQUEST_CREATE], rendition: [PERMISSIONS.REQUEST_CREATE], "invoice-files": [PERMISSIONS.REQUEST_CREATE],
+  supplier: [PERMISSIONS.SUPPLIER_PROPOSE], "supplier-bank": [PERMISSIONS.SUPPLIER_PROPOSE],
+  "employee-bank": [PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],
+  "batch-invoice": [PERMISSIONS.BATCH_INVOICE_UPLOAD], "invoice-resolution": [PERMISSIONS.BATCH_INVOICE_REVIEW]
+};
 const resources = new Set(["cost-centers", "expense-types", "exchange-rates", "projects", "approval-rules", "budget-rules", "budget-allocations", "document-rules", "accounting-mappings", "bank-formats", "finance-configurations", "direct-payment-eligibility-rules", "users"]);
 export function assertDraftScope(user, scope) {
   if (typeof scope !== "string") throw new AppError(422, "Invalid draft form.");
@@ -21,7 +30,8 @@ export function assertDraftScope(user, scope) {
   const allowed = scope?.startsWith("resource:") && resources.has(resource)
     ? ["users", "approval-rules", "bank-formats", "finance-configurations", "direct-payment-eligibility-rules"].includes(resource) ? ["Admin"]
       : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Budget"] : ["Admin", "Accounting"] : roles[scope];
-  if (!allowed?.includes(user.role)) throw new AppError(403, "Draft access is not available for this role.");
+  const granted = (grants[scope] || []).some((permission) => hasPermission(user, permission));
+  if (!allowed?.includes(user.role) && !granted) throw new AppError(403, "Draft access is not available for this role.");
 }
 function key() {
   const secret = process.env.DRAFT_ENCRYPTION_KEY || process.env.JWT_SECRET;

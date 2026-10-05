@@ -22,8 +22,9 @@ test("ManagementViewer is portal-only: the management-portal permission and noth
   // A stored extra grant (legacy data) never widens the role.
   const legacyViewer = { role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.REPORT_VIEW, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.USER_MANAGE] };
   assert.deepEqual(permissionsFor(legacyViewer), [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
-  // Other roles keep additive custom permissions.
-  assert.equal(hasPermission({ role: ROLES.BUDGET, permissions: [PERMISSIONS.AUDIT_VIEW] }, PERMISSIONS.AUDIT_VIEW), true);
+  // Other roles keep additive custom permissions (grantable ones only).
+  assert.equal(hasPermission({ role: ROLES.BUDGET, permissions: [PERMISSIONS.SUPPLIER_PROPOSE] }, PERMISSIONS.SUPPLIER_PROPOSE), true);
+  assert.equal(hasPermission({ role: ROLES.BUDGET, permissions: [PERMISSIONS.AUDIT_VIEW] }, PERMISSIONS.AUDIT_VIEW), false);
   assert.equal(hasPermission(ROLES.MANAGEMENT, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
   assert.equal(hasPermission(ROLES.ADMIN, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
 });

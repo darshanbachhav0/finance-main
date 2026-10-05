@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { PERMISSIONS } from "../utils/constants.js";
+import { hasPermission } from "../utils/permissions.js";
 import crypto from "node:crypto";
 import FinancialRequest from "../models/FinancialRequest.js";
 import User from "../models/User.js";
@@ -32,7 +34,7 @@ export async function generateDueDrafts() {
   const month = `${parts.find(p => p.type === "year").value}-${parts.find(p => p.type === "month").value}`;
   for await (const template of RecurringTemplate.find({ active: true, nextMonth: { $lte: month } }).cursor({ batchSize: 25 })) {
     const user = await User.findOne({ _id: template.owner, active: true });
-    if (!user || !["Admin", "Solicitor"].includes(user.role)) continue;
+    if (!user || !hasPermission(user, PERMISSIONS.REQUEST_CREATE)) continue;
     const request = await FinancialRequest.findById(template.source).lean();
     if (!request || String(request.requester || request.solicitor) !== String(user._id)) continue;
     const hash = crypto.createHash("sha256").update(`${template._id}:${month}`).digest("hex");

@@ -55,7 +55,8 @@ const routes = backend("routes/index.js");
 assert.ok(routes.indexOf('router.use("/search", searchRoutes)') > routes.indexOf("router.use(protect, authorize("));
 assert.match(service, /requestVisibilityFilter\(user\)/);
 assert.match(service, /prefixFilter\(requestVisibilityFilter\(user\), "parentRequest"\)/);
-assert.match(service, /canViewSuppliers\(user\.role\)/);
+// The supplier group follows the /suppliers gate, including permissions granted to the user.
+assert.match(service, /canViewSuppliers\(user\)/);
 assert.match(service, /new RegExp\(escapedRegex\(query\), "i"\)/);
 
 // 6. Styles live in the labelled block at the end of global.css.

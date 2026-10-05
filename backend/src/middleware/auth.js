@@ -44,6 +44,16 @@ export function authorize(...roles) {
   };
 }
 
+// Role list OR any of the permissions (role defaults plus the user's granted extras).
+export function authorizeAccess({ roles = [], permissions = [] }) {
+  return (req, _res, next) => {
+    if (!req.user || !(roles.includes(req.user.role) || permissions.some((permission) => hasPermission(req.user, permission)))) {
+      throw new AppError(403, "You do not have permission to perform this action.", { required: permissions }, ERROR_CODES.FORBIDDEN);
+    }
+    next();
+  };
+}
+
 export function authorizePermission(...permissions) {
   return (req, _res, next) => {
     if (!req.user || !permissions.some((permission) => hasPermission(req.user, permission))) {

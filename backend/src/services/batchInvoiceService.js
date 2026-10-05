@@ -26,7 +26,8 @@ import { transitionRequest } from "./workflowService.js";
 import { configureBatchInvoiceRunner, enqueueBatch } from "../queues/batchInvoiceQueue.js";
 import { AppError } from "../utils/AppError.js";
 import { readZipFile } from "../utils/zipReader.js";
-import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { hasPermission } from "../utils/permissions.js";
 import { canonicalSeries, canonicalSeriesNumber, canonicalVoucherNumber, canonicalVoucherType, isAdjustmentNote } from "../utils/voucherIdentity.js";
 import { registerAdjustmentNote } from "./adjustmentNoteService.js";
 import { hasManualSunatException } from "./sunatVoucherService.js";
@@ -774,8 +775,8 @@ export async function createMassUploadBatch({ purchaseOrderId, files, user, req 
   const request = purchaseOrder.request;
   await assertPostingAllowed(request, { user, req });
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
-  if (user.role === ROLES.SOLICITOR && String(ownerId) !== String(user._id)) {
-    throw new AppError(403, "Solicitors can upload invoice batches only for their own Purchase Orders.", { purchaseOrderId }, ERROR_CODES.FORBIDDEN);
+  if (!hasPermission(user, PERMISSIONS.BATCH_INVOICE_REVIEW) && String(ownerId) !== String(user._id)) {
+    throw new AppError(403, "You can upload invoice batches only for your own Purchase Orders.", { purchaseOrderId }, ERROR_CODES.FORBIDDEN);
   }
   if (request.flowType !== FLOW_TYPE.A1) {
     throw new AppError(422, "Track A2 batch liquidation is available only for Purchase Orders issued from Track A1 requests.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
@@ -871,7 +872,7 @@ configureBatchInvoiceRunner(processMassUploadBatch);
 export async function retryMassUploadBatch(batchId, user) {
   const batch = await MassUploadBatch.findById(batchId);
   if (!batch) throw new AppError(404, "Mass upload batch not found.", { batchId }, ERROR_CODES.NOT_FOUND);
-  if (user?.role === ROLES.SOLICITOR && String(batch.uploadedBy) !== String(user._id)) {
+  if (!hasPermission(user, PERMISSIONS.BATCH_INVOICE_REVIEW) && String(batch.uploadedBy) !== String(user._id)) {
     throw new AppError(403, "You cannot retry another user's invoice batch.", undefined, ERROR_CODES.FORBIDDEN);
   }
   if (batch.status === "PROCESSING") return batch;
@@ -891,7 +892,7 @@ export async function retryMassUploadBatch(batchId, user) {
 
 export async function listMassUploadBatches(query = {}, user) {
   const filter = {};
-  if (user?.role === ROLES.SOLICITOR) filter.uploadedBy = user._id;
+  if (!hasPermission(user, PERMISSIONS.BATCH_INVOICE_REVIEW)) filter.uploadedBy = user._id;
   if (query.status) filter.status = query.status;
   if (query.purchaseOrder) filter.purchaseOrder = query.purchaseOrder;
   withDeepLink(filter, query, { record: "_id", batch: "_id", request: "request" });
@@ -912,7 +913,7 @@ export async function getMassUploadBatch(batchId, user) {
     .populate("items.observation")
     .populate("items.accountsPayable");
   if (!batch) throw new AppError(404, "Mass upload batch not found.", { batchId }, ERROR_CODES.NOT_FOUND);
-  if (user?.role === ROLES.SOLICITOR) {
+  if (!hasPermission(user, PERMISSIONS.BATCH_INVOICE_REVIEW)) {
     const ownerId = batch.request?.requester || batch.request?.solicitor;
     if (String(batch.uploadedBy) !== String(user._id) && String(ownerId) !== String(user._id)) {
       throw new AppError(403, "You do not have access to this invoice batch.", undefined, ERROR_CODES.FORBIDDEN);
@@ -961,7 +962,7 @@ export async function listInvoiceObservations(query = {}) {
 
 export async function listEligiblePurchaseOrders(query = {}, user) {
   const filter = { status: { $in: ["ISSUED", "PARTIALLY_LIQUIDATED"] }, remainingAmount: { $gt: 0 } };
-  if (user?.role === ROLES.SOLICITOR) {
+  if (!hasPermission(user, PERMISSIONS.BATCH_INVOICE_REVIEW)) {
     const ownedRequests = await FinancialRequest.distinct("_id", { $or: [{ requester: user._id }, { solicitor: user._id }] });
     filter.request = { $in: ownedRequests };
   }

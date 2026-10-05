@@ -22,7 +22,7 @@ import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimburse
 import { nextRenditionNumber } from "./sequenceService.js";
 import { AppError } from "../utils/AppError.js";
 import { APPROVAL_STAGES, DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
-import { canUseCostCenter, canViewRequest } from "../utils/permissions.js";
+import { actsAsRequester, canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney, toMinorUnits } from "../utils/money.js";
 
 const APPLICABLE_TYPES = Object.freeze([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
@@ -107,7 +107,7 @@ function assertSubmissionState(request) {
 async function beneficiarySnapshot(request, user) {
   const costCenter = request.requesterCostCenter ? await CostCenter.findById(request.requesterCostCenter).select("code name") : null;
   if (!costCenter) throw new AppError(422, "The parent request Cost Center / CECO is required.", { field: "requesterCostCenter" }, ERROR_CODES.UNAUTHORIZED_COST_CENTER);
-  if (user.role === ROLES.SOLICITOR && !canUseCostCenter(user, costCenter._id)) {
+  if (actsAsRequester(user) && user.role !== ROLES.ADMIN && !canUseCostCenter(user, costCenter._id)) {
     throw new AppError(403, "The request CECO is not authorized for the current beneficiary.", { costCenter: costCenter._id, code: costCenter.code }, ERROR_CODES.UNAUTHORIZED_COST_CENTER);
   }
   return { user: user._id, employeeCode: user.employeeCode, name: user.name, email: user.email, area: user.area, costCenter: costCenter._id, costCenterCode: costCenter.code, costCenterName: costCenter.name };

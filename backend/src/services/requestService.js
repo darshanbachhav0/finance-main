@@ -48,7 +48,7 @@ import {
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
-import { canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
+import { actsAsRequester, canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
@@ -353,7 +353,7 @@ async function validateHeaderCostCenter(request, user, { required = false } = {}
   if (!center?.active) {
     throw new AppError(422, "Select an active Cost Center / CECO.", { costCenter: id }, ERROR_CODES.INVALID_COST_CENTER);
   }
-  if (user.role === ROLES.SOLICITOR && !canUseCostCenter(user, center._id)) {
+  if (actsAsRequester(user) && user.role !== ROLES.ADMIN && !canUseCostCenter(user, center._id)) {
     throw new AppError(
       403,
       `CECO ${center.code} - ${center.name} is not assigned to the current requester.`,
@@ -1054,7 +1054,7 @@ export async function requestFormPolicy(query) {
 
 export async function requestAuthorizedCostCenters(user) {
   const query = { active: true };
-  if (user.role === ROLES.SOLICITOR) {
+  if (user.role !== ROLES.ADMIN && actsAsRequester(user)) {
     const allowed = [user.costCenter, ...(user.authorizedCostCenters || [])]
       .filter(Boolean)
       .map((value) => value?._id || value);

@@ -43,6 +43,30 @@ export const PERMISSIONS = Object.freeze({
   BANK_FORMAT_CERTIFY: "bank-format:certify"
 });
 
+// Permissions Admin can grant to one person on top of their role ("Additional permissions").
+// Each one opens a self-contained feature and is enforced by the server for that user. Job
+// duties of a department (posting accounting, paying, confirming payments, managing periods,
+// users or master data, homologating suppliers, managing budget) are not grantable piecemeal:
+// they come with the role, which keeps separation of duties intact. Approval authority comes
+// from the approval routes (rules and manager chain), not from a checkbox.
+export const GRANTABLE_PERMISSIONS = Object.freeze([
+  PERMISSIONS.REQUEST_CREATE,
+  PERMISSIONS.REQUEST_VIEW_ALL,
+  PERMISSIONS.REQUEST_VOID,
+  PERMISSIONS.SUPPLIER_PROPOSE,
+  PERMISSIONS.SUPPLIER_BANK_VIEW,
+  PERMISSIONS.BUDGET_VIEW,
+  PERMISSIONS.REPORT_VIEW,
+  PERMISSIONS.MANAGEMENT_PORTAL_VIEW,
+  PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN,
+  PERMISSIONS.EMPLOYEE_BANK_REVIEW,
+  PERMISSIONS.RENDITION_REVIEW,
+  PERMISSIONS.PROCUREMENT_ORDER_CREATE,
+  PERMISSIONS.BATCH_INVOICE_UPLOAD,
+  PERMISSIONS.BATCH_INVOICE_REVIEW,
+  PERMISSIONS.BANK_FORMAT_CERTIFY
+]);
+
 export const ROLE_PERMISSIONS = Object.freeze({
   [ROLES.ADMIN]: Object.values(PERMISSIONS),
   [ROLES.SOLICITOR]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.BATCH_INVOICE_UPLOAD],
@@ -54,6 +78,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
   [ROLES.VICE_RECTOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW],
   [ROLES.ACCOUNTING]: [
     PERMISSIONS.REQUEST_VIEW_ALL,
+    PERMISSIONS.REQUEST_VOID,
     PERMISSIONS.SUPPLIER_HOMOLOGATE,
     PERMISSIONS.SUPPLIER_BANK_VIEW,
     PERMISSIONS.BUDGET_VIEW,
@@ -83,7 +108,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
   // Budget validates/commits/reserves funds and prepares exceptions; it no longer issues
   // Purchase Orders directly — that is Procurement's ownership (see ROLES.PROCUREMENT).
   [ROLES.BUDGET]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.BUDGET_MANAGE, PERMISSIONS.REPORT_VIEW],
-  [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.SUPPLIER_BANK_VIEW, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
+  [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
   [ROLES.MANAGEMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
   // Management portal only: the aggregate /api/management/v1 API and nothing internal (no
   // Reports, dashboards, audit or request data). Enforced for custom grants too - see

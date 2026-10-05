@@ -28,37 +28,37 @@ import {
   voidRequest,
   withdrawRequest,
 } from "../controllers/requestController.js";
-import { authorize, protect } from "../middleware/auth.js";
+import { authorize, authorizeAccess, authorizePermission, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
-import { ROLES } from "../utils/constants.js";
-import { REQUEST_CREATOR_ROLES } from "../utils/permissions.js";
+import { PERMISSIONS, ROLES } from "../utils/constants.js";
 
 const router = Router();
 
 router.use(protect);
 router.get("/document-requirements", getRequestDocumentRequirements);
 router.get("/form-policy", getRequestFormPolicy);
-router.get("/authorized-cost-centers", authorize(...REQUEST_CREATOR_ROLES), getAuthorizedCostCenters);
-router.post("/budget-preview", authorize(...REQUEST_CREATOR_ROLES), getBudgetPreview);
-router.route("/").get(listRequests).post(authorize(...REQUEST_CREATOR_ROLES), uploadFields, createRequest);
+// "Create requests" (every Solicitor and Admin by role, anyone else by grant).
+router.get("/authorized-cost-centers", authorizePermission(PERMISSIONS.REQUEST_CREATE), getAuthorizedCostCenters);
+router.post("/budget-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), getBudgetPreview);
+router.route("/").get(listRequests).post(authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, createRequest);
 router.get("/:id/document-requirements", getRequestDocumentStatus);
 router.route("/:id").get(getRequest).put(uploadFields, updateRequest).delete(deleteRequest);
 router.get("/:id/procurement-readiness", getProcurementReadiness);
-router.post("/:id/procurement-order", authorize(ROLES.ADMIN, ROLES.PROCUREMENT), createProcurementOrder);
+router.post("/:id/procurement-order", authorizePermission(PERMISSIONS.PROCUREMENT_ORDER_CREATE), createProcurementOrder);
 router.post("/:id/submit", submitRequest);
 router.post("/:id/withdraw", withdrawRequest);
-router.post("/:id/invoice", authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.ACCOUNTING), uploadFields, registerInvoice);
+router.post("/:id/invoice", authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.REQUEST_CREATE] }), uploadFields, registerInvoice);
 router.post("/:id/invoice/:voucherId/replace", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), replaceObservedInvoice);
-router.post("/:id/rendition", authorize(ROLES.ADMIN, ROLES.SOLICITOR), uploadFields, uploadRendition);
+router.post("/:id/rendition", authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, uploadRendition);
 router.get("/:id/rendition/policy", getRenditionFormPolicy);
 router.get("/:id/rendition/bank-destination", getRenditionPaymentDestination);
-router.post("/:id/rendition/approve", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), approveRendition);
-router.post("/:id/rendition/validate", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), validateRendition);
-router.post("/:id/rendition/observe", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), observeRendition);
-router.post("/:id/rendition/reject", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), rejectRendition);
+router.post("/:id/rendition/approve", authorizePermission(PERMISSIONS.RENDITION_REVIEW), approveRendition);
+router.post("/:id/rendition/validate", authorizePermission(PERMISSIONS.RENDITION_REVIEW), validateRendition);
+router.post("/:id/rendition/observe", authorizePermission(PERMISSIONS.RENDITION_REVIEW), observeRendition);
+router.post("/:id/rendition/reject", authorizePermission(PERMISSIONS.RENDITION_REVIEW), rejectRendition);
 router.post("/:id/rendition/recover", authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), recoverRendition);
 router.post("/:id/rendition/settle-non-deductible", authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), settleRenditionBalance);
 router.post("/:id/close", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), closeRequest);
-router.post("/:id/void", authorize(ROLES.ADMIN, ROLES.ACCOUNTING), voidRequest);
+router.post("/:id/void", authorizePermission(PERMISSIONS.REQUEST_VOID), voidRequest);
 
 export default router;

@@ -190,8 +190,10 @@ export default function MasterConfiguration() {
     }
   }), [masters, t, language]);
 
-  const visibleEntries = Object.entries(configs).filter(([, config]) => config.roles.includes(user.role));
-  if (!configs[resource] || !configs[resource].roles.includes(user.role)) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "approval-rules"}`} replace />;
+  // "Certify bank formats" granted to a user opens the Bank Formats resource for them.
+  const canOpen = (key, config) => config.roles.includes(user.role) || (key === "bank-formats" && (user.permissions || []).includes("bank-format:certify"));
+  const visibleEntries = Object.entries(configs).filter(([key, config]) => canOpen(key, config));
+  if (!configs[resource] || !canOpen(resource, configs[resource])) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "approval-rules"}`} replace />;
   const config = configs[resource];
 
   return <section>

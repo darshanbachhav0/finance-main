@@ -61,8 +61,41 @@ export const navigationAccess = Object.freeze({
   ...Object.fromEntries(Object.entries(configurationAccess).map(([resource, roles]) => [`/configuration/${resource}`, roles]))
 });
 
+// Pages a permission granted in Administration > Users opens for that person, on top of their
+// role. The backend enforces the same permissions on every call.
+export const navigationGrants = Object.freeze({
+  "/requests/new": ["request:create"],
+  "/budget": ["budget:view"],
+  "/reports": ["report:view"],
+  "/management-view": ["management-portal:view"],
+  "/suppliers": ["supplier:propose", "supplier:bank-view"],
+  "/reimbursement-bank": ["employee-bank:manage-own", "employee-bank:review"],
+  "/batch-invoices": ["batch-invoice:upload", "batch-invoice:review"],
+  "/accounting/invoice-observations": ["batch-invoice:review"],
+  "/configuration/bank-formats": ["bank-format:certify"]
+});
+
+// Menu entries added for granted pages the role's own menu does not list.
+const grantedNavigation = [
+  ["My Requests", "/requests", ["request:create"]],
+  ["New request", "/requests/new", ["request:create"]],
+  ["Budget Control", "/budget", ["budget:view"]],
+  ["Management Reports", "/reports", ["report:view"]],
+  ["Management Portal", "/management-view", ["management-portal:view"]],
+  ["Suppliers", "/suppliers", ["supplier:propose", "supplier:bank-view"]],
+  ["Reimbursement Banking", "/reimbursement-bank", ["employee-bank:manage-own", "employee-bank:review"]],
+  ["A2 Batch Invoices", "/batch-invoices", ["batch-invoice:upload", "batch-invoice:review"]],
+  ["Invoice Observations", "/accounting/invoice-observations", ["batch-invoice:review"]],
+  ["Bank Formats", "/configuration/bank-formats", ["bank-format:certify"]]
+];
+
+export function hasGrant(user, ...permissions) {
+  return permissions.some((permission) => (user?.permissions || []).includes(permission));
+}
+
 export function canAccessNavigation(role, path, user) {
   if (path === "/my-team" && user?.hasTeam !== true) return false;
+  if (hasGrant(user, ...(navigationGrants[path] || []))) return true;
   if (path?.startsWith("/configuration/") && !navigationAccess[path]) return Boolean(role && navigationAccess["/configuration/*"].includes(role));
   return Boolean(role && navigationAccess[path]?.includes(role));
 }
@@ -77,6 +110,9 @@ export function visibleNavigationPaths(role, user) {
 export function navigationForUser(user) {
   const items = [...(roleNavigation[user?.role] || [])];
   if (user?.hasTeam === true && !items.some(([, path]) => path === "/my-team")) items.push(["My Team", "/my-team"]);
+  for (const [label, path, permissions] of grantedNavigation) {
+    if (hasGrant(user, ...permissions) && !items.some(([, existing]) => existing === path)) items.push([label, path]);
+  }
   return items.filter(([, path]) => canAccessNavigation(user?.role, path, user));
 }
 
