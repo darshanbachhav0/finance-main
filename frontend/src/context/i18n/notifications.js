@@ -103,6 +103,11 @@ export default {
   "{requestNumber}: {amount} recovered; {remaining} remains.": "{requestNumber}: {amount} recuperados; quedan {remaining}.",
   "{requestNumber}: SUNAT could not verify the invoice. Accounting will review it; you do not need to submit the request again.": "{requestNumber}: SUNAT no pudo verificar el comprobante. Contabilidad lo revisará; no necesitas enviar la solicitud otra vez.",
   "Manual SUNAT exception needed": "Se requiere una excepción manual SUNAT",
+  "Budget change awaiting approval": "Cambio presupuestal pendiente de aprobación",
+  "{costCenter} {year}: {summary} ({amount}). Requested by {name}.": "{costCenter} {year}: {summary} ({amount}). Solicitado por {name}.",
+  "Budget change approved": "Cambio presupuestal aprobado",
+  "Budget change rejected": "Cambio presupuestal rechazado",
+  "{summary}. Comments: {comments}": "{summary}. Comentarios: {comments}",
   "{requestNumber}: Management rejected the budget exception. Adjust the request (for example the amount) and submit it for approval again.": "{requestNumber}: Gerencia rechazó la excepción presupuestal. Ajusta la solicitud (por ejemplo, el monto) y envíala otra vez a aprobación.",
   "{requestNumber}: SUNAT could not verify the invoice. Review it and approve a manual SUNAT exception so the payment can continue.": "{requestNumber}: SUNAT no pudo verificar el comprobante. Revíselo y apruebe una excepción manual SUNAT para que el pago continúe."
 };

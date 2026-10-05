@@ -174,8 +174,8 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
       assert.equal(String(fresh.supersedes), String(rejected._id));
       assert.equal(await BudgetException.countDocuments({ request: secondRequest._id }), 2);
       const current = await BudgetAllocation.findById(plan._id);
-      const increasedPlan = await adjustBudgetPlan(plan._id, { operationId: "dec-increase-0001", revision: current.__v, action: "INCREASE", amount: 150, reason: "Budget found funds" }, users.budget, req);
-      await adjustBudgetPlan(plan._id, { operationId: "dec-reserve-0001", revision: increasedPlan.__v, action: "ALLOCATE_RESERVE", toMonth: 8, amount: 150, reason: "Fund August" }, users.budget, req);
+      const increasedPlan = await adjustBudgetPlan(plan._id, { operationId: "dec-increase-0001", revision: current.__v, action: "INCREASE", amount: 150, reason: "Budget found funds" }, users.admin, req);
+      await adjustBudgetPlan(plan._id, { operationId: "dec-reserve-0001", revision: increasedPlan.__v, action: "ALLOCATE_RESERVE", toMonth: 8, amount: 150, reason: "Fund August" }, users.admin, req);
       const commitment = await reserveBudget(secondRequest, users.budget._id);
       assert.equal(commitment.status, BUDGET_STATUS.COMMITTED);
       const resolved = await BudgetException.findById(fresh._id);

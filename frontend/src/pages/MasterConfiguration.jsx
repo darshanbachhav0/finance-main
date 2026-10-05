@@ -122,7 +122,7 @@ export default function MasterConfiguration() {
       label: "Finance Configurations", roles: ["Admin", "Accounting"], endpoint: "/finance-configurations",
       description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",
       fields: [
-        { type: "section", label: "Value" }, { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS"] },
+        { type: "section", label: "Value" }, { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS", "BUDGET_CHANGE_APPROVAL_THRESHOLD"], hint: "BUDGET_CHANGE_APPROVAL_THRESHOLD: budget plan changes that move more than this amount (PEN) need Management approval. 0 or no record: every change applies immediately." },
         { name: "numericValue", label: "Value", type: "number", min: 0, step: "0.01", required: true },
         { name: "currency", label: "Currency", type: "select", defaultValue: "PEN", options: currencies },
         { name: "behavior", label: "Behavior", type: "select", defaultValue: "INFORMATION", options: ["INFORMATION", "WARNING", "FLAG", "BLOCK"], hint: "How exceeding this value is treated where it's checked - not every key enforces every behavior." },

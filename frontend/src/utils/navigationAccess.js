@@ -125,6 +125,36 @@ export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
   return items.filter(([, path]) => canAccessNavigation(user?.role, path, user));
 }
 
+// Sidebar sections in display order. Every menu path belongs to one section and keeps this order
+// whichever role or granted permission added it, so the menu reads the same way for everyone.
+export const navigationSections = Object.freeze([
+  ["Overview", ["/"]],
+  ["Requests", ["/requests", "/requests/new", "/approvals", "/my-team", "/batch-invoices"]],
+  ["Finance", ["/accounting", "/accounting/payables", "/accounting/invoices", "/accounting/invoice-observations", "/treasury", "/treasury/history", "/reimbursement-bank"]],
+  ["Planning and reports", ["/budget", "/reports", "/management-view", "/accounting/periods", "/accounting/sire"]],
+  ["Master Data", ["/suppliers", "/cost-centers", "/expense-types", "/exchange-rates", "/configuration/bank-formats"]],
+  ["Administration", ["/administration", "/users"]]
+]);
+
+function sectionOf(path) {
+  const index = navigationSections.findIndex(([, paths]) => paths.includes(path));
+  if (index >= 0) return index;
+  if (path?.startsWith("/configuration/")) return navigationSections.findIndex(([label]) => label === "Master Data");
+  return 0;
+}
+
+// Groups menu items (objects with a path) into the sections above, dropping empty sections.
+export function groupNavigation(items) {
+  const position = (path) => {
+    const paths = navigationSections[sectionOf(path)][1];
+    const at = paths.indexOf(path);
+    return at < 0 ? paths.length : at;
+  };
+  return navigationSections
+    .map(([label], index) => ({ label, items: items.filter((item) => sectionOf(item.path) === index).sort((left, right) => position(left.path) - position(right.path)) }))
+    .filter((group) => group.items.length);
+}
+
 export const roleNavigation = {
   Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["Approvals", "/approvals"]],
   AreaDirector: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
@@ -133,7 +163,8 @@ export const roleNavigation = {
   Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],
   Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["Invoice Observations", "/accounting/invoice-observations"], ["Suppliers", "/suppliers"], ["Accounting Periods", "/accounting/periods"], ["SIRE", "/accounting/sire"]],
   Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"], ["Bank Formats", "/configuration/bank-formats"]],
-  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
+  // Management also decides budget exceptions and budget changes above the approval threshold.
+  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Budget Control", "/budget"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
   // Portal only: no internal Reports, dashboards or request data.
   ManagementViewer: [["Management Portal", "/management-view"]],
   Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
@@ -146,7 +177,7 @@ export const navigationCounterKeys = Object.freeze({
   "/treasury": ["payable", "paymentConfirmation"],
   "/accounting": ["accounting"],
   "/accounting/invoice-observations": ["invoiceObservations"],
-  "/budget": ["budgetExceptions"],
+  "/budget": ["budgetExceptions", "budgetPlanChanges"],
   "/requests": ["corrections", "rendition"],
   "/suppliers": ["suppliers"]
 });

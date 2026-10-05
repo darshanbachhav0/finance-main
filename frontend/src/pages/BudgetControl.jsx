@@ -1,6 +1,6 @@
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import { useDraftResume } from "../hooks/useWorkDraft.js";
-import { AlertTriangle, CalendarClock, CheckCircle2, RefreshCw, RotateCw, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, Eye, RefreshCw, RotateCw, Undo2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../api/client.js";
@@ -15,12 +15,12 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import BudgetPlanWorkspace from "../components/BudgetPlanWorkspace.jsx";
+import BudgetPlanWorkspace, { changeDescription } from "../components/BudgetPlanWorkspace.jsx";
 import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
-const TAB_VIEWS = { budget: "Budget", exceptions: "Exceptions", commitments: "Commitments" };
+const TAB_VIEWS = { budget: "Budget", exceptions: "Exceptions", commitments: "Commitments", changes: "Budget changes" };
 
 export default function BudgetControl() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,10 +29,12 @@ export default function BudgetControl() {
   // exceptionStatus=PENDING) open the Exceptions view directly.
   const recordId = searchParams.get("record") || "";
   const linkedRequestId = searchParams.get("request") || "";
-  const exceptionLink = recordId ? { record: recordId } : linkedRequestId ? { request: linkedRequestId } : null;
   const tabParam = String(searchParams.get("tab") || "").toLowerCase();
+  // ?tab=changes&record=<id> deep-links one budget plan change (approval notifications).
+  const changeLink = tabParam === "changes" && recordId ? { record: recordId } : null;
+  const exceptionLink = changeLink ? null : recordId ? { record: recordId } : linkedRequestId ? { request: linkedRequestId } : null;
   const exceptionStatus = searchParams.get("exceptionStatus") || "";
-  const [focusView, setFocusView] = useState(() => exceptionLink ? "Exceptions" : TAB_VIEWS[tabParam] || "Budget");
+  const [focusView, setFocusView] = useState(() => changeLink ? "Budget changes" : exceptionLink ? "Exceptions" : TAB_VIEWS[tabParam] || "Budget");
   const { user } = useAuth();
   const { t, language } = useLanguage();
   const money = (value) => value === null || value === undefined ? "—" : formatCurrency(value, "PEN", language);
@@ -48,12 +50,16 @@ export default function BudgetControl() {
   const [confirm, setConfirm] = useState(null);
   const [error, setError] = useState("");
   const canDecide = ["Admin", "Budget"].includes(user.role);
+  // Changing an existing plan is Admin only; Management decides changes above the approval threshold.
+  const canEditPlans = user.role === "Admin";
+  const canDecideChanges = user.role === "Management";
   useDraftResume("budget-plan", () => { if (canDecide) setWorkspace({ planId: null }); });
-  useDraftResume("budget-adjustment", id => { if (canDecide) setWorkspace({ planId: id }); });
+  useDraftResume("budget-adjustment", id => { if (canEditPlans) setWorkspace({ planId: id }); });
   const allocationTable = usePaginatedResource("/budget/allocations", { fixedParams: { period } });
   const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: exceptionLink || { period }, initialFilters: exceptionStatus ? { status: exceptionStatus } : {}, deepLink: Boolean(exceptionLink) });
   useEffect(() => {
-    if (exceptionLink) setFocusView("Exceptions");
+    if (changeLink) setFocusView("Budget changes");
+    else if (exceptionLink) setFocusView("Exceptions");
     else if (TAB_VIEWS[tabParam]) setFocusView(TAB_VIEWS[tabParam]);
   }, [recordId, linkedRequestId, tabParam]);
 
@@ -65,6 +71,13 @@ export default function BudgetControl() {
     setSearchParams(next, { replace: true });
   }
   const commitmentTable = usePaginatedResource("/budget/commitments", { fixedParams: { period } });
+  const changeTable = usePaginatedResource("/budget/plan-changes", { fixedParams: changeLink || {}, initialFilters: changeLink ? {} : { status: "PENDING" }, deepLink: Boolean(changeLink) });
+  function showAllChanges() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("record");
+    next.set("tab", "changes");
+    setSearchParams(next, { replace: true });
+  }
 
   async function load() {
     setLoading(true);
@@ -86,6 +99,7 @@ export default function BudgetControl() {
     allocationTable.reload();
     exceptionTable.reload();
     commitmentTable.reload();
+    changeTable.reload();
   }
 
   function changeView(nextView) {
@@ -98,13 +112,19 @@ export default function BudgetControl() {
   function planSaved(plan) {
     setWorkspace({ planId: plan._id });
     if (plan.period !== period.slice(0, 4)) { setView("ANNUAL"); setPeriod(plan.period); setPeriodInput(plan.period); }
-    else { load(); allocationTable.reload(); exceptionTable.reload(); commitmentTable.reload(); }
+    else { load(); allocationTable.reload(); exceptionTable.reload(); commitmentTable.reload(); changeTable.reload(); }
   }
 
   async function decide(comments) {
     setProcessing(true);
     try {
-      if (confirm.kind === "decision") {
+      if (confirm.kind === "planChange") {
+        await api.post(`/budget/plan-changes/${confirm.row._id}/decision`, { decision: confirm.decision, comments });
+        notify(confirm.decision === "APPROVE" ? "Budget change approved and applied." : "Budget change rejected.");
+      } else if (confirm.kind === "withdrawChange") {
+        await api.post(`/budget/plan-changes/${confirm.row._id}/cancel`);
+        notify("Budget change withdrawn.");
+      } else if (confirm.kind === "decision") {
         const response = await api.post(`/budget/exceptions/${confirm.row._id}/decision`, { status: confirm.status, comments });
         const increase = response.data?.data?.appliedIncrease?.amount;
         notify(confirm.status === "REVIEWED" ? "Budget review saved for Management." : confirm.status === "APPROVED" ? (increase > 0 ? t("Budget exception approved. The budget was increased by {amount}.").replace("{amount}", money(increase)) : "Budget exception approved.") : "Budget exception rejected.");
@@ -121,7 +141,8 @@ export default function BudgetControl() {
       allocationTable.reload();
       exceptionTable.reload();
       commitmentTable.reload();
-    } catch (err) { setError(err.message); notify(err.message, "error"); setConfirm(null); } finally { setProcessing(false); }
+      changeTable.reload();
+    } catch (err) { setError(err.message); notify(err.message, "error"); setConfirm(null); changeTable.reload(); } finally { setProcessing(false); }
   }
 
   function exceptionActions(row) {
@@ -140,10 +161,26 @@ export default function BudgetControl() {
     return [];
   }
 
+  function changeActions(row) {
+    const actions = [{ label: "Open annual plan", icon: Eye, onClick: () => setWorkspace({ planId: row.plan?._id }) }];
+    if (row.status !== "PENDING") return actions;
+    if (canDecideChanges) actions.push(
+      { label: "Approve change", icon: CheckCircle2, primary: true, onClick: () => setConfirm({ kind: "planChange", decision: "APPROVE", row, title: "Approve this budget change?", description: "The change is checked again against the plan as it is now and applied immediately.", confirmLabel: "Approve and apply", inputLabel: "Decision comments", inputRequired: true }) },
+      { label: "Reject change", icon: XCircle, tone: "danger", onClick: () => setConfirm({ kind: "planChange", decision: "REJECT", row, title: "Reject this budget change?", description: "The plan stays as it is. The Admin who requested it is notified.", confirmLabel: "Reject change", inputLabel: "Decision comments", inputRequired: true, tone: "danger" }) }
+    );
+    if (canEditPlans) actions.push({ label: "Withdraw", icon: Undo2, tone: "danger", onClick: () => setConfirm({ kind: "withdrawChange", row, title: "Withdraw this budget change?", description: "It will not be applied. You can request it again later.", confirmLabel: "Withdraw change", tone: "danger" }) });
+    return actions;
+  }
+  const confirmDetails = !confirm ? [] : confirm.kind === "carryOver"
+    ? [{ label: "From budget year", value: confirm.year }, { label: "To budget year", value: String(Number(confirm.year) + 1) }, { label: "Result", value: t("Open commitments move to January of the next year.") }]
+    : ["planChange", "withdrawChange"].includes(confirm.kind)
+      ? [{ label: "Budget plan", value: `${confirm.row.plan?.period || ""} · ${confirm.row.plan?.costCenter?.code || ""}` }, { label: "Change", value: changeDescription(confirm.row, t, money) }, { label: "Amount", value: money(confirm.row.amount) }, { label: "Requested by", value: confirm.row.requestedByName }, { label: "Reason", value: confirm.row.reason }]
+      : [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }];
+
   return <section>
       <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
       <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
-    <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error}</Message>
+    <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error || changeTable.error}</Message>
     <div className="period-toolbar budget-period-toolbar">
       <div className="budget-view-switch" role="group" aria-label={t("Budget view")}><button type="button" aria-pressed={view === "ANNUAL"} onClick={() => changeView("ANNUAL")}>{t("Annual view")}</button><button type="button" aria-pressed={view === "MONTHLY"} onClick={() => changeView("MONTHLY")}>{t("Monthly view")}</button></div>
       <label className="field compact-period"><span>{t("Budget year")}</span><input aria-label={t("Budget year")} type="number" min="2000" max="2199" value={periodInput.slice(0, 4)} onChange={(event) => setPeriodInput(event.target.value + (view === "MONTHLY" ? "-" + (periodInput.slice(5) || "01") : ""))} /></label>
@@ -156,7 +193,7 @@ export default function BudgetControl() {
     {data.totals?.transitional?.committed > 0 && <Message>{t("Committed includes {amount} of informational (transitional) commitments, which do not reduce the available balance.").replace("{amount}", money(data.totals.transitional.committed))}</Message>}
     {data.warnings?.length > 0 && <div className="alert-strip warning"><AlertTriangle size={20} /><div><strong>{t("Budget attention required")}</strong><p>{t("One or more dimensions have low availability or over-execution.")}</p></div></div>}
 
-    <nav className="focus-tabs" aria-label={t("Sections")}>{["Budget", "Exceptions", "Commitments"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
+    <nav className="focus-tabs" aria-label={t("Sections")}>{["Budget", "Exceptions", "Commitments", "Budget changes"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
       <div hidden={focusView !== "Budget"} className="workspace-panel"><div className="section-heading"><div><h3>{t("Dimensional budget")}</h3><p>{t("Period, Cost Center, expense classification, and project remain visible together.")}</p></div><span className="section-count">{allocationTable.pagination.total}</span></div><DataTable rows={allocationTable.rows} loading={allocationTable.loading} remote={allocationTable.remote} rowActions={(row) => row.source === "LINKED_ANNUAL_PLAN" ? [{ label: "View annual plan", onClick: () => setWorkspace({ planId: row._id }) }] : []} filters={[{ key: "source", label: "sources", allLabel: "All sources", options: ["LINKED_ANNUAL_PLAN", "DIMENSIONAL_ALLOCATION", "TRANSITIONAL_COST_CENTER"] }]} searchPlaceholder="Search Cost Center, account, project, or period..." columns={[
       { key: "period", label: "Period", render: (row) => row.period || t("Undated legacy balance") },
       { key: "planningMode", label: "Budget planning mode", sortable: false, render: (row) => t(BUDGET_PLANNING_MODES[row.planningMode] || "Legacy allocation") },
@@ -180,7 +217,16 @@ export default function BudgetControl() {
       { key: "lines", label: "Dimensions", sortable: false, getValue: (row) => row.lines?.map((line) => line.costCenter?.code).join(" "), render: (row) => row.lines?.map((line) => `${line.costCenter?.code || "-"}${line.project ? ` / ${line.project}` : ""}`).join(", ") },
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> }, { key: "totalAmount", label: "Committed amount", align: "right", render: (row) => <strong>{money(row.totalAmount)}</strong> }, { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) }
     ]} /></div>
-    <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canDecide} onClose={() => setWorkspace(null)} onSaved={planSaved} />
-    <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm?.kind === "carryOver" ? [{ label: "From budget year", value: confirm.year }, { label: "To budget year", value: String(Number(confirm.year) + 1) }, { label: "Result", value: t("Open commitments move to January of the next year.") }] : confirm ? [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
+    <div hidden={focusView !== "Budget changes"} className="workspace-panel section-spacer"><div className="section-heading"><div><h3>{t("Budget changes")}</h3><p>{t("Changes to an annual plan that move more than the approval threshold wait here for Management. Smaller changes apply immediately and appear in each plan's history.")}</p></div><span className="section-count">{changeTable.pagination.total}</span></div>{changeLink && <DeepLinkNotice title="Showing one budget change" missing={!changeTable.loading && !changeTable.rows.length} missingDescription="This budget change no longer exists." clearLabel="Show all budget changes" onClear={showAllChanges} />}<DataTable rows={changeTable.rows} loading={changeTable.loading} remote={changeTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] }]} rowActions={changeActions} emptyTitle="No budget changes" emptyDescription="Changes above the approval threshold appear here until Management decides them." columns={[
+      { key: "createdAt", label: "Requested", render: (row) => formatDateTime(row.createdAt) },
+      { key: "plan", label: "Budget plan", sortable: false, getValue: (row) => row.plan?.costCenter?.code, render: (row) => <div className="primary-cell"><strong>{row.plan?.costCenter?.code || "-"} · {row.plan?.period}</strong><span>{row.plan?.costCenter?.name}</span></div> },
+      { key: "summary", label: "Change", sortable: false, render: (row) => <div className="primary-cell"><strong>{changeDescription(row, t, money)}</strong><span>{row.reason}</span></div> },
+      { key: "amount", label: "Amount", align: "right", render: (row) => <strong>{money(row.amount)}</strong> },
+      { key: "requestedByName", label: "Requested by", sortable: false },
+      { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
+      { key: "decision", label: "Decision", sortable: false, render: (row) => row.decidedByName ? <div className="primary-cell"><strong>{row.decidedByName}</strong><span>{row.decisionComments || "-"}</span></div> : "-" }
+    ]} /></div>
+    <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canDecide} canEdit={canEditPlans} onClose={() => setWorkspace(null)} onSaved={planSaved} />
+    <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirmDetails} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
   </section>;
 }
