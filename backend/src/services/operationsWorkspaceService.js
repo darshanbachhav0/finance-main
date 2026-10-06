@@ -69,7 +69,7 @@ export async function configurationHealth() {
   }
   for (const resource of ["direct-payment-eligibility-rules", "users", "approval-rules", "bank-formats", "finance-configurations", "document-rules", "budget-allocations"]) {
     try { assertDraftScope({ role: "Admin" }, `resource:${resource}`); }
-    catch { issues.push({ message: `${resource}: draft permissions do not match Admin configuration access.`, owner: "Admin", path: "/administration" }); }
+    catch { issues.push({ message: `${resource}: draft permissions do not match Admin configuration access.`, owner: "Admin", path: "/settings" }); }
   }
   for (const currency of ["PEN", "USD"]) if (!await BankFormatConfiguration.exists({ bank: "BBVA", currency, active: true, certified: true })) issues.push({ message: `${currency}: no active certified BBVA format.`, owner: "Treasury / Admin", path: "/configuration/bank-formats" });
   if (!durableAssetsEnabled()) issues.push({ message: "Durable cloud document storage is disabled. Verify persistent disk and backups.", owner: "Admin", path: "/operations" });

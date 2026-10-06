@@ -77,7 +77,7 @@ const modelPurposes = backend("models/AccountingMapping.js").match(/enum: \[("AC
 const purposesBlock = master.slice(master.indexOf("accountingMappingPurposes = ["), master.indexOf("const purposeLabel"));
 for (const purpose of modelPurposes) assert.match(purposesBlock, new RegExp(`value: "${purpose}"`), `purpose select offers ${purpose}`);
 assert.match(backend("routes/masterDataRoutes.js"), /accountingMappingRouter\.use\(protect, authorize\(ROLES\.ADMIN, ROLES\.ACCOUNTING\)\)/);
-assert.match(read("../src/layouts/AppLayout.jsx"), /path: "\/configuration\/accounting-mappings"/);
+assert.match(read("../src/utils/navigationAccess.js"), /"\/configuration\/accounting-mappings": "Accounting Mappings"/, "the page has a name in the shared navigation (Settings lists it)");
 assert.match(read("../src/pages/AccountingEntries.jsx"), /\["Accounting Mappings", "\/configuration\/accounting-mappings"\]/);
 assert.doesNotMatch(read("../../docs/ARCHITECTURE.md"), /An admin screen for accounting mappings/);
 

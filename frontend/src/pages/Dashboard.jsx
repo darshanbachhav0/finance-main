@@ -12,7 +12,9 @@ import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { navigationForUser } from "../utils/navigationAccess.js";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
 import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
 
@@ -41,7 +43,10 @@ const metricIcons = {
 
 export default function Dashboard() {
   const { t, language } = useLanguage();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  // Work review gets a header button only when the menu does not already list it.
+  const workReviewInMenu = navigationForUser(user).some(([, path]) => path === "/operations");
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -79,7 +84,7 @@ export default function Dashboard() {
   const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, rowId: item._id || item.request._id, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
   // The role's primary action, kept visible above its task list (and offered when all is done).
   const primaryAction = {
-    Admin: ["/administration", "Administration"],
+    Admin: ["/settings", "Settings"],
     Solicitor: ["/requests/new", "New request"],
     AreaDirector: ["/approvals", "Review approvals"],
     ViceRector: ["/approvals", "Review approvals"],
@@ -92,8 +97,7 @@ export default function Dashboard() {
 
   return (
     <section>
-      <Link className="secondary-button" to="/operations">{t("Work review")}</Link>
-      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
+      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<>{!workReviewInMenu && <Link className="secondary-button" to="/operations">{t("Work review")}</Link>}<span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
 
       {loading && !summary && (

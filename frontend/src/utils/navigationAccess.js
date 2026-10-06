@@ -32,15 +32,18 @@ export const reportDownloadRoles = Object.freeze(["Admin", "AreaDirector", "Vice
 
 export const configurationRoles = [...new Set(Object.values(configurationAccess).flat())];
 
+// Everyone who can open at least one Settings page.
+export const settingsRoles = ["Admin", "Accounting", "Budget", "Treasury"];
+
 export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
   "/management-view": ["Admin", "Management", "ManagementViewer"],
   "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"],
   "/my-team": internalRoles,
   "/requests/new": ["Admin", "Solicitor"],
-  "/administration": ["Admin"],
+  "/operations": internalRoles,
+  "/settings": settingsRoles,
   "/treasury/history": ["Admin", "Treasury"],
-  "/accounting/invoices": ["Admin", "Accounting"],
   "/approvals": internalRoles,
   "/batch-invoices": ["Admin", "Solicitor", "Accounting"],
   "/accounting": ["Admin", "Accounting"],
@@ -72,21 +75,62 @@ export const navigationGrants = Object.freeze({
   "/reimbursement-bank": ["employee-bank:manage-own", "employee-bank:review"],
   "/batch-invoices": ["batch-invoice:upload", "batch-invoice:review"],
   "/accounting/invoice-observations": ["batch-invoice:review"],
-  "/configuration/bank-formats": ["bank-format:certify"]
+  "/configuration/bank-formats": ["bank-format:certify"],
+  "/settings": ["bank-format:certify"]
 });
 
-// Menu entries added for granted pages the role's own menu does not list.
-const grantedNavigation = [
-  ["My Requests", "/requests", ["request:create"]],
-  ["New request", "/requests/new", ["request:create"]],
-  ["Budget Control", "/budget", ["budget:view"]],
-  ["Management Reports", "/reports", ["report:view"]],
-  ["Management Portal", "/management-view", ["management-portal:view"]],
-  ["Reimbursement Banking", "/reimbursement-bank", ["employee-bank:manage-own", "employee-bank:review"]],
-  ["A2 Batch Invoices", "/batch-invoices", ["batch-invoice:upload", "batch-invoice:review"]],
-  ["Invoice Observations", "/accounting/invoice-observations", ["batch-invoice:review"]],
-  ["Bank Formats", "/configuration/bank-formats", ["bank-format:certify"]]
-];
+// The one list of page names. The sidebar, phone bar, command palette, breadcrumbs and the
+// browser tab title all read their labels from here.
+export const pageLabels = Object.freeze({
+  "/": "Dashboard",
+  "/requests": "Requests",
+  "/requests/new": "New request",
+  "/approvals": "Approvals",
+  "/my-team": "My Team",
+  "/operations": "Work review",
+  "/batch-invoices": "A2 Batch Invoices",
+  "/accounting/invoice-observations": "Invoice Observations",
+  "/accounting/payables": "Accounts Payable",
+  "/reimbursement-bank": "Reimbursement Banking",
+  "/treasury": "Payments",
+  "/treasury/history": "Payment History",
+  "/accounting": "Accounting Entries",
+  "/accounting/periods": "Accounting Periods",
+  "/accounting/sire": "SIRE Export",
+  "/budget": "Budget Control",
+  "/reports": "Reports",
+  "/management-view": "Management Portal",
+  "/suppliers": "Suppliers",
+  "/settings": "Settings",
+  "/users": "Users",
+  "/cost-centers": "Cost Centers",
+  "/expense-types": "Accounting Accounts",
+  "/exchange-rates": "Exchange Rates",
+  "/configuration/approval-rules": "Approval Rules",
+  "/configuration/direct-payment-eligibility": "Track B Eligibility",
+  "/configuration/finance-configurations": "Finance Configurations",
+  "/configuration/budget-rules": "Budget Rules",
+  "/configuration/budget-allocations": "Budget Allocations",
+  "/configuration/accounting-mappings": "Accounting Mappings",
+  "/configuration/bank-formats": "Bank Formats"
+});
+
+// A requester only sees their own requests.
+const roleLabels = Object.freeze({ Solicitor: { "/requests": "My Requests" } });
+
+export function pageLabel(path, role) {
+  return roleLabels[role]?.[path] || pageLabels[path] || "";
+}
+
+// Settings pages, grouped as on the Settings page. Each one keeps its own route.
+export const settingsGroups = Object.freeze([
+  ["Organization", ["/users", "/cost-centers"]],
+  ["Finance", ["/expense-types", "/configuration/accounting-mappings", "/configuration/finance-configurations", "/exchange-rates"]],
+  ["Approval and budget rules", ["/configuration/approval-rules", "/configuration/direct-payment-eligibility", "/configuration/budget-rules", "/configuration/budget-allocations"]],
+  ["Banking", ["/configuration/bank-formats"]]
+]);
+
+export const settingsPaths = settingsGroups.flatMap(([, paths]) => paths);
 
 export function hasGrant(user, ...permissions) {
   return permissions.some((permission) => (user?.permissions || []).includes(permission));
@@ -97,6 +141,10 @@ export function canAccessNavigation(role, path, user) {
   if (hasGrant(user, ...(navigationGrants[path] || []))) return true;
   if (path?.startsWith("/configuration/") && !navigationAccess[path]) return Boolean(role && navigationAccess["/configuration/*"].includes(role));
   return Boolean(role && navigationAccess[path]?.includes(role));
+}
+
+export function settingsPagesFor(user) {
+  return settingsPaths.filter((path) => canAccessNavigation(user?.role, path, user));
 }
 
 export function visibleNavigationPaths(role, user) {
@@ -113,28 +161,67 @@ export function approvesRequests(user, pendingApprovals = 0) {
   return user.hasTeam === true || user.hasPendingApprovals === true || Number(pendingApprovals) > 0;
 }
 
-// Primary navigation is deliberately smaller than the set of permitted routes.
-export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
-  const items = [...(roleNavigation[user?.role] || [])].filter(([, path]) => path !== "/approvals" || approvesRequests(user, pendingApprovals));
-  if (user?.hasTeam === true && !items.some(([, path]) => path === "/my-team")) items.push(["My Team", "/my-team"]);
-  // Proposing suppliers is open to every internal user, so the menu always offers it.
-  if (internalRoles.includes(user?.role) && !items.some(([, path]) => path === "/suppliers")) items.push(["Suppliers", "/suppliers"]);
-  for (const [label, path, permissions] of grantedNavigation) {
-    if (hasGrant(user, ...permissions) && !items.some(([, existing]) => existing === path)) items.push([label, path]);
-  }
-  return items.filter(([, path]) => canAccessNavigation(user?.role, path, user));
-}
-
 // Sidebar sections in display order. Every menu path belongs to one section and keeps this order
 // whichever role or granted permission added it, so the menu reads the same way for everyone.
+// Settings pages are listed under Master Data for people whose Settings is a single page.
 export const navigationSections = Object.freeze([
   ["Overview", ["/"]],
-  ["Requests", ["/requests", "/requests/new", "/approvals", "/my-team", "/batch-invoices"]],
-  ["Finance", ["/accounting", "/accounting/payables", "/accounting/invoices", "/accounting/invoice-observations", "/treasury", "/treasury/history", "/reimbursement-bank"]],
-  ["Planning and reports", ["/budget", "/reports", "/management-view", "/accounting/periods", "/accounting/sire"]],
-  ["Master Data", ["/suppliers", "/cost-centers", "/expense-types", "/exchange-rates", "/configuration/bank-formats"]],
-  ["Administration", ["/administration", "/users"]]
+  ["My work", ["/requests", "/requests/new", "/approvals", "/my-team", "/operations"]],
+  ["Invoices and payables", ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/reimbursement-bank"]],
+  ["Treasury", ["/treasury", "/treasury/history"]],
+  ["Accounting", ["/accounting", "/accounting/periods", "/accounting/sire"]],
+  ["Planning and reports", ["/budget", "/reports", "/management-view"]],
+  ["Master Data", ["/suppliers", "/settings", ...settingsPaths]]
 ]);
+
+// Each role's primary menu: deliberately smaller than the set of permitted routes. Admin gets
+// every workspace; Settings and Suppliers are added below for everyone who can open them.
+const adminMenu = navigationSections.flatMap(([, paths]) => paths).filter((path) => path !== "/my-team" && !settingsPaths.includes(path) && path !== "/settings" && path !== "/suppliers");
+const roleMenus = {
+  Solicitor: ["/", "/requests", "/requests/new", "/approvals"],
+  AreaDirector: ["/", "/approvals", "/requests"],
+  ViceRector: ["/", "/approvals", "/requests"],
+  Budget: ["/", "/budget", "/requests"],
+  Procurement: ["/", "/requests", "/suppliers", "/reports"],
+  Accounting: ["/", "/accounting/payables", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire", "/operations"],
+  Treasury: ["/", "/treasury", "/treasury/history", "/operations"],
+  // Management also decides budget exceptions and budget changes above the approval threshold.
+  Management: ["/", "/approvals", "/budget", "/reports", "/management-view"],
+  // Portal only: no internal Reports, dashboards or request data.
+  ManagementViewer: ["/management-view"],
+  Admin: adminMenu
+};
+
+export const roleNavigation = Object.freeze(Object.fromEntries(Object.entries(roleMenus).map(([role, paths]) => [role, paths.map((path) => [pageLabel(path, role), path])])));
+
+// Menu entries added for granted pages the role's own menu does not list.
+const grantedNavigation = [
+  ["/requests", ["request:create"]],
+  ["/requests/new", ["request:create"]],
+  ["/budget", ["budget:view"]],
+  ["/reports", ["report:view"]],
+  ["/management-view", ["management-portal:view"]],
+  ["/reimbursement-bank", ["employee-bank:manage-own", "employee-bank:review"]],
+  ["/batch-invoices", ["batch-invoice:upload", "batch-invoice:review"]],
+  ["/accounting/invoice-observations", ["batch-invoice:review"]]
+];
+
+// Primary navigation as [label, path] pairs.
+export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
+  const role = user?.role;
+  const paths = (roleMenus[role] || []).filter((path) => path !== "/approvals" || approvesRequests(user, pendingApprovals));
+  const add = (path) => { if (!paths.includes(path)) paths.push(path); };
+  if (user?.hasTeam === true) add("/my-team");
+  // Proposing suppliers is open to every internal user, so the menu always offers it.
+  if (internalRoles.includes(role)) add("/suppliers");
+  for (const [path, permissions] of grantedNavigation) if (hasGrant(user, ...permissions)) add(path);
+  // Settings is one entry. Someone with a single settings page (Treasury: bank formats) goes
+  // straight to it instead of a page with one link.
+  const settings = settingsPagesFor(user);
+  if (settings.length === 1) add(settings[0]);
+  else if (settings.length > 1) add("/settings");
+  return paths.filter((path) => canAccessNavigation(role, path, user)).map((path) => [pageLabel(path, role), path]);
+}
 
 function sectionOf(path) {
   const index = navigationSections.findIndex(([, paths]) => paths.includes(path));
@@ -155,20 +242,33 @@ export function groupNavigation(items) {
     .filter((group) => group.items.length);
 }
 
-export const roleNavigation = {
-  Solicitor: [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", "/requests/new"], ["Approvals", "/approvals"]],
-  AreaDirector: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
-  ViceRector: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Requests", "/requests"]],
-  Budget: [["Dashboard", "/"], ["Budget Control", "/budget"], ["Requests", "/requests"]],
-  Procurement: [["Dashboard", "/"], ["Requests", "/requests"], ["Suppliers", "/suppliers"], ["Reports", "/reports"]],
-  Accounting: [["Dashboard", "/"], ["Accounting", "/accounting"], ["Accounts Payable", "/accounting/payables"], ["Invoices", "/accounting/invoices"], ["Invoice Observations", "/accounting/invoice-observations"], ["Suppliers", "/suppliers"], ["Accounting Periods", "/accounting/periods"], ["SIRE", "/accounting/sire"]],
-  Treasury: [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", "/treasury/history"], ["Bank Formats", "/configuration/bank-formats"]],
-  // Management also decides budget exceptions and budget changes above the approval threshold.
-  Management: [["Dashboard", "/"], ["Approvals", "/approvals"], ["Budget Control", "/budget"], ["Reports", "/reports"], ["Shared Management View", "/management-view"]],
-  // Portal only: no internal Reports, dashboards or request data.
-  ManagementViewer: [["Management Portal", "/management-view"]],
-  Admin: [["Dashboard", "/"], ["Administration", "/administration"]]
-};
+// Pages that sit under another page in the breadcrumb trail.
+const pageParents = Object.freeze({
+  "/requests/new": "/requests",
+  "/treasury/history": "/treasury",
+  ...Object.fromEntries(settingsPaths.map((path) => [path, "/settings"]))
+});
+
+// Breadcrumb trail for a location: [{ label, path }] from the dashboard down to the current page,
+// whose entry has no path. Request records use generic labels ("Request details").
+export function pageTrail(pathname, user) {
+  const role = user?.role;
+  const home = { label: pageLabel("/", role), path: "/" };
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  if (path === "/") return [{ label: home.label }];
+  const request = path.match(/^\/requests\/([^/]+)(\/edit)?$/);
+  if (request && request[1] !== "new") {
+    const requests = { label: pageLabel("/requests", role), path: "/requests" };
+    return request[2]
+      ? [home, requests, { label: "Request details", path: `/requests/${request[1]}` }, { label: "Edit request" }]
+      : [home, requests, { label: "Request details" }];
+  }
+  const ancestors = [];
+  for (let parent = pageParents[path]; parent; parent = pageParents[parent]) ancestors.unshift({ label: pageLabel(parent, role), path: parent });
+  // Users without the Settings page itself (a single settings page) skip that level.
+  const reachable = ancestors.filter((item) => item.path !== "/settings" || settingsPagesFor(user).length > 1);
+  return [home, ...reachable, { label: pageLabel(path, role) || "Financial Control" }];
+}
 
 // Pending-task counters next to menu entries. Each path adds up the /dashboard/tasks counters
 // of the work people act on from that page; a key the role does not receive counts as 0.
@@ -196,7 +296,7 @@ export function counterBadgeText(count) {
   return value > 99 ? "99+" : String(value);
 }
 
-// Phone bottom bar: up to three main destinations per role (from roleNavigation), plus Search.
+// Phone bottom bar: up to three main destinations per role (from the role's menu), plus Search.
 export const bottomNavigation = Object.freeze({
   Solicitor: ["/", "/requests", "/requests/new"],
   AreaDirector: ["/", "/approvals", "/requests"],
@@ -206,7 +306,7 @@ export const bottomNavigation = Object.freeze({
   Accounting: ["/", "/accounting", "/accounting/invoice-observations"],
   Treasury: ["/", "/treasury", "/treasury/history"],
   Management: ["/", "/approvals", "/reports"],
-  Admin: ["/", "/administration"]
+  Admin: ["/", "/requests", "/settings"]
 });
 
 // Shorter labels where the menu label does not fit a bottom-bar slot.

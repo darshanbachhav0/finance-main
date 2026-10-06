@@ -10,6 +10,7 @@ import api from "../api/client.js";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import Tabs, { tabPanelProps } from "../components/Tabs.jsx";
 import StatCard from "../components/StatCard.jsx";
 import Drawer from "../components/Drawer.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -182,8 +183,8 @@ export default function AccountingEntries() {
         <StatCard label="Reconciliation difference" value={formatCurrency(previewSummary.difference || 0, "PEN", language)} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "green" : "red"} />
       </div>
 
-      <nav className="focus-tabs" aria-label={t("Sections")}>{["Processing", "SUNAT exceptions", "Entries", "Consolidation", "History"].map(view => <button type="button" key={view} aria-pressed={focusView === view} onClick={() => setFocusView(view)}>{t(view)}</button>)}</nav>
-      <div hidden={focusView !== "SUNAT exceptions"} className="workspace-panel">
+      <Tabs idPrefix="accounting" label="Sections" panels value={focusView} onChange={setFocusView} tabs={["Processing", "SUNAT exceptions", "Entries", "Consolidation", "History"].map((view) => ({ id: view, label: view }))} />
+      <div hidden={focusView !== "SUNAT exceptions"} {...tabPanelProps("accounting", "SUNAT exceptions")} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("Invoices SUNAT could not validate")}</h3><p>{t("When SUNAT is down or the platform runs in Padrón-only mode, one Accounting user can approve a manual SUNAT exception. The reason is required and audited, and the exception stays visible on the invoice and its CXP.")}</p></div><span className="section-count">{sunatTable.pagination.total}</span></div>
         {sunatTable.payload.sunat?.variant === "PADRON" && <div className="document-requirement"><FileCheck2 size={20} /><div><strong>{t("Padrón-only mode")}</strong><p>{t("The public Padrón checks the supplier's RUC status but never verifies an individual invoice, so every invoice needs a manual SUNAT exception.")}</p></div></div>}
         <DataTable rows={sunatTable.rows} loading={sunatTable.loading} remote={sunatTable.remote} searchPlaceholder="Search request, RUC, or voucher..." rowActions={(row) => [{ label: "Approve manual SUNAT exception", icon: ShieldCheck, primary: true, onClick: () => openException(row) }]} columns={[
@@ -194,7 +195,7 @@ export default function AccountingEntries() {
           { key: "updatedAt", type: "date", label: "Observed", render: (row) => formatDateTime(row.updatedAt) }
         ]} />
       </div>
-      <div hidden={focusView !== "Processing"} className="workspace-panel">
+      <div hidden={focusView !== "Processing"} {...tabPanelProps("accounting", "Processing")} className="workspace-panel">
         <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
         <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => [{ label: "Review fiscal data", icon: Eye, primary: true, onClick: () => openFiscalProcessing(row) }]} columns={[
           { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
@@ -207,7 +208,7 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <div hidden={focusView !== "Entries"} className="workspace-panel section-spacer">
+      <div hidden={focusView !== "Entries"} {...tabPanelProps("accounting", "Entries")} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Accounting entries")}</h3><p>{t("Provision, payment, and rendition entries created by the workflow.")}</p></div></div>
         <DataTable
           rows={entries}
@@ -229,7 +230,7 @@ export default function AccountingEntries() {
         />
       </div>
 
-      <div hidden={focusView !== "Consolidation"} className="workspace-panel section-spacer">
+      <div hidden={focusView !== "Consolidation"} {...tabPanelProps("accounting", "Consolidation")} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Consolidation summary")}</h3><p>{t("Period totals grouped by cost center, expense account, and currency.")}</p></div><span className="section-count">{preview.length}</span></div>
         <DataTable rows={preview.map((row, index) => ({ ...row, id: `${row.costCenterCode}-${row.expenseAccount}-${row.currency}-${index}` }))} rowKey="id" loading={loading} filters={[{ key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] }]} columns={[
           { key: "costCenterCode", type: "code", label: "CeCo", render: (row) => <div className="primary-cell"><strong>{row.costCenterCode}</strong><span>{row.costCenterName}</span></div> },
@@ -245,7 +246,7 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <div hidden={focusView !== "History"} className="workspace-panel section-spacer">
+      <div hidden={focusView !== "History"} {...tabPanelProps("accounting", "History")} className="workspace-panel section-spacer">
         <div className="section-heading"><div><h3>{t("Export history")}</h3><p>{t("Previously generated consolidation reports remain available for download.")}</p></div></div>
         <DataTable rows={history} loading={historyTable.loading} remote={historyTable.remote} columns={[
           { key: "fileName", type: "name", label: "File", render: (row) => <ProtectedAssetButton resourcePath={row.url} fileName={row.fileName}>{row.fileName}</ProtectedAssetButton> },
