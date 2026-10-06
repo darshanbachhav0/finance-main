@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+// Line endings are normalized: a Windows checkout (core.autocrlf) has CRLF files.
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 // One accessible tab bar (components/Tabs.jsx) replaces the hand-built aria-pressed button rows.
 const tabs = read("../src/components/Tabs.jsx");

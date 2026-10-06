@@ -114,5 +114,23 @@ export default {
   // Batch upload and periods
   "Select an active Purchase Order and upload a ZIP of XML/PDF pairs, optionally with an XLSX invoice list. Every voucher is validated independently.": "Seleccione una Orden de Compra activa y cargue un ZIP con pares XML/PDF y, opcionalmente, una lista de comprobantes en XLSX. Cada comprobante se valida de forma independiente.",
   "ZIP: same-name XML + PDF pairs. An XLSX invoice list may be included in the ZIP; every row needs its XML, because only an XML invoice can be validated and posted.": "ZIP: pares XML + PDF con el mismo nombre. Puede incluir en el ZIP una lista de comprobantes en XLSX; cada fila necesita su XML, porque solo un comprobante XML puede validarse y contabilizarse.",
-  "The backend first verifies that no invoice dated in the period is unposted or observed and that the AP subledger reconciles with the journals. Posted invoices that are still unpaid stay as outstanding payables and do not block the close. A closed period blocks controlled financial mutations.": "El sistema verifica primero que ningún comprobante del periodo esté sin contabilizar u observado y que el auxiliar de cuentas por pagar cuadre con los asientos. Los comprobantes contabilizados que siguen pendientes de pago quedan como cuentas por pagar y no bloquean el cierre. Un periodo cerrado bloquea los cambios financieros controlados."
+  "The backend first verifies that no invoice dated in the period is unposted or observed and that the AP subledger reconciles with the journals. Posted invoices that are still unpaid stay as outstanding payables and do not block the close. A closed period blocks controlled financial mutations.": "El sistema verifica primero que ningún comprobante del periodo esté sin contabilizar u observado y que el auxiliar de cuentas por pagar cuadre con los asientos. Los comprobantes contabilizados que siguen pendientes de pago quedan como cuentas por pagar y no bloquean el cierre. Un periodo cerrado bloquea los cambios financieros controlados.",
+  // Accounts Payable views and record
+  "To pay": "Por pagar",
+  "Due within 7 days": "Vencen en 7 días",
+  "All CXP": "Todas las CXP",
+  "Accounts payable views": "Vistas de cuentas por pagar",
+  "Every invoice's payable (CXP): what is owed, when it is due and how it is paid.": "La cuenta por pagar (CXP) de cada comprobante: cuánto se debe, cuándo vence y cómo se paga.",
+  "Bank transfer": "Transferencia bancaria",
+  "Amounts": "Montos",
+  "Detraction (SPOT)": "Detracción (SPOT)",
+  "Deposit amount": "Monto del depósito",
+  "Detraction rate": "Tasa de detracción",
+  "Deposit": "Depósito",
+  "Original": "Original",
+  "A credit note lowers this invoice's balance (a part already paid becomes a supplier credit); a debit note raises it.": "Una nota de crédito reduce el saldo del comprobante (la parte ya pagada se convierte en crédito del proveedor); una nota de débito lo aumenta.",
+  "Only an unpaid CXP that is not in a bank file can be cancelled.": "Solo se puede anular una CXP impaga que no esté en un archivo bancario.",
+  "A credit or debit note was applied to this CXP, so it can no longer be cancelled.": "Se aplicó una nota de crédito o débito a esta CXP; ya no se puede anular.",
+  "A supplier credit was applied to this CXP, so it can no longer be cancelled.": "Se aplicó un crédito del proveedor a esta CXP; ya no se puede anular.",
+  "The detraction was already deposited, so this CXP can no longer be cancelled.": "La detracción ya fue depositada; esta CXP ya no se puede anular."
 };

@@ -1,0 +1,21 @@
+/* Accounts Payable page (pages/AccountsPayable.jsx, components/payables/PayableDetail.jsx).
+   Page styles live next to the page instead of growing global.css. */
+
+.accounts-payable-page .tab-bar { margin-top: var(--space-4); }
+.accounts-payable-page .payable-kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.payable-amount span { font-weight: 500; }
+.payable-status { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Record: the four facts people check first, then grouped sections. */
+.payable-headline { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--gray-200); border-radius: var(--radius-md, 8px); background: var(--gray-50); }
+.payable-headline > div { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.payable-headline span:first-child { color: var(--gray-600); font-size: 12px; }
+.payable-headline strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.payable-headline > div:first-child strong { font-size: 1.35rem; }
+.payable-group { display: grid; gap: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--gray-150, var(--gray-200)); }
+.payable-group h3 { margin: 0; font-size: 14px; }
+.payable-group .detail-grid { margin: 0; }
+
+/* Footer actions: an unavailable cancel says why, next to the disabled button. */
+.payable-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); width: 100%; }
+.payable-action-reason { flex: 1 1 220px; color: var(--gray-600); font-size: 12px; }

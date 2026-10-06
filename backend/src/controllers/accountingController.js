@@ -18,6 +18,7 @@ import { publicRequestPayload, requestPopulate } from "../services/requestServic
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
 import { moneyEquals } from "../utils/money.js";
+import { DUE_SOON_DAYS, PAYABLE_VIEWS, payableViewCountGroup, payableViewFilter } from "../services/accountsPayableViews.js";
 
 export const listPendingAccounting = asyncHandler(async (req, res) => {
   const query = { status: REQUEST_STATUS.BUDGET_COMMITTED };
@@ -94,7 +95,6 @@ export const recoverCredit = asyncHandler(async (req, res) => {
 
 export const listAccountsPayable = asyncHandler(async (req, res) => {
   const query = {};
-  if (req.query.status) query.status = req.query.status;
   if (req.query.currency) query.currency = req.query.currency;
   if (req.query.supplier) query.supplier = req.query.supplier;
   if (req.query.flowType) query.flowType = req.query.flowType;
@@ -118,9 +118,14 @@ export const listAccountsPayable = asyncHandler(async (req, res) => {
     ];
   }
   withDeepLink(query, req.query);
+  // Tab counts follow the search and filters but not the selected view or status.
+  const countQuery = { ...query };
+  const now = new Date();
+  if (req.query.status) query.status = req.query.status;
+  Object.assign(query, payableViewFilter(req.query.view, now));
   const { page, pageSize, skip } = parsePagination(req.query);
   const sort = parseSort(req.query, ["dueDate", "originalAmount", "outstandingAmount", "currency", "createdAt", "status"], { createdAt: -1 });
-  const [data, total, summaryRows] = await Promise.all([
+  const [data, total, summaryRows, viewRows] = await Promise.all([
     AccountsPayable.find(query)
       .populate("request", "requestNumber requestType flowType status accountingPeriod requesterArea")
       .populate("supplier", "name legalName rucDni paymentTerms")
@@ -139,11 +144,17 @@ export const listAccountsPayable = asyncHandler(async (req, res) => {
         outstandingPEN: { $sum: { $multiply: ["$outstandingAmount", "$exchangeRate"] } },
         paidPEN: { $sum: { $cond: [{ $eq: ["$status", "PAID"] }, "$penEquivalent", 0] } }
       } }
-    ])
+    ]),
+    AccountsPayable.aggregate([{ $match: countQuery }, { $group: payableViewCountGroup(now) }])
   ]);
+  const { _id, ...viewCounts } = viewRows[0] || {};
   res.json({
     ...paginatedPayload(data, total, page, pageSize),
-    summary: { count: total, originalPEN: summaryRows[0]?.originalPEN || 0, outstandingPEN: summaryRows[0]?.outstandingPEN || 0, paidPEN: summaryRows[0]?.paidPEN || 0 }
+    summary: {
+      count: total, originalPEN: summaryRows[0]?.originalPEN || 0, outstandingPEN: summaryRows[0]?.outstandingPEN || 0, paidPEN: summaryRows[0]?.paidPEN || 0,
+      viewCounts: Object.fromEntries(PAYABLE_VIEWS.map((view) => [view, viewCounts[view] || 0])),
+      dueSoonDays: DUE_SOON_DAYS
+    }
   });
 });
 

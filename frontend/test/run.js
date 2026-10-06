@@ -40,3 +40,4 @@ import "./feedback.test.js";
 import "./dateInput.test.js";
 import "./uxFormsContracts.test.js";
 import "./rowActions.test.js";
+import "./accountsPayable.test.js";
