@@ -1,4 +1,5 @@
 import { localeFor } from "./formatters.js";
+import { toneOf } from "./tones.js";
 
 // "My tasks" on the dashboard: the /dashboard/tasks items (also shown in the top-bar task panel)
 // turned into one clear sentence each, most urgent first. English strings are the t() keys;
@@ -35,8 +36,8 @@ export const TASK_DETAILS = {
 // The parent task's own overdue count already says this.
 const REDUNDANT_DETAILS = new Set(["approvalOverdue"]);
 
-const TONE_RANK = { red: 0, amber: 1, teal: 2, navy: 2, neutral: 3 };
-export const TONE_LABELS = { red: "Urgent", amber: "Needs attention", teal: "To do", navy: "To do", neutral: "To do" };
+const TONE_RANK = { danger: 0, warning: 1, accent: 2, info: 2, neutral: 3 };
+export const TONE_LABELS = { danger: "Urgent", warning: "Needs attention", accent: "To do", info: "To do", neutral: "To do" };
 
 const fill = (text, values) => Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, value), text);
 
@@ -78,15 +79,15 @@ export function buildTaskList(items = [], { now = new Date(), language, t = (tex
     .map((item) => ({
       key: item.key,
       path: item.path,
-      tone: item.tone || "neutral",
-      toneLabel: t(TONE_LABELS[item.tone] || "To do"),
+      tone: toneOf(item.tone),
+      toneLabel: t(TONE_LABELS[toneOf(item.tone)]),
       sentence: taskSentence(item, t),
       due: taskDueLabel(item, { now, language, t }),
       dueAt: item.dueAt || null,
       count: item.count,
-      details: details.filter((detail) => detail.partOf === item.key).map((detail) => ({ key: detail.key, tone: detail.tone, text: fill(t(TASK_DETAILS[detail.key] || detail.label), { count: detail.count }) }))
+      details: details.filter((detail) => detail.partOf === item.key).map((detail) => ({ key: detail.key, tone: toneOf(detail.tone), text: fill(t(TASK_DETAILS[detail.key] || detail.label), { count: detail.count }) }))
     }))
-    .sort((a, b) => (TONE_RANK[a.tone] ?? 3) - (TONE_RANK[b.tone] ?? 3)
+    .sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone]
       || (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) - (b.dueAt ? new Date(b.dueAt).getTime() : Infinity)
       || b.count - a.count);
 }

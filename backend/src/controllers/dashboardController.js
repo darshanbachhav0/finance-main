@@ -128,12 +128,12 @@ async function buildTasks(user) {
       earliestDate(FinancialRequest, query, "approvalDueAt")
     ]);
     const single = await singleRecordPath(count, FinancialRequest, query, (record) => `/approvals?request=${record._id}`);
-    items.push({ key: "approval", label: "Requests awaiting approval", count, path: single || "/approvals", tone: overdue ? "red" : "amber", dueAt, overdue });
-    items.push({ key: "approvalOverdue", label: "Approval SLA overdue", count: overdue, path: "/approvals", tone: "red", partOf: "approval" });
+    items.push({ key: "approval", label: "Requests awaiting approval", count, path: single || "/approvals", tone: overdue ? "danger" : "warning", dueAt, overdue });
+    items.push({ key: "approvalOverdue", label: "Approval SLA overdue", count: overdue, path: "/approvals", tone: "danger", partOf: "approval" });
     const config = slaConfiguration();
-    items.push({ key: "approvalDueSoon", label: "Approval due soon", count: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $gte: now, $lte: new Date(now.getTime() + config.dueSoonHours * 3600000) } }), path: "/approvals", tone: "amber", partOf: "approval" });
+    items.push({ key: "approvalDueSoon", label: "Approval due soon", count: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $gte: now, $lte: new Date(now.getTime() + config.dueSoonHours * 3600000) } }), path: "/approvals", tone: "warning", partOf: "approval" });
     const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope({ role: ROLES.ADMIN }) : query;
-    items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "red", ...(user.role === ROLES.MANAGEMENT ? {} : { partOf: "approval" }) });
+    items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "danger", ...(user.role === ROLES.MANAGEMENT ? {} : { partOf: "approval" }) });
   }
   // Requester tasks for every Solicitor and for anyone granted "Create requests".
   if (actsAsRequester(user)) {
@@ -144,7 +144,7 @@ async function buildTasks(user) {
     const correctionQuery = { ...owner, status: { $in: OWNER_CORRECTION_STATUSES }, "observation.resolver": { $nin: ["ACCOUNTING", "BUDGET"] }, "observation.code": { $nin: ["PADRON_RUC_VERIFIED_CPE_NOT_VALIDATED", "COMPROBANTE_NO_VERIFICADO"] } };
     const [drafts, corrections] = await Promise.all([FinancialRequest.countDocuments(draftQuery), FinancialRequest.countDocuments(correctionQuery)]);
     items.push({ key: "drafts", label: "Drafts to finish", count: drafts, path: (await singleRecordPath(drafts, FinancialRequest, draftQuery, (record) => `/requests/${record._id}/edit`)) || `/requests?status=${REQUEST_STATUS.DRAFT}`, tone: "neutral" });
-    items.push({ key: "corrections", label: "Requests to correct", count: corrections, path: (await singleRecordPath(corrections, FinancialRequest, correctionQuery, (record) => `/requests/${record._id}`)) || `/requests?status=${OWNER_CORRECTION_STATUSES.join("%2C")}`, tone: "red" });
+    items.push({ key: "corrections", label: "Requests to correct", count: corrections, path: (await singleRecordPath(corrections, FinancialRequest, correctionQuery, (record) => `/requests/${record._id}`)) || `/requests?status=${OWNER_CORRECTION_STATUSES.join("%2C")}`, tone: "danger" });
   }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SOLICITOR].includes(user.role)) {
     // Each role sees the rendition work that is its own: the requester submits (PENDING or
@@ -160,7 +160,7 @@ async function buildTasks(user) {
     } : {};
     const label = { submit: "Renditions to submit", review: "Renditions to review", outstanding: "Renditions outstanding" }[kind];
     const single = await singleRecordPath(count, FinancialRequest, query, (record) => `/requests/${record._id}`);
-    items.push({ key: "rendition", kind, label, count, path: single || `/requests?renditionStatus=${statuses.join("%2C")}`, tone: deadline.overdue ? "red" : "amber", ...deadline });
+    items.push({ key: "rendition", kind, label, count, path: single || `/requests?renditionStatus=${statuses.join("%2C")}`, tone: deadline.overdue ? "danger" : "warning", ...deadline });
   }
   if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role)) {
     const payableQuery = { status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED] } };
@@ -173,9 +173,9 @@ async function buildTasks(user) {
       earliestDate(AccountsPayable, payableQuery, "dueDate"),
       AccountsPayable.countDocuments({ ...payableQuery, dueDate: { $lt: now } })
     ]);
-    items.push({ key: "payable", label: "CXP ready for Treasury", count: payable, path: (await singleRecordPath(payable, AccountsPayable, payableQuery, (record) => `/treasury?tab=prepare&record=${record._id}`)) || "/treasury?tab=prepare", tone: payableOverdue ? "red" : "teal", dueAt: payableDueAt, overdue: payableOverdue });
-    items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: (await singleRecordPath(confirmation, AccountsPayable, confirmationQuery, (record) => `/treasury?tab=confirm&record=${record._id}`)) || "/treasury?tab=confirm", tone: "amber" });
-    items.push({ key: "bouncedPayments", label: "Returned payments to reprogram", count: bounced, path: (await singleRecordPath(bounced, AccountsPayable, bouncedQuery, (record) => `/treasury?tab=returned&record=${record._id}`)) || "/treasury?tab=returned", tone: "red" });
+    items.push({ key: "payable", label: "CXP ready for Treasury", count: payable, path: (await singleRecordPath(payable, AccountsPayable, payableQuery, (record) => `/treasury?tab=prepare&record=${record._id}`)) || "/treasury?tab=prepare", tone: payableOverdue ? "danger" : "accent", dueAt: payableDueAt, overdue: payableOverdue });
+    items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: (await singleRecordPath(confirmation, AccountsPayable, confirmationQuery, (record) => `/treasury?tab=confirm&record=${record._id}`)) || "/treasury?tab=confirm", tone: "warning" });
+    items.push({ key: "bouncedPayments", label: "Returned payments to reprogram", count: bounced, path: (await singleRecordPath(bounced, AccountsPayable, bouncedQuery, (record) => `/treasury?tab=returned&record=${record._id}`)) || "/treasury?tab=returned", tone: "danger" });
   }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
     const bankReviewQuery = { active: true, verificationStatus: "PENDING" };
@@ -184,15 +184,15 @@ async function buildTasks(user) {
       SupplierBankAccount.countDocuments(bankReviewQuery),
       Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" })
     ]);
-    items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: employeeBankReviews, path: (await singleRecordPath(employeeBankReviews, EmployeeReimbursementBankAccount, bankReviewQuery, (record) => `/reimbursement-bank?record=${record._id}`)) || "/reimbursement-bank?verificationStatus=PENDING", tone: "amber" });
-    items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: supplierBankReviews, path: (await singleRecordPath(supplierBankReviews, SupplierBankAccount, bankReviewQuery, (record) => `/suppliers?record=${record.supplier}`)) || "/suppliers", tone: "amber" });
-    items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "teal" });
-    items.push({ key: "suppliers", label: "Suppliers awaiting homologation", count: suppliers, path: (await singleRecordPath(suppliers, Supplier, { homologationStatus: "PENDING_VALIDATION" }, (record) => `/suppliers?record=${record._id}`)) || "/suppliers", tone: "amber" });
-    items.push({ key: "invoiceObservations", label: "Open invoice observations", count: await InvoiceObservation.countDocuments({ resolutionStatus: "OPEN" }), path: "/accounting/invoice-observations", tone: "amber" });
+    items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: employeeBankReviews, path: (await singleRecordPath(employeeBankReviews, EmployeeReimbursementBankAccount, bankReviewQuery, (record) => `/reimbursement-bank?record=${record._id}`)) || "/reimbursement-bank?verificationStatus=PENDING", tone: "warning" });
+    items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: supplierBankReviews, path: (await singleRecordPath(supplierBankReviews, SupplierBankAccount, bankReviewQuery, (record) => `/suppliers?record=${record.supplier}`)) || "/suppliers", tone: "warning" });
+    items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "accent" });
+    items.push({ key: "suppliers", label: "Suppliers awaiting homologation", count: suppliers, path: (await singleRecordPath(suppliers, Supplier, { homologationStatus: "PENDING_VALIDATION" }, (record) => `/suppliers?record=${record._id}`)) || "/suppliers", tone: "warning" });
+    items.push({ key: "invoiceObservations", label: "Open invoice observations", count: await InvoiceObservation.countDocuments({ resolutionStatus: "OPEN" }), path: "/accounting/invoice-observations", tone: "warning" });
     const missingDates = await missingExchangeRateDates();
-    items.push({ key: "missingExchangeRate", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "red" });
+    items.push({ key: "missingExchangeRate", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "danger" });
     const period = await AccountingPeriod.findOne({ period: currentPeriod() });
-    items.push({ key: "period", label: period?.status === "OPEN" ? "Current accounting period open" : "Current accounting period unavailable", count: period?.status === "OPEN" ? 0 : 1, path: "/accounting/periods", tone: "amber" });
+    items.push({ key: "period", label: period?.status === "OPEN" ? "Current accounting period open" : "Current accounting period unavailable", count: period?.status === "OPEN" ? 0 : 1, path: "/accounting/periods", tone: "warning" });
   }
   // Budget/Admin see every open exception (review first); Management sees the ones Budget has
   // reviewed and that now await its decision, decided from the Approval Inbox. Moot or
@@ -201,16 +201,16 @@ async function buildTasks(user) {
     const management = user.role === ROLES.MANAGEMENT;
     const count = await countPendingBudgetExceptions(management ? { awaitingDecision: true } : {});
     const single = !management && count === 1 ? (await openBudgetExceptions())[0] : null;
-    items.push({ key: "budgetExceptions", kind: management ? "decide" : "review", label: management ? "Budget exceptions awaiting your decision" : "Budget exceptions pending", count, path: management ? BUDGET_EXCEPTION_DECISIONS_PATH : single ? budgetExceptionPath(single) : "/budget?tab=exceptions&exceptionStatus=PENDING", tone: "red" });
+    items.push({ key: "budgetExceptions", kind: management ? "decide" : "review", label: management ? "Budget exceptions awaiting your decision" : "Budget exceptions pending", count, path: management ? BUDGET_EXCEPTION_DECISIONS_PATH : single ? budgetExceptionPath(single) : "/budget?tab=exceptions&exceptionStatus=PENDING", tone: "danger" });
   }
   // Budget plan changes above the approval threshold wait for Management's decision.
   if (user.role === ROLES.MANAGEMENT) {
-    items.push({ key: "budgetPlanChanges", kind: "decide", label: "Budget changes awaiting your decision", count: await countPendingBudgetPlanChanges(), path: "/budget?tab=changes", tone: "amber" });
+    items.push({ key: "budgetPlanChanges", kind: "decide", label: "Budget changes awaiting your decision", count: await countPendingBudgetPlanChanges(), path: "/budget?tab=changes", tone: "warning" });
   }
   if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role)) {
     const orderQuery = { flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null };
     const awaitingOrder = await FinancialRequest.countDocuments(orderQuery);
-    items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: awaitingOrder, path: (await singleRecordPath(awaitingOrder, FinancialRequest, orderQuery, (record) => `/requests/${record._id}`)) || AWAITING_PURCHASE_ORDER_PATH, tone: "amber" });
+    items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: awaitingOrder, path: (await singleRecordPath(awaitingOrder, FinancialRequest, orderQuery, (record) => `/requests/${record._id}`)) || AWAITING_PURCHASE_ORDER_PATH, tone: "warning" });
   }
   // partOf details are subsets of another task, so they never add to the total.
   return { items, total: items.filter((item) => !item.partOf).reduce((sum, item) => sum + Number(item.count || 0), 0), counters: Object.fromEntries(items.map((item) => [item.key, item.count])) };
@@ -260,11 +260,11 @@ async function roleDetails(user, common) {
       AuditLog.find().populate("user", "name role").sort({ createdAt: -1 }).limit(8)
     ]);
     metrics.push(
-      { key: "requests", label: "Total requests", value: common.total, tone: "navy" },
-      { key: "users", label: "Active users", value: activeUsers, tone: "green" },
-      { key: "workflow", label: "In active workflow", value: common.total - statusCount(common, REQUEST_STATUS.CLOSED) - statusCount(common, REQUEST_STATUS.VOIDED) - statusCount(common, REQUEST_STATUS.REJECTED), tone: "teal" },
-      { key: "supplierWarnings", label: "Supplier validations", value: pendingSuppliers, tone: "amber" },
-      { key: "blocked", label: "Blocked controls (30d)", value: blockedActions, tone: blockedActions ? "red" : "neutral" }
+      { key: "requests", label: "Total requests", value: common.total, tone: "neutral" },
+      { key: "users", label: "Active users", value: activeUsers, tone: "success" },
+      { key: "workflow", label: "In active workflow", value: common.total - statusCount(common, REQUEST_STATUS.CLOSED) - statusCount(common, REQUEST_STATUS.VOIDED) - statusCount(common, REQUEST_STATUS.REJECTED), tone: "accent" },
+      { key: "supplierWarnings", label: "Supplier validations", value: pendingSuppliers, tone: "warning" },
+      { key: "blocked", label: "Blocked controls (30d)", value: blockedActions, tone: blockedActions ? "danger" : "neutral" }
     );
     data.recentActivity = recentActivity;
   }
@@ -272,10 +272,10 @@ async function roleDetails(user, common) {
   if (user.role === ROLES.SOLICITOR) {
     metrics.push(
       { key: "drafts", label: "My drafts", value: statusCount(common, REQUEST_STATUS.DRAFT), tone: "neutral" },
-      { key: "returned", label: "Returned / observed", value: statusCount(common, REQUEST_STATUS.RETURNED) + statusCount(common, REQUEST_STATUS.OBSERVED), tone: "red" },
-      { key: "pending", label: "Pending approvals", value: statusCount(common, REQUEST_STATUS.PENDING_APPROVAL) + statusCount(common, REQUEST_STATUS.DIRECTOR_APPROVED) + statusCount(common, REQUEST_STATUS.VICE_RECTOR_APPROVED), tone: "amber" },
-      { key: "rendition", label: "Rendition tasks", value: await FinancialRequest.countDocuments({ ...ownerScope(user), flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } }), tone: "teal" },
-      { key: "closed", label: "Closed requests", value: statusCount(common, REQUEST_STATUS.CLOSED), tone: "green" }
+      { key: "returned", label: "Returned / observed", value: statusCount(common, REQUEST_STATUS.RETURNED) + statusCount(common, REQUEST_STATUS.OBSERVED), tone: "danger" },
+      { key: "pending", label: "Pending approvals", value: statusCount(common, REQUEST_STATUS.PENDING_APPROVAL) + statusCount(common, REQUEST_STATUS.DIRECTOR_APPROVED) + statusCount(common, REQUEST_STATUS.VICE_RECTOR_APPROVED), tone: "warning" },
+      { key: "rendition", label: "Rendition tasks", value: await FinancialRequest.countDocuments({ ...ownerScope(user), flowType: "C", "rendition.status": { $in: ["PENDING", "SUBMITTED", "OBSERVED"] }, status: { $nin: [REQUEST_STATUS.CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED] } }), tone: "accent" },
+      { key: "closed", label: "Closed requests", value: statusCount(common, REQUEST_STATUS.CLOSED), tone: "success" }
     );
   }
 
@@ -288,10 +288,10 @@ async function roleDetails(user, common) {
     ]);
     const summary = waiting[0] || { amount: 0, count: 0 };
     metrics.push(
-      { key: "pending", label: "Pending approvals", value: summary.count, tone: "amber" },
-      { key: "amount", label: "PEN waiting", value: summary.amount, tone: "teal", format: "currency" },
-      { key: "oldest", label: "Oldest approval", value: oldest[0] ? Math.max(0, Math.floor((Date.now() - oldest[0].createdAt.getTime()) / 86400000)) : 0, suffix: "days", tone: "navy" },
-      { key: "overdue", label: "SLA overdue", value: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $lt: new Date() } }), tone: "red" }
+      { key: "pending", label: "Pending approvals", value: summary.count, tone: "warning" },
+      { key: "amount", label: "PEN waiting", value: summary.amount, tone: "accent", format: "currency" },
+      { key: "oldest", label: "Oldest approval", value: oldest[0] ? Math.max(0, Math.floor((Date.now() - oldest[0].createdAt.getTime()) / 86400000)) : 0, suffix: "days", tone: "neutral" },
+      { key: "overdue", label: "SLA overdue", value: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $lt: new Date() } }), tone: "danger" }
     );
     data.oldestRequests = oldest.map(request => ({ ...request.toObject(), sla: slaStatus(request) }));
     data.recentDecisions = decisions;
@@ -307,11 +307,11 @@ async function roleDetails(user, common) {
     const typeTotals = new Map(spendByType.map((item) => [item._id, item.amount || 0]));
     const totalSpend = spendByType.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     metrics.push(
-      { key: "spend", label: "Controlled spend", value: totalSpend, format: "currency", tone: "navy" },
-      { key: "capex", label: "CAPEX", value: typeTotals.get("CAPEX") || 0, format: "currency", tone: "teal" },
+      { key: "spend", label: "Controlled spend", value: totalSpend, format: "currency", tone: "neutral" },
+      { key: "capex", label: "CAPEX", value: typeTotals.get("CAPEX") || 0, format: "currency", tone: "accent" },
       { key: "opex", label: "OPEX", value: typeTotals.get("OPEX") || 0, format: "currency", tone: "neutral" },
-      { key: "available", label: "Budget available", value: overview.totals.available, format: "currency", tone: "green" },
-      { key: "commitments", label: "Pending commitments", value: pendingCommitments, tone: "amber" }
+      { key: "available", label: "Budget available", value: overview.totals.available, format: "currency", tone: "success" },
+      { key: "commitments", label: "Pending commitments", value: pendingCommitments, tone: "warning" }
     );
     data.budget = overview;
   }
@@ -326,13 +326,13 @@ async function roleDetails(user, common) {
     ]);
     const journal = journals[0] || { count: 0, debit: 0, credit: 0 };
     metrics.push(
-      { key: "period", label: "Current period", value: periodRecord?.status || "NOT_CREATED", format: "text", tone: periodRecord?.status === "OPEN" ? "green" : "amber" },
-      { key: "cxp", label: "Accounts payable", value: cxp, tone: "navy" },
-      { key: "debit", label: "Debit total", value: journal.debit, format: "currency", tone: "teal" },
+      { key: "period", label: "Current period", value: periodRecord?.status || "NOT_CREATED", format: "text", tone: periodRecord?.status === "OPEN" ? "success" : "warning" },
+      { key: "cxp", label: "Accounts payable", value: cxp, tone: "neutral" },
+      { key: "debit", label: "Debit total", value: journal.debit, format: "currency", tone: "accent" },
       { key: "credit", label: "Credit total", value: journal.credit, format: "currency", tone: "neutral" },
-      { key: "closure", label: "Pending period items", value: pendingClosure, tone: "amber" }
+      { key: "closure", label: "Pending period items", value: pendingClosure, tone: "warning" }
     );
-    if (missingDates.length) warnings.push({ key: "missingRates", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "red" });
+    if (missingDates.length) warnings.push({ key: "missingRates", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "danger" });
   }
 
   if (user.role === ROLES.TREASURY) {
@@ -347,10 +347,10 @@ async function roleDetails(user, common) {
     const missingBank = queue.filter((item) => !hasVerifiedPaymentDestination(item, supplierAccounts)).length;
     const recentFiles = await PaymentBatch.find().populate("generatedBy", "name role").sort({ generatedAt: -1 }).limit(6);
     metrics.push(
-      { key: "queue", label: "Payable queue", value: queue.length, tone: "amber" },
-      { key: "pen", label: "PEN waiting", value: totals.PEN || 0, format: "currency", currency: "PEN", tone: "teal" },
-      { key: "usd", label: "USD waiting", value: totals.USD || 0, format: "currency", currency: "USD", tone: "navy" },
-      { key: "missingBank", label: "Missing bank details", value: missingBank, tone: missingBank ? "red" : "green" },
+      { key: "queue", label: "Payable queue", value: queue.length, tone: "warning" },
+      { key: "pen", label: "PEN waiting", value: totals.PEN || 0, format: "currency", currency: "PEN", tone: "accent" },
+      { key: "usd", label: "USD waiting", value: totals.USD || 0, format: "currency", currency: "USD", tone: "neutral" },
+      { key: "missingBank", label: "Missing bank details", value: missingBank, tone: missingBank ? "danger" : "success" },
       { key: "files", label: "Recent bank files", value: recentFiles.length, tone: "neutral" }
     );
     data.queue = queue.slice(0, 8);
@@ -365,10 +365,10 @@ async function roleDetails(user, common) {
       AccountsPayable.countDocuments({ purchaseOrder: { $ne: null }, status: { $ne: AP_STATUS.CANCELLED } })
     ]);
     metrics.push(
-      { key: "awaitingOrder", label: "Approved, awaiting PO", value: awaitingOrder, tone: "amber" },
-      { key: "openOrders", label: "Open Purchase Orders", value: openOrders, tone: "navy" },
-      { key: "invoicedAgainstOrders", label: "Invoices received against POs", value: invoicedAgainstOrders, tone: "teal" },
-      { key: "supplierWarnings", label: "Supplier validations", value: await Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }), tone: "amber" }
+      { key: "awaitingOrder", label: "Approved, awaiting PO", value: awaitingOrder, tone: "warning" },
+      { key: "openOrders", label: "Open Purchase Orders", value: openOrders, tone: "neutral" },
+      { key: "invoicedAgainstOrders", label: "Invoices received against POs", value: invoicedAgainstOrders, tone: "accent" },
+      { key: "supplierWarnings", label: "Supplier validations", value: await Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }), tone: "warning" }
     );
     data.recentOrders = recentOrders;
   }
@@ -376,10 +376,10 @@ async function roleDetails(user, common) {
   if (user.role === ROLES.BUDGET) {
     const overview = await budgetOverview({ period });
     metrics.push(
-      { key: "assigned", label: "Assigned", value: overview.totals.assigned, format: "currency", tone: "navy" },
-      { key: "available", label: "Available", value: overview.totals.available, format: "currency", tone: "green" },
-      { key: "committed", label: "Committed", value: overview.totals.committed, format: "currency", tone: "amber" },
-      { key: "executed", label: "Executed", value: overview.totals.executed, format: "currency", tone: "teal" },
+      { key: "assigned", label: "Assigned", value: overview.totals.assigned, format: "currency", tone: "neutral" },
+      { key: "available", label: "Available", value: overview.totals.available, format: "currency", tone: "success" },
+      { key: "committed", label: "Committed", value: overview.totals.committed, format: "currency", tone: "warning" },
+      { key: "executed", label: "Executed", value: overview.totals.executed, format: "currency", tone: "accent" },
       { key: "paid", label: "Paid", value: overview.totals.paid, format: "currency", tone: "neutral" }
     );
     data.budget = overview;

@@ -57,14 +57,14 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       assert.equal(rendition.kind, "submit");
       assert.equal(rendition.count, 2, "submitted and closed renditions are not the requester's work");
       assert.equal(rendition.overdue, 1);
-      assert.equal(rendition.tone, "red", "an overdue rendition makes the task urgent");
+      assert.equal(rendition.tone, "danger", "an overdue rendition makes the task urgent");
       assert.equal(new Date(rendition.dueAt).getTime(), late.rendition.dueAt.getTime(), "the earliest deadline is reported");
       assert.equal(rendition.path, "/requests?renditionStatus=PENDING%2COBSERVED");
       await FinancialRequest.deleteOne({ _id: late._id });
       const single = (await tasksOf("Solicitor")).byKey.rendition;
       assert.equal(single.path, `/requests/${soon._id}`, "one rendition opens that request");
       assert.equal(single.overdue, 0);
-      assert.equal(single.tone, "amber");
+      assert.equal(single.tone, "warning");
 
       const accounting = (await tasksOf("Accounting")).byKey.rendition;
       assert.equal(accounting.kind, "review");
@@ -82,7 +82,7 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       assert.equal(tasks.byKey.approval.count, 1);
       assert.equal(tasks.byKey.approval.path, `/approvals?request=${pending._id}`);
       assert.equal(tasks.byKey.approval.overdue, 1);
-      assert.equal(tasks.byKey.approval.tone, "red");
+      assert.equal(tasks.byKey.approval.tone, "danger");
       assert.equal(tasks.byKey.approvalOverdue.partOf, "approval");
       assert.equal(tasks.byKey.approvalDueSoon.partOf, "approval");
       assert.equal(tasks.total, 1, "nested SLA details do not double-count the approval");

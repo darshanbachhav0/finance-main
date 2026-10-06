@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { useId, useMemo } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import EmptyState from "./EmptyState.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import { useTheme } from "../context/ThemeContext.jsx";
 import { formatNumber, localeFor } from "../utils/formatters.js";
@@ -137,7 +138,7 @@ export default function AnalyticsChart({
           <ResponsiveContainer width="100%" height="100%">{renderChart()}</ResponsiveContainer>
         </div>
         <ChartFallback data={chartData} xKey={xKey} series={chartSeries} valueFormatter={valueFormatter} t={t} />
-      </> : <div className="chart-state">{t(emptyLabel)}</div>}
+      </> : <EmptyState title={emptyLabel} />}
     </section>
   );
 }

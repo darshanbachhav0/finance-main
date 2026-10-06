@@ -223,11 +223,11 @@ export default function ApprovalInbox() {
       <Message type="error">{actionError || approvalTable.error}</Message>
       {deepLink.active && <DeepLinkNotice title="Showing the request linked from your notification" missing={!loading && !rows.length} missingDescription="This request is no longer waiting for your approval. Its quick view shows the current status." clearLabel="Show all pending approvals" onClear={() => { setQuickViewId(null); deepLink.clear(); }} />}
       <div className="stats-grid compact-stats">
-        <StatCard label="Pending approval" value={summary.total} tone="amber" />
-        <StatCard label="PEN equivalent waiting" value={formatCurrency(summary.amount, "PEN", language)} tone="teal" />
-        <StatCard label="Oldest request age" value={summary.oldest} suffix="days" tone="navy" />
+        <StatCard label="Pending approval" value={summary.total} tone="warning" />
+        <StatCard label="PEN equivalent waiting" value={formatCurrency(summary.amount, "PEN", language)} tone="accent" />
+        <StatCard label="Oldest request age" value={summary.oldest} suffix="days" tone="neutral" />
         {exceptionDecisions.enabled && <>
-          <StatCard label="Budget exceptions to decide" value={exceptionDecisions.total} tone="red" to="#budget-exceptions" actionLabel="View budget exceptions" />
+          <StatCard label="Budget exceptions to decide" value={exceptionDecisions.total} tone="danger" to="#budget-exceptions" actionLabel="View budget exceptions" />
           <StatCard label="Decisions awaiting you" value={summary.total + exceptionDecisions.total} tone="neutral" />
         </>}
       </div>

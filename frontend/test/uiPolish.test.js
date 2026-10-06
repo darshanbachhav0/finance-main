@@ -26,7 +26,8 @@ assert.match(layer, /@media \(max-width: 768px\) \{[\s\S]*min-height: var\(--tou
 for (const [code, label] of Object.entries(interfaceCodeLabels)) {
   assert.ok(label && label !== code, `${code} has a readable English label`);
   const spanish = interfaceSpanish[label];
-  const knownElsewhere = ["Scheduled", "Cancelled", "Low", "Medium", "High"].includes(label);
+  // Labels whose Spanish lives in another dictionary (tones.test.js checks every badge shows Spanish).
+  const knownElsewhere = ["Scheduled", "Cancelled", "Low", "Medium", "High", "Not reviewed", "Not verified", "Not declared", "Normal", "Payroll deduction", "Submitted", "Generated", "Manual review", "Yes", "No", "Confirmed", "Validated", "Valid", "Overdue"].includes(label);
   assert.ok(spanish || knownElsewhere, `${label} has Spanish copy`);
 }
 const language = source("../src/context/LanguageContext.jsx");

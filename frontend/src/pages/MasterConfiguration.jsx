@@ -42,7 +42,7 @@ function BankFormatCertificationPanel({ rows, reload }) {
           <div className="certification-row" key={row._id}>
             <div className="certification-meta">
               <strong>{row.currency}</strong>
-              <span className={`badge ${row.certified ? "badge-green" : "badge-amber"}`}>{t(row.certified ? "Certified" : "Not certified")}</span>
+              <span className={`badge ${row.certified ? "badge-success" : "badge-warning"}`}>{t(row.certified ? "Certified" : "Not certified")}</span>
               <small>{row.certified ? `${row.certifiedBy?.name || "-"} · ${row.certifiedAt ? formatDateTime(row.certifiedAt) : "-"}` : t("No certification recorded")}</small>
             </div>
             <label className="field certification-reference">

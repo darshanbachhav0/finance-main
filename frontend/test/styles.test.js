@@ -45,7 +45,7 @@ assert.deepEqual(dead, [], "no CSS for class names nothing renders");
 const globalCss = styles["global.css"];
 const hexColours = (globalCss.match(/#[0-9a-fA-F]{3,8}\b/g) || []).length;
 const important = (globalCss.match(/!important/g) || []).length;
-assert.ok(hexColours <= 335, `global.css hard-coded colours: ${hexColours} (limit 335)`);
+assert.ok(hexColours <= 326, `global.css hard-coded colours: ${hexColours} (limit 326)`);
 assert.ok(important <= 52, `global.css !important: ${important} (limit 52)`);
 
 // 5. Scales. Font sizes come from the type scale (--font-2xs ... --font-4xl) or a fluid clamp();

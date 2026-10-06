@@ -28,8 +28,8 @@ export default function MyTeam() {
       <PageHeader title="My Team" description="People who report to you, directly, and the requests they have submitted." />
       <Message type="error">{error}</Message>
       <div className="stats-grid compact-stats">
-        <StatCard label="Direct reports" value={team.length} tone="navy" />
-        <StatCard label="Active requests from your team" value={team.reduce((sum, member) => sum + (member.requestCounts?.active || 0), 0)} tone="amber" />
+        <StatCard label="Direct reports" value={team.length} tone="neutral" />
+        <StatCard label="Active requests from your team" value={team.reduce((sum, member) => sum + (member.requestCounts?.active || 0), 0)} tone="warning" />
       </div>
       <div className="workspace-panel">
         <DataTable

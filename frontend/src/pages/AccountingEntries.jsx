@@ -178,10 +178,10 @@ export default function AccountingEntries() {
       </div>
 
       <div className="stats-grid">
-        <StatCard label="Pending fiscal processing" value={pendingTable.pagination.total} tone="amber" />
-        <StatCard label="Entries" value={entriesTable.payload.summary?.journalCount || 0} tone="navy" />
-        <StatCard label="Consolidated PEN" value={formatCurrency(consolidated.pen, "PEN", language)} tone="green" />
-        <StatCard label="Reconciliation difference" value={formatCurrency(previewSummary.difference || 0, "PEN", language)} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "green" : "red"} />
+        <StatCard label="Pending fiscal processing" value={pendingTable.pagination.total} tone="warning" />
+        <StatCard label="Entries" value={entriesTable.payload.summary?.journalCount || 0} tone="neutral" />
+        <StatCard label="Consolidated PEN" value={formatCurrency(consolidated.pen, "PEN", language)} tone="success" />
+        <StatCard label="Reconciliation difference" value={formatCurrency(previewSummary.difference || 0, "PEN", language)} tone={Number(previewSummary.difference || 0) === 0 && previewSummary.balanced ? "success" : "danger"} />
       </div>
 
       <Tabs idPrefix="accounting" label="Sections" panels value={focusView} onChange={setFocusView} tabs={["Processing", "SUNAT exceptions", "Entries", "Consolidation", "History"].map((view) => ({ id: view, label: view }))} />

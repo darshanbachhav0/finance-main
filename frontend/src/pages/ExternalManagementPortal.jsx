@@ -70,11 +70,11 @@ export default function ExternalManagementPortal() {
       <Message type="error">{error}</Message>
       <div className="stats-grid management-kpis" aria-busy={loading}>
         <StatCard label="Pending requests" value={formatNumber(overview.pendingRequests, language)} tone="neutral" icon={ClipboardCheck} />
-        <StatCard label="Pending approvals" value={formatNumber(overview.pendingApprovals, language)} tone="amber" icon={CalendarClock} />
-        <StatCard label="Committed budget" value={money(budget.committedPEN)} tone="teal" icon={WalletCards} />
-        <StatCard label="Pending payments" value={money(overview.pendingPaymentAmountPEN)} tone="amber" icon={CircleDollarSign} />
-        <StatCard label="Paid this month" value={money(overview.paidThisMonth?.amountPEN)} tone="green" icon={CircleDollarSign} />
-        <StatCard label="Overdue approvals" value={formatNumber(overview.overdueApprovals, language)} tone="red" icon={TriangleAlert} />
+        <StatCard label="Pending approvals" value={formatNumber(overview.pendingApprovals, language)} tone="warning" icon={CalendarClock} />
+        <StatCard label="Committed budget" value={money(budget.committedPEN)} tone="accent" icon={WalletCards} />
+        <StatCard label="Pending payments" value={money(overview.pendingPaymentAmountPEN)} tone="warning" icon={CircleDollarSign} />
+        <StatCard label="Paid this month" value={money(overview.paidThisMonth?.amountPEN)} tone="success" icon={CircleDollarSign} />
+        <StatCard label="Overdue approvals" value={formatNumber(overview.overdueApprovals, language)} tone="danger" icon={TriangleAlert} />
       </div>
       <div className="analytics-grid management-charts">
         <AnalyticsChart title="Workflow position" description="Current request volume by controlled status." data={chartRows(data.workflow?.byStatus)} horizontal compact series={counts} valueFormatter={(value) => formatNumber(value, language)} loading={loading} />

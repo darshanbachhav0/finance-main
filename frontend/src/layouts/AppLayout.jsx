@@ -15,6 +15,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import { SIDEBAR_DRAWER_QUERY } from "../utils/breakpoints.js";
+import { toneOf } from "../utils/tones.js";
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
 import { bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
 import { navigationIcon } from "../utils/navigationIcons.js";
@@ -219,7 +220,7 @@ export default function AppLayout() {
                     {notifications.data.map((item) => (
                       <div key={item._id} className="notification-row">
                       <Link to={item.path || "/"} className={`task-item notification-item${item.readAt ? " is-read" : ""}`} onClick={() => { setTaskOpen(false); markNotificationRead(item); }}>
-                        <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "red" : item.type === "SLA_DUE_SOON" ? "amber" : item.readAt ? "neutral" : "teal"}`} />
+                        <span className={`task-indicator tone-${item.type === "SLA_ESCALATION" || item.type === "SLA_OVERDUE" ? "danger" : item.type === "SLA_DUE_SOON" ? "warning" : item.readAt ? "neutral" : "accent"}`} />
                         <span><strong>{notificationTitle(t, item)}</strong><small>{notificationMessage(t, item)}</small></span>
                       </Link>
                       <span className="notification-row-actions">
@@ -232,7 +233,7 @@ export default function AppLayout() {
                     <div className="notification-list-heading"><strong>{t("Pending tasks")}</strong></div>
                     {tasks.items.filter((item) => item.count > 0).map((item) => (
                       <Link key={item.key} to={item.path} className="task-item">
-                        <span className={`task-indicator tone-${item.tone}`} />
+                        <span className={`task-indicator tone-${toneOf(item.tone)}`} />
                         <span>{t(item.label)}</span>
                         <strong>{item.count}</strong>
                       </Link>
