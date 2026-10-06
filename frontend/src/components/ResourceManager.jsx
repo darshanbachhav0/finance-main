@@ -177,8 +177,8 @@ export default function ResourceManager({
       setConfirm(null);
       resourceTable.reload();
     } catch (err) {
-      setActionError(err.details ? `${err.message} ${JSON.stringify(err.details)}` : err.message);
-      notify(err.message, "error");
+      // The API client already lists validation details in the message (never raw JSON).
+      setActionError(err.message);
       setConfirm(null);
     } finally {
       setSaving(false);
@@ -199,6 +199,7 @@ export default function ResourceManager({
 
   async function remove() {
     setSaving(true);
+    setActionError("");
     try {
       await api.delete(`${endpoint}/${confirm.row._id}`);
       notify(deleteMode === "deactivate" ? "Record deactivated." : "Record permanently deleted.");
@@ -206,7 +207,6 @@ export default function ResourceManager({
       resourceTable.reload();
     } catch (err) {
       setActionError(err.message);
-      notify(err.message, "error");
       setConfirm(null);
     } finally {
       setSaving(false);
@@ -262,7 +262,7 @@ export default function ResourceManager({
           </>
         )}
       />
-      <Message type="error">{actionError || resourceTable.error}</Message>
+      <Message type="error">{(drawerOpen ? "" : actionError) || resourceTable.error}</Message>
       {renderBeforeTable?.({ rows, loading, reload: resourceTable.reload })}
       <div className="workspace-panel">
         <DataTable rows={rows} columns={normalizedColumns} loading={loading} filters={tableFilters} rowActions={actions} caption={title} remote={resourceTable.remote} />
@@ -270,6 +270,7 @@ export default function ResourceManager({
 
       <Drawer
         open={drawerOpen}
+        error={actionError}
         title={editing ? "Edit record" : "New record"}
         description={title}
         onClose={() => !saving && setDrawerOpen(false)}

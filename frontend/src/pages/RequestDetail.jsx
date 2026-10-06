@@ -185,6 +185,8 @@ export default function RequestDetail() {
   const [confirm, setConfirm] = useState(null);
   const [invoiceFiles, setInvoiceFiles] = useState(Object.fromEntries(invoiceDocumentFields.map((field) => [field.key, null])));
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
+  // Invoice registration errors stay next to the invoice form, far down the Documents tab.
+  const [invoiceError, setInvoiceError] = useState("");
 
   async function load() {
     setLoading(true);
@@ -280,6 +282,7 @@ export default function RequestDetail() {
 
   async function runAction(type, comments = "", forward) {
     setProcessing(true);
+    setError("");
     try {
       if (["approve", "observe", "return", "reject"].includes(type)) {
         await api.post(`/approvals/${id}/${type}`, type === "approve" && typeof forward === "boolean" ? { comments, forward } : { comments });
@@ -310,7 +313,6 @@ export default function RequestDetail() {
       await load();
     } catch (err) {
       setError(`${err.message}${err.code ? ` (${err.code})` : ""}`);
-      notify(err.message, "error");
       setConfirm(null);
     } finally {
       setProcessing(false);
@@ -319,13 +321,13 @@ export default function RequestDetail() {
 
   async function submitRequest() {
     setProcessing(true);
+    setError("");
     try {
       await api.post(`/requests/${id}/submit`);
       notify("Request submitted for approval.");
       await load();
     } catch (err) {
       setError(err.message);
-      notify(err.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -336,16 +338,18 @@ export default function RequestDetail() {
   async function submitInvoice(event) {
     event.preventDefault(); if (!invoiceDraft.ready || invoiceDraft.status === "conflict") return;
     const form = event.currentTarget;
+    setInvoiceError("");
     if (invoiceRequirements.some((item) => !item.kind || !invoiceDocumentFields.some((field) => field.kind === item.kind))) {
-      setError(t("Invoice document requirements could not be loaded correctly. Refresh the page; if this continues, contact Admin to review the document rules."));
+      setInvoiceError(t("Invoice document requirements could not be loaded correctly. Refresh the page; if this continues, contact Admin to review the document rules."));
       return;
     }
     const missingInvoiceFiles = invoiceRequirements.filter((requirement) => !invoiceFiles[invoiceDocumentFields.find((field) => field.kind === requirement.kind)?.key]);
     if (missingInvoiceFiles.length) {
-      setError(`${t("Required invoice documents are missing")}: ${missingInvoiceFiles.map((item) => t(invoiceDocumentFields.find((field) => field.kind === item.kind)?.label || item.labelKey || item.kind)).join(", ")}.`);
+      setInvoiceError(`${t("Required invoice documents are missing")}: ${missingInvoiceFiles.map((item) => t(invoiceDocumentFields.find((field) => field.kind === item.kind)?.label || item.labelKey || item.kind)).join(", ")}.`);
       return;
     }
     setInvoiceSubmitting(true);
+    setInvoiceError("");
     try {
       const data = new FormData();
       invoiceDocumentFields.forEach((field) => { if (invoiceFiles[field.key]) data.append(field.key, invoiceFiles[field.key]); });
@@ -356,8 +360,7 @@ export default function RequestDetail() {
       form.reset();
       await load();
     } catch (err) {
-      setError(`${err.message}${err.code ? ` (${err.code})` : ""}`);
-      notify(err.message, "error");
+      setInvoiceError(`${err.message}${err.code ? ` (${err.code})` : ""}`);
     } finally {
       setInvoiceSubmitting(false);
     }
@@ -491,6 +494,8 @@ export default function RequestDetail() {
     : null;
   const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && permissions.canObserve, permissions.canApprove && permissions.canReturn, permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
   const StickyIcon = stickyAction?.icon;
+  // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
+  const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
   const requestDescription = request.flowType === "C"
     ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
     : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
@@ -504,42 +509,24 @@ export default function RequestDetail() {
           <div className="page-actions">
             <Link className="text-link back-link" to="/requests"><ArrowLeft size={16} /><span>{t("Back to list")}</span></Link>
             <button type="button" className="icon-button" onClick={() => window.print()} aria-label={t("Print record")} title={t("Print record")}><Printer size={16} /></button>
-            {permissions.modifiable && <Link className="secondary-button" to={`/requests/${id}/edit`}><Pencil size={16} /><span>{t("Edit request")}</span></Link>}
-            {permissions.deletable && (
-              <button
-                type="button"
-                className="danger-button subtle"
-                onClick={() => setConfirm({
-                  type: "delete",
-                  title: "Permanently delete this request?",
-                  description: "Only a permitted draft or rejected record can be deleted. This cannot be undone.",
-                  confirmLabel: "Delete request",
-                  tone: "danger",
-                  details: [{ label: "Request", value: request.requestNumber }]
-                })}
-              >
-                <Trash2 size={16} /><span>{t("Delete")}</span>
-              </button>
-            )}
           </div>
         )}
       />
 
       <Message type="error">{error}</Message>
       <ReadinessPanel requestId={id} revision={request.updatedAt} />
-      {["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id) && <Link className="text-button" to={`/operations?source=${id}`}>{t("Prepare recurring drafts")}</Link>}
 
       <dl className="request-overview">
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
         <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
-        <div><dt>{t("Current status")}</dt><dd><FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact /></dd></div>
       </dl>
-      {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1])}</a></div>}
+      {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1] === "Documents" ? "Open documents" : "View actions")}</a></div>}
       {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
         ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
         : request.observation.detail)}</Message>}
-      <div className="stage-row">
+      <div className="stage-row" role="group" aria-label={t("Current status")}>
+        <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
@@ -548,6 +535,23 @@ export default function RequestDetail() {
 
       <div className="request-detail-layout">
         <div className="request-detail-main">
+          <div hidden={activeTab !== "Approvals"} className="workspace-panel timeline-panel">
+            <div className="section-heading"><div><h3>{t("Approval timeline")}</h3><p>{t("Electronic sign-offs, SLA dates, and workflow decisions.")}</p></div></div>
+            <ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
+          </div>
+
+          <div hidden={activeTab !== "History"} className="workspace-panel timeline-panel">
+            <div className="section-heading"><div><h3>{t("Immutable audit")}</h3><p>{t("Application audit records are append-only.")}</p></div></div>
+            <div className="compact-lines">
+              {(related.audit || []).slice().reverse().map((item) => (
+                <div key={item._id}>
+                  <span>{formatDateTime(item.createdAt, language)} · {item.user?.name || "System"}</span>
+                  <strong>{item.action}</strong>
+                </div>
+              ))}
+              {!related.audit?.length && <p>{t("No audit events available.")}</p>}
+            </div>
+          </div>
           <Section title="Requirement and justification" description="Official request identity, responsible area and business need.">
             <DefinitionGrid>
               <Definition label="Request type">{t(optionLabel(request.requestType, requestTypeLabels))}</Definition>
@@ -749,6 +753,7 @@ export default function RequestDetail() {
                   <span>{t("Remaining PO balance")}: {formatCurrency(order?.remainingAmount, order?.currency || request.currency, language)}</span>
                   <span>{t("The server validates SUNAT, anti-duplication and the PO ceiling before creating CXP.")}</span>
                 </div>
+                <Message type="error">{invoiceError}</Message>
                 <button className="primary-button" type="submit" disabled={invoiceSubmitting}><UploadCloud size={16} /><span>{t(invoiceSubmitting ? "Processing..." : "Validate and provision invoice")}</span></button>
               </form></DraftPanel>
             </Section>
@@ -783,7 +788,7 @@ export default function RequestDetail() {
                             await api.post(`/requests/${id}/invoice/${row._id}/replace`, { replacementId: values.get("replacementId"), reason: values.get("reason") });
                             notify("Invoice replacement recorded. Request progress updated.");
                             await load();
-                          } catch (err) { setError(err.message); notify(err.message, "error"); }
+                          } catch (err) { setError(err.message); }
                           finally { setReplacingInvoice(false); }
                         }}>
                           <label>{t("Posted replacement invoice")}<select name="replacementId" required defaultValue=""><option value="">{t("Select")}</option>{related.sunatVouchers.filter((item) => item.accountsPayable && !item.supersededBy).map((item) => <option key={item._id} value={item._id}>{item.seriesNumber}</option>)}</select></label>
@@ -927,7 +932,7 @@ export default function RequestDetail() {
         </div>
 
         <aside className="request-detail-side" id="request-actions">
-          {(permissions.modifiable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
+          {(canPrepareRecurring || permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
               <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
               {permissions.canWithdraw && (
@@ -938,8 +943,11 @@ export default function RequestDetail() {
               )}
               {permissions.modifiable && (
                 <div className="action-item">
-                  <div><strong>{t("Submit for approval")}</strong><span>{missingDocuments.length ? t("Required documents are incomplete.") : t("Starts the configured approval route.")}</span></div>
-                  <button type="button" className="primary-button" disabled={processing || missingDocuments.length > 0} title={missingDocuments.length ? t("Upload all required documents before submission.") : undefined} onClick={submitRequest}><Send size={16} /><span>{t("Submit")}</span></button>
+                  <div><strong>{t("Submit for approval")}</strong><span id="request-submit-reason">{missingDocuments.length ? t("Upload all required documents before submission.") : t("Starts the configured approval route.")}</span></div>
+                  <div className="action-item-buttons">
+                    <Link className="secondary-button" to={`/requests/${id}/edit`}><Pencil size={16} /><span>{t("Edit request")}</span></Link>
+                    <button type="button" className="primary-button" disabled={processing || missingDocuments.length > 0} aria-describedby="request-submit-reason" onClick={submitRequest}><Send size={16} /><span>{t("Submit")}</span></button>
+                  </div>
                 </div>
               )}
               {permissions.canApprove && (
@@ -965,6 +973,29 @@ export default function RequestDetail() {
               {permissions.canClose && (
                 <button type="button" className="primary-button" onClick={confirmClose}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
               )}
+              {canPrepareRecurring && (
+                <div className="action-item">
+                  <div><strong>{t("Prepare recurring drafts")}</strong><span>{t("Creates next months' drafts from this request; each one needs its own documents and approval.")}</span></div>
+                  <div className="action-item-buttons"><Link className="secondary-button" to={`/operations?source=${id}`}><span>{t("Prepare recurring drafts")}</span></Link></div>
+                </div>
+              )}
+              {(permissions.canVoid || permissions.deletable) && <div className="action-panel-danger">
+              {permissions.deletable && (
+                <button
+                  type="button"
+                  className="danger-button subtle"
+                  onClick={() => setConfirm({
+                    type: "delete",
+                    title: "Permanently delete this request?",
+                    description: "Only a permitted draft or rejected record can be deleted. This cannot be undone.",
+                    confirmLabel: "Delete request",
+                    tone: "danger",
+                    details: [{ label: "Request", value: request.requestNumber }]
+                  })}
+                >
+                  <Trash2 size={16} /><span>{t("Delete request")}</span>
+                </button>
+              )}
               {permissions.canVoid && (
                 <button type="button" className="danger-button subtle" onClick={() => setConfirm({
                   type: "void",
@@ -977,26 +1008,10 @@ export default function RequestDetail() {
                   details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes to ANULADO." }]
                 })}><Trash2 size={16} /><span>{t("Annul request")}</span></button>
               )}
+              </div>}
             </div>
           )}
 
-          <div hidden={activeTab !== "Approvals"} className="workspace-panel timeline-panel">
-            <div className="section-heading"><div><h3>{t("Approval timeline")}</h3><p>{t("Electronic sign-offs, SLA dates, and workflow decisions.")}</p></div></div>
-            <ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
-          </div>
-
-          <div hidden={activeTab !== "History"} className="workspace-panel timeline-panel">
-            <div className="section-heading"><div><h3>{t("Immutable audit")}</h3><p>{t("Application audit records are append-only.")}</p></div></div>
-            <div className="compact-lines">
-              {(related.audit || []).slice().reverse().map((item) => (
-                <div key={item._id}>
-                  <span>{formatDateTime(item.createdAt, language)} · {item.user?.name || "System"}</span>
-                  <strong>{item.action}</strong>
-                </div>
-              ))}
-              {!related.audit?.length && <p>{t("No audit events available.")}</p>}
-            </div>
-          </div>
         </aside>
       </div>
 
@@ -1019,6 +1034,7 @@ export default function RequestDetail() {
         inputLabel={confirm?.inputLabel}
         inputRequired={confirm?.inputRequired}
         loading={processing}
+        error={error}
         onClose={() => !processing && setConfirm(null)}
         onConfirm={(comments) => runAction(confirm.type, comments, confirm.forward)}
       />

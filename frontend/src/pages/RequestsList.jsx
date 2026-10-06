@@ -72,6 +72,7 @@ export default function RequestsList() {
 
   async function removeRequest() {
     setDeleting(true);
+    setActionError("");
     try {
       await api.delete(`/requests/${deleteRow._id}`);
       notify("Draft request permanently deleted.");
@@ -80,7 +81,6 @@ export default function RequestsList() {
       requestsTable.reload();
     } catch (err) {
       setActionError(err.message);
-      notify(err.message, "error");
     } finally {
       setDeleting(false);
     }
@@ -88,6 +88,7 @@ export default function RequestsList() {
 
   async function withdrawRequest(comments) {
     setWithdrawing(true);
+    setActionError("");
     try {
       await api.post(`/requests/${withdrawRow._id}/withdraw`, { comments });
       notify("Request withdrawn to draft. Edit it and submit it again when ready.");
@@ -96,7 +97,6 @@ export default function RequestsList() {
       requestsTable.reload();
     } catch (err) {
       setActionError(err.message);
-      notify(err.message, "error");
     } finally {
       setWithdrawing(false);
     }
@@ -111,7 +111,7 @@ export default function RequestsList() {
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}
       />
       <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
-      <Message type="error">{actionError || requestsTable.error}</Message>
+      <Message type="error">{(deleteRow || withdrawRow ? "" : actionError) || requestsTable.error}</Message>
       <div className="workspace-panel">
         <DataTable
           tableId="requests"
@@ -138,10 +138,9 @@ export default function RequestsList() {
           emptyTitle="No requests yet"
           emptyDescription={canCreate ? "Create a request to start its approval workflow." : "Requests appear here once they are submitted."}
           emptyAction={canCreate ? { label: "Create request", to: "/requests/new", icon: Plus } : undefined}
-          onRowClick={(row) => setQuickViewId(row._id)}
+          onRowClick={(row) => navigate(`/requests/${row._id}`)}
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
-            { label: "Open full details", icon: Eye, onClick: () => navigate(`/requests/${row._id}`) },
             // Next step: edit a draft or returned request; withdraw one still waiting for the jefe.
             { label: "Edit request", icon: Pencil, primary: true, hidden: !canModify(row), onClick: () => navigate(`/requests/${row._id}/edit`) },
             {
@@ -175,17 +174,19 @@ export default function RequestsList() {
       <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
       <ConfirmDialog
         open={Boolean(deleteRow)}
+        error={actionError}
         title="Permanently delete this request?"
         description="Only draft requests can be deleted. This action cannot be undone."
         details={deleteRow ? [{ label: "Request", value: deleteRow.requestNumber }, { label: "Result", value: "The request and its draft data will be permanently removed." }] : []}
         confirmLabel="Delete permanently"
         tone="danger"
         loading={deleting}
-        onClose={() => setDeleteRow(null)}
+        onClose={() => !deleting && setDeleteRow(null)}
         onConfirm={removeRequest}
       />
       <ConfirmDialog
         open={Boolean(withdrawRow)}
+        error={actionError}
         title="Withdraw this request?"
         description="Your first approver has not approved it yet. Withdrawing returns it to draft so you can edit it and submit it again; the approval restarts from the first approver."
         details={withdrawRow ? [{ label: "Request", value: withdrawRow.requestNumber }, { label: "Result", value: "Status changes to BORRADOR and the pending approval task is closed." }] : []}

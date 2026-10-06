@@ -4,7 +4,6 @@ import { useState } from "react";
 import api from "../api/client.js";
 import DataTable from "./DataTable.jsx";
 import Drawer from "./Drawer.jsx";
-import Message from "./Message.jsx";
 import StatusBadge from "./StatusBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
@@ -48,7 +47,7 @@ export default function SupplierCreditsPanel({ table, onChanged }) {
       setAction(null);
       table.reload();
       onChanged?.();
-    } catch (err) { setError(err.message); notify(err.message, "error"); }
+    } catch (err) { setError(err.message); }
     finally { setProcessing(false); }
   }
 
@@ -69,10 +68,9 @@ export default function SupplierCreditsPanel({ table, onChanged }) {
         { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
         { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) }
       ]} />
-      <Drawer open={Boolean(action)} title={action?.kind === "apply" ? "Apply supplier credit" : "Record supplier refund"} description={action ? `${action.credit.creditNoteSeriesNumber} · ${money(action.credit.currency, action.credit.remainingAmount)}` : ""} onClose={() => !processing && setAction(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setAction(null)}>{t("Cancel")}</button><button type="submit" form="supplier-credit-form" className="primary-button" disabled={processing || (action?.kind === "apply" ? !form.accountsPayableId : !form.bank || !form.reference)}><span>{t(processing ? "Processing..." : "Confirm")}</span></button></>}>
+      <Drawer open={Boolean(action)} error={error} title={action?.kind === "apply" ? "Apply supplier credit" : "Record supplier refund"} description={action ? `${action.credit.creditNoteSeriesNumber} · ${money(action.credit.currency, action.credit.remainingAmount)}` : ""} onClose={() => !processing && setAction(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setAction(null)}>{t("Cancel")}</button><button type="submit" form="supplier-credit-form" className="primary-button" disabled={processing || (action?.kind === "apply" ? !form.accountsPayableId : !form.bank || !form.reference)}><span>{t(processing ? "Processing..." : "Confirm")}</span></button></>}>
         {action && (
           <form id="supplier-credit-form" className="form-grid" onSubmit={submit}>
-            <Message type="error">{error}</Message>
             <label className="field"><span>{t("Amount")} *</span><input type="number" min="0.01" step="0.01" max={action.credit.remainingAmount} required value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
             {action.kind === "apply" ? (
               <label className="field"><span>{t("Unpaid invoice of the same supplier")} *</span>

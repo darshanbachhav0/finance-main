@@ -62,6 +62,7 @@ export default function ApprovalInbox() {
 
   async function decide(comments) {
     setProcessing(true);
+    setActionError("");
     try {
       const body = confirm.type === "approve" && typeof confirm.forward === "boolean" ? { comments, forward: confirm.forward } : { comments };
       const response = await api.post(`/approvals/${confirm.row._id}/${confirm.type}`, body);
@@ -78,7 +79,6 @@ export default function ApprovalInbox() {
       approvalTable.reload();
     } catch (err) {
       setActionError(err.details?.errors ? `${err.message} ${err.details.errors.join(" ")}` : err.message);
-      notify(err.message, "error");
       setConfirm(null);
     } finally {
       setProcessing(false);
@@ -195,6 +195,7 @@ export default function ApprovalInbox() {
 
   async function bulkApprove(comments) {
     setProcessing(true);
+    setActionError("");
     try {
       const body = { ids: selectedRows.map((row) => row._id), comments };
       // forward is only meaningful (and then required) when manager-chain rows are in the batch.
@@ -210,7 +211,6 @@ export default function ApprovalInbox() {
     } catch (err) {
       const listed = err.details?.requests?.map((item) => item.requestNumber).filter(Boolean) || [];
       setActionError(listed.length ? `${err.message} ${listed.join(", ")}` : err.message);
-      notify(err.message, "error");
       setBulkConfirm(null);
     } finally {
       setProcessing(false);
@@ -258,13 +258,13 @@ export default function ApprovalInbox() {
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
 
-            // Approve, send to my jefe and observe are visible in the Decision column; the menu keeps
-            // only what isn't shown there, with Reject last.
-            { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") },
-            { label: "Reject", icon: XCircle, tone: "danger", hidden: !hasAction(row, "REJECT"), onClick: () => openDecision(row, "reject") }
+            // Approve, send to my jefe, observe and reject are buttons in the Decision column; the
+            // menu keeps only what isn't shown there.
+            { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") }
           ]}
           columns={[
-            { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
+            { key: "requestNumber", type: "name", primary: true, label: "Request", render: (row) => <div className="primary-cell"><Link to={`/requests/${row._id}`}>{row.requestNumber}</Link><span>{row.title || row.description || ""}</span></div> },
+            { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.legalName || row.supplier?.name || (row.flowType === "C" ? t("No supplier (Track C)") : "-") },
             { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => t(row.approvalStage || "AREA_DIRECTOR") },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
             { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },

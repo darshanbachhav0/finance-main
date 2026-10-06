@@ -15,15 +15,17 @@ function BankFormatCertificationPanel({ rows, reload }) {
   const { notify } = useToast();
   const [busyId, setBusyId] = useState(null);
   const [reference, setReference] = useState({});
+  const [error, setError] = useState("");
 
   async function certify(row, certified) {
     setBusyId(row._id);
+    setError("");
     try {
       await api.post(`/bank-formats/${row._id}/certify`, { certified, certificationReference: reference[row._id] || "" });
       notify(certified ? "BBVA format certified." : "BBVA format certification removed.");
       reload();
     } catch (err) {
-      notify(err.message, "error");
+      setError(err.message);
     } finally {
       setBusyId(null);
     }
@@ -33,6 +35,7 @@ function BankFormatCertificationPanel({ rows, reload }) {
   return (
     <details className="workspace-panel" open>
       <summary>{t("BBVA certification")}</summary>
+      <Message type="error">{error}</Message>
       <p>{t("Certification is a separate, audited action from editing the format. Mark a format certified only after Treasury/BBVA formally accepts the generated PEN/USD test files. Files already generated keep the certification state that applied when they were created.")}</p>
       <div className="certification-list">
         {rows.map((row) => (
@@ -54,7 +57,7 @@ function BankFormatCertificationPanel({ rows, reload }) {
             {row.certified ? (
               <button type="button" className="secondary-button" disabled={busyId === row._id} onClick={() => certify(row, false)}>{t("Remove certification")}</button>
             ) : (
-              <button type="button" className="primary-button" disabled={busyId === row._id} onClick={() => certify(row, true)}>{t("Certify")}</button>
+              <button type="button" className="primary-button" disabled={busyId === row._id || !(reference[row._id] || "").trim()} onClick={() => certify(row, true)}>{t("Certify")}</button>
             )}
           </div>
         ))}

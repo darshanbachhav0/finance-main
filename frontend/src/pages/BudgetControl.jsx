@@ -143,7 +143,7 @@ export default function BudgetControl() {
       exceptionTable.reload();
       commitmentTable.reload();
       changeTable.reload();
-    } catch (err) { setError(err.message); notify(err.message, "error"); setConfirm(null); changeTable.reload(); } finally { setProcessing(false); }
+    } catch (err) { setError(err.message); setConfirm(null); changeTable.reload(); } finally { setProcessing(false); }
   }
 
   function exceptionActions(row) {

@@ -46,6 +46,7 @@ export default function BudgetExceptionDecisions({ queue }) {
   const sectionRef = useRef(null);
   const [confirm, setConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [actionError, setActionError] = useState("");
   const money = (value) => formatCurrency(value || 0, "PEN", language);
 
   // Task and notification links (/approvals#budget-exceptions) land on this section.
@@ -80,6 +81,7 @@ export default function BudgetExceptionDecisions({ queue }) {
 
   async function decide(comments) {
     setProcessing(true);
+    setActionError("");
     try {
       const response = await api.post(`/budget/exceptions/${confirm.row._id}/decision`, { status: confirm.status, comments });
       const increase = response.data?.data?.appliedIncrease?.amount;
@@ -89,7 +91,7 @@ export default function BudgetExceptionDecisions({ queue }) {
       setConfirm(null);
       await queue.reload();
     } catch (err) {
-      notify(err.message, "error");
+      setActionError(err.message);
       setConfirm(null);
       await queue.reload();
     } finally {
@@ -109,7 +111,7 @@ export default function BudgetExceptionDecisions({ queue }) {
           <Link className="text-link" to={ALL_EXCEPTIONS_PATH}>{t("View all exceptions")}</Link>
         </div>
       </div>
-      <Message type="error">{queue.error}</Message>
+      <Message type="error">{actionError || queue.error}</Message>
       <DataTable
         className="cards-narrow-only"
         controls={false}

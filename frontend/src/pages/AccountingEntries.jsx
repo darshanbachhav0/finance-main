@@ -56,6 +56,7 @@ export default function AccountingEntries() {
     event.preventDefault();
     if (!exceptionForm.reason.trim()) return;
     setExceptionSaving(true);
+    setActionError("");
     try {
       const requestId = exceptionTarget.request?._id || exceptionTarget.request;
       const response = await api.post(`/requests/${requestId}/invoice/${exceptionTarget._id}/manual-sunat-override`, { reason: exceptionForm.reason.trim(), evidenceReference: exceptionForm.evidenceReference.trim() });
@@ -63,7 +64,7 @@ export default function AccountingEntries() {
       setExceptionTarget(null);
       load();
       sunatTable.reload();
-    } catch (err) { setActionError(err.message); notify(err.message, "error"); }
+    } catch (err) { setActionError(err.message); }
     finally { setExceptionSaving(false); }
   }
   const entries = entriesTable.rows;
@@ -102,6 +103,7 @@ export default function AccountingEntries() {
 
   async function exportCsv() {
     setExporting(true);
+    setActionError("");
     try {
       const response = await api.get("/accounting/consolidation/export", { params: { period, format: "csv" }, responseType: "blob" });
       const url = URL.createObjectURL(response.data);
@@ -114,7 +116,6 @@ export default function AccountingEntries() {
       historyTable.reload();
     } catch (err) {
       setActionError(err.message);
-      notify(err.message, "error");
     } finally {
       setExporting(false);
     }
@@ -145,6 +146,7 @@ export default function AccountingEntries() {
     event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       const { igvDeductible, ...fiscal } = fiscalForm;
       await api.post(`/accounting/requests/${selectedRequest._id}/process`, {
@@ -160,7 +162,6 @@ export default function AccountingEntries() {
       window.dispatchEvent(new Event("erp:tasks-changed"));
     } catch (err) {
       setActionError(err.message);
-      notify(err.message, "error");
     } finally { setProcessing(false); }
   }
 
@@ -168,7 +169,7 @@ export default function AccountingEntries() {
     <section>
       <PageHeader title="Accounting Entries" description="Process fiscal documents, post balanced journals, reconcile the month, and retain export history." actions={<><Link className="secondary-button" to="/accounting/payables">{t("Accounts Payable")}</Link><Link className="secondary-button" to="/accounting/periods">{t("Manage periods")}</Link></>} />
       <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Accounting Mappings", "/configuration/accounting-mappings"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Accounting Accounts", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Management Reports", "/reports"]]} />
-      <Message type="error">{actionError || entriesTable.error || pendingTable.error || historyTable.error}</Message>
+      <Message type="error">{(selectedRequest || exceptionTarget ? "" : actionError) || entriesTable.error || pendingTable.error || historyTable.error}</Message>
 
       <div className="period-toolbar">
         <label className="field compact-period"><span>{t("Accounting period")}</span><MonthInput value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
@@ -258,7 +259,7 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <Drawer open={Boolean(selectedRequest)} title="Process account payable" description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : "Validate and create CXP")}</span></button></>}>
+      <Drawer open={Boolean(selectedRequest)} error={actionError} title="Process account payable" description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : "Validate and create CXP")}</span></button></>}>
         <div className="document-requirement required"><FileCheck2 size={20} /><div><strong>{t("Fiscal duplicate control")}</strong><p>{t("The system blocks repeated RUC + document type + series + number combinations.")}</p></div></div>
         <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelectedRequest(null)}><form id="fiscal-processing-form" className="form-grid two-column-form" onSubmit={processRequest}>
           <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option value="FACTURA">{t("FACTURA")}</option><option value="BOLETA">{t("BOLETA")}</option><option value="RXH">{t("RXH")}</option></select><small className="field-hint">{t("Credit and debit notes are registered against their original invoice from Accounts Payable.")}</small></label>
@@ -277,7 +278,7 @@ export default function AccountingEntries() {
         </form></DraftPanel>
       </Drawer>
 
-      <Drawer open={Boolean(exceptionTarget)} title="Approve manual SUNAT exception" description={exceptionTarget ? `${exceptionTarget.seriesNumber} · ${exceptionTarget.request?.requestNumber || ""}` : ""} onClose={() => !exceptionSaving && setExceptionTarget(null)} footer={<><button type="button" className="secondary-button" disabled={exceptionSaving} onClick={() => setExceptionTarget(null)}>{t("Cancel")}</button><button type="submit" form="sunat-exception-form" className="primary-button" disabled={exceptionSaving || !exceptionForm.reason.trim()}><ShieldCheck size={16} /><span>{t(exceptionSaving ? "Processing..." : "Approve exception")}</span></button></>}>
+      <Drawer open={Boolean(exceptionTarget)} error={actionError} title="Approve manual SUNAT exception" description={exceptionTarget ? `${exceptionTarget.seriesNumber} · ${exceptionTarget.request?.requestNumber || ""}` : ""} onClose={() => !exceptionSaving && setExceptionTarget(null)} footer={<><button type="button" className="secondary-button" disabled={exceptionSaving} onClick={() => setExceptionTarget(null)}>{t("Cancel")}</button><button type="submit" form="sunat-exception-form" className="primary-button" disabled={exceptionSaving || !exceptionForm.reason.trim()}><ShieldCheck size={16} /><span>{t(exceptionSaving ? "Processing..." : "Approve exception")}</span></button></>}>
         {exceptionTarget && <form id="sunat-exception-form" className="form-grid" onSubmit={approveException}>
           <div className="document-requirement required"><ShieldCheck size={20} /><div><strong>{t("Non-authoritative decision")}</strong><p>{exceptionTarget.observationDetail}</p><p>{t("The invoice will be posted and paid on Accounting's responsibility. It cannot override a supplier mismatch, a duplicate or the Purchase Order ceiling.")}</p></div></div>
           <label className="field"><span>{t("Reason")} *</span><textarea rows="3" required value={exceptionForm.reason} onChange={(event) => setExceptionForm({ ...exceptionForm, reason: event.target.value })} placeholder={t("For example: SUNAT CPE service unavailable; PDF checked against the supplier's portal.")} /></label>

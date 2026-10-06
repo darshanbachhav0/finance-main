@@ -87,7 +87,7 @@ export default function BulkInvoiceUpload() {
       setFile(null);
       notify("Batch accepted. Valid invoices will continue even when another invoice is observed.");
       batchTable.reload();
-    } catch (err) { setError(err.message); notify(err.message, "error"); }
+    } catch (err) { setError(err.message); }
     finally { setSubmitting(false); }
   }
 

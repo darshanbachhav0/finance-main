@@ -2,6 +2,7 @@ import useWorkDraft, { useDraftResume } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
 import {
   AlertTriangle,
+  ArrowLeft,
   Building2,
   Edit3,
   Eye,
@@ -18,13 +19,17 @@ import {
 } from "react";
 
 import {
+  Link,
+  useLocation,
   useNavigate,
+  useParams,
   useSearchParams
 } from "react-router-dom";
 
 import api from "../api/client.js";
 
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import Message from "../components/Message.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Drawer from "../components/Drawer.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -101,6 +106,13 @@ export default function Suppliers() {
     searchParams
   ] =
     useSearchParams();
+
+  const location = useLocation();
+  // A supplier record is its own page (/suppliers/:id); the list, notifications and resumed
+  // drafts open it there. Proposing and correcting a supplier still happen in a panel.
+  const { id: routeId } = useParams();
+  const recordId = /^[a-f0-9]{24}$/i.test(routeId || "") ? routeId : "";
+  const [actionError, setActionError] = useState("");
 
   // Every internal user can propose a supplier; Accounting validates and homologates it.
   const canPropose =
@@ -208,14 +220,23 @@ export default function Suppliers() {
 
   useEffect(
     () => {
-      if (linkedSupplierId) {
-        loadSupplier(
-          linkedSupplierId
-        );
+      if (linkedSupplierId && !recordId) {
+        navigate(`/suppliers/${linkedSupplierId}`, { replace: true });
       }
     },
     [
       linkedSupplierId
+    ]
+  );
+
+  useEffect(
+    () => {
+      if (recordId) {
+        loadSupplier(recordId, location.state?.mode || "view");
+      }
+    },
+    [
+      recordId
     ]
   );
 
@@ -482,10 +503,16 @@ export default function Suppliers() {
     id,
     mode = "view"
   ) {
+    if (id !== recordId) {
+      // Keeps draft-resume parameters (?workDraft=...) for the record page.
+      navigate(`/suppliers/${id}${location.search}`, { state: { mode } });
+      return;
+    }
     if (mode === "edit") setEntry(null);
+    setActionError("");
     setDrawer({
       open:
-        true,
+        mode !== "view",
 
       mode
     });
@@ -523,10 +550,7 @@ export default function Suppliers() {
     } catch (
       error
     ) {
-      notify(
-        error.message,
-        "error"
-      );
+      setActionError(error.message);
 
       setDrawer({
         open:
@@ -589,6 +613,7 @@ export default function Suppliers() {
     setSaving(
       true
     );
+    setActionError("");
 
     try {
       await work();
@@ -606,10 +631,7 @@ export default function Suppliers() {
     } catch (
       error
     ) {
-      notify(
-        error.message,
-        "error"
-      );
+      setActionError(error.message);
 
       return false;
     } finally {
@@ -1140,6 +1162,7 @@ export default function Suppliers() {
     setSaving(
       true
     );
+    setActionError("");
 
     try {
       const response =
@@ -1182,6 +1205,7 @@ export default function Suppliers() {
         return true;
       }
 
+      setDrawer({ open: false, mode: "view" });
       await loadSupplier(
         response
           .data
@@ -1194,10 +1218,7 @@ export default function Suppliers() {
     } catch (
       error
     ) {
-      notify(
-        error.message,
-        "error"
-      );
+      setActionError(error.message);
 
       return false;
     } finally {
@@ -1225,16 +1246,7 @@ export default function Suppliers() {
       success
     ) {
       await supplierDraft.complete();
-      setDrawer(
-        (
-          current
-        ) => ({
-          ...current,
-
-          mode:
-            "view"
-        })
-      );
+      setDrawer({ open: false, mode: "view" });
     }
 
     return success;
@@ -1444,147 +1456,13 @@ export default function Suppliers() {
             ?.name ||
           "Supplier Record";
 
-  return (
-    <div className="page-shell supplier-page">
-      <PageHeader
-        title="Supplier Master & Homologation"
-        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, Finance review, banking history and controlled PRV assignment."
-        actions={
-          <>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={
-                suppliers.reload
-              }
-            >
-              <RefreshCw
-                size={16}
-              />
-
-              <span>
-                {t(
-                  "Refresh"
-                )}
-              </span>
-            </button>
-
-            {
-              canPropose && (
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={
-                    startCreate
-                  }
-                >
-                  <Plus
-                    size={16}
-                  />
-
-                  <span>
-                    {t(
-                      "New supplier"
-                    )}
-                  </span>
-                </button>
-              )
-            }
-          </>
-        }
-      />
-
-      {
-        suppliers.error && (
-          <div
-            className="inline-alert alert-error"
-            role="alert"
-          >
-            {t(
-              "Supplier records could not be loaded."
-            )}
-            {" "}
-            {
-              suppliers.error
-            }
-          </div>
-        )
-      }
-
-      <DataTable
-        tableId="official-supplier-master"
-        caption="Supplier Master and Homologation"
-        columns={
-          columns
-        }
-        rows={
-          suppliers.rows
-        }
-        loading={
-          suppliers.loading
-        }
-        remote={
-          suppliers.remote
-        }
-        rowActions={
-          rowActions
-        }
-        onRowClick={
-          (row) =>
-            loadSupplier(
-              row._id,
-              "view"
-            )
-        }
-        filters={[
-          {
-            key:
-              "homologationStatus",
-
-            label:
-              "Homologation Status",
-
-            allLabel:
-              "All homologation statuses",
-
-            options: [
-              "PENDING_VALIDATION",
-              "HOMOLOGATED",
-              "OBSERVED",
-              "REJECTED",
-              "INACTIVE"
-            ]
-          },
-
-          {
-            key:
-              "complianceReviewResult",
-
-            label:
-              "Finance Review",
-
-            allLabel:
-              "All Finance review results",
-
-            options: [
-              "PENDING",
-              "APPROVED",
-              "OBSERVED",
-              "REJECTED"
-            ]
-          }
-        ]}
-        searchPlaceholder="Search by PRV, RUC, legal or commercial name..."
-        exportable
-        emptyTitle="No suppliers yet"
-        emptyDescription={canPropose ? "Propose a supplier to start its RCO-FOR-002 homologation." : "Suppliers appear here once they are proposed for homologation."}
-        emptyAction={canPropose ? { label: "New supplier", onClick: startCreate, icon: Plus } : undefined}
-      />
-
+  const modals = (
+    <>
       <Drawer
         open={
           drawer.open
         }
+        error={actionError}
         size="xlarge"
         title={
           drawerTitle
@@ -1950,9 +1828,67 @@ export default function Suppliers() {
           )
         }
 
+        </fieldset>
+      </Drawer>
+
+      <ConfirmDialog
+        open={
+          Boolean(
+            confirmation
+          )
+        }
+        title={
+          confirmation
+            ?.title
+        }
+        description={
+          confirmation
+            ?.description
+        }
+        confirmLabel={
+          confirmation
+            ?.confirmLabel
+        }
+        tone={
+          confirmation
+            ?.tone
+        }
+        details={
+          confirmation
+            ?.details ||
+          []
+        }
+        loading={
+          confirmation
+            ?.loading
+        }
+        error={actionError}
+        onConfirm={
+          runConfirmedAction
+        }
+        onClose={
+          () =>
+            !confirmation
+              ?.loading &&
+            setConfirmation(
+              null
+            )
+        }
+      />
+    </>
+  );
+
+  if (recordId) {
+    return (
+      <div className="page-shell supplier-page supplier-record-page">
+        <PageHeader
+          title={detail?._id === recordId ? detail.legalName || detail.name : "Supplier record"}
+          description={detail?._id === recordId ? [detail.rucDni && `RUC ${detail.rucDni}`, detail.supplierCode].filter(Boolean).join(" · ") : ""}
+          actions={<Link className="text-link back-link" to="/suppliers"><ArrowLeft size={16} aria-hidden="true" /><span>{t("Back to suppliers")}</span></Link>}
+        />
+        <Message type="error">{drawer.open || confirmation ? "" : actionError}</Message>
+        <fieldset className="work-draft-fields" disabled={saving}>
         {
-          drawer.mode ===
-            "view" &&
           loadingDetail && (
             <div className="supplier-detail-loading">
               <span className="skeleton skeleton-line" />
@@ -1963,8 +1899,6 @@ export default function Suppliers() {
         }
 
         {
-          drawer.mode ===
-            "view" &&
           detail &&
           !loadingDetail && (
             <SupplierDetail
@@ -1978,7 +1912,7 @@ export default function Suppliers() {
               loading={
                 saving
               }
-              onEdit={() => { setEntry(null); setDrawer(current => ({ ...current, mode: "edit" })); }}
+              onEdit={() => { setEntry(null); setActionError(""); setDrawer({ open: true, mode: "edit" }); }}
               onAddBank={
                 (bank) =>
                   mutate(
@@ -2181,51 +2115,149 @@ export default function Suppliers() {
           )
         }
         </fieldset>
-      </Drawer>
+        {modals}
+      </div>
+    );
+  }
 
-      <ConfirmDialog
-        open={
-          Boolean(
-            confirmation
-          )
-        }
-        title={
-          confirmation
-            ?.title
-        }
-        description={
-          confirmation
-            ?.description
-        }
-        confirmLabel={
-          confirmation
-            ?.confirmLabel
-        }
-        tone={
-          confirmation
-            ?.tone
-        }
-        details={
-          confirmation
-            ?.details ||
-          []
-        }
-        loading={
-          confirmation
-            ?.loading
-        }
-        onConfirm={
-          runConfirmedAction
-        }
-        onClose={
-          () =>
-            !confirmation
-              ?.loading &&
-            setConfirmation(
-              null
-            )
+  return (
+    <div className="page-shell supplier-page">
+      <PageHeader
+        title="Supplier Master & Homologation"
+        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, Finance review, banking history and controlled PRV assignment."
+        actions={
+          <>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={
+                suppliers.reload
+              }
+            >
+              <RefreshCw
+                size={16}
+              />
+
+              <span>
+                {t(
+                  "Refresh"
+                )}
+              </span>
+            </button>
+
+            {
+              canPropose && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={
+                    startCreate
+                  }
+                >
+                  <Plus
+                    size={16}
+                  />
+
+                  <span>
+                    {t(
+                      "New supplier"
+                    )}
+                  </span>
+                </button>
+              )
+            }
+          </>
         }
       />
+
+      {
+        suppliers.error && (
+          <div
+            className="inline-alert alert-error"
+            role="alert"
+          >
+            {t(
+              "Supplier records could not be loaded."
+            )}
+            {" "}
+            {
+              suppliers.error
+            }
+          </div>
+        )
+      }
+
+      <DataTable
+        tableId="official-supplier-master"
+        caption="Supplier Master and Homologation"
+        columns={
+          columns
+        }
+        rows={
+          suppliers.rows
+        }
+        loading={
+          suppliers.loading
+        }
+        remote={
+          suppliers.remote
+        }
+        rowActions={
+          rowActions
+        }
+        onRowClick={
+          (row) =>
+            loadSupplier(
+              row._id,
+              "view"
+            )
+        }
+        filters={[
+          {
+            key:
+              "homologationStatus",
+
+            label:
+              "Homologation Status",
+
+            allLabel:
+              "All homologation statuses",
+
+            options: [
+              "PENDING_VALIDATION",
+              "HOMOLOGATED",
+              "OBSERVED",
+              "REJECTED",
+              "INACTIVE"
+            ]
+          },
+
+          {
+            key:
+              "complianceReviewResult",
+
+            label:
+              "Finance Review",
+
+            allLabel:
+              "All Finance review results",
+
+            options: [
+              "PENDING",
+              "APPROVED",
+              "OBSERVED",
+              "REJECTED"
+            ]
+          }
+        ]}
+        searchPlaceholder="Search by PRV, RUC, legal or commercial name..."
+        exportable
+        emptyTitle="No suppliers yet"
+        emptyDescription={canPropose ? "Propose a supplier to start its RCO-FOR-002 homologation." : "Suppliers appear here once they are proposed for homologation."}
+        emptyAction={canPropose ? { label: "New supplier", onClick: startCreate, icon: Plus } : undefined}
+      />
+
+      {modals}
     </div>
   );
 }

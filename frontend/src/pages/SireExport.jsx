@@ -78,7 +78,6 @@ export default function SireExport() {
       historyTable.reload();
     } catch (err) {
       setError(err.message);
-      notify(err.message, "error");
     } finally {
       setExporting(false);
     }

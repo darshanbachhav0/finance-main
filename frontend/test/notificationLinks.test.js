@@ -34,7 +34,8 @@ assert.match(pages.BulkInvoiceUpload, /useDeepLink\(\["batch", "request"\]\)/);
 assert.match(pages.BulkInvoiceUpload, /openBatch\(\{ _id: target \}\)/);
 assert.match(pages.AccountsPayable, /setSelected\(row\)/);
 assert.match(pages.Suppliers, /searchParams\.get\("record"\)/);
-assert.match(pages.Suppliers, /loadSupplier\(\s*linkedSupplierId\s*\)/);
+// ?record= opens the supplier's own record page.
+assert.match(pages.Suppliers, /navigate\(`\/suppliers\/\$\{linkedSupplierId\}`, \{ replace: true \}\)/);
 for (const [name, source] of Object.entries(pages)) {
   if (name === "Suppliers") continue;
   assert.match(source, /<DeepLinkNotice /, `${name} tells the user it shows one linked record and offers the full list`);
