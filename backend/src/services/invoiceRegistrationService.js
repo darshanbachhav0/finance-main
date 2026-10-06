@@ -30,7 +30,7 @@ import {
 } from "./sunatVoucherService.js";
 import { isAdjustmentNote } from "../utils/voucherIdentity.js";
 import { runFinancialOperation } from "./transactionService.js";
-import { fileChecksum, parseInvoiceXml } from "./xmlValidationService.js";
+import { assertReadableVoucher, fileChecksum, parseInvoiceEvidence, parseInvoiceXml } from "./xmlValidationService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
@@ -357,12 +357,17 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
     const pdfFile = persisted.pdf?.[0] || persisted.feeReceipt?.[0];
     const conformityFile = persisted.conformity?.[0];
     const evidenceFiles = Object.fromEntries(Object.keys(invoiceAttachmentKinds).map((field) => [field, persisted[field]?.[0]]));
-    if (!xmlFile?.path) throw new AppError(422, "Invoice XML is required before accounting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
-    xmlFile.checksum ||= await fileChecksum(xmlFile.path);
-    const data = await parseInvoiceXml(xmlFile.path);
-    // The XML's own document type decides the path: a credit/debit note adjusts its original
+    // The invoice is read from its XML when there is one, otherwise from its factura PDF.
+    const evidenceFile = xmlFile?.path ? xmlFile : pdfFile;
+    if (!evidenceFile?.path) throw new AppError(422, "Upload the invoice XML or its factura PDF.", { missing: ["XML", "PDF"] }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
+    evidenceFile.checksum ||= await fileChecksum(evidenceFile.path);
+    const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
+    const source = xmlFile?.path ? "XML" : "PDF";
+    const data = source === "XML" ? await parseInvoiceXml(xmlFile.path) : assertReadableVoucher((await parseInvoiceEvidence(pdfFile.path, { expectedRuc })).data, "PDF");
+    // The document's own type decides the path: a credit/debit note adjusts its original
     // invoice (linked from the XML reference or chosen by the user) instead of creating a payable.
     if (isAdjustmentNote(data.voucherType)) {
+      if (source === "PDF") throw new AppError(422, "Credit and debit notes are registered from their XML. Upload the note's XML.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
       const result = await registerAdjustmentNote({ xmlFile, pdfFile, originalVoucherId, requestId: request._id, user, req });
       evidenceAdopted = true;
       const refreshed = await FinancialRequest.findById(request._id).populate("supplier");
@@ -378,11 +383,10 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
     };
     // Guard the period the invoice actually lands in (its document date).
     await guardAccountingPeriod({ period: invoicePostingPeriod(data.issueDate), action: "POST", user, req, module: "ACCOUNTING", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
-    const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
     const { duplicate, placeholder } = await reusablePlaceholder(voucher, request._id);
 
     if (!data.ruc || data.ruc !== expectedRuc) {
-      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "RUC_MISMATCH", detail: "The XML issuer RUC does not match the approved supplier.", xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
+      const result = await recordObservation({ request, purchaseOrder, voucher, status: "OBSERVED_SUNAT", requestStatus: REQUEST_STATUS.OBSERVED_SUNAT, code: "RUC_MISMATCH", detail: `The ${source === "PDF" ? "factura PDF" : "XML"} issuer RUC does not match the approved supplier.`, xmlFile, pdfFile, conformityFile, evidenceFiles, user, req, placeholder });
       evidenceAdopted = true;
       return result;
     }
@@ -486,15 +490,17 @@ export async function approveManualSunatException({ requestId, voucherId, reason
       const purchaseOrder = await PurchaseOrder.findOne({ request: request._id });
       if (!purchaseOrder) return deferredPosting(new Error("Purchase Order is required for Track A1 invoice matching."));
       const stored = await SunatVoucher.findById(voucher._id).select("+xmlPath +pdfPath");
-      if (!stored.xmlPath) return deferredPosting({ code: "ENOENT" });
-      const data = await parseInvoiceXml(stored.xmlPath);
+      const evidencePath = stored.xmlPath || stored.pdfPath;
+      if (!evidencePath) return deferredPosting({ code: "ENOENT" });
+      const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
+      const { source, data } = await parseInvoiceEvidence(evidencePath, { expectedRuc });
+      assertReadableVoucher(data, source);
       const parts = splitVoucherNumber(data.invoiceNumber);
       const invoice = { ...data, voucherType: data.voucherType || stored.voucherType, series: parts.series, number: parts.number, currency: data.currency || request.currency };
-      const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
-      if (data.ruc !== expectedRuc) return deferredPosting(new Error("The XML issuer RUC does not match the approved supplier."));
+      if (data.ruc !== expectedRuc) return deferredPosting(new Error(`The ${source === "PDF" ? "factura PDF" : "XML"} issuer RUC does not match the approved supplier.`));
       await guardAccountingPeriod({ period: invoicePostingPeriod(data.issueDate), action: "POST", user, req, module: "ACCOUNTING", entityType: "SunatVoucher", entityId: stored._id, requestId: request._id });
       await assertPurchaseOrderInvoiceFits(purchaseOrder._id, data.totalAmount, { currency: invoice.currency });
-      const xmlFile = { path: stored.xmlPath, url: stored.xmlUrl, checksum: stored.xmlChecksum };
+      const xmlFile = stored.xmlPath ? { path: stored.xmlPath, url: stored.xmlUrl, checksum: stored.xmlChecksum } : undefined;
       const pdfFile = stored.pdfPath ? { path: stored.pdfPath, url: stored.pdfUrl } : undefined;
       const result = await provisionA1Voucher({ request, purchaseOrder, voucher: invoice, data, sunatResult: manualExceptionEvidence(stored), xmlFile, pdfFile, user, req });
       return { ...outcome, voucher: result.sunatVoucher, provisioned: true, accountsPayable: result.accountsPayable, request: result.request };

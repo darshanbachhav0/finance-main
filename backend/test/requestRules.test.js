@@ -3,24 +3,22 @@ import test from "node:test";
 import { assertMandatoryDocuments, assertRequestLines, requiredDocumentsFor } from "../src/services/requestRules.js";
 import { MANDATORY_XML_TYPES } from "../src/utils/constants.js";
 
-test("mandatory invoice request types require both XML and PDF", () => {
-  const request = { flowType: "B", requestType: MANDATORY_XML_TYPES[0], attachments: [{ kind: "XML" }] };
+test("invoice request types need their invoice XML or its factura PDF, not both", () => {
+  const request = { flowType: "B", requestType: MANDATORY_XML_TYPES[0], attachments: [] };
   assert.throws(() => assertMandatoryDocuments(request), (error) => {
     assert.equal(error.statusCode, 422);
-    assert.match(error.message, /PDF/);
+    assert.match(error.message, /invoice XML or factura PDF/);
     return true;
   });
-
-  assert.doesNotThrow(() => assertMandatoryDocuments({
-    flowType: "B", requestType: MANDATORY_XML_TYPES[0],
-    attachments: [{ kind: "XML" }, { kind: "PDF" }]
-  }));
+  for (const attachments of [[{ kind: "XML" }], [{ kind: "PDF" }], [{ kind: "XML" }, { kind: "PDF" }]]) {
+    assert.doesNotThrow(() => assertMandatoryDocuments({ flowType: "B", requestType: MANDATORY_XML_TYPES[0], attachments }));
+  }
 });
 
 test("a stored invoice XML missing from disk is a clear 422, never a server error", async () => {
   const { parseInvoiceXml, fileChecksum } = await import("../src/services/xmlValidationService.js");
   for (const read of [parseInvoiceXml, fileChecksum]) {
-    await assert.rejects(() => read("/tmp/uma-finance/uploads/requests/missing/gone.xml"), (error) => error.statusCode === 422 && error.code === "STORED_FILE_MISSING" && /Upload the same XML/.test(error.message));
+    await assert.rejects(() => read("/tmp/uma-finance/uploads/requests/missing/gone.xml"), (error) => error.statusCode === 422 && error.code === "STORED_FILE_MISSING" && /Upload it again/.test(error.message));
   }
 });
 

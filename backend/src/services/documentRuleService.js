@@ -21,14 +21,37 @@ function canonicalNature(value) { return LEGACY_EXPENSE_NATURE_MAP[value] || val
 // silently reintroduce the old three-quotation gate.
 export const QUOTATION_MINIMUM_COUNT = 1;
 function normalizeRequirement(requirement) {
-  return requirement.kind === "QUOTATION"
-    ? { kind: requirement.kind, labelKey: "at least one quotation", minCount: QUOTATION_MINIMUM_COUNT }
-    : { kind: requirement.kind, minCount: requirement.minCount, labelKey: requirement.labelKey };
+  if (requirement.kind === "QUOTATION") return { kind: requirement.kind, labelKey: "at least one quotation", minCount: QUOTATION_MINIMUM_COUNT };
+  if (requirement.kind === INVOICE_EVIDENCE) return { kind: INVOICE_EVIDENCE, anyOf: [...requirement.anyOf], minCount: 1, labelKey: requirement.labelKey };
+  return { kind: requirement.kind, minCount: requirement.minCount, labelKey: requirement.labelKey };
+}
+
+// Product decision: the invoice is evidenced by its XML or by its factura PDF; at least one is
+// required, never both. If the XML is there it is verified as before, otherwise the PDF is read
+// (xmlValidationService.parseInvoiceEvidence). Rules that list XML and/or PDF (or the fee receipt)
+// - including DocumentRule records stored before this decision - collapse here into one
+// requirement any of those files satisfies, so no configuration can make the XML compulsory again.
+export const INVOICE_EVIDENCE = "INVOICE";
+const EVIDENCE_KINDS = ["XML", "PDF", "FEE_RECEIPT"];
+function invoiceEvidenceRequirement(kinds) {
+  const anyOf = EVIDENCE_KINDS.filter((kind) => kinds.has(kind));
+  if (anyOf.length === 1 && anyOf[0] === "XML") anyOf.push("PDF");
+  const feeReceipt = anyOf.includes("FEE_RECEIPT");
+  return { kind: INVOICE_EVIDENCE, anyOf, minCount: 1, labelKey: feeReceipt ? "electronic fee receipt (XML or PDF)" : "invoice XML or factura PDF" };
+}
+// Stored rules hand over Mongoose subdocuments; spreading one would lose its fields.
+const plainRequirement = (item) => (typeof item?.toObject === "function" ? item.toObject() : { ...item });
+function collapseInvoiceEvidence(input) {
+  const requirements = input.map(plainRequirement);
+  const kinds = new Set(requirements.filter((item) => EVIDENCE_KINDS.includes(item.kind)).map((item) => item.kind));
+  for (const item of requirements) if (item.kind === INVOICE_EVIDENCE) item.anyOf.forEach((kind) => kinds.add(kind));
+  const rest = requirements.filter((item) => !EVIDENCE_KINDS.includes(item.kind) && item.kind !== INVOICE_EVIDENCE);
+  return kinds.size ? [...rest, invoiceEvidenceRequirement(kinds)] : rest;
 }
 
 function mergeRequirements(requirements) {
   const merged = new Map();
-  for (const requirement of requirements.map(normalizeRequirement)) {
+  for (const requirement of collapseInvoiceEvidence(requirements).map(normalizeRequirement)) {
     const current = merged.get(requirement.kind);
     if (!current || requirement.minCount > current.minCount) merged.set(requirement.kind, requirement);
   }
@@ -41,32 +64,31 @@ const goodsNatures = new Set([
 ]);
 
 function requirement(kind, labelKey, minCount = 1) { return { kind, minCount, labelKey }; }
+function invoiceEvidence(kinds = ["XML", "PDF"]) { return invoiceEvidenceRequirement(new Set(kinds)); }
 
 export function defaultDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
   const flowType = request.flowType || FLOW_TYPE.A1;
   const nature = canonicalNature(request.expenseNature);
-  if (flowType === FLOW_TYPE.B) return phase === DOCUMENT_PHASE.SUBMISSION
-    ? [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")] : [];
-  if (flowType === FLOW_TYPE.A2) return phase === DOCUMENT_PHASE.INVOICE_REGISTRATION
-    ? [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")] : [];
+  if (flowType === FLOW_TYPE.B) return phase === DOCUMENT_PHASE.SUBMISSION ? [invoiceEvidence()] : [];
+  if (flowType === FLOW_TYPE.A2) return phase === DOCUMENT_PHASE.INVOICE_REGISTRATION ? [invoiceEvidence()] : [];
   // An undocumented reimbursement (REEMBOLSO_SIN_SUSTENTO) is, by definition, backed by
   // the signed declaration rather than receipts, so no default rendition file is required.
   if (flowType === FLOW_TYPE.C) return phase === DOCUMENT_PHASE.RENDITION && canonicalType(request.requestType) !== "REEMBOLSO_SIN_SUSTENTO"
     ? [requirement("RENDITION", "rendition supporting documents")] : [];
   if (nature === EXPENSE_NATURE.PROFESSIONAL_FEES) {
     if (phase === DOCUMENT_PHASE.SUBMISSION) return [requirement("CONTRACT", "contract or service agreement")];
-    if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [requirement("XML", "electronic fee receipt XML"), requirement("FEE_RECEIPT", "Recibo por Honorarios")];
+    if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [invoiceEvidence(["XML", "FEE_RECEIPT"])];
     if (phase === DOCUMENT_PHASE.ACCOUNTING) return [requirement("ACTIVITY_REPORT", "activity report")];
     return [];
   }
   if (goodsNatures.has(nature)) {
     if (phase === DOCUMENT_PHASE.SUBMISSION) return [requirement("QUOTATION", "at least one quotation", QUOTATION_MINIMUM_COUNT)];
-    if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")];
+    if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [invoiceEvidence()];
     if (phase === DOCUMENT_PHASE.ACCOUNTING) return [requirement("CONFORMITY", "goods conformity or reception evidence")];
     return [];
   }
   if (phase === DOCUMENT_PHASE.SUBMISSION) return [requirement("CONTRACT", "service or contract documentation")];
-  if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [requirement("XML", "invoice XML"), requirement("PDF", "invoice PDF")];
+  if (phase === DOCUMENT_PHASE.INVOICE_REGISTRATION) return [invoiceEvidence()];
   if (phase === DOCUMENT_PHASE.ACCOUNTING) return [requirement("CONFORMITY", "service conformity")];
   return [];
 }
@@ -154,8 +176,9 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
 
 export function validateDocumentRequirements(request, requirements, attachments = request.attachments || []) {
   const counts = attachments.reduce((map, attachment) => { map.set(attachment.kind, (map.get(attachment.kind) || 0) + 1); return map; }, new Map());
-  const evaluated = requirements.map(normalizeRequirement).map((item) => ({ ...item, present: counts.get(item.kind) || 0 }));
-  const missing = evaluated.filter((item) => item.present < item.minCount).map((item) => ({ kind: item.kind, required: item.minCount, present: item.present, label: item.labelKey }));
+  const evaluated = collapseInvoiceEvidence(requirements).map(normalizeRequirement)
+    .map((item) => ({ ...item, present: (item.anyOf || [item.kind]).reduce((sum, kind) => sum + (counts.get(kind) || 0), 0) }));
+  const missing = evaluated.filter((item) => item.present < item.minCount).map((item) => ({ kind: item.kind, ...(item.anyOf ? { anyOf: item.anyOf } : {}), required: item.minCount, present: item.present, label: item.labelKey }));
   return { valid: missing.length === 0, requirements: evaluated, missing };
 }
 

@@ -20,7 +20,7 @@ import {
   voucherIdentity
 } from "./sunatVoucherService.js";
 import { runFinancialOperation } from "./transactionService.js";
-import { assertVoucherXmlMatches, fileChecksum, parseInvoiceXml } from "./xmlValidationService.js";
+import { assertVoucherEvidenceMatches, fileChecksum, parseInvoiceXml } from "./xmlValidationService.js";
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES, FLOW_TYPE } from "../utils/constants.js";
 import { addMoney, moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
@@ -197,7 +197,7 @@ export async function applyAdjustmentNote({ noteVoucherId, user, req }) {
   const net = roundMoney(note.netAmount ?? subtractMoney(total, igv));
   const rate = Number(accountsPayable.exchangeRate || 1);
   if (note.xmlPath) {
-    await assertVoucherXmlMatches(note.xmlPath, { ruc: note.rucIssuer, series: note.series, number: note.number, issueDate: note.issueDate, currency: note.currency || accountsPayable.currency, netAmount: note.netAmount, igvAmount: note.igvAmount, totalAmount: note.xmlAmount });
+    await assertVoucherEvidenceMatches(note.xmlPath, { ruc: note.rucIssuer, series: note.series, number: note.number, issueDate: note.issueDate, currency: note.currency || accountsPayable.currency, netAmount: note.netAmount, igvAmount: note.igvAmount, totalAmount: note.xmlAmount });
   }
   const period = invoicePostingPeriod(note.issueDate);
   await guardAccountingPeriod({ period, action: "POST", user, req, module: "ACCOUNTING", entityType: "AccountsPayable", entityId: accountsPayable._id, requestId: request._id });

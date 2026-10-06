@@ -80,9 +80,9 @@ function requesterId(request) {
   return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
 }
 
-function requiresFiscalXml(request) {
-  // A1 invoices are attached only after the PO is issued and conformity is
-  // recorded. The request approval gate requires fiscal XML only for Track B.
+function requiresVerifiedInvoice(request) {
+  // A1 invoices are attached only after the PO is issued and conformity is recorded. The request
+  // approval gate requires a verified invoice (its XML or factura PDF) only for Track B.
   return request.flowType === FLOW_TYPE.B;
 }
 
@@ -133,7 +133,7 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
 
   if ([REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.BUDGET_COMMITTED].includes(targetStatus)) {
     await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
-    if (requiresFiscalXml(request) && !request.xmlValidation?.validated) throw new AppError(422, "A valid XML fiscal document is required.", { requestType: request.requestType, flowType: request.flowType }, ERROR_CODES.XML_VALIDATION_FAILED);
+    if (requiresVerifiedInvoice(request) && !request.xmlValidation?.validated) throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType, flowType: request.flowType }, ERROR_CODES.XML_VALIDATION_FAILED);
   }
 
   if (targetStatus === REQUEST_STATUS.BUDGET_COMMITTED && !request.budgetCommitment) throw new AppError(422, "A budget commitment is required before this transition.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);

@@ -35,7 +35,7 @@ import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { assertSupplierEligibleForRequestReview, assertSupplierUsable } from "./supplierService.js";
 import { transitionRequest, canTransition } from "./workflowService.js";
-import { validateXmlAgainstRequest } from "./xmlValidationService.js";
+import { latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
 import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
@@ -546,9 +546,11 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   // After the exchange rate and totals exist, so the Track B cap sees the real PEN amount.
   if (validateSubmission) await assertTrackEligible(request);
 
-  const xmlAttachment = [...(request.attachments || [])].reverse().find((attachment) => attachment.kind === "XML");
+  // Track B carries its invoice: the XML when there is one, otherwise the factura PDF. Other tracks
+  // check an XML attached early, as before; their invoice is registered later.
+  const xmlAttachment = request.flowType === FLOW_TYPE.B ? latestInvoiceEvidence(request.attachments) : latestInvoiceEvidence((request.attachments || []).filter((attachment) => attachment.kind === "XML"));
   if (xmlAttachment) {
-    request.xmlValidation = await validateXmlAgainstRequest(xmlAttachment.path, {
+    request.xmlValidation = await validateInvoiceAgainstRequest(xmlAttachment.path, {
       supplier,
       fiscalData: request.fiscalData,
       currency: request.currency,
@@ -609,7 +611,7 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
     }
     await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
     if (request.flowType === FLOW_TYPE.B && !request.xmlValidation?.validated) {
-      throw new AppError(422, "A valid XML fiscal document is required.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
+      throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
     }
   }
   return { supplier, files };
