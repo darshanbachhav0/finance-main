@@ -3,20 +3,25 @@ import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
+import Message from "./Message.jsx";
+import useFreshError from "../hooks/useFreshError.js";
 
-export default function Drawer({ open, title, description, size = "medium", children, footer, onClose }) {
+// `error`: why the panel's last action failed, shown above its buttons so it is seen where the
+// person acted (the page behind the panel is covered).
+export default function Drawer({ open, title, description, size = "medium", children, footer, error, onClose }) {
   const { t } = useLanguage();
   const closeRef = useRef(null);
   const drawerRef = useRef(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
-  const contentRef = useRef({ title, description, children, footer });
+  const contentRef = useRef({ title, description, children, footer, error });
   const { shouldRender, phase } = useAnimatedPresence(open, 180);
+  const freshError = useFreshError(open, error);
 
   onCloseRef.current = onClose;
-  if (open) contentRef.current = { title, description, children, footer };
-  const content = open ? { title, description, children, footer } : contentRef.current;
+  if (open) contentRef.current = { title, description, children, footer, error: freshError };
+  const content = open ? { title, description, children, footer, error: freshError } : contentRef.current;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -61,6 +66,7 @@ export default function Drawer({ open, title, description, size = "medium", chil
           </button>
         </header>
         <div className="drawer-body">{content.children}</div>
+        {content.error && <div className="drawer-error"><Message type="error">{content.error}</Message></div>}
         {content.footer && <footer className="drawer-footer">{content.footer}</footer>}
       </aside>
     </div>, document.body

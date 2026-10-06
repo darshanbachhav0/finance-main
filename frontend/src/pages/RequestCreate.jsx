@@ -553,7 +553,6 @@ export default function RequestCreate() {
     if (Object.keys(nextErrors).length) {
       const summary = validationSummary(nextErrors, t);
       setError(summary);
-      notify(summary, "error", { duration: 12000 });
       validationFocusRef.current = window.requestAnimationFrame(() => {
         const error = window.document.querySelector(".field-error-text");
         error?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -577,7 +576,6 @@ export default function RequestCreate() {
       setStep(firstInvalid);
       const summary = validationSummary(Object.assign({}, ...validations), t);
       setError(summary);
-      notify(summary, "error", { duration: 12000 });
       return;
     }
     setSaving(true);
@@ -620,7 +618,6 @@ export default function RequestCreate() {
       navigate(`/requests/${response.data.data._id}`);
     } catch (err) {
       setError(err.message);
-      notify(err.message, "error");
     } finally {
       setSaving(false);
     }
@@ -640,7 +637,6 @@ export default function RequestCreate() {
       actions={null}
     />
     <DraftPanel busy={saving} draft={draft} onDiscard={() => { localStorage.removeItem(draftKey); navigate("/requests"); }}>
-    <Message type="error">{error}</Message>
     <ReadinessPanel payload={{ ...form, lines, quotations: quotations.map(q => ({ ...q, attachment: quotationFiles[q.clientId] ? "preview-only" : q.attachment })), attachments: [...existingAttachments, ...Object.values(quotationFiles).filter(Boolean).map(file => ({ kind: "QUOTATION", name: file.name, url: "preview-only" })), ...documentDefinitions.flatMap(def => (files[def.key] || []).map(file => ({ kind: def.kind, name: file.name, url: "preview-only" })))] }} />
     {step === 2 && <InvoiceXmlPreview expected={{ ruc: selectedSupplier?.rucDni, currency: form.currency, netAmount: totals.net, igvAmount: totals.igv, totalAmount: totals.total }} />}
 
@@ -756,6 +752,7 @@ export default function RequestCreate() {
         {step === 3 && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div>{form.flowType === "A1" && quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}<div className="review-layout"><div className="review-section"><div className="section-heading compact"><h3>{t("Requirement")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Operational track")}</dt><dd>{t(optionLabel(form.flowType, flowTypeLabels))}</dd></div><div><dt>CAPEX / OPEX</dt><dd>{form.flowType === "C" ? t(form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "Non-deductible - undocumented reimbursement" : "Defined at rendition validation") : t(form.requestType)}</dd></div>{form.flowType === "C" && <div><dt>{t("Track C request type")}</dt><dd>{t(trackCRequestTypeLabels[form.requestType] || form.requestType)}</dd></div>}<div><dt>{t("CECO")}</dt><dd>{masters.costCenters.find((item) => item._id === form.requesterCostCenter)?.code || "-"}</dd></div><div><dt>{t("Title")}</dt><dd>{form.title || "-"}</dd></div><div><dt>{t("Priority")}</dt><dd>{t(form.priority)}</dd></div><div className="wide"><dt>{t("Business justification")}</dt><dd>{form.businessJustification || "-"}</dd></div><div className="wide"><dt>{t("Risk if not approved")}</dt><dd>{form.nonApprovalRisk || "-"}</dd></div></dl></div><div className="review-section"><div className="section-heading compact"><h3>{t("Items and totals")}</h3><button type="button" className="text-button" onClick={() => setStep(0)}>{t("Edit")}</button></div><div className="review-lines">{lines.map((line, index) => <div key={line.clientId}><span>{index + 1}</span><div><strong>{line.itemDescription || t("Accounting line")}</strong><small>{masters.costCenters.find((item) => item._id === line.costCenter)?.code} - {masters.costCenters.find((item) => item._id === line.costCenter)?.name}</small></div><strong>{formatCurrency(line.totalAmount, form.currency, language)}</strong></div>)}</div><div className="review-total"><span>{t("Total amount")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div></div>{form.flowType !== "C" && <div className="review-section"><div className="section-heading compact"><h3>{t("Recommended supplier")}</h3><button type="button" className="text-button" onClick={() => setStep(1)}>{t("Edit")}</button></div>{selectedSupplier ? <div className="recommended-summary"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /><p>{form.supplierSelectionReason || "-"}</p></div> : <p>{t("No recommended supplier selected.")}</p>}</div>}<div className="review-section"><div className="section-heading compact"><h3>{t("Budget and documents")}</h3><button type="button" className="text-button" onClick={() => setStep(2)}>{t("Edit")}</button></div><dl className="detail-grid"><div><dt>{t("Budget status")}</dt><dd><StatusBadge status={budgetPreview.status} /></dd></div><div><dt>{t("Quotation evidence")}</dt><dd>{quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length}/{quotations.length}</dd></div><div><dt>{t("Other documents")}</dt><dd>{existingAttachments.filter((item) => item.kind !== "QUOTATION").length + Object.values(files).flat().length}</dd></div></dl></div></div></div>}
 
         </MotionSurface>
+      <div className="wizard-error"><Message type="error">{error}</Message></div>
       <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => setStep((current) => Math.max(0, current - 1))}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{step < 3 ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit for approval")}</span></button>}</div></footer>
       </div>
     </div>

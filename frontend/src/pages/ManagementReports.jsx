@@ -104,7 +104,6 @@ export default function ManagementReports() {
       await load();
     } catch (err) {
       setError(err.message);
-      notify(err.message, "error");
     } finally {
       setExporting(false);
     }

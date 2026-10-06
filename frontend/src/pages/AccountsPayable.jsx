@@ -72,6 +72,7 @@ export default function AccountsPayable() {
 
   async function confirmCancel(reason) {
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/accounting/accounts-payable/${cancelTarget._id}/cancel`, { reason });
       notify("CXP cancelled. The reversal was posted, the Purchase Order balance restored and the voucher annulled.");
@@ -80,7 +81,6 @@ export default function AccountsPayable() {
       creditTable.reload();
     } catch (err) {
       setActionError(err.message);
-      notify(err.message, "error");
       setCancelTarget(null);
     } finally { setProcessing(false); }
   }
@@ -103,7 +103,7 @@ export default function AccountsPayable() {
       setNoteTarget(null);
       payableTable.reload();
       creditTable.reload();
-    } catch (err) { setActionError(err.message); notify(err.message, "error"); }
+    } catch (err) { setActionError(err.message); }
     finally { setProcessing(false); }
   }
 
@@ -211,7 +211,7 @@ export default function AccountsPayable() {
 
       <Message type="error">
         {
-          actionError || payableTable.error
+          (noteTarget ? "" : actionError) || payableTable.error
         }
       </Message>
 
@@ -1386,6 +1386,7 @@ export default function AccountsPayable() {
 
       <Drawer
         open={Boolean(noteTarget)}
+        error={actionError}
         title="Register credit/debit note"
         description={noteTarget ? `${noteTarget.voucher?.series || ""}-${noteTarget.voucher?.number || ""} · ${noteTarget.request?.requestNumber || ""}` : ""}
         onClose={() => !processing && setNoteTarget(null)}
@@ -1393,7 +1394,6 @@ export default function AccountsPayable() {
       >
         {noteTarget && (
           <form id="adjustment-note-form" className="form-grid" onSubmit={submitNote}>
-            <Message type="error">{actionError}</Message>
             <p>{t("A credit note reduces this invoice's unpaid balance; if the invoice was already paid, the paid part becomes a supplier credit that can be recovered or applied to a future invoice. A debit note increases this invoice's payable. The note is linked to this invoice and must reference it if its XML has a reference.")}</p>
             <label className="field"><span>{t("Note XML")} *</span><input type="file" accept=".xml" required onChange={(event) => setNoteFiles({ ...noteFiles, xml: event.target.files?.[0] || null })} /></label>
             <label className="field"><span>{t("Note PDF")}</span><input type="file" accept=".pdf" onChange={(event) => setNoteFiles({ ...noteFiles, pdf: event.target.files?.[0] || null })} /></label>

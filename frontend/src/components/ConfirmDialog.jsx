@@ -3,6 +3,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
+import Message from "./Message.jsx";
+import useFreshError from "../hooks/useFreshError.js";
 
 export default function ConfirmDialog({
   open,
@@ -17,6 +19,8 @@ export default function ConfirmDialog({
   inputRequired = false,
   inputPlaceholder,
   loading = false,
+  // Why the confirmed action failed; shown above the buttons while the dialog stays open.
+  error,
   onConfirm,
   onClose
 }) {
@@ -32,6 +36,7 @@ export default function ConfirmDialog({
   const previousFocusRef = useRef(null);
   const contentRef = useRef({ title, description, details, confirmLabel, cancelLabel, tone, inputLabel, inputType, inputRequired, inputPlaceholder });
   const { shouldRender, phase } = useAnimatedPresence(open, 170);
+  const freshError = useFreshError(open, error);
 
   onCloseRef.current = onClose;
   if (open) contentRef.current = { title, description, details, confirmLabel, cancelLabel, tone, inputLabel, inputType, inputRequired, inputPlaceholder };
@@ -137,6 +142,7 @@ export default function ConfirmDialog({
             {content.inputRequired && !inputValue.trim() && <small className="field-hint">{t(content.inputType === "text" ? "Enter a value to continue." : "A comment is required to continue.")}</small>}
           </label>
         )}
+        {freshError && <div className="dialog-error"><Message type="error">{freshError}</Message></div>}
         <footer className="dialog-actions">
           <button ref={cancelRef} type="button" className="secondary-button" onClick={onClose} disabled={loading}>{t(content.cancelLabel)}</button>
           <button

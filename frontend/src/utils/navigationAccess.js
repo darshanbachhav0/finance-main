@@ -250,7 +250,7 @@ const pageParents = Object.freeze({
 });
 
 // Breadcrumb trail for a location: [{ label, path }] from the dashboard down to the current page,
-// whose entry has no path. Request records use generic labels ("Request details").
+// whose entry has no path. Records use generic labels ("Request details", "Supplier record").
 export function pageTrail(pathname, user) {
   const role = user?.role;
   const home = { label: pageLabel("/", role), path: "/" };
@@ -263,6 +263,8 @@ export function pageTrail(pathname, user) {
       ? [home, requests, { label: "Request details", path: `/requests/${request[1]}` }, { label: "Edit request" }]
       : [home, requests, { label: "Request details" }];
   }
+  const supplier = path.match(/^\/suppliers\/([^/]+)$/);
+  if (supplier) return [home, { label: pageLabel("/suppliers", role), path: "/suppliers" }, { label: "Supplier record" }];
   const ancestors = [];
   for (let parent = pageParents[path]; parent; parent = pageParents[parent]) ancestors.unshift({ label: pageLabel(parent, role), path: parent });
   // Users without the Settings page itself (a single settings page) skip that level.

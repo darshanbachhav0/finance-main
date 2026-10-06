@@ -26,8 +26,13 @@ test("row details open in an accessible side panel instead of an inline disclosu
   assert.match(drawer, /event\.key === "Escape"/);
   assert.match(drawer, /event\.key !== "Tab"/);
   assert.match(drawer, /previousFocusRef\.current\?\.focus/);
-  // Pages with a request quick view keep it on row click.
-  for (const page of ["RequestsList", "ApprovalInbox"]) assert.match(source(`../src/pages/${page}.jsx`), /onRowClick=\{\(row\) => setQuickViewId\(row\._id\)\}/, page);
+  // Approvers preview a request from the inbox; the request list opens the record itself and
+  // keeps the preview in the row menu (one "view" action, not two).
+  assert.match(source("../src/pages/ApprovalInbox.jsx"), /onRowClick=\{\(row\) => setQuickViewId\(row\._id\)\}/);
+  const requestsList = source("../src/pages/RequestsList.jsx");
+  assert.match(requestsList, /onRowClick=\{\(row\) => navigate\(`\/requests\/\$\{row\._id\}`\)\}/);
+  assert.match(requestsList, /label: "Quick view"/);
+  assert.doesNotMatch(requestsList, /label: "Open full details"/);
   // The bulk-actions selection API is unchanged.
   assert.match(table, /selection\.onChange\(next\)/);
   assert.match(table, /selection\.isRowSelectable/);

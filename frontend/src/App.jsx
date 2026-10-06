@@ -98,6 +98,7 @@ export default function App() {
           </Route>
           <Route path="suppliers" element={<ProtectedRoute roles={internalRoles} permissions={["supplier:bank-view"]} />}>
             <Route index element={<Suppliers />} />
+            <Route path=":id" element={<Suppliers />} />
           </Route>
           <Route path="cost-centers" element={<ProtectedRoute roles={["Admin", "Accounting"]} />}>
             <Route index element={<CostCenters />} />

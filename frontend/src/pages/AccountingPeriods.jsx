@@ -32,6 +32,7 @@ export default function AccountingPeriods() {
     event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       await api.post("/accounting-periods", form);
       await draft.complete();
@@ -39,18 +40,19 @@ export default function AccountingPeriods() {
       setCreateOpen(false);
       setActionError("");
       periodTable.reload();
-    } catch (err) { setActionError(err.message); notify(err.message, "error"); } finally { setProcessing(false); }
+    } catch (err) { setActionError(err.message); } finally { setProcessing(false); }
   }
 
   async function changeStatus(comments) {
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/accounting-periods/${confirm.row._id}/${confirm.action}`, { comments });
       notify(confirm.action === "close" ? "Accounting period closed." : "Accounting period reopened.");
       setConfirm(null);
       setActionError("");
       periodTable.reload();
-    } catch (err) { setActionError(err.message); notify(err.message, "error"); setConfirm(null); } finally { setProcessing(false); }
+    } catch (err) { setActionError(err.message); setConfirm(null); } finally { setProcessing(false); }
   }
 
   function requestStatusChange(row) {
@@ -71,13 +73,13 @@ export default function AccountingPeriods() {
 
   return <section>
     <PageHeader title="Accounting Periods" description="Open, close, and reopen fiscal periods through explicit audited controls." actions={<><button type="button" className="secondary-button" onClick={periodTable.reload} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button><button type="button" className="primary-button" onClick={() => setCreateOpen(true)}><CalendarPlus size={16} /><span>{t("New period")}</span></button></>} />
-    <Message type="error">{actionError || periodTable.error}</Message>
+    <Message type="error">{(createOpen ? "" : actionError) || periodTable.error}</Message>
     <div className="workspace-panel"><DataTable rows={rows} loading={loading} remote={periodTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OPEN", "CLOSED"] }]} searchPlaceholder="Search accounting period..." rowActions={(row) => [{ label: row.status === "OPEN" ? "Close period" : "Reopen period", icon: row.status === "OPEN" ? LockKeyhole : LockOpen, tone: row.status === "OPEN" ? "danger" : "default", onClick: () => requestStatusChange(row) }]} columns={[
       { key: "period", label: "Period" }, { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
       { key: "openedAt", label: "Opened", render: (row) => row.openedAt ? formatDateTime(row.openedAt) : "-" }, { key: "openedBy", label: "Opened by", render: (row) => row.openedBy?.name || "-" },
       { key: "closedAt", label: "Closed", render: (row) => row.closedAt ? formatDateTime(row.closedAt) : "-" }, { key: "closedBy", label: "Closed by", render: (row) => row.closedBy?.name || "-" }, { key: "comments", label: "Comments" }
     ]} /></div>
-    <Drawer open={createOpen} title="New accounting period" description="Create an open period before financial activity begins." onClose={() => !processing && setCreateOpen(false)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCreateOpen(false)}>{t("Cancel")}</button><button type="submit" form="period-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><Save size={16} /><span>{t(processing ? "Saving..." : "Create")}</span></button></>}>
+    <Drawer open={createOpen} error={actionError} title="New accounting period" description="Create an open period before financial activity begins." onClose={() => !processing && setCreateOpen(false)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCreateOpen(false)}>{t("Cancel")}</button><button type="submit" form="period-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><Save size={16} /><span>{t(processing ? "Saving..." : "Create")}</span></button></>}>
       <DraftPanel busy={processing} draft={draft} onDiscard={() => setCreateOpen(false)}><form id="period-form" className="form-grid" onSubmit={createPeriod}><label className="field"><span>{t("Period")} *</span><MonthInput required value={form.period} onChange={(event) => setForm({ ...form, period: event.target.value })} /></label><label className="field"><span>{t("Opening comments")}</span><textarea rows="4" value={form.comments} onChange={(event) => setForm({ ...form, comments: event.target.value })} /></label></form></DraftPanel>
     </Drawer>
     <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirm ? [{ label: "Period", value: confirm.row.period }, { label: "Result", value: confirm.action === "close" ? "Status changes to CLOSED only after all financial controls pass." : "Status changes to OPEN and the action is audited." }] : []} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={changeStatus} />

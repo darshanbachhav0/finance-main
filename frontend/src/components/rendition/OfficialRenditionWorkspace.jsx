@@ -187,18 +187,18 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
       await onReload();
     } catch (err) {
       setError(`${err.message}${err.code ? ` (${err.code})` : ""}`);
-      notify(err.message, "error");
     } finally { setProcessing(false); }
   }
 
   async function review(action, reviewComments) {
     setProcessing(true);
+    setError("");
     try {
       await api.post(`/requests/${request._id}/rendition/${action}`, { comments: reviewComments });
       notify(action === "approve" ? "Finance approved the rendition." : action === "observe" ? "Rendition observed and returned for correction." : "Finance rejected the rendition.");
       setConfirm(null);
       await onReload();
-    } catch (err) { setError(err.message); notify(err.message, "error"); setConfirm(null); }
+    } catch (err) { setError(err.message); setConfirm(null); }
     finally { setProcessing(false); }
   }
 
@@ -215,7 +215,6 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
       await onReload();
     } catch (err) {
       setError(err.message);
-      notify(err.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -235,7 +234,6 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
       await onReload();
     } catch (err) {
       setError(err.message);
-      notify(err.message, "error");
     } finally {
       setProcessing(false);
     }

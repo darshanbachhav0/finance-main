@@ -227,6 +227,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
 
   async function generate() {
     setProcessing(true);
+    setActionError("");
     try {
       const selectedAccounts = Object.fromEntries(selected.map((id) => {
         const row = rows.find((item) => String(payableIdOf(item)) === String(id));
@@ -251,7 +252,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
       setConfirmOpen(false);
     } finally {
       setProcessing(false);
@@ -272,6 +272,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     event.preventDefault(); if (!paymentDraft.ready || paymentDraft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/treasury/payables/${payableIdOf(paymentRow)}/confirm-payment`, paymentForm);
       await paymentDraft.complete();
@@ -281,7 +282,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -291,6 +291,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     event.preventDefault(); if (!bounceDraft.ready || bounceDraft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/treasury/payables/${payableIdOf(bounceRow)}/bounce`, bounceForm);
       await bounceDraft.complete();
@@ -301,7 +302,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -311,6 +311,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     event.preventDefault(); if (!reprogramDraft.ready || reprogramDraft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       const data = new FormData();
       data.append("comments", reprogramForm.comments);
@@ -324,7 +325,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -340,6 +340,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   async function cancelFile(event) {
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/treasury/bank-files/${cancelTarget.batchId}/cancel`, { reason: cancelReason, accountsPayableIds: cancelTarget.accountsPayableId ? [cancelTarget.accountsPayableId] : undefined });
       notify(cancelTarget.accountsPayableId ? "The CXP was removed from the bank file and is back in the payment queue." : "Bank file cancelled. Its CXP records are back in the payment queue.");
@@ -349,7 +350,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -363,6 +363,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   async function depositDetraction(event) {
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/treasury/payables/${payableIdOf(detractionRow)}/detraction-deposit`, detractionForm);
       notify("Detraction deposit recorded.");
@@ -371,7 +372,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -387,6 +387,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     event.preventDefault(); if (!reconciliationDraft.ready || reconciliationDraft.status === "conflict") return;
     event.preventDefault();
     setProcessing(true);
+    setActionError("");
     try {
       await api.post(`/treasury/payables/${payableIdOf(reconciliationRow)}/reconcile`, reconciliationForm);
       await reconciliationDraft.complete();
@@ -396,7 +397,6 @@ export default function TreasuryQueue({ historyOnly = false }) {
       reloadAll();
     } catch (error) {
       setActionError(error.message);
-      notify(error.message, "error");
     } finally {
       setProcessing(false);
     }
@@ -433,7 +433,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   return <section>
       <PageHeader title={historyOnly ? "Payment History" : "Payments"} description="Schedule and confirm payments." actions={<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
       <WorkspaceTools links={[["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Management Reports", "/reports"]]} />
-    <Message type="error">{actionError || resourceError}</Message>
+    <Message type="error">{(paymentRow || bounceRow || reprogramRow || reconciliationRow || cancelTarget || detractionRow ? "" : actionError) || resourceError}</Message>
     {!historyOnly && selected.length > 0 && <ReadinessPanel paymentPayload={{ payableIds: selected, currency, accountSelections }} />}
     {linkActive && <DeepLinkNotice title="Showing the payment linked from your notification" missing={linkMissing} missingDescription="This payment is no longer pending in any Treasury stage. It may already be paid and reconciled." clearLabel="Show all payments" onClear={deepLink.clear} />}
     <div hidden={historyOnly} className="stats-grid"><StatCard label="Payable queue" value={queueTable.pagination.total} tone="amber" /><StatCard label="Missing bank details" value={missingBank} tone={missingBank ? "red" : "green"} /><StatCard label="Payment confirmation" value={confirmationTable.pagination.total} tone="amber" /><StatCard label="Bounced payments" value={bouncedTable.pagination.total} tone={bouncedTable.pagination.total ? "red" : "green"} /></div>
@@ -505,16 +505,16 @@ export default function TreasuryQueue({ historyOnly = false }) {
     <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
     <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: paymentDate }, ...(offCycle ? [{ label: "Reason for paying off the payment cycle", value: paymentDateReason }] : []), { label: "Total", value: selectedByCurrency.length ? selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ") : money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
 
-    <Drawer open={Boolean(paymentRow)} title="Confirm actual bank payment" description={paymentRow ? `${paymentRow.requestNumber} - ${paymentRow.supplier?.legalName || paymentRow.supplier?.name || t("UMA collaborator")}` : ""} onClose={() => !processing && setPaymentRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setPaymentRow(null)}>{t("Cancel")}</button><button type="submit" form="payment-confirmation-form" className="primary-button" disabled={processing}><CircleCheckBig size={16} />{t(processing ? "Processing..." : "Confirm payment")}</button></>}><div className="document-requirement required"><AlertTriangle size={20} /><div><strong>{t("This settles the selected Accounts Payable record")}</strong><p>{t("Confirmation posts the payment journal and does not infer payment from a downloaded TXT. Enter less than the outstanding amount to record a partial payment; the remaining balance stays open for a later confirmation.")}</p></div></div><DraftPanel busy={processing} draft={paymentDraft} onDiscard={() => setPaymentRow(null)}><form id="payment-confirmation-form" className="form-grid" onSubmit={confirmPayment}><label className="field"><span>{t("Operation number")} *</span><input required value={paymentForm.operationNumber} onChange={(event) => setPaymentForm({ ...paymentForm, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Actual payment date")} *</span><DateInput required value={paymentForm.paidAt} onChange={(event) => setPaymentForm({ ...paymentForm, paidAt: event.target.value })} /></label><label className="field"><span>{t("Confirmed amount")} *</span><input required type="number" min="0.01" max={paymentRow ? amountOf(paymentRow) : undefined} step="0.01" value={paymentForm.confirmedAmount} onChange={(event) => setPaymentForm({ ...paymentForm, confirmedAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={paymentForm.comments} onChange={(event) => setPaymentForm({ ...paymentForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(paymentRow)} error={actionError} title="Confirm actual bank payment" description={paymentRow ? `${paymentRow.requestNumber} - ${paymentRow.supplier?.legalName || paymentRow.supplier?.name || t("UMA collaborator")}` : ""} onClose={() => !processing && setPaymentRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setPaymentRow(null)}>{t("Cancel")}</button><button type="submit" form="payment-confirmation-form" className="primary-button" disabled={processing}><CircleCheckBig size={16} />{t(processing ? "Processing..." : "Confirm payment")}</button></>}><div className="document-requirement required"><AlertTriangle size={20} /><div><strong>{t("This settles the selected Accounts Payable record")}</strong><p>{t("Confirmation posts the payment journal and does not infer payment from a downloaded TXT. Enter less than the outstanding amount to record a partial payment; the remaining balance stays open for a later confirmation.")}</p></div></div><DraftPanel busy={processing} draft={paymentDraft} onDiscard={() => setPaymentRow(null)}><form id="payment-confirmation-form" className="form-grid" onSubmit={confirmPayment}><label className="field"><span>{t("Operation number")} *</span><input required value={paymentForm.operationNumber} onChange={(event) => setPaymentForm({ ...paymentForm, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Actual payment date")} *</span><DateInput required value={paymentForm.paidAt} onChange={(event) => setPaymentForm({ ...paymentForm, paidAt: event.target.value })} /></label><label className="field"><span>{t("Confirmed amount")} *</span><input required type="number" min="0.01" max={paymentRow ? amountOf(paymentRow) : undefined} step="0.01" value={paymentForm.confirmedAmount} onChange={(event) => setPaymentForm({ ...paymentForm, confirmedAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={paymentForm.comments} onChange={(event) => setPaymentForm({ ...paymentForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(bounceRow)} title="Report bounced payment" description={bounceRow?.requestNumber || ""} onClose={() => !processing && setBounceRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setBounceRow(null)}>{t("Cancel")}</button><button type="submit" form="bounce-payment-form" className="danger-button" disabled={processing}><XCircle size={16} />{t("Mark PAGO_REBOTADO")}</button></>}><DraftPanel busy={processing} draft={bounceDraft} onDiscard={() => setBounceRow(null)}><form id="bounce-payment-form" className="form-grid" onSubmit={reportBounce}><label className="field"><span>{t("Rejection type")} *</span><select required value={bounceForm.reasonCategory} onChange={(event) => setBounceForm({ ...bounceForm, reasonCategory: event.target.value })}><option value="">{t("Select")}</option><option value="BANK_DETAILS">{t("Incorrect, invalid, changed or unverified bank details")}</option><option value="TECHNICAL">{t("Technical or temporary bank problem")}</option></select><small className="field-hint">{t("Bank-details rejections flag the account until Accounting re-verifies it and need a signed CCI letter.")}</small></label><label className="field"><span>{t("Bank rejection reason")} *</span><textarea required rows="4" value={bounceForm.reason} onChange={(event) => setBounceForm({ ...bounceForm, reason: event.target.value })} /></label><label className="field"><span>{t("Bank reference")}</span><input value={bounceForm.bankReference} onChange={(event) => setBounceForm({ ...bounceForm, bankReference: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(bounceRow)} error={actionError} title="Report bounced payment" description={bounceRow?.requestNumber || ""} onClose={() => !processing && setBounceRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setBounceRow(null)}>{t("Cancel")}</button><button type="submit" form="bounce-payment-form" className="danger-button" disabled={processing}><XCircle size={16} />{t("Mark PAGO_REBOTADO")}</button></>}><DraftPanel busy={processing} draft={bounceDraft} onDiscard={() => setBounceRow(null)}><form id="bounce-payment-form" className="form-grid" onSubmit={reportBounce}><label className="field"><span>{t("Rejection type")} *</span><select required value={bounceForm.reasonCategory} onChange={(event) => setBounceForm({ ...bounceForm, reasonCategory: event.target.value })}><option value="">{t("Select")}</option><option value="BANK_DETAILS">{t("Incorrect, invalid, changed or unverified bank details")}</option><option value="TECHNICAL">{t("Technical or temporary bank problem")}</option></select><small className="field-hint">{t("Bank-details rejections flag the account until Accounting re-verifies it and need a signed CCI letter.")}</small></label><label className="field"><span>{t("Bank rejection reason")} *</span><textarea required rows="4" value={bounceForm.reason} onChange={(event) => setBounceForm({ ...bounceForm, reason: event.target.value })} /></label><label className="field"><span>{t("Bank reference")}</span><input value={bounceForm.bankReference} onChange={(event) => setBounceForm({ ...bounceForm, bankReference: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(reprogramRow)} title="Reprogram bounced payment" description={reprogramRow?.requestNumber || ""} onClose={() => !processing && setReprogramRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReprogramRow(null)}>{t("Cancel")}</button><button type="submit" form="reprogram-payment-form" className="primary-button" disabled={processing || (reprogramLetterRequired && !reprogramForm.cciLetter)}><RotateCcw size={16} />{t("Reprogram")}</button></>}><div className={`document-requirement${reprogramLetterRequired ? " required" : ""}`}><UploadCloud size={20} /><div><strong>{t(reprogramLetterRequired ? "Signed CCI letter required" : "Retry on the verified account")}</strong><p>{t(reprogramLetterRequired ? "The previous payment destination remains auditable; the replacement evidence is stored before reopening the CXP." : "The bank rejected the transfer for a technical reason. No new CCI letter is needed while the account stays verified.")}</p></div></div><DraftPanel busy={processing} draft={reprogramDraft} onDiscard={() => setReprogramRow(null)}><form id="reprogram-payment-form" className="form-grid" onSubmit={reprogramPayment}><label className="field"><span>{t("Signed CCI letter")}{reprogramLetterRequired ? " *" : ""} {reprogramForm.cciLetter?.name}</span><input required={reprogramLetterRequired && !reprogramForm.cciLetter} type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(event) => setReprogramForm({ ...reprogramForm, cciLetter: event.target.files?.[0] || null })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reprogramForm.comments} onChange={(event) => setReprogramForm({ ...reprogramForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(reprogramRow)} error={actionError} title="Reprogram bounced payment" description={reprogramRow?.requestNumber || ""} onClose={() => !processing && setReprogramRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReprogramRow(null)}>{t("Cancel")}</button><button type="submit" form="reprogram-payment-form" className="primary-button" disabled={processing || (reprogramLetterRequired && !reprogramForm.cciLetter)}><RotateCcw size={16} />{t("Reprogram")}</button></>}><div className={`document-requirement${reprogramLetterRequired ? " required" : ""}`}><UploadCloud size={20} /><div><strong>{t(reprogramLetterRequired ? "Signed CCI letter required" : "Retry on the verified account")}</strong><p>{t(reprogramLetterRequired ? "The previous payment destination remains auditable; the replacement evidence is stored before reopening the CXP." : "The bank rejected the transfer for a technical reason. No new CCI letter is needed while the account stays verified.")}</p></div></div><DraftPanel busy={processing} draft={reprogramDraft} onDiscard={() => setReprogramRow(null)}><form id="reprogram-payment-form" className="form-grid" onSubmit={reprogramPayment}><label className="field"><span>{t("Signed CCI letter")}{reprogramLetterRequired ? " *" : ""} {reprogramForm.cciLetter?.name}</span><input required={reprogramLetterRequired && !reprogramForm.cciLetter} type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={(event) => setReprogramForm({ ...reprogramForm, cciLetter: event.target.files?.[0] || null })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reprogramForm.comments} onChange={(event) => setReprogramForm({ ...reprogramForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(reconciliationRow)} title="Reconcile bank payment" description={reconciliationRow?.requestNumber || ""} onClose={() => !processing && setReconciliationRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReconciliationRow(null)}>{t("Cancel")}</button><button type="submit" form="reconciliation-form" className="primary-button" disabled={processing}><Scale size={16} />{t(processing ? "Processing..." : "Reconcile")}</button></>}><DraftPanel busy={processing} draft={reconciliationDraft} onDiscard={() => setReconciliationRow(null)}><form id="reconciliation-form" className="form-grid" onSubmit={reconcile}><label className="field"><span>{t("Bank reference")} *</span><input required value={reconciliationForm.bankReference} onChange={(event) => setReconciliationForm({ ...reconciliationForm, bankReference: event.target.value })} /></label><label className="field"><span>{t("Statement amount")} *</span><small className="field-hint">{t("Type the amount shown on the bank statement.")}</small><input required type="number" min="0.01" step="0.01" value={reconciliationForm.statementAmount} onChange={(event) => setReconciliationForm({ ...reconciliationForm, statementAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reconciliationForm.comments} onChange={(event) => setReconciliationForm({ ...reconciliationForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
+    <Drawer open={Boolean(reconciliationRow)} error={actionError} title="Reconcile bank payment" description={reconciliationRow?.requestNumber || ""} onClose={() => !processing && setReconciliationRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setReconciliationRow(null)}>{t("Cancel")}</button><button type="submit" form="reconciliation-form" className="primary-button" disabled={processing}><Scale size={16} />{t(processing ? "Processing..." : "Reconcile")}</button></>}><DraftPanel busy={processing} draft={reconciliationDraft} onDiscard={() => setReconciliationRow(null)}><form id="reconciliation-form" className="form-grid" onSubmit={reconcile}><label className="field"><span>{t("Bank reference")} *</span><input required value={reconciliationForm.bankReference} onChange={(event) => setReconciliationForm({ ...reconciliationForm, bankReference: event.target.value })} /></label><label className="field"><span>{t("Statement amount")} *</span><small className="field-hint">{t("Type the amount shown on the bank statement.")}</small><input required type="number" min="0.01" step="0.01" value={reconciliationForm.statementAmount} onChange={(event) => setReconciliationForm({ ...reconciliationForm, statementAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={reconciliationForm.comments} onChange={(event) => setReconciliationForm({ ...reconciliationForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
 
-    <Drawer open={Boolean(cancelTarget)} title={cancelTarget?.accountsPayableId ? "Remove from bank file" : "Cancel bank file"} description={cancelTarget?.batchNumber || ""} onClose={() => !processing && setCancelTarget(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCancelTarget(null)}>{t("Close")}</button><button type="submit" form="cancel-bank-file-form" className="danger-button" disabled={processing || !cancelReason.trim()}><Ban size={16} />{t("Confirm cancellation")}</button></>}><div className="document-requirement"><AlertTriangle size={20} /><div><strong>{t("Only before any payment is confirmed")}</strong><p>{t("The CXP records return to the payment queue. This is not a bounce and needs no CCI letter; do not upload the cancelled file to the bank.")}</p></div></div><form id="cancel-bank-file-form" className="form-grid" onSubmit={cancelFile}><label className="field"><span>{t("Cancellation reason")} *</span><textarea required rows="3" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label></form></Drawer>
+    <Drawer open={Boolean(cancelTarget)} error={actionError} title={cancelTarget?.accountsPayableId ? "Remove from bank file" : "Cancel bank file"} description={cancelTarget?.batchNumber || ""} onClose={() => !processing && setCancelTarget(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setCancelTarget(null)}>{t("Close")}</button><button type="submit" form="cancel-bank-file-form" className="danger-button" disabled={processing || !cancelReason.trim()}><Ban size={16} />{t("Confirm cancellation")}</button></>}><div className="document-requirement"><AlertTriangle size={20} /><div><strong>{t("Only before any payment is confirmed")}</strong><p>{t("The CXP records return to the payment queue. This is not a bounce and needs no CCI letter; do not upload the cancelled file to the bank.")}</p></div></div><form id="cancel-bank-file-form" className="form-grid" onSubmit={cancelFile}><label className="field"><span>{t("Cancellation reason")} *</span><textarea required rows="3" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label></form></Drawer>
 
-    <Drawer open={Boolean(detractionRow)} title="Record detraction deposit" description={detractionRow ? `${detractionRow.requestNumber} - ${money("PEN", detractionRow.detraction?.amountPen)}` : ""} onClose={() => !processing && setDetractionRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setDetractionRow(null)}>{t("Cancel")}</button><button type="submit" form="detraction-deposit-form" className="primary-button" disabled={processing}><Landmark size={16} />{t("Record deposit")}</button></>}><form id="detraction-deposit-form" className="form-grid" onSubmit={depositDetraction}><label className="field"><span>{t("Constancia number")} *</span><input required value={detractionForm.constancyNumber} onChange={(event) => setDetractionForm({ ...detractionForm, constancyNumber: event.target.value })} /></label><label className="field"><span>{t("Deposit date")} *</span><DateInput required max={todayKey} value={detractionForm.depositDate} onChange={(event) => setDetractionForm({ ...detractionForm, depositDate: event.target.value })} /></label><label className="field"><span>{t("Deposited amount (PEN)")} *</span><input required type="number" min="1" step="1" value={detractionForm.amount} onChange={(event) => setDetractionForm({ ...detractionForm, amount: event.target.value })} /></label></form></Drawer>
+    <Drawer open={Boolean(detractionRow)} error={actionError} title="Record detraction deposit" description={detractionRow ? `${detractionRow.requestNumber} - ${money("PEN", detractionRow.detraction?.amountPen)}` : ""} onClose={() => !processing && setDetractionRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setDetractionRow(null)}>{t("Cancel")}</button><button type="submit" form="detraction-deposit-form" className="primary-button" disabled={processing}><Landmark size={16} />{t("Record deposit")}</button></>}><form id="detraction-deposit-form" className="form-grid" onSubmit={depositDetraction}><label className="field"><span>{t("Constancia number")} *</span><input required value={detractionForm.constancyNumber} onChange={(event) => setDetractionForm({ ...detractionForm, constancyNumber: event.target.value })} /></label><label className="field"><span>{t("Deposit date")} *</span><DateInput required max={todayKey} value={detractionForm.depositDate} onChange={(event) => setDetractionForm({ ...detractionForm, depositDate: event.target.value })} /></label><label className="field"><span>{t("Deposited amount (PEN)")} *</span><input required type="number" min="1" step="1" value={detractionForm.amount} onChange={(event) => setDetractionForm({ ...detractionForm, amount: event.target.value })} /></label></form></Drawer>
   </section>;
 }
