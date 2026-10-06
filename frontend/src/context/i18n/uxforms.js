@@ -51,5 +51,9 @@ export default {
   "Use digits only: 11 for a RUC or 8 for a DNI.": "Usa solo dígitos: 11 para un RUC u 8 para un DNI.",
   "This RUC is not valid: check the digits (the last one is a check digit).": "Este RUC no es válido: revisa los dígitos (el último es un dígito verificador).",
   "A RUC has 11 digits.": "El RUC tiene 11 dígitos.",
-  "A DNI has 8 digits.": "El DNI tiene 8 dígitos."
+  "A DNI has 8 digits.": "El DNI tiene 8 dígitos.",
+  // Request form steps
+  "What and why": "Qué y por qué",
+  "Budget and items": "Presupuesto e ítems",
+  "Describe what you need, where it is charged and who supplies it. Your progress saves automatically.": "Describe qué necesitas, dónde se carga y quién lo provee. Tu avance se guarda automáticamente."
 };

@@ -1,4 +1,5 @@
-// Step 1 of the request form is split into four blocks. Each block owns a set of form
+// The first two steps of the request form hold four blocks ("What and why": need, why;
+// "Budget and items": budget, items). Each block owns a set of form
 // fields (and item-line fields) so its "Complete" badge follows the same validation rules
 // used on Continue / Submit.
 
@@ -19,15 +20,15 @@ export const REQUEST_FORM_BLOCKS = [
     id: "budget",
     title: "Budget",
     description: "Where the spend is charged: area, CECO, month and currency.",
-    fields: ["requesterCostCenter", "issueDate", "accountingPeriod", "currency"],
-    linePattern: /^lines\.\d+\.costCenter$/
+    fields: ["requesterCostCenter", "issueDate", "accountingPeriod", "currency"]
   },
   {
     id: "items",
     title: "Items and amounts",
     description: "Enter the quantity and unit price. We calculate IGV and the final total for you.",
     fields: ["lines"],
-    linePattern: /^lines\.\d+\.(itemDescription|quantity|unitPrice|unitOfMeasure|totalAmount)$/
+    // An item's cost center is set in the items block ("Adjust budget allocation").
+    linePattern: /^lines\.\d+\.(itemDescription|quantity|unitPrice|unitOfMeasure|totalAmount|costCenter)$/
   }
 ];
 

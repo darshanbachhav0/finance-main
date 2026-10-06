@@ -36,6 +36,7 @@ import "./colorContrast.test.js";
 import "./uxShell.test.js";
 import "./tabs.test.js";
 import "./feedback.test.js";
+import "./requestWizard.test.js";
 
 import "./dateInput.test.js";
 import "./uxFormsContracts.test.js";
