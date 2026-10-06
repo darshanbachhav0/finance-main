@@ -68,7 +68,7 @@ export default function ManagementReports() {
   const countSeries = [{ key: "count", label: "Requests", color: "#17344c" }];
   const payableTotal = useMemo(() => data.payable.reduce((sum, item) => sum + Number(item.outstanding || 0), 0), [data.payable]);
   const comparisonChange = data.comparison?.changePercent;
-  const comparisonTone = comparisonChange === null || comparisonChange === undefined ? "neutral" : comparisonChange > 0 ? "amber" : "green";
+  const comparisonTone = comparisonChange === null || comparisonChange === undefined ? "neutral" : comparisonChange > 0 ? "warning" : "success";
   const labelRows = (rows) => rows.map((row) => ({ ...row, name: row._id || t("Unassigned") }));
   const dimensionRows = (rows) => rows.map((row) => ({ ...row, name: row._id?.code ? `${row._id.code} - ${row._id.name || ""}` : row._id?.name || t("Unassigned") }));
   const supplierRows = data.supplierConcentration.map((row) => ({ ...row, name: row.name || row.identifier || t("Unassigned") }));
@@ -133,12 +133,12 @@ export default function ManagementReports() {
       <div className="report-context" role="status"><strong>{t("Showing report for")}: {filters.period || t("All periods")}</strong>{Object.entries(filters).filter(([key, value]) => key !== "period" && value).map(([key, value]) => <span key={key}>{t({ dateFrom: "Date from", dateTo: "Date to", currency: "Currency", requestType: "Request type", area: "Area", costCenter: "Cost center", project: "Project" }[key])}: {key === "costCenter" ? data.filterOptions.costCenters.find((center) => center.value === value)?.code || value : t(value)}</span>)}</div>
 
       <div className="stats-grid report-stats">
-        <StatCard label="Assigned budget" value={money(data.budget.assigned)} tone="navy" />
-        <StatCard label="Committed" value={money(data.budget.committed)} tone="amber" />
-        <StatCard label="Executed" value={money(data.budget.executed)} tone="teal" />
+        <StatCard label="Assigned budget" value={money(data.budget.assigned)} tone="neutral" />
+        <StatCard label="Committed" value={money(data.budget.committed)} tone="warning" />
+        <StatCard label="Executed" value={money(data.budget.executed)} tone="accent" />
         <StatCard label="Paid" value={money(data.budget.paid)} tone="neutral" />
-        <StatCard label="Available" value={money(data.budget.available)} tone="green" />
-        <StatCard label="Accounts payable" value={money(payableTotal)} tone={data.overduePayables ? "red" : "teal"} />
+        <StatCard label="Available" value={money(data.budget.available)} tone="success" />
+        <StatCard label="Accounts payable" value={money(payableTotal)} tone={data.overduePayables ? "danger" : "accent"} />
       </div>
 
       <div className={`comparison-strip tone-${comparisonTone}`}>

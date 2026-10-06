@@ -173,10 +173,10 @@ export default function AccountsPayable() {
       {deepLink.active && <DeepLinkNotice title="Showing the CXP linked from your notification" missing={!loading && !rows.length} missingDescription="No CXP was found for this link." clearLabel="Show all CXP" onClear={deepLink.clear} />}
 
       <div className="stats-grid compact-stats payable-kpis">
-        <StatCard label="Outstanding amount" value={money("PEN", totals.outstanding)} tone="amber" />
-        <StatCard label="Due within 7 days" value={counts.due ?? "-"} tone={counts.due ? "red" : "green"} />
-        <StatCard label="Bounced payments" value={counts.bounced ?? "-"} tone={counts.bounced ? "red" : "green"} />
-        <StatCard label="Paid amount" value={money("PEN", totals.paid)} tone="green" />
+        <StatCard label="Outstanding amount" value={money("PEN", totals.outstanding)} tone="warning" />
+        <StatCard label="Due within 7 days" value={counts.due ?? "-"} tone={counts.due ? "danger" : "success"} />
+        <StatCard label="Bounced payments" value={counts.bounced ?? "-"} tone={counts.bounced ? "danger" : "success"} />
+        <StatCard label="Paid amount" value={money("PEN", totals.paid)} tone="success" />
       </div>
 
       <Tabs idPrefix="payables" label="Accounts payable views" value={activeTab} onChange={changeView} tabs={viewTabs} />

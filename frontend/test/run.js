@@ -38,6 +38,7 @@ import "./tabs.test.js";
 import "./treasury.test.js";
 import "./supplierForm.test.js";
 import "./translations.test.js";
+import "./tones.test.js";
 import "./styles.test.js";
 import "./feedback.test.js";
 import "./requestWizard.test.js";

@@ -23,6 +23,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import api from "../../api/client.js";
 import { useLanguage } from "../../context/LanguageContext.jsx";
+import EmptyState from "../EmptyState.jsx";
 import ProtectedAssetButton from "../ProtectedAssetButton.jsx";
 import StatusBadge from "../StatusBadge.jsx";
 
@@ -254,7 +255,7 @@ export default function SupplierDetail({
           {(supplier.bankAccounts || []).map((account) => (
             <article className={`supplier-bank-row${account.active ? "" : " is-inactive"}`} key={account._id}>
               <div className="bank-main"><strong>{t(account.bank)} · {t(account.accountType)}</strong><span>{account.accountNumber || "-"}</span><small>{t("CCI")}: {account.cci || "-"}</small></div>
-              <div className="bank-meta"><span>{account.currency}</span><StatusBadge status={account.verificationStatus} /><StatusBadge status={account.ownershipResult} />{account.preferred && <span className="badge badge-blue"><Star size={12} />{t("Preferred")}</span>}</div>
+              <div className="bank-meta"><span>{account.currency}</span><StatusBadge status={account.verificationStatus} /><StatusBadge status={account.ownershipResult} />{account.preferred && <span className="badge badge-info"><Star size={12} />{t("Preferred")}</span>}</div>
               <div className="bank-review-meta"><small>{t("Account holder")}: {account.accountHolderName || "-"}</small><small>{t("Verification source")}: {account.verificationSource || t("Not reviewed")}</small><small>{displayDate(account.verifiedAt || account.validFrom, language)}</small></div>
               {permissions.canVerifyBanking && account.active && (
                 <div className="bank-actions">
@@ -265,7 +266,7 @@ export default function SupplierDetail({
               )}
             </article>
           ))}
-          {!supplier.bankAccounts?.length && <p className="empty-inline">{t("No supplier bank accounts recorded.")}</p>}
+          {!supplier.bankAccounts?.length && <EmptyState compact title="No supplier bank accounts recorded." />}
         </div>
         <form className="supplier-inline-form" onSubmit={saveDetractionAccount}>
           <div className="form-grid supplier-form-grid">
@@ -379,7 +380,7 @@ export default function SupplierDetail({
       <Section icon={History} title="Audit / History" status="Insert-only application audit">
         <div className="supplier-audit-list">
           {(supplier.auditHistory || []).map((event) => <div key={event._id}><span className="audit-dot" /><div><strong>{t(event.action)}</strong><span>{event.actorName || t("System")} · {t(event.role || "System")}</span>{event.message && <small>{event.message}</small>}</div><time>{displayDate(event.createdAt, language)}</time></div>)}
-          {!supplier.auditHistory?.length && <p className="empty-inline">{t("No supplier history recorded.")}</p>}
+          {!supplier.auditHistory?.length && <EmptyState compact title="No supplier history recorded." />}
         </div>
       </Section>
     </div>

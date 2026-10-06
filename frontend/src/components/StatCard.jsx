@@ -1,13 +1,14 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { toneOf } from "../utils/tones.js";
 
 export default function StatCard({ label, value, tone = "neutral", icon: Icon, suffix, to, actionLabel }) {
   const { t } = useLanguage();
   const Container = to ? Link : "div";
 
   return (
-    <Container className={`stat-card tone-${tone}${to ? " stat-card-link" : ""}`} {...(to ? { to } : {})}>
+    <Container className={`stat-card tone-${toneOf(tone)}${to ? " stat-card-link" : ""}`} {...(to ? { to } : {})}>
       <div className="stat-card-heading">
         <span>{t(label)}</span>
         {Icon && <Icon size={18} aria-hidden="true" />}

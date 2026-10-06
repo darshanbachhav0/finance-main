@@ -128,11 +128,11 @@ export default function SireExport() {
       )}
 
       <div className="stats-grid compact-stats">
-        <StatCard label="Reviewed vouchers" value={summary.reviewed || 0} tone="navy" />
-        <StatCard label="Rows in SUNAT file" value={summary.eligible || 0} tone="green" />
-        <StatCard label="Vouchers with errors" value={summary.blockingErrors || 0} tone={summary.blockingErrors ? "red" : "green"} />
-        <StatCard label="Excluded (cancelled or duplicate)" value={(summary.excluded || 0) - (summary.blockingErrors || 0)} tone="amber" />
-        <StatCard label="Purchase total" value={purchaseTotal} tone="teal" />
+        <StatCard label="Reviewed vouchers" value={summary.reviewed || 0} tone="neutral" />
+        <StatCard label="Rows in SUNAT file" value={summary.eligible || 0} tone="success" />
+        <StatCard label="Vouchers with errors" value={summary.blockingErrors || 0} tone={summary.blockingErrors ? "danger" : "success"} />
+        <StatCard label="Excluded (cancelled or duplicate)" value={(summary.excluded || 0) - (summary.blockingErrors || 0)} tone="warning" />
+        <StatCard label="Purchase total" value={purchaseTotal} tone="accent" />
       </div>
 
       {blockingIssues.length > 0 && (

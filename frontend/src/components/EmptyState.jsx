@@ -4,9 +4,12 @@ import { Inbox, SearchX, X } from "lucide-react";
 
 // The empty result of a list. It suggests the next step: "Clear filters" when filters hide the
 // rows, otherwise the page's own `action` ({ label, to | onClick, icon }) when one exists.
-export default function EmptyState({ title = "No records yet", description, filtered = false, onClear, action }) {
+// `compact` is the one-line form for an empty part of a record ("No history recorded.").
+export default function EmptyState({ title = "No records yet", description, filtered = false, onClear, action, compact = false }) {
   const { t } = useLanguage();
   const ActionIcon = action?.icon;
+
+  if (compact) return <p className="empty-state-compact"><Inbox size={16} aria-hidden="true" /><span>{t(title)}</span></p>;
 
   return (
     <div className="empty-state" role="status">

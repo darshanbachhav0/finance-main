@@ -100,7 +100,7 @@ test("lists share one loading and empty-state pattern that suggests the next act
   assert.doesNotMatch(source("../src/components/BudgetPlanWorkspace.jsx"), /<p role="status">\{t\("Loading\.\.\."\)\}<\/p>/);
 
   const empty = source("../src/components/EmptyState.jsx");
-  assert.match(empty, /export default function EmptyState\(\{[^}]*action \}\)/);
+  assert.match(empty, /export default function EmptyState\(\{[^}]*action[^}]*\}\)/);
   assert.match(empty, /onClear && <button[^>]*>.*\{t\("Clear filters"\)\}/);
   assert.match(empty, /!filtered && action && \(action\.to/);
   assert.match(table, /emptyAction,/);

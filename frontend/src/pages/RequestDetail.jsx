@@ -46,6 +46,7 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import OfficialRenditionWorkspace from "../components/rendition/OfficialRenditionWorkspace.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import EmptyState from "../components/EmptyState.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 import { displayedRequestStatus, renditionRequirements as summarizeRenditionRequirements } from "../utils/requestPresentation.js";
@@ -549,7 +550,7 @@ export default function RequestDetail() {
                   <strong>{item.action}</strong>
                 </div>
               ))}
-              {!related.audit?.length && <p>{t("No audit events available.")}</p>}
+              {!related.audit?.length && <EmptyState compact title="No audit events available." />}
             </div>
           </div>
           <Section title="Requirement and justification" description="Official request identity, responsible area and business need.">
