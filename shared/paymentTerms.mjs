@@ -3,7 +3,7 @@ export const PAYMENT_CONDITIONS = Object.freeze({
   "100%_ADVANCE": "100% advance",
   "100%_ON_DELIVERY": "100% on delivery",
   ADVANCE_AND_BALANCE: "Advance + balance",
-  CREDIT: "Credit",
+  CREDIT: "On credit",
   PARTIAL_PAYMENTS: "Partial payments",
   OTHER: "Other"
 });

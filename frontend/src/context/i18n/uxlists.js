@@ -3,7 +3,6 @@ export default {
   // Row details panel and related-tool shortcuts
   "Details": "Detalles",
   "Additional information for this record.": "Información adicional de este registro.",
-  "Related tools": "Herramientas relacionadas",
 
   // Empty states that suggest the next step
   "No requests yet": "Aún no hay solicitudes",

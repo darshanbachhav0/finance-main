@@ -74,7 +74,7 @@ export default {
   "Remaining budget": "Presupuesto restante",
   "Balance after this request. No funds are reserved here.": "Saldo después de esta solicitud. No se reservan fondos aquí.",
   "Annual remaining": "Saldo anual", "Monthly remaining": "Saldo mensual",
-  "This request": "Esta solicitud", "Updating balances…": "Actualizando saldos…",
+  "This request": "Esta solicitud", 
   "Add the USD/PEN exchange rate for the request date to see the remaining budget.": "Registra el tipo de cambio USD/PEN para la fecha de la solicitud y podrás ver el saldo restante.",
   "Appearance": "Apariencia", "System": "Sistema", "Light": "Claro", "Dark": "Oscuro",
   "Plan before you submit": "Planifica antes de enviar",
