@@ -41,7 +41,7 @@ assert.ok(inbox.includes('t("{approved} approved, {failed} with errors")') && in
 assert.ok(treasury.includes('rowKey="selectionKey"') && treasury.includes("selection={{ selected, onChange: setSelected, isRowSelectable: isSelectable }}"));
 assert.ok(treasury.includes('t("Select all visible")') && treasury.includes("onClick={selectAllVisible}"));
 assert.ok(treasury.includes("selectedByCurrency.map(([code, value]) => money(code, value))"));
-assert.ok(treasury.includes('<div className="bulk-bar"') && treasury.includes('t("Generate file")'));
+assert.ok(treasury.includes('<div className="bulk-bar bank-file-bar"') && treasury.includes('t("Generate file")'));
 assert.match(treasury, /setResult\(response\.data\);[\s\S]{0,160}setSelected\(\[\]\);/);
 assert.ok(!treasury.includes("toggleRow"), "the hand-rolled checkbox column is replaced by DataTable selection");
 

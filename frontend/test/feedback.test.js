@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { pageTrail } from "../src/utils/navigationAccess.js";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+// Line endings are normalized: a Windows checkout (core.autocrlf) has CRLF files.
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const listFiles = (dir) => fs.readdirSync(new URL(dir, import.meta.url), { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? listFiles(`${dir}${entry.name}/`) : entry.name.endsWith(".jsx") ? [`${dir}${entry.name}`] : []);
 
 // 1. A failed action is reported once, where the person acted. Error toasts remain only where
