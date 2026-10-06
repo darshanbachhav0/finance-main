@@ -55,5 +55,26 @@ export default {
   "The CXP was removed from the bank file and is back in the payment queue.": "La CXP se retiró del archivo bancario y volvió a la cola de pagos.",
   "Bank file cancelled. Its CXP records are back in the payment queue.": "Archivo bancario anulado. Sus CXP volvieron a la cola de pagos.",
   // Reconciliation
-  "Type the amount shown on the bank statement.": "Ingrese el monto que figura en el estado de cuenta bancario."
+  "Type the amount shown on the bank statement.": "Ingrese el monto que figura en el estado de cuenta bancario.",
+  // Bank-file steps and page copy
+  "Prepare the BBVA bank file, confirm what the bank paid, deposit detractions and reconcile.": "Prepara el archivo bancario BBVA, confirma lo que pagó el banco, deposita detracciones y concilia.",
+  "Bank files generated for payment, with their downloads.": "Archivos bancarios generados para pago, con sus descargas.",
+  "Prepare bank file": "Preparar archivo bancario",
+  "Bank file steps": "Pasos del archivo bancario",
+  "File details": "Datos del archivo",
+  "Select payments": "Seleccionar pagos",
+  "Review and generate": "Revisar y generar",
+  "One bank file per currency.": "Un archivo bancario por moneda.",
+  "Only payments with a verified account in the file currency can be selected.": "Solo se pueden seleccionar pagos con una cuenta verificada en la moneda del archivo.",
+  "Change the file currency?": "¿Cambiar la moneda del archivo?",
+  "A bank file holds one currency, so the selected payments are cleared.": "Un archivo bancario tiene una sola moneda, así que se quitan los pagos seleccionados.",
+  "New currency": "Nueva moneda",
+  "Change currency": "Cambiar moneda",
+  "Keep selection": "Mantener selección",
+  "Remove from bank file?": "¿Quitar del archivo bancario?",
+  "Cancel bank file?": "¿Anular el archivo bancario?",
+  "Keep bank file": "Mantener archivo bancario",
+  "Only before any payment is confirmed. The CXP records return to the payment queue. This is not a bounce and needs no CCI letter; do not upload the cancelled file to the bank.": "Solo antes de confirmar cualquier pago. Las CXP vuelven a la cola de pagos. No es un rebote y no requiere carta CCI; no subas al banco el archivo anulado.",
+  "Whole soles, as on the constancia: SPOT deposits are rounded to the sol.": "En soles enteros, como en la constancia: los depósitos de detracción se redondean al sol.",
+  "Bank TXT instruction created. Payment remains unconfirmed.": "Instrucción bancaria TXT generada. El pago sigue sin confirmar."
 };

@@ -18,7 +18,9 @@ const quickView = read("../src/components/RequestQuickView.jsx");
 assert.ok(!quickView.match(/editable[^;]+RECHAZADO/), "Rejected requests must not be editable from quick view");
 
 const treasury = read("../src/pages/TreasuryQueue.jsx");
-assert.ok(treasury.includes('value={bank} readOnly'));
+// New files are BBVA only: the source bank is stated, never an editable control.
+assert.ok(!/<(select|input)[^>]*value=\{bank\}/.test(treasury), "the source bank cannot be changed");
+assert.ok(treasury.includes("New payment files use BBVA."));
 assert.ok(treasury.includes('const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"]'));
 assert.ok(treasury.includes("Beneficiary accounts may use another bank through CCI"));
 
