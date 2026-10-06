@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
+import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { counterBadgeText } from "../utils/navigationAccess.js";
 
-export const PHONE_QUERY = "(max-width: 640px)";
 const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
 const EDITABLE_SELECTOR = 'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]):not([type="range"]):not([type="color"]), textarea, [contenteditable="true"]';
 

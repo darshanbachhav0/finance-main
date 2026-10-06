@@ -71,7 +71,7 @@ test("all Phase 3 labels and validation codes participate in the shared English-
 
 test("official request layouts collapse to one column without page-level fixed widths at 390px", () => {
   const styles = source("../src/styles/global.css");
-  assert.match(styles, /@media \(max-width: 430px\)/);
+  assert.match(styles, /@media \(max-width: 400px\)/);
   assert.match(styles, /\.quotation-grid \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(styles, /\.official-line, \.quotation-card, \.budget-preview/);
   assert.doesNotMatch(styles, /\.quotation-card[^}]*width:\s*\d+px/);

@@ -2,40 +2,40 @@
    to the component instead of growing global.css. */
 
 .supplier-official-form .workflow-stepper { margin-bottom: var(--space-3); }
-.supplier-form-legend { margin: 0 0 var(--space-3); color: var(--gray-600); font-size: 12px; line-height: 1.6; }
-.homologation-tag { display: inline-block; margin: 0 var(--space-2); padding: 1px 8px; border-radius: 999px; color: var(--amber-700, #8a5a00); background: var(--amber-50, #fff6e0); font-size: 11px; font-weight: 700; vertical-align: middle; }
+.supplier-form-legend { margin: 0 0 var(--space-3); color: var(--gray-600); font-size: var(--font-xs); line-height: 1.6; }
+.homologation-tag { display: inline-block; margin: 0 var(--space-2); padding: 1px 8px; border-radius: var(--radius-pill); color: var(--amber-700, #8a5a00); background: var(--amber-50, #fff6e0); font-size: var(--font-2xs); font-weight: 700; vertical-align: middle; }
 .supplier-form-section h3 .homologation-tag { margin-right: 0; }
 
 /* SUNAT lookups: one panel, one row per lookup. */
-.sunat-status { display: grid; gap: 1px; margin-bottom: var(--space-3); overflow: hidden; border: 1px solid var(--gray-200); border-radius: var(--radius-md, 8px); background: var(--gray-200); }
+.sunat-status { display: grid; gap: 1px; margin-bottom: var(--space-3); overflow: hidden; border: 1px solid var(--gray-200); border-radius: var(--radius-md); background: var(--gray-200); }
 .sunat-status-row { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-3); background: var(--surface-panel); }
 .sunat-status-row > div { display: grid; gap: 2px; min-width: 0; }
-.sunat-status-row strong { font-size: 13px; }
-.sunat-status-row span { color: var(--gray-700); font-size: 12px; overflow-wrap: anywhere; }
+.sunat-status-row strong { font-size: var(--font-sm); }
+.sunat-status-row span { color: var(--gray-700); font-size: var(--font-xs); overflow-wrap: anywhere; }
 .sunat-status-row.tone-success > svg { color: var(--green-700, #19733d); }
 .sunat-status-row.tone-warning > svg { color: var(--amber-700, #8a5a00); }
 .sunat-status-row.tone-info > svg { color: var(--blue-700, #2463a6); }
-.sunat-representatives { margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md, 8px); }
+.sunat-representatives { margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); }
 .sunat-representatives > summary { font-weight: 650; }
 
 /* Declarations: a radio group drawn as the existing segmented control. */
-.segmented-control label { display: inline-flex; align-items: center; min-height: 30px; padding: 5px 10px; border-radius: 4px; color: var(--gray-600); font-size: 12px; font-weight: 700; cursor: pointer; }
+.segmented-control label { display: inline-flex; align-items: center; min-height: 30px; padding: 5px 10px; border-radius: var(--radius-xs); color: var(--gray-600); font-size: var(--font-xs); font-weight: 700; cursor: pointer; }
 .segmented-control label.active { color: #fff; background: var(--uma-primary); }
 .segmented-control label:has(input:focus-visible) { outline: 2px solid var(--uma-primary); outline-offset: 2px; }
 
 /* Documents: the chosen file is named and can be removed. */
-.file-field > label > span { font-size: 12px; font-weight: 700; }
+.file-field > label > span { font-size: var(--font-xs); font-weight: 700; }
 .file-field-input { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .file-field-input input { flex: 1 1 180px; }
 
 /* Review */
-.supplier-review h4 { margin: var(--space-4) 0 var(--space-2); font-size: 13px; }
+.supplier-review h4 { margin: var(--space-4) 0 var(--space-2); font-size: var(--font-sm); }
 .homologation-checklist { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.homologation-checklist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md, 8px); }
+.homologation-checklist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); }
 .homologation-checklist li > svg { grid-row: span 2; color: var(--amber-700, #8a5a00); }
 .homologation-checklist li.is-done > svg { color: var(--green-700, #19733d); }
-.homologation-checklist li > span { font-size: 13px; font-weight: 600; }
-.homologation-checklist li > small { grid-column: 2; color: var(--gray-600); font-size: 12px; }
+.homologation-checklist li > span { font-size: var(--font-sm); font-weight: 600; }
+.homologation-checklist li > small { grid-column: 2; color: var(--gray-600); font-size: var(--font-xs); }
 .homologation-checklist li > button { grid-column: 3; grid-row: 1 / span 2; }
 
 /* Footer: errors above the buttons; Cancel apart from Back / Continue / Submit. */

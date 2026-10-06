@@ -93,7 +93,7 @@ test("Phase 5 workflow panels use dense shared styles and collapse at mobile wid
   for (const selector of [".readiness-gates", ".responsibility-map", ".readiness-issues", ".order-summary", ".payment-destination-summary", ".table-account-select"]) {
     assert.ok(styles.includes(selector), `Missing ${selector}`);
   }
-  assert.match(styles, /@media \(max-width: 680px\)[\s\S]*\.readiness-gates, \.responsibility-map \{ grid-template-columns: 1fr; \}/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.readiness-gates, \.responsibility-map \{ grid-template-columns: 1fr; \}/);
   assert.doesNotMatch(styles, /\.procurement-readiness[^}]*width:\s*\d+px/);
 });
 

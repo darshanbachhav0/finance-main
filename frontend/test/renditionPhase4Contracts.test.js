@@ -79,7 +79,7 @@ test("Finance review supports approved, observed, and rejected outcomes with com
 
 test("Phase 4 layouts collapse safely for 390px-class mobile screens", () => {
   const styles = source("../src/styles/global.css");
-  assert.match(styles, /@media \(max-width: 600px\)/);
+  assert.match(styles, /@media \(max-width: 640px\)/);
   assert.match(styles, /\.rendition-identity, \.rendition-totals, \.finance-review-row, \.rendition-submit-bar, \.bank-selector-row \{ grid-template-columns: 1fr; \}/);
   assert.match(styles, /min-height: 44px/);
   assert.doesNotMatch(styles, /\.official-rendition-workspace[^}]*width:\s*\d+px/);

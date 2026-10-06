@@ -20,7 +20,7 @@ assert.match(layer, /\.table-filter-fields\.simplified-filters\.is-open \{[^}]*d
 // "More filters" is styled at every width, not only inside a small-screen media query.
 assert.match(layer, /^\.table-filter-toggle \{/m);
 // Phones get 40px touch targets.
-assert.match(layer, /@media \(max-width: 760px\) \{[\s\S]*min-height: var\(--touch-target\)/);
+assert.match(layer, /@media \(max-width: 768px\) \{[\s\S]*min-height: var\(--touch-target\)/);
 
 // Workflow codes shown in charts and badges have an English label and a Spanish translation.
 for (const [code, label] of Object.entries(interfaceCodeLabels)) {

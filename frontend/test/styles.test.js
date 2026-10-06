@@ -48,4 +48,34 @@ const important = (globalCss.match(/!important/g) || []).length;
 assert.ok(hexColours <= 335, `global.css hard-coded colours: ${hexColours} (limit 335)`);
 assert.ok(important <= 52, `global.css !important: ${important} (limit 52)`);
 
-console.log(`PASS styles: semantic tokens, every variable defined, no dead selectors, ${hexColours} hex colours and ${important} !important in global.css (ratcheted)`);
+// 5. Scales. Font sizes come from the type scale (--font-2xs ... --font-4xl) or a fluid clamp();
+//    radii from the radius scale (--radius-xs ... --radius-pill), 0 or 50% for circles; @media
+//    widths from utils/breakpoints.js (max-width: step, min-width: step + 1). Print styles keep
+//    their own sizes.
+const { BREAKPOINTS } = await import("../src/utils/breakpoints.js");
+const steps = Object.values(BREAKPOINTS);
+const fontOk = /^(var\(--font-[a-z0-9]+\)|clamp\(.+\)|inherit)( !important)?$/;
+const radiusOk = /^((var\(--radius-[a-z]+(, ?\d+px)?\)|0|50%)\s*)+( !important)?$/;
+const offScale = [];
+for (const [file, text] of Object.entries(styles)) {
+  const root = postcss.parse(text);
+  root.walkAtRules("media", (at) => {
+    for (const [, kind, width] of at.params.matchAll(/\((max|min)-width:\s*(\d+)px\)/g)) {
+      if (!steps.includes(kind === "max" ? Number(width) : Number(width) - 1)) offScale.push(`${file}: @media ${at.params}`);
+    }
+  });
+  root.walkDecls((decl) => {
+    if (decl.prop.startsWith("--")) return;
+    for (let parent = decl.parent; parent; parent = parent.parent) if (parent.type === "atrule" && /print/.test(parent.params)) return;
+    if (decl.prop === "font-size" && !fontOk.test(decl.value)) offScale.push(`${file}: ${decl.parent.selector} { font-size: ${decl.value} }`);
+    if (/^border(-(top|bottom)-(left|right))?-radius$/.test(decl.prop) && !radiusOk.test(decl.value)) offScale.push(`${file}: ${decl.parent.selector} { ${decl.prop}: ${decl.value} }`);
+  });
+}
+assert.deepEqual(offScale, [], "font sizes, radii and @media widths use the design scales");
+for (const step of ["2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl"]) assert.ok(defined.has(`--font-${step}`), `--font-${step} is defined`);
+for (const step of ["xs", "sm", "md", "lg", "xl", "pill"]) assert.ok(defined.has(`--radius-${step}`), `--radius-${step} is defined`);
+// JS media queries come from the same module instead of repeating pixel widths.
+const jsWidths = code.replace(fs.readFileSync(path.join(src, "utils/breakpoints.js"), "utf8"), "").match(/\((max|min)-width:\s*\d+px\)/g) || [];
+assert.deepEqual(jsWidths, [], "JS media queries use utils/breakpoints.js");
+
+console.log(`PASS styles: semantic tokens, every variable defined, no dead selectors, ${hexColours} hex colours and ${important} !important in global.css (ratcheted), type/radius/breakpoint scales`);

@@ -64,7 +64,7 @@ assert.match(shellCss, /\[data-theme="dark"\] \.brand \.uma-logo-full, \[data-th
 assert.match(shellCss, /\.sidebar-collapsed \.brand \{ min-height: 76px;/, "the collapsed sidebar keeps the symbol");
 
 // 4. Checkboxes: 22px box inside a 40px tap area on phones.
-assert.match(shellCss, /@media \(max-width: 760px\) \{[\s\S]*input\[type="checkbox"\]:not\(\.sr-only\) \{[^}]*width: var\(--touch-target\); height: var\(--touch-target\); margin: -9px;/);
+assert.match(shellCss, /@media \(max-width: 768px\) \{[\s\S]*input\[type="checkbox"\]:not\(\.sr-only\) \{[^}]*width: var\(--touch-target\); height: var\(--touch-target\); margin: -9px;/);
 assert.match(shellCss, /input\[type="checkbox"\]:not\(\.sr-only\)::before \{[^}]*inset: 9px;/, "the drawn box stays 40 - 2 x 9 = 22px");
 assert.match(shellCss, /:checked::before \{[^}]*var\(--checkbox-check\)/);
 assert.match(shellCss, /:focus-visible::before \{/, "keyboard focus stays visible");
@@ -83,7 +83,7 @@ for (const role of ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Account
   assert.ok(destinations({ role }).length <= 3, `${role}: at most three destinations plus Search`);
 }
 const bottomNav = source("../src/components/MobileBottomNav.jsx");
-assert.match(bottomNav, /\(max-width: 640px\)/);
+assert.match(bottomNav, /useMediaQuery\(PHONE_QUERY\)/, "shown on phones only (utils/breakpoints.js)");
 assert.match(bottomNav, /\[role="dialog"\]\[aria-modal="true"\]/, "hidden while a dialog or drawer is open");
 assert.match(bottomNav, /visualViewport/, "hidden while the on-screen keyboard is open");
 assert.match(layout, /<MobileBottomNav[\s\S]*onSearch=\{managementViewer \? undefined : openCommandPalette\}/, "Search opens the command palette");

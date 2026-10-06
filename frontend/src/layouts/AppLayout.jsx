@@ -14,6 +14,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
+import { SIDEBAR_DRAWER_QUERY } from "../utils/breakpoints.js";
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
 import { bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
 import { navigationIcon } from "../utils/navigationIcons.js";
@@ -24,7 +25,7 @@ export default function AppLayout() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const mobile = useMediaQuery("(max-width: 1080px)");
+  const mobile = useMediaQuery(SIDEBAR_DRAWER_QUERY);
   const managementViewer = user.role === "ManagementViewer";
   const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead, dismiss: dismissNotification } = useNotificationBell(user._id, !managementViewer);
   const [taskOpen, setTaskOpen] = useState(false);
