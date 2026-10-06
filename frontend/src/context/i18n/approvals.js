@@ -31,9 +31,5 @@ export default {
   "You can open a team request only while it is on your approval route.": "Solo puede abrir una solicitud de su equipo mientras esté en su ruta de aprobación.",
 
   // Notifications raised by the approval workflow
-  "Request approved": "Solicitud aprobada",
-  "Approval escalated": "Aprobación escalada",
-  "Approval escalated to you": "Aprobación escalada a usted",
-  "Your request's approval is overdue": "La aprobación de su solicitud está vencida",
-  "Approval without an available approver": "Aprobación sin aprobador disponible"
+
 };

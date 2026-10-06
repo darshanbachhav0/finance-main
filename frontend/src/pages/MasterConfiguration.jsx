@@ -133,7 +133,7 @@ export default function MasterConfiguration() {
         { type: "section", label: "Reference" }, { name: "description", label: "Description", type: "textarea" }, { name: "source", label: "Source / reference" },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true }
       ],
-      columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? formatDate(row.effectiveFrom) : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? formatDate(row.effectiveTo) : "Open" }, { key: "active", label: "Status" }]
+      columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? formatDate(row.effectiveFrom) : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? formatDate(row.effectiveTo) : t("No end date") }, { key: "active", label: "Status" }]
     },
     "budget-rules": {
       label: "Budget Rules", roles: ["Admin", "Budget"], endpoint: "/budget-rules",

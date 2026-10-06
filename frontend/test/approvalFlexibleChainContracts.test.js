@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import approvalsSpanish from "../src/context/i18n/approvals.js";
+import notificationsSpanish from "../src/context/i18n/notifications.js";
 
 const read = file => fs.readFileSync(new URL(file, import.meta.url), "utf8");
 const inbox = read("../src/pages/ApprovalInbox.jsx");
@@ -21,6 +22,7 @@ assert.ok(list.includes("/withdraw") && list.includes('includes("WITHDRAW")'));
 assert.ok(team.includes("row.canView ?"));
 // Admin can put a user on leave.
 assert.ok(users.includes('name: "onLeave"'));
-for (const key of ["Send to my jefe", "Withdraw", "Withdraw request", "On leave", "Request approved"]) assert.ok(approvalsSpanish[key], `Spanish copy for ${key}`);
+// Each key lives in one dictionary (notifications hold the notification titles).
+for (const key of ["Send to my jefe", "Withdraw", "Withdraw request", "On leave", "Request approved"]) assert.ok({ ...approvalsSpanish, ...notificationsSpanish }[key], `Spanish copy for ${key}`);
 
 console.log("PASS flexible chain, withdrawal, My Team links and leave UI contracts");

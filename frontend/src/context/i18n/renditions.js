@@ -4,7 +4,6 @@ export default {
   "Track C request type": "Tipo de solicitud de la Vía C",
   "Advance to render (paid before the expense)": "Entrega a rendir (anticipo antes del gasto)",
   "Undocumented reimbursement (expense already paid, no receipt)": "Reembolso sin sustento (gasto ya pagado, sin comprobante)",
-  "Undocumented reimbursement": "Reembolso sin sustento",
   "Select an advance to render or an undocumented reimbursement.": "Seleccione una entrega a rendir o un reembolso sin sustento.",
   "Reimburses an expense you already paid and could not support with a fiscal receipt. After approval you sign the declaration, Accounting reviews it and Treasury pays your verified account.": "Reembolsa un gasto que usted ya pagó y que no pudo sustentar con un comprobante de pago. Tras la aprobación usted firma la declaración jurada, Contabilidad la revisa y Tesorería abona en su cuenta verificada.",
   "UMA pays you first; you then render the advance with receipts within the configured working-day deadline.": "UMA le entrega primero el anticipo; luego usted lo rinde con comprobantes dentro del plazo configurado en días hábiles.",

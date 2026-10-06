@@ -15,9 +15,6 @@ export default {
   "Opened from a notification or task.": "Abierta desde una notificación o tarea.",
   "Show all exceptions": "Mostrar todas las excepciones",
   "Budget exceptions awaiting your decision": "Excepciones presupuestales pendientes de su decisión",
-  "Budget exception ready for decision": "Excepción presupuestal lista para decisión",
-  "Budget exception approved": "Excepción presupuestal aprobada",
-  "Budget exception rejected": "Excepción presupuestal rechazada",
   "Budget must review this exception before Management can decide it.": "Presupuesto debe revisar esta excepción antes de que Gerencia pueda decidirla.",
   // Transitional usage
   "Committed includes {amount} of informational (transitional) commitments, which do not reduce the available balance.": "Lo comprometido incluye {amount} de compromisos informativos (transitorios), que no reducen el saldo disponible.",
@@ -32,7 +29,6 @@ export default {
   "{count} open commitments carried over to {year} ({amount}).": "{count} compromisos abiertos trasladados a {year} ({amount}).",
   // Procurement readiness
   "This request does not require a Purchase or Service Order.": "Esta solicitud no requiere una Orden de Compra o de Servicio.",
-  "Requirement, CECO, quotations and conformity": "Requerimiento, CECO, cotizaciones y conformidad",
   // Flexible annual plans (Admin edits, roll-forward, approval threshold)
   "Increase from approved budget exception": "Ampliación por excepción presupuestal aprobada",
   "Carried over to next year": "Trasladado al año siguiente",
