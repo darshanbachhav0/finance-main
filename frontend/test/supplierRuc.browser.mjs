@@ -100,7 +100,7 @@ try {
   }, user);
   const openSupplier = async ruc => {
     await page.goto("http://127.0.0.1:5188/suppliers");
-    await page.getByRole("button", { name: "New supplier", exact: true }).click();
+    await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
     await page.getByLabel("RUC / identifier", { exact: true }).fill(ruc);
     await page.getByLabel("Legal Name", { exact: false }).waitFor();
     await page.waitForFunction(company => [...document.querySelectorAll("label")].find(label => label.textContent.includes("Legal Name"))?.querySelector("input")?.value === company, company);
@@ -109,7 +109,9 @@ try {
     assert.equal(await page.getByLabel("Payment Terms", { exact: true }).count(), 0);
     assert.equal(await page.getByLabel("Custom credit days", { exact: true }).count(), 0);
     assert.equal(await page.getByLabel("Payment comments", { exact: true }).count(), 0);
-    await page.getByText("Payment terms are entered in each supplier quotation and carried into the selected purchase.", { exact: true }).waitFor();
+    // The proposal is a stepped form: identification first, conditions on the next step.
+    await page.getByRole("button", { name: "Identification" }).waitFor();
+    assert.equal(await page.getByText("Payment terms are entered in each supplier quotation and carried into the selected purchase.", { exact: true }).isVisible(), false);
   };
 
   await openSupplier("20600000001");
@@ -122,6 +124,9 @@ try {
   assert.equal(cached.cached, true);
   assert.equal(searches, 1, "Repeated RUC lookup reuses the cached result");
   await page.screenshot({ path: `${output}/autofill.png`, fullPage: true });
+  // Continue checks the identification step (filled by SUNAT) and opens contacts and conditions.
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByText("Payment terms are entered in each supplier quotation and carried into the selected purchase.", { exact: true }).waitFor();
   const optionalContact = page.locator(".optional-section");
   assert.equal(await optionalContact.getAttribute("open"), null);
   await optionalContact.locator("summary").focus();
@@ -138,7 +143,7 @@ try {
 
   // A deliberately blocked Padrón request must not hold the entire form hostage.
   await page.goto("http://127.0.0.1:5188/suppliers");
-  await page.getByRole("button", { name: "New supplier", exact: true }).click();
+  await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000006");
   await page.getByText("Loading SUNAT details in the background", { exact: true }).waitFor();
   await page.getByLabel("Legal Name", { exact: false }).fill("User-entered company name");
@@ -153,13 +158,13 @@ try {
   assert.equal(await page.getByLabel("Fiscal Address", { exact: true }).inputValue(), "User-entered address");
 
   await page.goto("http://127.0.0.1:5188/suppliers");
-  await page.getByRole("button", { name: "New supplier", exact: true }).click();
+  await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000007");
   await page.getByText("Existing supplier fixture", { exact: true }).waitFor();
   assert.equal(await page.getByLabel("Legal Name", { exact: false }).count(), 0, "Duplicates must not open a proposal form");
 
   await page.goto("http://127.0.0.1:5188/suppliers");
-  await page.getByRole("button", { name: "New supplier", exact: true }).click();
+  await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000008");
   await page.getByText("Duplicate check unavailable", { exact: true }).waitFor();
   const checksAfterFailure = duplicateChecks;
