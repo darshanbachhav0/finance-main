@@ -15,25 +15,12 @@ import {
 import { ChevronRight, MoreHorizontal, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import useMediaQuery from "../hooks/useMediaQuery.js";
+import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { getMenuNavigationIndex } from "../utils/menuNavigation.js";
 import { splitRowActions } from "../utils/rowActions.js";
 
 const OPEN_EVENT = "erp:row-action-menu-open";
-const MOBILE_QUERY = "(max-width: 640px)";
-
-function useMediaQuery(query) {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const update = () => setMatches(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, [query]);
-
-  return matches;
-}
 
 // `variant="bar"` lays the same actions out for a panel footer (details drawer); the grouping
 // rules live in utils/rowActions.js.
@@ -41,7 +28,7 @@ export default function RowActionMenu({ row, actions, variant = "row", onBeforeA
   const { t } = useLanguage();
   const menuId = useId();
   const triggerId = useId();
-  const isMobile = useMediaQuery(MOBILE_QUERY);
+  const isMobile = useMediaQuery(PHONE_QUERY);
   const [open, setOpen] = useState(false);
   const [returnFocus, setReturnFocus] = useState(true);
   const itemRefs = useRef([]);

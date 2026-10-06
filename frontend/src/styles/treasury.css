@@ -2,18 +2,18 @@
    growing global.css. */
 
 /* Bank-file preparation: 1 file details, 2 select payments, 3 review and generate. */
-.bank-file-steps { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-3); padding: 0; list-style: none; color: var(--gray-600); font-size: 13px; font-weight: 600; }
+.bank-file-steps { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-3); padding: 0; list-style: none; color: var(--gray-600); font-size: var(--font-sm); font-weight: 600; }
 .bank-file-steps li { display: inline-flex; align-items: center; gap: var(--space-2); }
 .bank-file-steps li.is-current { color: var(--gray-950); }
 .bank-file-steps li.is-done { color: var(--green-700, #19733d); }
-.bank-file-step-number { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; margin-right: var(--space-2); border: 2px solid currentColor; border-radius: 50%; font-size: 12px; font-weight: 700; vertical-align: middle; }
+.bank-file-step-number { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; margin-right: var(--space-2); border: 2px solid currentColor; border-radius: 50%; font-size: var(--font-xs); font-weight: 700; vertical-align: middle; }
 .bank-file-steps li.is-current .bank-file-step-number { color: #fff; background: var(--uma-primary); border-color: var(--uma-primary); }
 .bank-file-steps li .bank-file-step-number { margin-right: 0; }
 .treasury-file-controls h3, .bank-file-review h3 { display: flex; align-items: center; }
 
 /* Step 3 sits under the list: the readiness check, then the sticky bar with Generate. */
 .bank-file-review { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
-.bank-file-review h3 { margin: 0; font-size: 15px; }
+.bank-file-review h3 { margin: 0; font-size: var(--font-md); }
 .bank-file-review > .workspace-panel { margin: 0; }
 
 .treasury-kpis .stat-card-link { text-decoration: none; }

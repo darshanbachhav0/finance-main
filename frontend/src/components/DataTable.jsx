@@ -17,6 +17,7 @@ import TableTools from "./TableTools.jsx";
 import { TableSkeletonRows } from "./WorkspaceSkeleton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
+import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { columnLayout, isPrimaryColumn } from "../utils/tableColumns.js";
 
 function rawValue(column, row) {
@@ -233,7 +234,7 @@ export default function DataTable({
 
   // Long search hints ("Search request, supplier, voucher...") are cut off on phones; there the
   // first term is shown and the full hint stays available as the field's tooltip.
-  const narrowScreen = useMediaQuery("(max-width: 640px)");
+  const narrowScreen = useMediaQuery(PHONE_QUERY);
   const fullPlaceholder = t(searchPlaceholder);
   const searchHint = narrowScreen && fullPlaceholder.includes(",") ? `${fullPlaceholder.split(",")[0].replace(/[.…]+$/, "")}…` : fullPlaceholder;
 
