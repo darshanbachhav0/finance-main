@@ -105,6 +105,10 @@ export default {
   "Upload the invoice XML or its factura PDF (one is enough) and the other required documents. The amounts are read from the XML, or from the factura PDF when there is no XML.": "Sube el XML o el PDF de la factura (basta con uno) y los demás documentos requeridos. Los montos se leen del XML o, si no hay XML, del PDF de la factura.",
   "This or the other invoice file: one is enough.": "Este o el otro archivo del comprobante: basta con uno.",
   "invoice XML or factura PDF": "XML o PDF de la factura",
+  // Request submission: at least one document, never all of them.
+  "at least one supporting document": "al menos un documento de sustento",
+  "Upload at least one document: any of these files is enough.": "Sube al menos un documento: basta con cualquiera de estos archivos.",
+  "Any one document is enough": "Basta con un documento cualquiera",
   "electronic fee receipt (XML or PDF)": "recibo por honorarios electrónico (XML o PDF)",
   "Upload the invoice XML or its factura PDF.": "Sube el XML del comprobante o el PDF de la factura.",
   "Track B requires a verified invoice (its XML or factura PDF).": "La vía B requiere un comprobante verificado (su XML o el PDF de la factura).",

@@ -953,7 +953,7 @@ export default function RequestDetail() {
               )}
               {permissions.modifiable && (
                 <div className="action-item">
-                  <div><strong>{t("Submit for approval")}</strong><span id="request-submit-reason">{missingDocuments.length ? t("Upload all required documents before submission.") : t("Starts the configured approval route.")}</span></div>
+                  <div><strong>{t("Submit for approval")}</strong><span id="request-submit-reason">{missingDocuments.length ? t("Upload the required documents before submission.") : t("Starts the configured approval route.")}</span></div>
                   <div className="action-item-buttons">
                     <Link className="secondary-button" to={`/requests/${id}/edit`}><Pencil size={16} /><span>{t("Edit request")}</span></Link>
                     <button type="button" className="primary-button" disabled={processing || missingDocuments.length > 0} aria-describedby="request-submit-reason" onClick={submitRequest}><Send size={16} /><span>{t("Submit")}</span></button>

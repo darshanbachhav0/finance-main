@@ -23,6 +23,7 @@ export const QUOTATION_MINIMUM_COUNT = 1;
 function normalizeRequirement(requirement) {
   if (requirement.kind === "QUOTATION") return { kind: requirement.kind, labelKey: "at least one quotation", minCount: QUOTATION_MINIMUM_COUNT };
   if (requirement.kind === INVOICE_EVIDENCE) return { kind: INVOICE_EVIDENCE, anyOf: [...requirement.anyOf], minCount: 1, labelKey: requirement.labelKey };
+  if (requirement.kind === SUBMISSION_DOCUMENT) return anySubmissionDocument();
   return { kind: requirement.kind, minCount: requirement.minCount, labelKey: requirement.labelKey };
 }
 
@@ -49,6 +50,25 @@ function collapseInvoiceEvidence(input) {
   return kinds.size ? [...rest, invoiceEvidenceRequirement(kinds)] : rest;
 }
 
+// Product decision: a requester submitting a request uploads at least one document, never every
+// document on the checklist. At submission the configured evidence (a contract, a purchase order,
+// a conformity report...) collapses into one requirement that any one uploaded file satisfies -
+// including DocumentRule records stored before this decision, whatever minimum they carry.
+// Quotations keep their own rule (each one carries its evidence), and where the invoice is part of
+// the submission (Track B) it already is that one document, since it must be verified.
+export const SUBMISSION_DOCUMENT = "SUBMISSION_DOCUMENT";
+export const SUBMISSION_DOCUMENT_KINDS = Object.freeze(["CONTRACT", "PURCHASE_ORDER", "CONFORMITY", "ACTIVITY_REPORT", "SUPPORTING", "XML", "PDF", "FEE_RECEIPT"]);
+function anySubmissionDocument() {
+  return { kind: SUBMISSION_DOCUMENT, anyOf: [...SUBMISSION_DOCUMENT_KINDS], minCount: 1, labelKey: "at least one supporting document" };
+}
+function atLeastOneSubmissionDocument(requirements) {
+  const quotations = requirements.filter((item) => item.kind === "QUOTATION");
+  const documents = requirements.filter((item) => item.kind !== "QUOTATION");
+  if (!documents.length) return requirements;
+  const invoice = documents.find((item) => item.kind === INVOICE_EVIDENCE);
+  return [...quotations, invoice || anySubmissionDocument()];
+}
+
 function mergeRequirements(requirements) {
   const merged = new Map();
   for (const requirement of collapseInvoiceEvidence(requirements).map(normalizeRequirement)) {
@@ -67,6 +87,11 @@ function requirement(kind, labelKey, minCount = 1) { return { kind, minCount, la
 function invoiceEvidence(kinds = ["XML", "PDF"]) { return invoiceEvidenceRequirement(new Set(kinds)); }
 
 export function defaultDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
+  const requirements = phaseDocumentRequirements(request, phase);
+  return phase === DOCUMENT_PHASE.SUBMISSION ? atLeastOneSubmissionDocument(requirements) : requirements;
+}
+
+function phaseDocumentRequirements(request, phase) {
   const flowType = request.flowType || FLOW_TYPE.A1;
   const nature = canonicalNature(request.expenseNature);
   if (flowType === FLOW_TYPE.B) return phase === DOCUMENT_PHASE.SUBMISSION ? [invoiceEvidence()] : [];
@@ -118,7 +143,8 @@ async function matchingRules(request, phase) {
 export async function configuredDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
   const rules = await matchingRules(request, phase);
   if (!rules.length) return mergeRequirements(defaultDocumentRequirements(request, phase));
-  return mergeRequirements(rules.flatMap((rule) => rule.requirements || []));
+  const requirements = mergeRequirements(rules.flatMap((rule) => rule.requirements || []));
+  return phase === DOCUMENT_PHASE.SUBMISSION ? atLeastOneSubmissionDocument(requirements) : requirements;
 }
 
 export async function documentRequirementsByPhase(request) {

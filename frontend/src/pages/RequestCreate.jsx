@@ -41,7 +41,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
-import { coversKind, isEitherOf, presentCount, ruleForKind } from "../utils/documentRequirements.js";
+import { coversKind, isAnyDocument, isEitherOf, presentCount, ruleForKind } from "../utils/documentRequirements.js";
 import {
   currencies,
   expenditureClassificationLabels,
@@ -484,7 +484,9 @@ export default function RequestCreate() {
         if (!definitions.length) return;
         const count = presentCount(rule, existingAttachments, Object.fromEntries(definitions.map((item) => [item.kind, files[item.key]?.length || 0])));
         if (count >= rule.minCount) return;
-        const message = isEitherOf(rule)
+        const message = isAnyDocument(rule)
+          ? t("Upload at least one document: any of these files is enough.")
+          : isEitherOf(rule)
           ? t("Upload one of these files (one is enough): {documents}.").replace("{documents}", definitions.map((item) => t(item.label)).join(" / "))
           : t("A minimum of {count} {document} file(s) is required.").replace("{document}", t(definitions[0].label)).replace("{count}", String(rule.minCount));
         definitions.forEach((item) => { next[item.key] = message; });
@@ -756,7 +758,7 @@ export default function RequestCreate() {
           const alternatives = isEitherOf(rule) ? documentDefinitions.filter((item) => item.key !== document.key && coversKind(rule, item.kind)) : [];
           const metByAlternative = alternatives.some((item) => existingAttachments.some((file) => file.kind === item.kind) || files[item.key]?.length);
           const required = rule && !metByAlternative;
-          const state = attached ? t("Files attached") : metByAlternative ? t("Optional document") : alternatives.length ? t("Required: this or {other}").replace("{other}", alternatives.map((item) => t(item.label)).join(" / ")) : t(rule ? "Required document" : "Optional document");
+          const state = attached ? t("Files attached") : metByAlternative ? t("Optional document") : isAnyDocument(rule) ? t("Any one document is enough") : alternatives.length ? t("Required: this or {other}").replace("{other}", alternatives.map((item) => t(item.label)).join(" / ")) : t(rule ? "Required document" : "Optional document");
           return <label hidden={!showOptionalDocuments && !rule && !attached && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: Array.from(event.target.files || []) }))} /><div className="file-list">{existing.map((file) => <span key={file._id}>{file.originalName} - {t("Already uploaded")}</span>)}{files[document.key].map((file) => <span key={`${file.name}-${file.size}`}>{file.name} - {(file.size / 1024).toFixed(0)} KB</span>)}</div>{errors[document.key] && <small className="field-error-text">{t(errors[document.key])}</small>}</label>;
         })}</div></div>}
 

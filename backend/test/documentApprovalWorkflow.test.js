@@ -15,7 +15,9 @@ import {
 } from "../src/services/approvalRuleService.js";
 import { DOCUMENT_PHASE, EXPENSE_NATURE, FLOW_TYPE } from "../src/utils/constants.js";
 
-// An invoice requirement is satisfied by any one of its files ("XML|PDF").
+// An invoice requirement is satisfied by any one of its files ("XML|PDF"); at submission the
+// requester's checklist is satisfied by any one document.
+const ANY_DOCUMENT = "CONTRACT|PURCHASE_ORDER|CONFORMITY|ACTIVITY_REPORT|SUPPORTING|XML|PDF|FEE_RECEIPT";
 function kinds(request, phase) {
   return defaultDocumentRequirements(request, phase).map((item) => [item.anyOf ? item.anyOf.join("|") : item.kind, item.minCount]);
 }
@@ -50,16 +52,29 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
 
   await t.test("A1 services separate contract, invoice, and service conformity", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.SERVICES };
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["CONTRACT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [[ANY_DOCUMENT, 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
   });
 
   await t.test("professional services require receipt, agreement, and activity report", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.PROFESSIONAL_FEES };
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["CONTRACT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [[ANY_DOCUMENT, 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|FEE_RECEIPT", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["ACTIVITY_REPORT", 1]]);
+  });
+
+  await t.test("submission needs at least one document, never all of them", () => {
+    const requirements = defaultDocumentRequirements({ flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
+    assert.throws(
+      () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, []),
+      error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.missing[0].kind === "SUBMISSION_DOCUMENT"
+    );
+    for (const kind of ["CONTRACT", "PURCHASE_ORDER", "SUPPORTING", "PDF"]) {
+      assert.equal(assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, [{ kind }]).valid, true, `${kind} alone is enough`);
+    }
+    // Track B's one document is its invoice, which must be verified.
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.B }, DOCUMENT_PHASE.SUBMISSION), [["XML|PDF", 1]]);
   });
 
   await t.test("missing current-phase evidence blocks progression", () => {
@@ -94,7 +109,9 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
       assert.deepEqual(requirements.map((item) => [item.kind, item.minCount]), [["SUPPORTING", 2]]);
       assert.throws(() => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.ACCOUNTING, [{ kind: "SUPPORTING" }]), error => error.details.missing[0].required === 2);
       const legacySubmission = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
-      assert.deepEqual(legacySubmission.map((item) => [item.kind, item.minCount]), [["CONTRACT", 2]]);
+      // At submission one document is enough, whatever minimum a legacy rule carries.
+      assert.deepEqual(legacySubmission.map((item) => [item.kind, item.minCount]), [["SUBMISSION_DOCUMENT", 1]]);
+      assert.equal(assertDocumentRequirements({}, legacySubmission, DOCUMENT_PHASE.SUBMISSION, [{ kind: "SUPPORTING" }]).valid, true);
       const legacyAccounting = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);
       assert.deepEqual(legacyAccounting.map((item) => [item.kind, item.minCount]), [["CONFORMITY", 1]]);
 
