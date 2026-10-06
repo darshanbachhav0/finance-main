@@ -99,7 +99,7 @@ export default function Login() {
           {!resetRequired && <label className="field"><span>{t("DNI")}</span><input type="text" inputMode="numeric" pattern="[0-9]{6,8}" autoComplete="username" value={dni} onChange={(event) => setDni(event.target.value)} required autoFocus={!DEMO_LOGIN_ENABLED} /></label>}
           <label className="field"><span>{t("Password")}</span><div className="password-control"><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /><button type="button" className="icon-button quiet" aria-label={t(showPassword ? "Hide password" : "Show password")} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           {resetRequired && <><Message>{t("Change your initial password to continue.")}</Message><label className="field"><span>{t("New password")}</span><input type="password" autoComplete="new-password" minLength={10} maxLength={72} value={newPassword} onChange={event => setNewPassword(event.target.value)} required /></label></>}
-          <button className="primary-button login-submit" type="submit" disabled={loading}><LogIn size={17} /><span>{t(loading ? "Saving..." : resetRequired ? "Change password" : "Sign in")}</span></button>
+          <button className="primary-button login-submit" type="submit" disabled={loading}><LogIn size={17} /><span>{t(loading ? (resetRequired ? "Saving..." : "Signing in...") : resetRequired ? "Change password" : "Sign in")}</span></button>
         </form>
       </section>
     </main>

@@ -691,6 +691,30 @@ export default function SupplierForm({
       return;
     }
 
+    // The initial bank account is only sent with a bank selected, so typed account details
+    // without one would be dropped silently.
+    if (
+      includeInitialBank &&
+      !form.bank &&
+      [
+        form.accountNumber,
+        form.cci
+      ].some(
+        (value) =>
+          String(
+            value || ""
+          ).trim()
+      )
+    ) {
+      setError(
+        t(
+          "Select the bank for the account you entered, or clear the account number and CCI to add the account after saving."
+        )
+      );
+
+      return;
+    }
+
     const payload =
       new FormData();
 

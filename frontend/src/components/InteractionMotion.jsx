@@ -13,7 +13,7 @@ export default function InteractionMotion() {
     }
     function updateControls() {
       for(const button of document.querySelectorAll("button")) {
-        const busy=button.disabled && /saving|submitting|processing|uploading|guardando|enviando|procesando|subiendo/i.test(button.textContent);
+        const busy=button.disabled && /saving|submitting|processing|uploading|signing in|guardando|enviando|procesando|subiendo|ingresando/i.test(button.textContent);
         if(busy && !button.classList.contains("motion-busy")){button.classList.add("motion-busy");button.setAttribute("aria-busy","true");}
         else if(!busy && button.classList.contains("motion-busy")){button.classList.remove("motion-busy");button.removeAttribute("aria-busy");}
       }

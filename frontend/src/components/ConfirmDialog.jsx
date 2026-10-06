@@ -27,6 +27,7 @@ export default function ConfirmDialog({
   const dialogRef = useRef(null);
   const inputRef = useRef(null);
   const confirmRef = useRef(null);
+  const cancelRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef(null);
   const contentRef = useRef({ title, description, details, confirmLabel, cancelLabel, tone, inputLabel, inputType, inputRequired, inputPlaceholder });
@@ -43,7 +44,8 @@ export default function ConfirmDialog({
     previousFocusRef.current = document.activeElement;
     setInputValue("");
     const frame = window.requestAnimationFrame(() => {
-      (content.inputLabel ? inputRef.current : confirmRef.current)?.focus({ preventScroll: true });
+      // A destructive dialog starts on Cancel, so pressing Enter right away does not run it.
+      (content.inputLabel ? inputRef.current : content.tone === "danger" ? cancelRef.current : confirmRef.current)?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [open, content.inputLabel]);
@@ -136,7 +138,7 @@ export default function ConfirmDialog({
           </label>
         )}
         <footer className="dialog-actions">
-          <button type="button" className="secondary-button" onClick={onClose} disabled={loading}>{t(content.cancelLabel)}</button>
+          <button ref={cancelRef} type="button" className="secondary-button" onClick={onClose} disabled={loading}>{t(content.cancelLabel)}</button>
           <button
             ref={confirmRef}
             type="button"
