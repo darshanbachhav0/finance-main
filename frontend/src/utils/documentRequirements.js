@@ -5,6 +5,9 @@ export const requirementKinds = (rule) => (rule?.anyOf?.length ? rule.anyOf : [r
 export const coversKind = (rule, kind) => requirementKinds(rule).includes(kind);
 export const ruleForKind = (rules = [], kind) => rules.find((rule) => coversKind(rule, kind));
 export const isEitherOf = (rule) => (rule?.anyOf?.length || 0) > 1;
+// At submission the requester uploads at least one document, never all of them: the checklist is
+// one requirement any uploaded file satisfies (backend documentRuleService.SUBMISSION_DOCUMENT).
+export const isAnyDocument = (rule) => rule?.kind === "SUBMISSION_DOCUMENT";
 
 // Files present for a requirement: stored attachments plus any chosen in the form ({ XML: 1 }).
 export function presentCount(rule, attachments = [], chosen = {}) {

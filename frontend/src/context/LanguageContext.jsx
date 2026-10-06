@@ -625,7 +625,7 @@ const additionalSpanish = {
   "Required documents are determined by the request type and expense nature.": "Los documentos obligatorios se determinan según el tipo de solicitud y la naturaleza del gasto.",
   "Mandatory document checklist": "Lista de documentos obligatorios",
   "Add quotations or other support when applicable.": "Agrega cotizaciones u otros sustentos cuando corresponda.",
-  "Upload all required documents before submission.": "Carga todos los documentos obligatorios antes de enviar.",
+  "Upload the required documents before submission.": "Carga los documentos obligatorios antes de enviar.",
   "Approval level": "Nivel de aprobación",
   "SLA due": "Vencimiento SLA",
   "Director approval recorded and sent to Vice Rector.": "Aprobación del director registrada y enviada al Vicerrector.",

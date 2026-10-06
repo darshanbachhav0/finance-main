@@ -43,7 +43,9 @@ test("goods submission requires at least one quotation (three are not compulsory
   assert.doesNotThrow(() => assertMandatoryDocuments(request));
 });
 
-test("service submission requires service or contract documentation", () => {
-  const request = { requestType: "OPEX", expenseNature: "Contratación de Servicios", attachments: [{ kind: "CONTRACT" }] };
-  assert.doesNotThrow(() => assertMandatoryDocuments(request));
+test("service submission requires at least one document, any one", () => {
+  const request = { requestType: "OPEX", expenseNature: "Contratación de Servicios", attachments: [] };
+  assert.throws(() => assertMandatoryDocuments(request), (error) => error.statusCode === 422 && /at least one supporting document/.test(error.message));
+  assert.doesNotThrow(() => assertMandatoryDocuments({ ...request, attachments: [{ kind: "CONTRACT" }] }));
+  assert.doesNotThrow(() => assertMandatoryDocuments({ ...request, attachments: [{ kind: "SUPPORTING" }] }));
 });
