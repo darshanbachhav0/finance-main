@@ -44,7 +44,8 @@ test("order confirmation explains immutable supplier, PRV, lines, currency, and 
 });
 
 test("AP screens display the captured supplier payment terms and preserve due date", () => {
-  const payable = source("../src/pages/AccountsPayable.jsx");
+  // The CXP record lives in components/payables/PayableDetail.jsx.
+  const payable = source("../src/pages/AccountsPayable.jsx") + source("../src/components/payables/PayableDetail.jsx");
   const detail = source("../src/pages/RequestDetail.jsx");
   assert.match(payable, /paymentTermsSnapshot/);
   assert.match(payable, /Payment Terms/);

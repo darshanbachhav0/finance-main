@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+// Line endings are normalized: a Windows checkout (core.autocrlf) has CRLF files.
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const page = read("../src/pages/RequestCreate.jsx");
 const stepBody = (id) => {
   const start = page.indexOf(`{stepId === "${id}" && <div className="wizard-step`);
