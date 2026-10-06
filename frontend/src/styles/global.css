@@ -3418,3 +3418,7 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
   .focused-request-detail .request-detail-side { display: block; }
 }
 @media (max-width: 1180px) { .focused-request-detail .request-detail-side { order: -1; } }
+
+/* ==== ux: request form ======================================================================== */
+/* The stepper has one column per step (five, or four for Track C); phones keep two columns. */
+@media (min-width: 641px) { .workflow-stepper { grid-template-columns: repeat(var(--step-count, 4), minmax(0, 1fr)); } }

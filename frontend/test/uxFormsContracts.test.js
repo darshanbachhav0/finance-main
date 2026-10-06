@@ -54,7 +54,9 @@ test("request step 1 is grouped into four blocks with a completion badge", () =>
   assert.equal(uxformsSpanish.Complete, "Completo");
   for (const field of ["flowType", "requestType", "expenseNature", "title", "detailedDescription"]) assert.equal(blockForField(field), "need");
   for (const field of ["businessJustification", "nonApprovalRisk"]) assert.equal(blockForField(field), "why");
-  for (const field of ["requesterCostCenter", "issueDate", "accountingPeriod", "currency", "lines.0.costCenter", "lines.2.costCenter"]) assert.equal(blockForField(field), "budget");
+  for (const field of ["requesterCostCenter", "issueDate", "accountingPeriod", "currency"]) assert.equal(blockForField(field), "budget");
+  // An item's cost center is edited inside the items block, so its error marks that block.
+  for (const field of ["lines.0.costCenter", "lines.2.costCenter"]) assert.equal(blockForField(field), "items");
   // Requesters never choose an accounting account (tipo de gasto): Accounting sets it at invoice time.
   assert.doesNotMatch(source("../src/pages/RequestCreate.jsx"), /expenseType|expense-types|ExpenseType/);
   for (const field of ["lines", "lines.0.quantity", "lines.1.unitPrice", "lines.0.itemDescription", "lines.0.totalAmount"]) assert.equal(blockForField(field), "items");
@@ -94,8 +96,9 @@ test("fields are validated when the user leaves them, and submit validation is k
   assert.match(page, /onFieldBlur=\{field => validateField\(`lines\.\$\{index\}\.\$\{field\}`\)\}/);
   assert.match(page, /onBlur=\{\(\) => validateQuotationAmount\(index\)\}/);
   assert.match(page, /openPeriodError\(form\.issueDate, masters\.periods/);
-  assert.match(page, /const validations = \[0, 1, 2\]\.map\(\(index\) => validationForStep\(index, sendForApproval\)\)/);
-  assert.match(page, /const nextErrors = validationForStep\(step, false\)/);
+  // Continue, the field checks and Submit use the same rules; Save draft is lenient.
+  assert.match(page, /const validations = checkedSteps\.map\(\(item\) => validationForStep\(item, sendForApproval\)\)/);
+  assert.match(page, /const nextErrors = validationForStep\(stepId, true\)/);
   const line = source("../src/components/RequestItemLine.jsx");
   for (const field of ["itemDescription", "quantity", "unitOfMeasure", "unitPrice"]) assert.match(line, new RegExp(`onBlur=\\{blur\\("${field}"\\)\\}`));
   assert.match(line, /field-error/);

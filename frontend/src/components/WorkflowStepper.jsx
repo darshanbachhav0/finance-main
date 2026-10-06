@@ -4,7 +4,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 export default function WorkflowStepper({ steps, current, completedSteps = [], maxAccessible = current, onSelect }) {
   const { t } = useLanguage();
   return (
-    <ol className="workflow-stepper" aria-label={t("Request progress")}>
+    <ol className="workflow-stepper" aria-label={t("Request progress")} style={{ "--step-count": steps.length }}>
       {steps.map((step, index) => {
         const completed = completedSteps.includes(index) || index < current;
         const active = index === current;

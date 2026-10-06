@@ -14,7 +14,7 @@ export default function RequestFormBlock({ id, title, description, status = "inc
         {description && <p>{t(description)}</p>}
       </div>
       <div className="request-form-block-meta">
-        <span className={`request-block-status is-${status}`} aria-live="polite">
+        <span className={`request-block-status is-${status}`}>
           {status === "complete" && <CheckCircle2 size={14} aria-hidden="true" />}
           <span className="sr-only">{t(title)}: </span>{t(STATUS_LABELS[status] || status)}
         </span>
