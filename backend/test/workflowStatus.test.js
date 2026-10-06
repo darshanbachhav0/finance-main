@@ -1,7 +1,8 @@
 import EmployeeReimbursementBankAccount from "../src/models/EmployeeReimbursementBankAccount.js";
 import { submitRendition, reviewRendition } from "../src/services/renditionService.js";
 import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "../src/services/directPaymentService.js";
-import { fiscalFixture, invoiceXml, invoiceZip } from "./fiscalFixtures.js";
+import { fiscalFixture, invoicePdf, invoiceXml, invoiceZip, textPdf } from "./fiscalFixtures.js";
+import { validateInvoiceAgainstRequest } from "../src/services/xmlValidationService.js";
 import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 import { reserveBudget, deferBudget } from "../src/services/budgetService.js";
 import assert from "node:assert/strict";
@@ -314,6 +315,57 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       } finally {
         assert.equal(path.dirname(directory), path.resolve(uploadRoot, "requests"));
         assert.match(path.basename(directory), /^[a-f0-9]{24}$/);
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    await t.test("Track B is verified from its factura PDF when no XML is uploaded", async () => {
+      const request = await makeRequest({ flowType: "B" });
+      const voucher = { ruc: supplier.rucDni, series: "FB02", number: "001", issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
+      await fs.mkdir(tempUploadDir, { recursive: true });
+      const filePath = path.join(tempUploadDir, `direct-${request._id}.pdf`); files.push(filePath);
+      await fs.writeFile(filePath, invoicePdf(voucher));
+      request.attachments = [{ kind: "PDF", filename: "factura.pdf", originalName: "factura.pdf", path: filePath, url: "/test/factura.pdf", mimetype: "application/pdf", size: 900 }];
+      request.xmlValidation = await validateInvoiceAgainstRequest(filePath, { supplier, currency: request.currency, totalNet: request.totalNet, totalIGV: request.totalIGV, totalAmount: request.totalAmount, issueDate: request.issueDate }, { request, user: admin, fileName: "factura.pdf" });
+      assert.equal(request.xmlValidation.source, "PDF");
+      await request.save();
+      const originalTotal = request.totalAmount; request.totalAmount = 119;
+      await assert.rejects(() => preflightDirectPayment({ request, user: admin, req }), error => error.code === "XML_AMOUNT_MISMATCH" && /factura PDF/.test(error.message));
+      request.totalAmount = originalTotal;
+      await reserveBudget(request, admin._id);
+      const checked = await preflightDirectPayment({ request, user: admin, req }); assert.equal(checked.valid, true, checked.detail);
+      assert.deepEqual([checked.voucher.series, Number(checked.voucher.number), checked.voucher.ruc], ["FB02", 1, supplier.rucDni], "SUNAT is consulted with the identity printed on the factura");
+      const result = await provisionDirectPayment({ request, user: admin, req, preflight: checked });
+      assert.equal(result.accountsPayable.originalAmount, 118);
+      const evidence = await SunatVoucher.findById(result.accountsPayable.sunatVoucher).select("+xmlPath +pdfPath");
+      assert.equal(evidence.evidenceSource, "PDF");
+      assert.equal(evidence.xmlPath, undefined);
+      assert.equal(evidence.pdfPath, filePath);
+    });
+
+    await t.test("A1 invoice registers from its factura PDF alone, and a scanned PDF is refused", async () => {
+      const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }], attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
+      await reserveBudget(request, admin._id);
+      await PurchaseOrder.create({ poNumber: "FACTURA-PDF-PO", request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: admin._id });
+      const directory = path.resolve(uploadRoot, "requests", String(request._id));
+      async function upload(name, content) {
+        await fs.mkdir(tempUploadDir, { recursive: true });
+        const filename = `${request._id}-${name}`, filePath = path.join(tempUploadDir, filename);
+        await fs.writeFile(filePath, content);
+        return { path: filePath, filename, originalname: name, mimetype: "application/pdf", size: content.length };
+      }
+      try {
+        const scan = await upload("scan.pdf", textPdf([]));
+        await assert.rejects(() => registerA1Invoice({ requestId: request._id, user: admin, req, files: { pdf: [scan] } }), error => error.code === "INVOICE_PDF_UNREADABLE");
+        await assert.rejects(() => registerA1Invoice({ requestId: request._id, user: admin, req, files: {} }), error => error.code === "MISSING_REQUIRED_DOCUMENT");
+        const voucher = { ruc: supplier.rucDni, series: "F089", number: "001", issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
+        const result = await registerA1Invoice({ requestId: request._id, user: admin, req, files: { pdf: [await upload("factura.pdf", invoicePdf(voucher))] } });
+        assert.equal(result.observed, false, JSON.stringify(result.request?.observation || result));
+        const evidence = await SunatVoucher.findOne({ request: request._id, series: "F089" }).select("+xmlPath +pdfPath");
+        assert.equal(evidence.evidenceSource, "PDF");
+        assert.equal(evidence.xmlAmount, 118);
+        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
+      } finally {
         await fs.rm(directory, { recursive: true, force: true });
       }
     });

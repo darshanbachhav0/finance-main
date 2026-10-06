@@ -31,7 +31,7 @@ export default {
   "This request is assigned to a different approval level.": "Esta solicitud está asignada a otro nivel de aprobación.",
   "This approval step is assigned to another role.": "Este paso de aprobación está asignado a otro rol.",
   "This request belongs to another approval area.": "Esta solicitud pertenece a otra área de aprobación.",
-  "A valid XML fiscal document is required.": "Se requiere un XML fiscal válido.",
+  "A verified invoice is required: upload its XML or its factura PDF.": "Se requiere un comprobante verificado: sube su XML o el PDF de la factura.",
   "This record changed while you were working. Refresh before trying again.": "Este registro cambió mientras trabajabas. Actualiza antes de volver a intentarlo.",
 
   // Treasury: bank-file selection

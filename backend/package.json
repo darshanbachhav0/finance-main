@@ -57,6 +57,7 @@
     "mongoose": "^8.2.1",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "pdfjs-dist": "~5.6.205",
     "playwright": "^1.62.1"
   },
   "devDependencies": {

@@ -8,6 +8,7 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { moneyEquals } from "../utils/money.js";
 import { canonicalSeriesNumber, canonicalVoucherType } from "../utils/voucherIdentity.js";
+import { isPdfBuffer, parseInvoicePdf } from "./invoicePdfService.js";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -87,7 +88,7 @@ async function readStoredFile(filePath, encoding) {
     if (error.code !== "ENOENT") throw error;
     throw new AppError(
       422,
-      "The invoice XML saved for this request is no longer available on the server. Upload the same XML and PDF again in Documents, then retry.",
+      "The invoice file (XML or factura PDF) saved for this request is no longer available on the server. Upload it again in Documents, then retry.",
       { file: path.basename(String(filePath || "")) },
       ERROR_CODES.STORED_FILE_MISSING
     );
@@ -100,7 +101,10 @@ export async function fileChecksum(filePath) {
 }
 
 export async function parseInvoiceXml(filePath) {
-  const xml = await readStoredFile(filePath, "utf8");
+  return parseInvoiceXmlText(await readStoredFile(filePath, "utf8"));
+}
+
+function parseInvoiceXmlText(xml) {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) {
     throw new AppError(422, "XML document type/entity declarations are not allowed.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }
@@ -145,10 +149,44 @@ export async function parseInvoiceXml(filePath) {
   };
 }
 
-export async function buildXmlValidationResult(filePath, requestData) {
-  const data = await parseInvoiceXml(filePath);
+// An invoice is evidenced by its XML or by its factura PDF (the printed representation): an XML is
+// read as UBL, a PDF through its text (invoicePdfService). The file's own bytes decide, not its
+// name, so a mislabelled upload is still read correctly.
+export const INVOICE_EVIDENCE_KINDS = Object.freeze(["XML", "PDF", "FEE_RECEIPT"]);
+
+export function latestInvoiceEvidence(attachments = []) {
+  const latest = (kind) => [...attachments].reverse().find((attachment) => attachment.kind === kind);
+  return latest("XML") || latest("PDF") || latest("FEE_RECEIPT") || null;
+}
+
+export async function parseInvoiceEvidence(filePath, { expectedRuc } = {}) {
+  const content = await readStoredFile(filePath);
+  if (isPdfBuffer(content)) return { source: "PDF", data: await parseInvoicePdf(content, { expectedRuc }) };
+  return { source: "XML", data: parseInvoiceXmlText(content.toString("utf8")) };
+}
+
+// A voucher registered from a factura PDF must show its own identity and total: SUNAT is consulted
+// with them and they become the payable. Anything the PDF does not show is named, never guessed.
+export function assertReadableVoucher(data, source) {
+  if (source !== "PDF") return data;
+  const missing = [
+    !data.ruc && "supplier RUC",
+    !data.invoiceNumber && "series and number",
+    !data.issueDate && "issue date",
+    !data.currency && "currency",
+    data.totalAmount === undefined && "total amount"
+  ].filter(Boolean);
+  if (missing.length) {
+    throw new AppError(422, `The factura PDF does not show its ${missing.join(", ")}. Upload the invoice XML, or the original PDF sent by the supplier.`, { missing }, ERROR_CODES.INVOICE_PDF_UNREADABLE);
+  }
+  return data;
+}
+
+export async function buildInvoiceValidationResult(filePath, requestData) {
   const errors = [];
   const expectedIdentifier = normalizeIdentifier(requestData.supplier?.normalizedIdentifier || requestData.supplier?.rucDni);
+  const { source, data } = await parseInvoiceEvidence(filePath, { expectedRuc: expectedIdentifier });
+  const file = source === "PDF" ? "factura PDF" : "XML";
   const expectedDocument = normalizeVoucher(requestData.documentNumber || requestData.fiscalData?.documentNumber || requestData.fiscalData?.number);
   const expectedDate = requestData.documentDate || requestData.issueDate;
   const comparisons = {
@@ -162,25 +200,28 @@ export async function buildXmlValidationResult(filePath, requestData) {
     totalMatch: data.totalAmount !== undefined && moneyEquals(data.totalAmount, requestData.totalAmount)
   };
 
-  if (!comparisons.currencyMatch) errors.push(`Currency does not match XML. Form ${requestData.currency}, XML ${data.currency || "missing"}.`);
-
-  if (!data.ruc) errors.push("XML does not include supplier RUC/DNI.");
-  else if (!comparisons.supplierMatch) errors.push(`Supplier RUC/DNI does not match XML. Expected ${expectedIdentifier}, XML ${data.ruc}.`);
-  if (expectedDocument && !comparisons.documentNumberMatch) errors.push(`Voucher number does not match XML. Expected ${expectedDocument}, XML ${data.invoiceNumber || "missing"}.`);
-  if (expectedDate && !comparisons.dateMatch) errors.push(`Issue date does not match XML. Expected ${dateOnly(expectedDate)}, XML ${data.issueDate || "missing"}.`);
-  if (data.netAmount === undefined) errors.push("XML does not include Net amount.");
-  else if (!comparisons.netMatch) errors.push(`Net amount does not match XML. Form ${requestData.totalNet ?? requestData.netAmount}, XML ${data.netAmount}.`);
-  if (data.igvAmount === undefined) errors.push("XML does not include IGV amount.");
-  else if (!comparisons.igvMatch) errors.push(`IGV amount does not match XML. Form ${requestData.totalIGV ?? requestData.igvAmount}, XML ${data.igvAmount}.`);
-  if (data.totalAmount === undefined) errors.push("XML does not include Total amount.");
-  else if (!comparisons.totalMatch) errors.push(`Total amount does not match XML. Form ${requestData.totalAmount}, XML ${data.totalAmount}.`);
+  if (!comparisons.currencyMatch) errors.push(`Currency does not match the ${file}. Form ${requestData.currency}, ${file} ${data.currency || "missing"}.`);
+  if (!data.ruc) errors.push(`The ${file} does not include the supplier RUC/DNI.`);
+  else if (!comparisons.supplierMatch) errors.push(`Supplier RUC/DNI does not match the ${file}. Expected ${expectedIdentifier}, ${file} ${data.ruc}.`);
+  // A PDF must show the voucher's identity itself: SUNAT is consulted with it later.
+  if (source === "PDF" && !data.invoiceNumber) errors.push("The factura PDF does not show the voucher series and number.");
+  if (expectedDocument && !comparisons.documentNumberMatch) errors.push(`Voucher number does not match the ${file}. Expected ${expectedDocument}, ${file} ${data.invoiceNumber || "missing"}.`);
+  if (source === "PDF" && !data.issueDate) errors.push("The factura PDF does not show the issue date.");
+  if (expectedDate && !comparisons.dateMatch) errors.push(`Issue date does not match the ${file}. Expected ${dateOnly(expectedDate)}, ${file} ${data.issueDate || "missing"}.`);
+  if (data.netAmount === undefined) errors.push(`The ${file} does not include the Net amount.`);
+  else if (!comparisons.netMatch) errors.push(`Net amount does not match the ${file}. Form ${requestData.totalNet ?? requestData.netAmount}, ${file} ${data.netAmount}.`);
+  if (data.igvAmount === undefined) errors.push(`The ${file} does not include the IGV amount.`);
+  else if (!comparisons.igvMatch) errors.push(`IGV amount does not match the ${file}. Form ${requestData.totalIGV ?? requestData.igvAmount}, ${file} ${data.igvAmount}.`);
+  if (data.totalAmount === undefined) errors.push(`The ${file} does not include the Total amount.`);
+  else if (!comparisons.totalMatch) errors.push(`Total amount does not match the ${file}. Form ${requestData.totalAmount}, ${file} ${data.totalAmount}.`);
 
   const checksum = await fileChecksum(filePath);
   return {
     status: errors.length ? "INVALID" : "VALID",
     validated: errors.length === 0,
     validatedAt: new Date(),
-    provider: "LOCAL_XML",
+    provider: source === "PDF" ? "LOCAL_PDF" : "LOCAL_XML",
+    source,
     ...comparisons,
     errors,
     errorMessages: errors,
@@ -190,9 +231,9 @@ export async function buildXmlValidationResult(filePath, requestData) {
 }
 
 // Compare per-invoice inputs, never the aggregate Purchase Order/request total.
-export async function assertVoucherXmlMatches(filePath, voucher) {
-  if (!filePath) throw new AppError(422, "Invoice XML is required before accounting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
-  const result = await buildXmlValidationResult(filePath, {
+export async function assertVoucherEvidenceMatches(filePath, voucher) {
+  if (!filePath) throw new AppError(422, "The invoice XML or factura PDF is required before accounting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+  const result = await buildInvoiceValidationResult(filePath, {
     supplier: { normalizedIdentifier: voucher.ruc || voucher.rucIssuer },
     documentNumber: voucher.invoiceNumber || `${voucher.series}-${voucher.number}`,
     documentDate: voucher.issueDate || voucher.documentDate,
@@ -201,12 +242,12 @@ export async function assertVoucherXmlMatches(filePath, voucher) {
     igvAmount: voucher.igvAmount,
     totalAmount: voucher.totalAmount
   });
-  if (!result.validated) throw new AppError(422, "Invoice values disagree with XML. Resolve the differences before accounting.", { validation: result }, ERROR_CODES.XML_AMOUNT_MISMATCH);
+  if (!result.validated) throw new AppError(422, `Invoice values disagree with the ${result.source === "PDF" ? "factura PDF" : "XML"}. Resolve the differences before accounting.`, { validation: result }, ERROR_CODES.XML_AMOUNT_MISMATCH);
   return result;
 }
 
-export async function validateXmlAgainstRequest(filePath, requestData, attempt = {}) {
-  const result = await buildXmlValidationResult(filePath, requestData);
+export async function validateInvoiceAgainstRequest(filePath, requestData, attempt = {}) {
+  const result = await buildInvoiceValidationResult(filePath, requestData);
   await XmlValidationAttempt.create({
     request: attempt.request?._id || attempt.request,
     requestNumber: attempt.requestNumber,
@@ -220,7 +261,7 @@ export async function validateXmlAgainstRequest(filePath, requestData, attempt =
   if (!result.validated) {
     throw new AppError(
       422,
-      "XML fiscal consistency validation failed.",
+      `The ${result.source === "PDF" ? "factura PDF" : "invoice XML"} does not match the request.`,
       { validation: result },
       ERROR_CODES.XML_AMOUNT_MISMATCH
     );

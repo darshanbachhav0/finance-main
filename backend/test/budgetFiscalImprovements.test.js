@@ -13,7 +13,7 @@ import { reserveBudget, releaseBudget, assertBudgetBeforePosting, assertRenditio
 import { recordBudgetExceptionDecision } from "../src/services/budgetExceptionService.js";
 import { resolveExchangeRateSnapshot, applyExchangeRate } from "../src/services/exchangeRateService.js";
 import { rateSnapshot, fetchSunatSellingRate } from "../src/services/sunatExchangeRateProvider.js";
-import { assertVoucherXmlMatches, parseInvoiceXml } from "../src/services/xmlValidationService.js";
+import { assertVoucherEvidenceMatches, parseInvoiceXml } from "../src/services/xmlValidationService.js";
 import { validateVoucherWithSunat, createSunatVoucher, findDuplicateVoucher } from "../src/services/sunatVoucherService.js";
 import { PublicPadronSunatProvider } from "../src/integrations/sunat/PublicPadronSunatProvider.js";
 import { ProductionSunatProvider } from "../src/integrations/sunat/ProductionSunatProvider.js";
@@ -182,11 +182,11 @@ test("supplier status is not invoice validity; XML evidence blocks inconsistent 
     });
     await t.test("individual and batch invoice inputs compare all seven XML fields", async () => {
       assert.equal((await parseInvoiceXml(filePath)).invoiceNumber, "F001-0001");
-      assert.equal((await assertVoucherXmlMatches(filePath, voucher)).validated, true);
+      assert.equal((await assertVoucherEvidenceMatches(filePath, voucher)).validated, true);
       for (const [field, value] of Object.entries({ ruc: "20111111111", series: "F002", number: "0002", netAmount: 101, igvAmount: 19, totalAmount: 119, currency: "USD" })) {
-        await assert.rejects(() => assertVoucherXmlMatches(filePath, { ...voucher, [field]: value }), e => e.code === "XML_AMOUNT_MISMATCH", field);
+        await assert.rejects(() => assertVoucherEvidenceMatches(filePath, { ...voucher, [field]: value }), e => e.code === "XML_AMOUNT_MISMATCH", field);
       }
-      await assert.rejects(() => assertVoucherXmlMatches(null, voucher), e => e.code === "XML_VALIDATION_FAILED");
+      await assert.rejects(() => assertVoucherEvidenceMatches(null, voucher), e => e.code === "XML_VALIDATION_FAILED");
     });
     await t.test("production adapter cannot accept an active taxpayer response as an invoice response", async () => {
       const provider = new ProductionSunatProvider(); provider.configured = true; provider.voucherEndpoint = "/voucher";

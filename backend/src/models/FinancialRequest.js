@@ -174,6 +174,8 @@ const xmlValidationSchema = new mongoose.Schema(
     validated: { type: Boolean, default: false },
     validatedAt: Date,
     provider: { type: String, default: "LOCAL_XML" },
+    // Which file evidenced the invoice: its XML, or the factura PDF when no XML was uploaded.
+    source: { type: String, enum: ["XML", "PDF"] },
     supplierMatch: Boolean,
     currencyMatch: Boolean,
     documentNumberMatch: Boolean,
@@ -188,6 +190,8 @@ const xmlValidationSchema = new mongoose.Schema(
       ruc: String,
       supplierName: String,
       invoiceNumber: String,
+      documentTypeCode: String,
+      voucherType: String,
       issueDate: String,
       currency: String,
       netAmount: Number,

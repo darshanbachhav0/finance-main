@@ -28,7 +28,7 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLin
 import { requestListPopulate, requestListSelect, requestPopulate } from "./requestService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
-import { validateXmlAgainstRequest } from "./xmlValidationService.js";
+import { latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_ROUTING_MODE,
@@ -107,9 +107,9 @@ async function validateApprovalControls(request, user) {
   await applyExchangeRate(request);
   await request.validate();
   await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
-  const xmlAttachment = [...(request.attachments || [])].reverse().find((item) => item.kind === "XML");
+  const xmlAttachment = request.flowType === FLOW_TYPE.B ? latestInvoiceEvidence(request.attachments) : latestInvoiceEvidence((request.attachments || []).filter((item) => item.kind === "XML"));
   if (xmlAttachment) {
-    request.xmlValidation = await validateXmlAgainstRequest(xmlAttachment.path, {
+    request.xmlValidation = await validateInvoiceAgainstRequest(xmlAttachment.path, {
       supplier,
       fiscalData: request.fiscalData,
       currency: request.currency,
@@ -121,7 +121,7 @@ async function validateApprovalControls(request, user) {
     request.xmlValidationHistory.push(request.xmlValidation);
   }
   if (request.flowType === FLOW_TYPE.B && !request.xmlValidation?.validated) {
-    throw new AppError(422, "A valid XML fiscal document is required.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
+    throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
   }
 }
 
