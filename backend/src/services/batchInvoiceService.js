@@ -21,7 +21,7 @@ import { nextMassUploadBatchNumber } from "./sequenceService.js";
 import { cleanupUploadedFiles, persistUploadedFiles, uploadRoot } from "./storageService.js";
 import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat, voucherIdentity } from "./sunatVoucherService.js";
 import { runFinancialOperation } from "./transactionService.js";
-import { parseInvoiceXml, assertVoucherEvidenceMatches } from "./xmlValidationService.js";
+import { parseInvoiceXml, assertVoucherXmlMatches } from "./xmlValidationService.js";
 import { transitionRequest } from "./workflowService.js";
 import { configureBatchInvoiceRunner, enqueueBatch } from "../queues/batchInvoiceQueue.js";
 import { AppError } from "../utils/AppError.js";
@@ -1066,7 +1066,7 @@ export async function retryInvoiceObservation({ observationId, files = {}, accep
     if (evidenceCandidate.xmlFile?.path) {
       const parsed = await parseInvoiceXml(evidenceCandidate.xmlFile.path);
       try {
-        await assertVoucherEvidenceMatches(evidenceCandidate.xmlFile.path, acceptXmlValues ? { ...parsed, voucherType: voucher.voucherType } : voucher);
+        await assertVoucherXmlMatches(evidenceCandidate.xmlFile.path, acceptXmlValues ? { ...parsed, voucherType: voucher.voucherType } : voucher);
       } catch (error) {
         await updateObservationFailure({ observation, candidate: evidenceCandidate, voucher, status: "OBSERVED_BATCH", errorCode: error.code, detail: error.message, user });
         throw error;

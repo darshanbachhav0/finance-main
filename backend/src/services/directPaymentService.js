@@ -1,4 +1,4 @@
-import { assertVoucherEvidenceMatches, latestInvoiceEvidence } from "./xmlValidationService.js";
+import { assertVoucherXmlMatches } from "./xmlValidationService.js";
 import { assertPostingAllowed } from "./financialProgressService.js";
 import Supplier from "../models/Supplier.js";
 import SunatVoucher from "../models/SunatVoucher.js";
@@ -16,7 +16,7 @@ function xmlVoucher(request) {
   const identity = splitVoucherNumber(data.invoiceNumber || `${request.fiscalData?.series || ""}-${request.fiscalData?.number || ""}`);
   return {
     ruc: data.ruc || request.supplierSnapshot?.identifier,
-    voucherType: request.fiscalData?.voucherType || request.fiscalData?.documentType || data.voucherType || "FACTURA",
+    voucherType: request.fiscalData?.voucherType || request.fiscalData?.documentType || "FACTURA",
     series: request.fiscalData?.series || identity.series,
     number: request.fiscalData?.number || identity.number,
     issueDate: data.issueDate || request.fiscalData?.documentDate || request.issueDate,
@@ -116,10 +116,10 @@ export async function preflightDirectPayment({ request, user, req, observe = tru
     throw new AppError(422, "Direct-payment preflight is only available for Track B.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
   }
   if (!request.xmlValidation?.validated) {
-    throw new AppError(422, "Track B requires a verified invoice (its XML or factura PDF).", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+    throw new AppError(422, "Track B requires a validated invoice XML.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }
   const voucher = xmlVoucher(request);
-  await assertVoucherEvidenceMatches(latestInvoiceEvidence(request.attachments)?.path, {
+  await assertVoucherXmlMatches(latestAttachment(request, "XML")?.path, {
     ...voucher, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount
   });
   const supplier = request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier);

@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import { assertBudgetBeforePosting, executeBudgetAmount, reverseBudgetExecution } from "./budgetService.js";
 import SunatVoucher from "../models/SunatVoucher.js";
-import { assertVoucherEvidenceMatches, latestInvoiceEvidence } from "./xmlValidationService.js";
+import { assertVoucherXmlMatches } from "./xmlValidationService.js";
 import {
   createSunatVoucher,
   findDuplicateVoucher,
@@ -306,7 +306,7 @@ async function createJournal({ request, accountsPayable, entryType, sourceTransa
   const existing = await JournalEntry.findOne(identity).session(session || null);
   if (existing) return existing;
   if (entryType === "PROVISION" && request.flowType !== FLOW_TYPE.C) {
-    const evidence = await SunatVoucher.findById(accountsPayable?.sunatVoucher).select("+xmlPath +pdfPath").session(session || null);
+    const evidence = await SunatVoucher.findById(accountsPayable?.sunatVoucher).select("+xmlPath").session(session || null);
     const fiscal = evidence?.validationEvidence?.fiscal;
     // An audited manual SUNAT exception (SUNAT down / padrón-only mode) is the one accepted
     // substitute for an individually verified voucher.
@@ -314,7 +314,7 @@ async function createJournal({ request, accountsPayable, entryType, sourceTransa
     if (!manualException && (!evidence?.validationEvidence?.valid || !fiscal?.valid || fiscal.voucherVerified === false || fiscal.publicDataset || (process.env.NODE_ENV === "production" && fiscal.source === "MOCK"))) {
       throw new AppError(422, "Individual invoice validation evidence is required before posting.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
     }
-    await assertVoucherEvidenceMatches(evidence.xmlPath || evidence.pdfPath, {
+    await assertVoucherXmlMatches(evidence.xmlPath, {
       ruc: accountsPayable.supplierIdentifierSnapshot, series: accountsPayable.voucher.series, number: accountsPayable.voucher.number,
       issueDate: accountsPayable.voucher.documentDate, currency: accountsPayable.currency,
       netAmount: evidence.netAmount, igvAmount: evidence.igvAmount, totalAmount: accountsPayable.invoiceAmount ?? accountsPayable.originalAmount
@@ -592,8 +592,8 @@ export async function createAccountsPayableFromVoucher({
   const exchangeRate = Number(rateEvidence?.rate || request.exchangeRate || 1);
   await assertBudgetBeforePosting(request, { session, userId: user?._id || user, amount: multiplyMoney(total, exchangeRate), allowFxTopUp: (voucher.currency || request.currency) === "USD", exchangeRateEvidence: rateEvidence });
   if (request.flowType !== FLOW_TYPE.C) {
-    const evidence = await SunatVoucher.findById(sunatVoucher?._id || sunatVoucher).select("+xmlPath +pdfPath").session(session || null);
-    await assertVoucherEvidenceMatches(evidence?.xmlPath || evidence?.pdfPath, voucher);
+    const evidence = await SunatVoucher.findById(sunatVoucher?._id || sunatVoucher).select("+xmlPath").session(session || null);
+    await assertVoucherXmlMatches(evidence?.xmlPath, voucher);
     const fiscalValidation = hasManualSunatException(evidence)
       ? manualExceptionEvidence(evidence)
       : await validateVoucherWithSunat(voucher, { request, user });
@@ -877,7 +877,7 @@ export async function createSupplierCreditJournal(request, { kind, supplierCredi
   });
 }
 
-async function recordObservedManualEvidence({ request, voucher, validation, invoiceFile, user, existing }) {
+async function recordObservedManualEvidence({ request, voucher, validation, xmlFile, user, existing }) {
   if (existing?.accountsPayable) return existing;
   if (existing) {
     if (["PENDING", "OBSERVED_SUNAT"].includes(existing.validationStatus)) {
@@ -888,8 +888,7 @@ async function recordObservedManualEvidence({ request, voucher, validation, invo
     }
     return existing;
   }
-  const xml = invoiceFile?.kind === "XML";
-  return createSunatVoucher({ request, supplier: request.supplier, voucher, validationStatus: "OBSERVED_SUNAT", observationDetail: validation.detail, sunatResult: validation, xmlFile: xml ? invoiceFile : undefined, pdfFile: xml ? undefined : invoiceFile, user });
+  return createSunatVoucher({ request, supplier: request.supplier, voucher, validationStatus: "OBSERVED_SUNAT", observationDetail: validation.detail, sunatResult: validation, xmlFile, user });
 }
 
 export async function processAccountsPayable({ requestId, payload, user, req }) {
@@ -946,9 +945,9 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   await assertBudgetBeforePosting(request, { userId: user._id, amount: penTotal, allowFxTopUp: invoiceBased && request.currency === "USD", exchangeRateEvidence: rateEvidence });
   let manualEvidence;
   if (invoiceBased) {
-    const invoiceFile = latestInvoiceEvidence(request.attachments);
+    const xml = [...(request.attachments || [])].reverse().find(item => item.kind === "XML");
     const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };
-    await assertVoucherEvidenceMatches(invoiceFile?.path, voucher);
+    await assertVoucherXmlMatches(xml?.path, voucher);
     const existingEvidence = await findDuplicateVoucher(voucher);
     if (existingEvidence && String(existingEvidence.request) !== String(request._id)) throw new AppError(409, "Fiscal document already registered.", undefined, ERROR_CODES.DUPLICATE_VOUCHER);
     let validation;
@@ -963,7 +962,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
       }
       if (!validation.valid) {
         // Keep the observed evidence so Accounting can approve a manual SUNAT exception and retry.
-        const observed = await recordObservedManualEvidence({ request, voucher, validation, invoiceFile, user, existing: existingEvidence });
+        const observed = await recordObservedManualEvidence({ request, voucher, validation, xmlFile: xml, user, existing: existingEvidence });
         throw new AppError(422, validation.detail, { validation, sunatVoucher: observed?._id, manualExceptionAvailable: Boolean(observed) }, ERROR_CODES.XML_VALIDATION_FAILED);
       }
     }
@@ -972,7 +971,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, requireAccount: true });
   await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING);
   if (MANDATORY_XML_TYPES.includes(request.requestType) && !request.xmlValidation?.validated) {
-    throw new AppError(422, "A verified invoice (its XML or factura PDF) is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+    throw new AppError(422, "A valid XML fiscal document is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }
 
   const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier: request.supplier });

@@ -38,7 +38,7 @@ import { assertRequestLines } from "../src/services/requestRules.js";
 import { createSupplierProposal, replaceActiveBankAccount } from "../src/services/supplierService.js";
 import { reviewRendition } from "../src/services/renditionService.js";
 import { confirmTreasuryPayment, generatePaymentBatch, reconcilePayment } from "../src/services/treasuryService.js";
-import { validateInvoiceAgainstRequest } from "../src/services/xmlValidationService.js";
+import { validateXmlAgainstRequest } from "../src/services/xmlValidationService.js";
 import { recordAudit } from "../src/services/auditService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
 import { AP_STATUS, BUDGET_STATUS, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
@@ -173,7 +173,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       const filePath = path.join(tempUploadDir, `mismatch-${Date.now()}.xml`);
       cleanupPaths.push(filePath);
       await fs.writeFile(filePath, `<?xml version="1.0"?><Invoice><ID>F001-1</ID><IssueDate>${issueDate}</IssueDate><AccountingSupplierParty><Party><PartyIdentification><ID>${supplier.rucDni}</ID></PartyIdentification></Party></AccountingSupplierParty><TaxTotal><TaxAmount>18</TaxAmount></TaxTotal><LegalMonetaryTotal><LineExtensionAmount>100</LineExtensionAmount><PayableAmount>119</PayableAmount></LegalMonetaryTotal></Invoice>`);
-      await assert.rejects(() => validateInvoiceAgainstRequest(filePath, { supplier, issueDate, totalNet: 100, totalIGV: 18, totalAmount: 118 }, { request: request._id, user: users.solicitor, supplier, fileName: "mismatch.xml" }), (error) => error.code === "XML_AMOUNT_MISMATCH");
+      await assert.rejects(() => validateXmlAgainstRequest(filePath, { supplier, issueDate, totalNet: 100, totalIGV: 18, totalAmount: 118 }, { request: request._id, user: users.solicitor, supplier, fileName: "mismatch.xml" }), (error) => error.code === "XML_AMOUNT_MISMATCH");
       assert.equal(await XmlValidationAttempt.countDocuments({ status: "INVALID" }), 1);
     });
 

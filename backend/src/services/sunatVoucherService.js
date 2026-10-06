@@ -132,8 +132,6 @@ function voucherFields({ request, purchaseOrder, batch, supplier, voucher, flowT
     pdfPath: pdfFile?.path,
     pdfUrl: pdfFile?.url,
     xmlChecksum: xmlFile?.checksum,
-    pdfChecksum: pdfFile?.checksum,
-    evidenceSource: xmlFile?.path ? "XML" : pdfFile?.path ? "PDF" : undefined,
     validatedAt: new Date(),
     validatedBy: user?._id || user
   };

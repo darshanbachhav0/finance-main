@@ -35,9 +35,6 @@ const sunatVoucherSchema = new mongoose.Schema(
     pdfPath: { type: String, select: false },
     pdfUrl: String,
     xmlChecksum: String,
-    pdfChecksum: String,
-    // The file the voucher's data was read from: the XML, or the factura PDF when there was no XML.
-    evidenceSource: { type: String, enum: ["XML", "PDF"] },
     validatedAt: Date,
     validatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     provisionedAt: Date,

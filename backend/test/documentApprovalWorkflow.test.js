@@ -15,64 +15,58 @@ import {
 } from "../src/services/approvalRuleService.js";
 import { DOCUMENT_PHASE, EXPENSE_NATURE, FLOW_TYPE } from "../src/utils/constants.js";
 
-// An invoice requirement is satisfied by any one of its files ("XML|PDF").
 function kinds(request, phase) {
-  return defaultDocumentRequirements(request, phase).map((item) => [item.anyOf ? item.anyOf.join("|") : item.kind, item.minCount]);
+  return defaultDocumentRequirements(request, phase).map((item) => [item.kind, item.minCount]);
 }
 
 test("phase-based document and approval workflow rules", { timeout: 120000 }, async t => {
   await t.test("hydrated document rules serialize correctly and block missing invoice evidence", () => {
-    // A rule stored as "XML + PDF" (before the product decision) asks for either file.
     const rule = new DocumentRule({ code: "HYDRATED", requirements: [
       { kind: "XML", minCount: 1, labelKey: "Invoice XML" },
       { kind: "PDF", minCount: 1, labelKey: "Invoice PDF" },
       { kind: "CONFORMITY", minCount: 1, labelKey: "Service conformity" }
     ] });
-    assert.throws(() => assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", []), error => {
-      assert.deepEqual(error.details.missing.map(item => item.kind), ["CONFORMITY", "INVOICE"]);
-      assert.deepEqual(error.details.missing[1].anyOf, ["XML", "PDF"]);
+    assert.throws(() => assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", [{ kind: "PDF" }]), error => {
+      assert.deepEqual(error.details.missing.map(item => item.kind), ["XML", "CONFORMITY"]);
       const serialized = JSON.parse(JSON.stringify(error.details.requirements));
-      assert.deepEqual(serialized[0], { kind: "CONFORMITY", minCount: 1, labelKey: "Service conformity", present: 0 });
+      assert.deepEqual(serialized[0], { kind: "XML", minCount: 1, labelKey: "Invoice XML", present: 0 });
       assert.equal(JSON.stringify(serialized).includes("$__"), false);
       return error.code === "MISSING_REQUIRED_DOCUMENT";
     });
-    for (const invoice of ["XML", "PDF"]) {
-      assert.equal(assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", [{ kind: invoice }, { kind: "CONFORMITY" }]).valid, true, `${invoice} alone evidences the invoice`);
-    }
+    assert.equal(assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", [{ kind: "XML" }, { kind: "PDF" }, { kind: "CONFORMITY" }]).valid, true);
   });
   await t.test("A1 goods requirements are enforced at their correct phases", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS };
     // Product decision: at least one quotation; three quotations are not compulsory.
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION", 1]]);
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML", 1], ["PDF", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
   });
 
   await t.test("A1 services separate contract, invoice, and service conformity", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.SERVICES };
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["CONTRACT", 1]]);
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML", 1], ["PDF", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
   });
 
   await t.test("professional services require receipt, agreement, and activity report", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.PROFESSIONAL_FEES };
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["CONTRACT", 1]]);
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|FEE_RECEIPT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML", 1], ["FEE_RECEIPT", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["ACTIVITY_REPORT", 1]]);
   });
 
   await t.test("missing current-phase evidence blocks progression", () => {
     const requirements = defaultDocumentRequirements({ flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS }, DOCUMENT_PHASE.INVOICE_REGISTRATION);
     assert.throws(
-      () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.INVOICE_REGISTRATION, [{ kind: "CONFORMITY" }]),
-      error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.phase === DOCUMENT_PHASE.INVOICE_REGISTRATION && error.details.missing[0].kind === "INVOICE"
+      () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.INVOICE_REGISTRATION, [{ kind: "XML" }]),
+      error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.phase === DOCUMENT_PHASE.INVOICE_REGISTRATION && error.details.missing[0].kind === "PDF"
     );
-    assert.equal(assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.INVOICE_REGISTRATION, [{ kind: "PDF" }]).valid, true);
   });
 
-  await t.test("A2 invoice candidates need their invoice evidence (the batch itself reads only XML)", () => {
-    assert.deepEqual(kinds({ flowType: FLOW_TYPE.A2 }, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+  await t.test("A2 invoice candidates require XML and PDF", () => {
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.A2 }, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML", 1], ["PDF", 1]]);
   });
 
   await t.test("Track C supporting documents belong to rendition", () => {

@@ -71,4 +71,3 @@ import "./supplierAutomaticLookup.test.js";
 import "./taxpayerProfileCache.test.js";
 import "./operationsAutomation.test.js";
 import "./accountsPayableViews.test.js";
-import "./invoiceEvidence.test.js";

@@ -60,8 +60,6 @@ import {
   requestTypeLabels
 } from "../utils/options.js";
 
-import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
-
 const workflow = REQUEST_LIFECYCLE;
 const documentPhaseOrder = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
 const invoiceDocumentFields = [
@@ -257,7 +255,7 @@ export default function RequestDetail() {
   const missingDocuments = useMemo(() => requirements
     .map((rule) => ({
       ...rule,
-      present: presentCount(rule, attachments)
+      present: attachments.filter((item) => item.kind === rule.kind).length
     }))
     .filter((rule) => rule.present < rule.minCount), [requirements, attachments]);
 
@@ -342,15 +340,13 @@ export default function RequestDetail() {
     event.preventDefault(); if (!invoiceDraft.ready || invoiceDraft.status === "conflict") return;
     const form = event.currentTarget;
     setInvoiceError("");
-    if (invoiceRequirements.some((item) => !item.kind || !invoiceDocumentFields.some((field) => coversKind(item, field.kind)))) {
+    if (invoiceRequirements.some((item) => !item.kind || !invoiceDocumentFields.some((field) => field.kind === item.kind))) {
       setInvoiceError(t("Invoice document requirements could not be loaded correctly. Refresh the page; if this continues, contact Admin to review the document rules."));
       return;
     }
-    // The invoice needs its XML or its factura PDF (one is enough); other requirements need their file.
-    const fieldsFor = (requirement) => invoiceDocumentFields.filter((field) => coversKind(requirement, field.kind));
-    const missingInvoiceFiles = invoiceRequirements.filter((requirement) => !fieldsFor(requirement).some((field) => invoiceFiles[field.key]));
+    const missingInvoiceFiles = invoiceRequirements.filter((requirement) => !invoiceFiles[invoiceDocumentFields.find((field) => field.kind === requirement.kind)?.key]);
     if (missingInvoiceFiles.length) {
-      setInvoiceError(`${t("Required invoice documents are missing")}: ${missingInvoiceFiles.map((item) => fieldsFor(item).map((field) => t(field.label)).join(" / ") || t(item.labelKey || item.kind)).join(", ")}.`);
+      setInvoiceError(`${t("Required invoice documents are missing")}: ${missingInvoiceFiles.map((item) => t(invoiceDocumentFields.find((field) => field.kind === item.kind)?.label || item.labelKey || item.kind)).join(", ")}.`);
       return;
     }
     setInvoiceSubmitting(true);
@@ -709,7 +705,7 @@ export default function RequestDetail() {
               <div>
                 <strong>{missingDocuments.length ? t("Required evidence incomplete") : t("Required evidence complete")}</strong>
                 <p>{requirements.length
-                  ? requirements.map((rule) => `${t(rule.labelKey)} ${presentCount(rule, attachments)}/${rule.minCount}`).join(" · ")
+                  ? requirements.map((rule) => `${t(rule.labelKey)} ${attachments.filter((item) => item.kind === rule.kind).length}/${rule.minCount}`).join(" · ")
                   : t("No additional configured evidence for this classification.")}</p>
               </div>
             </div>
@@ -738,7 +734,7 @@ export default function RequestDetail() {
             <div className={`xml-result ${request.xmlValidation?.validated ? "valid" : request.xmlValidation?.status === "INVALID" ? "invalid" : "neutral"}`}>
               <FileCheck2 size={19} />
               <div>
-                <strong>{t(request.xmlValidation?.validated ? (request.xmlValidation.source === "PDF" ? "Invoice verified from the factura PDF" : "XML validation passed") : "Invoice verification not passed")}</strong>
+                <strong>{t(request.xmlValidation?.validated ? "XML validation passed" : "XML validation not passed")}</strong>
                 {["Accounting", "Admin"].includes(user.role) && <details><summary>{t("Advanced validation details")}</summary><p>{request.xmlValidation
                   ? ["supplierMatch", "documentNumberMatch", "dateMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
                   : t("No XML validation result is stored.")}</p></details>}
@@ -748,15 +744,10 @@ export default function RequestDetail() {
           </Section>
 
           {permissions.canRegisterInvoice && (
-            <Section title="Register A1 invoice and conformity" description="Upload the invoice XML or its factura PDF (one is enough) and the other required documents. The amounts are read from the XML, or from the factura PDF when there is no XML.">
+            <Section title="Register A1 invoice and conformity" description="Upload the documents required for invoice registration and Accounting. Amount fields are immutable and read from XML.">
               <DraftPanel busy={invoiceSubmitting} draft={invoiceDraft}><form className="invoice-registration-panel" onSubmit={submitInvoice}>
                 <p className="draft-file-list">{Object.values(invoiceFiles).filter(Boolean).map(file => file.name).join(", ")}</p><div className="file-upload-grid">
-                  {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => coversKind(item, field.kind))).map((field) => {
-                    const rule = invoiceRequirements.find((item) => coversKind(item, field.kind));
-                    const either = isEitherOf(rule);
-                    const chosenElsewhere = invoiceDocumentFields.some((other) => other.key !== field.key && coversKind(rule, other.kind) && invoiceFiles[other.key]);
-                    return <label className="field" key={field.kind}><span>{t(field.label)}{either ? "" : " *"}</span><input type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key] && !chosenElsewhere} />{either && <small className="field-hint">{t(chosenElsewhere ? "Optional document" : "This or the other invoice file: one is enough.")}</small>}</label>;
-                  })}
+                  {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => item.kind === field.kind)).map((field) => <label className="field" key={field.kind}><span>{t(field.label)} *</span><input type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key]} /></label>)}
                 </div>
                 <div className="invoice-control-note">
                   <strong>{order?.poNumber}</strong>
