@@ -3,15 +3,16 @@ import { roleNavigation, canAccessNavigation } from "../src/utils/navigationAcce
 import { requestStage } from "../src/utils/requestStage.js";
 import { displayedRequestStatus } from "../src/utils/requestPresentation.js";
 for (const [role, items] of Object.entries(roleNavigation)) {
-  // Accounting's daily work spans more screens (Suppliers, Invoice Observations, Periods).
-  assert.ok(items.length <= (role === "Accounting" ? 8 : 5), `${role}: primary menu stays focused`);
+  // Admin runs the whole system from the grouped menu; Accounting's daily work spans invoices,
+  // payables, entries, periods and SIRE. Everyone else keeps a short list.
+  if (role !== "Admin") assert.ok(items.length <= (role === "Accounting" ? 8 : 5), `${role}: primary menu stays focused`);
   assert.equal(new Set(items.map(([, path]) => path)).size, items.length);
   items.forEach(([, path]) => assert.ok(canAccessNavigation(role, path), `${role}: ${path}`));
 }
-assert.deepEqual(roleNavigation.Admin.map(([, path]) => path), ["/", "/administration"]);
-assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/configuration/bank-formats"]);
+assert.ok(roleNavigation.Admin.some(([, path]) => path === "/accounting/payables"), "Admin opens workspaces from the menu, not from a hub page");
+assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/operations"]);
 assert.equal(canAccessNavigation("Solicitor", "/suppliers"), true, "Contextual supplier workflow remains accessible");
-assert.equal(canAccessNavigation("Solicitor", "/administration"), false);
+assert.equal(canAccessNavigation("Solicitor", "/settings"), false);
 assert.equal(requestStage("TXT_GENERADO"), 4, "TXT generation does not complete Payment");
 assert.equal(requestStage("PAGADO"), 5, "Paid still awaits reconciliation");
 assert.equal(requestStage("PAGADO_CERRADO"), requestStage("CERRADO"));

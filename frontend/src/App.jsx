@@ -4,10 +4,10 @@ import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
-import { configurationRoles } from "./utils/navigationAccess.js";
+import { configurationRoles, settingsRoles } from "./utils/navigationAccess.js";
 
 const Operations = lazy(() => import("./pages/Operations.jsx"));
-const WorkspaceHub = lazy(() => import("./pages/WorkspaceHub.jsx"));
+const SettingsHub = lazy(() => import("./pages/SettingsHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
 const AccountingPeriods = lazy(() => import("./pages/AccountingPeriods.jsx"));
@@ -54,7 +54,9 @@ export default function App() {
           <Route path="management-view" element={<ProtectedRoute roles={["Admin", "Management", "ManagementViewer"]} permissions={["management-portal:view"]} />}>
             <Route index element={<ExternalManagementPortal />} />
           </Route>
-          <Route path="administration" element={<ProtectedRoute roles={["Admin"]} />}><Route index element={<WorkspaceHub administration />} /></Route>
+          <Route path="settings" element={<ProtectedRoute roles={settingsRoles} permissions={["bank-format:certify"]} />}><Route index element={<SettingsHub />} /></Route>
+          {/* Former hub pages: their links now live in the menu and on Settings. */}
+          <Route path="administration" element={<Navigate to="/settings" replace />} />
           <Route path="operations" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<Operations />} /></Route>
           <Route path="requests" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<RequestsList />} /></Route>
           <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
@@ -73,7 +75,7 @@ export default function App() {
           </Route>
           <Route path="accounting" element={<ProtectedRoute roles={["Admin", "Accounting"]} />}>
             <Route index element={<AccountingEntries />} />
-            <Route path="invoices" element={<WorkspaceHub />} />
+            <Route path="invoices" element={<Navigate to="/accounting/payables" replace />} />
             <Route path="payables" element={<AccountsPayable />} />
             <Route path="periods" element={<AccountingPeriods />} />
             <Route path="sire" element={<SireExport />} />

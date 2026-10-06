@@ -38,6 +38,7 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import Tabs from "../components/Tabs.jsx";
 import InfoPopover from "../components/InfoPopover.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
@@ -543,7 +544,7 @@ export default function RequestDetail() {
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
       </div>
-      <nav className="focus-tabs" aria-label={t("Request sections")}>{["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map(tab => { const TabIcon = tabIcons[tab]; return <button type="button" key={tab} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}><TabIcon size={15} aria-hidden="true" />{t(tab)}</button>; })}</nav>
+      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
 
       <div className="request-detail-layout">
         <div className="request-detail-main">

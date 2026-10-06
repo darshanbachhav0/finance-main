@@ -4,6 +4,7 @@ import api from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import Tabs from "../components/Tabs.jsx";
 import MonthInput from "../components/MonthInput.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 export default function Operations() {
@@ -27,7 +28,7 @@ export default function Operations() {
   async function act(action) { setBusy(true); setError(""); try { await action(); await load(); } catch (error) { setError(error.message); } finally { setBusy(false); } }
   const issue = (row, index) => <p key={index}>{t(row.message)} <small>· {t(row.owner)}</small>{row.path && <Link to={row.path}> · {t("Open")}</Link>}</p>;
   return <section><PageHeader title="Work review" description="Readiness, exceptions and preparation. Financial actions retain their existing controls." />
-    <nav className="focus-tabs" aria-label={t("Sections")}>{tabs.map(name => <button type="button" aria-pressed={tab === name} key={name} onClick={() => { setData(null); setTab(name); setPage(1); }}>{t(name)}</button>)}</nav>
+    <Tabs idPrefix="operations" label="Sections" value={tab} onChange={(name) => { setData(null); setTab(name); setPage(1); }} tabs={tabs.map((name) => ({ id: name, label: name }))} />
     {error && <p role="alert" className="workspace-panel">{error}</p>}{busy && <p role="status">{t("Loading...")}</p>}
     {["Reviews", "Closure"].includes(tab) && <>{data?.data?.map(row => <article className="workspace-panel section-spacer" key={row.id}><Link to={`/requests/${row.id}`}><strong>{row.requestNumber} · {row.title}</strong></Link><p>{t(row.next.message)} · {t(row.next.owner)}</p><small>{t("Updated")}: {new Date(row.updatedAt).toLocaleDateString()}</small>{row.issues.map(issue)}</article>)}<div className="wizard-actions"><button disabled={busy || page === 1} onClick={() => setPage(page - 1)}>{t("Previous")}</button><span>{page} · {data?.total || 0} {t("Requests")}</span><button disabled={busy || page * 20 >= (data?.total || 0)} onClick={() => setPage(page + 1)}>{t("Next")}</button></div></>}
     {tab === "Suppliers" && <><p>{t("Oldest pending suppliers")}: {data?.data?.length || 0} / {data?.total || 0}</p>{data?.data?.map(row => <article key={row.id} className="workspace-panel section-spacer"><strong>{row.name}</strong><p>{row.ready ? t("Ready for Finance review") : t("Requirements pending")}</p>{row.issues?.map((item, i) => issue({ ...item, owner: row.owner, path: row.path }, i))}<Link to={row.path}>{t("Open")}</Link></article>)}</>}

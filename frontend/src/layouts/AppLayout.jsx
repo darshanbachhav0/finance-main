@@ -1,38 +1,9 @@
 import { Suspense } from "react";
 import MotionSurface from "../components/MotionSurface.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
-import {
-  BarChart3,
-  Bell,
-  BookOpenCheck,
-  Building2,
-  CalendarRange,
-  Check,
-  ChartNoAxesCombined,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  ClipboardCheck,
-  FileSpreadsheet,
-  FileArchive,
-  FilePlus2,
-  History,
-  Landmark,
-  LogOut,
-  Menu,
-  ReceiptText,
-  Search,
-  Settings2,
-  ShieldCheck,
-  SlidersHorizontal,
-  TriangleAlert,
-  Users,
-  WalletCards,
-  X
-} from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import useNotificationBell from "../hooks/useNotificationBell.js";
 import { notificationMessage, notificationTitle } from "../utils/notificationText.js";
 import CommandPalette from "../components/CommandPalette.jsx";
@@ -44,101 +15,8 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
-import { bottomNavigationForUser, canAccessNavigation, counterBadgeText, groupNavigation, navigationCount, navigationForUser } from "../utils/navigationAccess.js";
-
-const groups = [
-  {
-    label: "Overview",
-    items: [{ label: "Dashboard", path: "/", icon: BarChart3 }]
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "Requests", path: "/requests", icon: ReceiptText },
-      { label: "Approval Inbox", path: "/approvals", icon: ClipboardCheck },
-      { label: "A2 Batch Invoices", path: "/batch-invoices", icon: FileArchive }
-    ]
-  },
-  {
-    label: "Finance",
-    items: [
-      { label: "Accounting Entries", path: "/accounting", icon: FileSpreadsheet },
-      { label: "Reimbursement Banking", path: "/reimbursement-bank", icon: CircleDollarSign },
-      { label: "Accounts Payable", path: "/accounting/payables", icon: BookOpenCheck },
-      { label: "Invoice Observations", path: "/accounting/invoice-observations", icon: TriangleAlert },
-      { label: "Treasury", path: "/treasury", icon: Landmark },
-    ]
-  },
-  {
-    label: "Planning and reports",
-    items: [
-      { label: "Budget Control", path: "/budget", icon: WalletCards },
-      { label: "Accounting Periods", path: "/accounting/periods", icon: CalendarRange },
-      { label: "SIRE Export", path: "/accounting/sire", icon: FileSpreadsheet },
-      { label: "Management Reports", path: "/reports", icon: ChartNoAxesCombined },
-      { label: "Management Portal", path: "/management-view", icon: ChartNoAxesCombined }
-    ]
-  },
-  {
-    label: "Master Data",
-    items: [
-      { label: "Suppliers", path: "/suppliers", icon: Building2 },
-      { label: "Cost Centers", path: "/cost-centers", icon: CircleDollarSign },
-      { label: "Accounting Accounts", path: "/expense-types", icon: Settings2 },
-      { label: "Exchange Rates", path: "/exchange-rates", icon: CircleDollarSign },
-      { label: "Configuration", path: "/configuration/approval-rules", icon: SlidersHorizontal },
-      { label: "Budget Rules", path: "/configuration/budget-rules", icon: SlidersHorizontal },
-      { label: "Finance Configurations", path: "/configuration/finance-configurations", icon: SlidersHorizontal },
-      { label: "Accounting Mappings", path: "/configuration/accounting-mappings", icon: BookOpenCheck },
-      { label: "Bank Formats", path: "/configuration/bank-formats", icon: Landmark }
-    ]
-  },
-  {
-    label: "Administration",
-    items: [
-      { label: "Users", path: "/users", icon: Users }
-    ]
-  }
-];
-
-// Icons for role destinations that are not part of the groups above.
-const routeIcons = {
-  "/requests/new": FilePlus2,
-  "/administration": ShieldCheck,
-  "/treasury/history": History,
-  "/accounting/invoices": ReceiptText,
-  "/my-team": Users
-};
-const navigationIcon = (path) => groups.flatMap((group) => group.items).find((item) => item.path === path)?.icon || routeIcons[path] || Settings2;
-
-const routeTitles = [
-  [/^\/management-view/, "Management Portal"],
-  [/^\/administration/, "Administration"],
-  [/^\/treasury\/history/, "Payment History"],
-  [/^\/accounting\/invoices/, "Invoices"],
-  [/^\/$/, "Dashboard"],
-  [/^\/requests\/new$/, "New request"],
-  [/^\/requests\/[^/]+\/edit$/, "Edit request"],
-  [/^\/requests\/[^/]+$/, "Request details"],
-  [/^\/requests/, "Requests"],
-  [/^\/approvals/, "Approval Inbox"],
-  [/^\/batch-invoices/, "A2 Batch Invoice Ingestion"],
-  [/^\/treasury/, "Treasury Payment Queue"],
-  [/^\/reimbursement-bank/, "Employee Reimbursement Banking"],
-  [/^\/budget/, "Budget Control"],
-  [/^\/reports/, "Management Reports"],
-  [/^\/accounting\/periods/, "Accounting Periods"],
-  [/^\/accounting\/payables/, "Accounts Payable"],
-  [/^\/accounting\/invoice-observations/, "Invoice Observation Inbox"],
-  [/^\/accounting\/sire/, "SIRE RCE Export"],
-  [/^\/accounting/, "Accounting Entries"],
-  [/^\/suppliers/, "Suppliers"],
-  [/^\/cost-centers/, "Cost Centers"],
-  [/^\/expense-types/, "Accounting Accounts"],
-  [/^\/exchange-rates/, "Exchange Rates"],
-  [/^\/users/, "Users"],
-  [/^\/configuration/, "Configuration"]
-];
+import { bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
+import { navigationIcon } from "../utils/navigationIcons.js";
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -158,18 +36,27 @@ export default function AppLayout() {
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
   const pendingApprovals = Number(tasks.counters?.approval) || 0;
-  // Grouped into fixed sections (Overview, Requests, Finance, Planning and reports, Master Data,
-  // Administration) so every role reads the menu the same way.
-  const visibleGroups = useMemo(() => groupNavigation(navigationForUser(user, { pendingApprovals }).map(([label, path]) => ({ ...(groups.flatMap(group => group.items).find(item => item.path === path) || {}), icon: navigationIcon(path), label, path })).filter(item => canAccessNavigation(user.role, item.path, user))), [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
-  const commandPages = useMemo(() => visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label }))), [visibleGroups]);
-  const bottomItems = useMemo(() => bottomNavigationForUser(user, { pendingApprovals }).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user.role, user.hasTeam, user.hasPendingApprovals, pendingApprovals > 0]);
+  // Grouped into fixed sections (Overview, My work, Payables, Treasury, Accounting, Planning and
+  // reports, Master Data) so every role reads the menu the same way.
+  const visibleGroups = useMemo(() => groupNavigation(navigationForUser(user, { pendingApprovals }).map(([label, path]) => ({ label, path, icon: navigationIcon(path) }))), [user, pendingApprovals > 0]);
+  // The palette also finds every Settings page the person can open, not only the menu entries.
+  const commandPages = useMemo(() => {
+    const pages = visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })));
+    const settings = settingsPagesFor(user).filter((path) => !pages.some((item) => item.path === path)).map((path) => ({ label: pageLabel(path, user.role), path, icon: navigationIcon(path), group: "Settings" }));
+    return [...pages, ...settings];
+  }, [visibleGroups, user]);
+  const bottomItems = useMemo(() => bottomNavigationForUser(user, { pendingApprovals }).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user, pendingApprovals > 0]);
   // "3 pendientes": the badge's spoken form, also added to the link's name (the collapsed
   // sidebar hides the text label, so the badge must not be the only place the count lives).
   const pendingLabel = (count) => t(count === 1 ? "{count} pending item" : "{count} pending items").replace("{count}", count > 99 ? "99+" : count);
   const openCommandPalette = () => { setTaskOpen(false); setUserOpen(false); setMobileOpen(false); setCommandOpen(true); };
 
-  const pageTitle = routeTitles.find(([pattern]) => pattern.test(location.pathname))?.[1] || "Financial Control";
-  const breadcrumb = location.pathname === "/" ? [] : [{ label: "Dashboard", path: "/" }, { label: pageTitle }];
+  const trail = useMemo(() => pageTrail(location.pathname, user), [location.pathname, user]);
+  const pageTitle = trail[trail.length - 1].label;
+  // The menu entry for this page: the page itself, else its nearest ancestor in the trail
+  // (a request opens under Requests, a settings page under Settings).
+  const menuPaths = visibleGroups.flatMap((group) => group.items.map((item) => item.path));
+  const activePath = [location.pathname, ...trail.map((item) => item.path).filter(Boolean).reverse()].find((path) => menuPaths.includes(path));
 
   useEffect(() => {
     setMobileOpen(false);
@@ -265,18 +152,18 @@ export default function AppLayout() {
                 const count = navigationCount(item.path, tasks.counters);
                 const name = count > 0 ? `${t(item.label)} (${pendingLabel(count)})` : t(item.label);
                 return (
-                  <NavLink
+                  <Link
                     key={item.path}
                     to={item.path}
-                    end={item.path === "/" || item.path === "/accounting" || item.path === "/requests" || item.path === "/treasury"}
-                    className="nav-item"
+                    className={`nav-item${item.path === activePath ? " active" : ""}`}
+                    aria-current={item.path === activePath ? "page" : undefined}
                     data-tooltip={name}
                     aria-label={name}
                   >
                     <Icon size={18} aria-hidden="true" />
                     <span className="nav-label">{t(item.label)}</span>
                     {count > 0 && <span className="nav-counter" aria-hidden="true">{counterBadgeText(count)}</span>}
-                  </NavLink>
+                  </Link>
                 );
               })}
             </div>
@@ -293,14 +180,20 @@ export default function AppLayout() {
         <header className="topbar">
           <div className="topbar-title">
             <button ref={mobileMenuRef} type="button" className="icon-button mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label={t("Open navigation")}><Menu size={20} /></button>
-            <div>
-              {breadcrumb.length > 0 && (
-                <nav className="breadcrumbs" aria-label={t("Breadcrumbs")}>
-                  {breadcrumb.map((item, index) => item.path ? <Link key={item.label} to={item.path}>{t(item.label)}</Link> : <span key={item.label} aria-current="page">{t(item.label)}</span>).reduce((items, item, index) => index ? [...items, <span className="breadcrumb-separator" key={`separator-${index}`}>/</span>, item] : [item], [])}
-                </nav>
-              )}
-              <strong className="topbar-page-title">{t(pageTitle)}</strong>
-            </div>
+            {/* The page's own header carries its title; the bar shows where the page sits. */}
+            <nav className="breadcrumbs" aria-label={t("Breadcrumbs")}>
+              <ol>
+                {trail.map((item, index) => {
+                  // On phones the bar keeps a back link to the parent page (not to the dashboard).
+                  const parent = index > 0 && index === trail.length - 2;
+                  return (
+                    <li key={`${index}-${item.label}`} className={item.path ? `breadcrumb-link${parent ? " breadcrumb-parent" : ""}` : "breadcrumb-current"}>
+                      {item.path ? <Link to={item.path}>{t(item.label)}</Link> : <span aria-current="page">{t(item.label)}</span>}
+                    </li>
+                  );
+                })}
+              </ol>
+            </nav>
           </div>
 
           <div className="topbar-actions" ref={menusRef}>
