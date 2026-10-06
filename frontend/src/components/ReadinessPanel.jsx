@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
-export default function ReadinessPanel({ requestId, revision, payload, paymentPayload }) {
+export default function ReadinessPanel({ requestId, revision, payload, paymentPayload, defaultOpen = false }) {
   const { t } = useLanguage();
   const [result, setResult] = useState(null), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const serialized = JSON.stringify(paymentPayload || payload);
@@ -13,7 +13,7 @@ export default function ReadinessPanel({ requestId, revision, payload, paymentPa
     finally { if (!signal?.aborted) setBusy(false); }
   }
   useEffect(() => { const controller = new AbortController(); const timer = setTimeout(() => check(controller.signal), 1000); return () => { clearTimeout(timer); controller.abort(); }; }, [requestId, revision, serialized]);
-  return <details className="workspace-panel section-spacer"><summary>{t("Readiness check")} {busy ? t("Checking...") : result?.issues?.length ? `(${result.issues.length})` : ""}</summary>
+  return <details className="workspace-panel section-spacer" open={defaultOpen || undefined}><summary>{t("Readiness check")} {busy ? t("Checking...") : result?.issues?.length ? `(${result.issues.length})` : ""}</summary>
     {error && <p role="alert">{error}</p>}
     {result?.next && <p><strong>{t(result.next.message)}</strong> · {t(result.next.owner)}</p>}
     {result?.issues?.map((issue, index) => <p key={index}>{t(issue.message)} <small>— {t(issue.owner)}</small>{requestId && issue.path && <Link to={issue.path}> · {t("Open")}</Link>}</p>)}
