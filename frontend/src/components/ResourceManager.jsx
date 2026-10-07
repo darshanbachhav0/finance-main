@@ -12,6 +12,7 @@ import DataTable from "./DataTable.jsx";
 import Drawer from "./Drawer.jsx";
 import Message from "./Message.jsx";
 import PageHeader from "./PageHeader.jsx";
+import SearchSelect from "./SearchSelect.jsx";
 import StatusBadge from "./StatusBadge.jsx";
 
 const ARRAY_TYPES = new Set(["file", "toggle-list", "tags", "multiselect"]);
@@ -284,6 +285,15 @@ export default function ResourceManager({
         <DraftPanel busy={saving} draft={draft} onDiscard={() => setDrawerOpen(false)}><form id="resource-form" className="form-grid resource-form" onSubmit={submit} noValidate>
           {fields.map((field) => {
             if (field.type === "section") return <h4 key={`section-${field.label}`} className="form-section-title">{t(field.label)}</h4>;
+            // options and hint may depend on the form and the record being edited (e.g. a person's
+            // substitute is never themselves; a hint can preview the effect of the current choice).
+            const options = typeof field.options === "function" ? field.options(form, editing) : field.options;
+            const hint = typeof field.hint === "function" ? field.hint(form, editing) : field.hint;
+            if (field.type === "search-select") return (
+              <div key={field.name} className={field.wide ? "field-wide" : undefined}>
+                <SearchSelect label={field.label} value={form[field.name] || ""} options={options} required={field.required} error={fieldErrors[field.name]} hint={hint} placeholder={field.placeholder || "Select"} searchPlaceholder={field.searchPlaceholder || "Search options..."} onChange={(value) => setForm({ ...form, [field.name]: value || "" })} />
+              </div>
+            );
             const Wrapper = GROUP_TYPES.has(field.type) ? "div" : "label";
             return (
             <Wrapper key={field.name} role={Wrapper === "div" ? "group" : undefined} aria-label={Wrapper === "div" ? t(field.label) : undefined} className={`field${WIDE_TYPES.has(field.type) || field.wide ? " field-wide" : ""}${fieldErrors[field.name] ? " field-error" : ""}`}>
@@ -291,11 +301,11 @@ export default function ResourceManager({
               {field.type === "select" ? (
                 <select value={form[field.name]} required={field.required} onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}>
                   <option value="">{t("Select")}</option>
-                  {field.options.map((option) => <option key={option.value ?? option} value={option.value ?? option}>{t(option.label ?? option)}</option>)}
+                  {options.map((option) => <option key={option.value ?? option} value={option.value ?? option}>{t(option.label ?? option)}</option>)}
                 </select>
               ) : field.type === "toggle-group" ? (
                 <span className="toggle-group" role="radiogroup">
-                  {field.options.map((option) => {
+                  {options.map((option) => {
                     const value = option.value ?? option;
                     const active = form[field.name] === value;
                     return (
@@ -314,7 +324,7 @@ export default function ResourceManager({
                 </span>
               ) : field.type === "toggle-list" ? (
                 <span className="toggle-group">
-                  {field.options.map((option) => {
+                  {options.map((option) => {
                     const value = option.value ?? option;
                     const selected = Array.isArray(form[field.name]) && form[field.name].includes(value);
                     return (
@@ -342,7 +352,7 @@ export default function ResourceManager({
               ) : field.type === "file" ? (
                 <><input type="file" accept={field.accept} multiple={field.multiple} onChange={(event) => setForm({ ...form, [field.name]: Array.from(event.target.files || []) })} /><small className="field-hint">{form[field.name]?.map((file) => file.name).join(", ") || t(field.placeholder || "Choose file")}</small></>
               ) : field.type === "multiselect" ? (
-                <ChipMultiSelect value={form[field.name]} options={field.options} label={field.label} onChange={(next) => setForm({ ...form, [field.name]: next })} />
+                <ChipMultiSelect value={form[field.name]} options={options} label={field.label} onChange={(next) => setForm({ ...form, [field.name]: next })} />
               ) : field.type === "tags" ? (
                 <TagInput value={form[field.name]} label={field.label} placeholder={field.placeholder} onChange={(next) => setForm({ ...form, [field.name]: next })} />
               ) : field.type === "date" ? (
@@ -367,7 +377,7 @@ export default function ResourceManager({
                 />
               )}
               {fieldErrors[field.name] && <small className="field-error-text">{t(fieldErrors[field.name])}</small>}
-              {field.hint && <small className="field-hint">{t(field.hint)}</small>}
+              {hint && <small className="field-hint">{t(hint)}</small>}
             </Wrapper>
             );
           })}

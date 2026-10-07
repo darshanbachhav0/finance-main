@@ -31,7 +31,9 @@ export async function notifyApprovalStep(request) {
   const message = {
     eventKey: `request:${request._id}:approval:${step.approvalLevel}`,
     type: "APPROVAL_PENDING", title: notificationText("Approval pending"),
-    message: notificationText("{requestNumber} is waiting for {approvalLevel} approval.", { requestNumber: request.requestNumber, approvalLevel: step.approvalLevel }),
+    message: step.coveringForSnapshot?.name
+      ? notificationText("{requestNumber} is waiting for your approval on behalf of {name}.", { requestNumber: request.requestNumber, name: step.coveringForSnapshot.name })
+      : notificationText("{requestNumber} is waiting for {approvalLevel} approval.", { requestNumber: request.requestNumber, approvalLevel: step.approvalLevel }),
     path: `/approvals?request=${request._id}`, entityType: "FinancialRequest", entityId: request._id
   };
   if (step.approverUser) return notifyUser({ ...message, userId: step.approverUser?._id || step.approverUser });

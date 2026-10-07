@@ -7,6 +7,7 @@ import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
 import { REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { recordAudit } from "../services/auditService.js";
+import { endExpiredLeaves } from "../services/userLeaveService.js";
 
 export async function sessionUser(user) {
   // Recompute on session refresh; never trust a client-supplied or stored capability.
@@ -151,7 +152,9 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 export const me = asyncHandler(async (req, res) => {
-  res.json({ user: await sessionUser(req.user) });
+  // A leave whose last day has passed ends when the person opens the app.
+  const { ended } = await endExpiredLeaves({ userIds: [req.user._id] });
+  res.json({ user: await sessionUser(ended ? await User.findById(req.user._id) : req.user) });
 });
 
 export const changePassword = asyncHandler(async (req, res) => {

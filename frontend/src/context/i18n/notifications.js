@@ -115,5 +115,14 @@ export default {
   "Budget change rejected": "Cambio presupuestal rechazado",
   "{summary}. Comments: {comments}": "{summary}. Comentarios: {comments}",
   "{requestNumber}: Management rejected the budget exception. Adjust the request (for example the amount) and submit it for approval again.": "{requestNumber}: Gerencia rechazó la excepción presupuestal. Ajusta la solicitud (por ejemplo, el monto) y envíala otra vez a aprobación.",
-  "{requestNumber}: SUNAT could not verify the invoice. Review it and approve a manual SUNAT exception so the payment can continue.": "{requestNumber}: SUNAT no pudo verificar el comprobante. Revíselo y apruebe una excepción manual SUNAT para que el pago continúe."
+  "{requestNumber}: SUNAT could not verify the invoice. Review it and approve a manual SUNAT exception so the payment can continue.": "{requestNumber}: SUNAT no pudo verificar el comprobante. Revíselo y apruebe una excepción manual SUNAT para que el pago continúe.",
+  // Leave coverage.
+  "{requestNumber} is waiting for your approval on behalf of {name}.": "{requestNumber} espera tu aprobación en nombre de {name}.",
+  "You are covering approvals": "Estás cubriendo aprobaciones",
+  "Coverage ended": "Cobertura terminada",
+  "{name} is on leave until {until}. Their approvals come to you meanwhile.": "{name} está de licencia hasta el {until}. Mientras tanto, sus aprobaciones llegan a ti.",
+  "{name} is on leave. Their approvals come to you meanwhile.": "{name} está de licencia. Mientras tanto, sus aprobaciones llegan a ti.",
+  "{name} is back. The approvals you were holding for them have returned to them.": "{name} regresó. Las aprobaciones que tenías en su nombre volvieron a esa persona.",
+  "Welcome back": "Bienvenido de vuelta",
+  "Your leave ended after {until}. Your approvals come to you again.": "Tu licencia terminó después del {until}. Tus aprobaciones vuelven a llegarte."
 };

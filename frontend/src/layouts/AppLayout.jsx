@@ -1,12 +1,13 @@
 import { Suspense } from "react";
 import MotionSurface from "../components/MotionSurface.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
-import { Bell, Check, ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu, Search, X } from "lucide-react";
+import { Bell, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import useNotificationBell from "../hooks/useNotificationBell.js";
 import { notificationMessage, notificationTitle } from "../utils/notificationText.js";
 import CommandPalette from "../components/CommandPalette.jsx";
+import MyLeavePanel from "../components/MyLeavePanel.jsx";
 import UmaBrand from "../components/UmaBrand.jsx";
 import ThemeControl from "../components/ThemeControl.jsx";
 import LanguageToggle from "../components/LanguageToggle.jsx";
@@ -16,13 +17,14 @@ import useAnimatedPresence from "../hooks/useAnimatedPresence.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import { SIDEBAR_DRAWER_QUERY } from "../utils/breakpoints.js";
 import { toneOf } from "../utils/tones.js";
+import { formatDate } from "../utils/formatters.js";
 import MobileBottomNav from "../components/MobileBottomNav.jsx";
 import { bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
 import { navigationIcon } from "../utils/navigationIcons.js";
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -32,6 +34,7 @@ export default function AppLayout() {
   const [taskOpen, setTaskOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const menusRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -257,6 +260,7 @@ export default function AppLayout() {
                     <span>{user.email}</span>
                     <small>{t(user.role)} · {user.area}</small>
                   </div>
+                  {!managementViewer && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
                   <button type="button" onClick={logout}><LogOut size={16} /><span>{t("Log out")}</span></button>
                   <ThemeControl />
                 </div>
@@ -266,6 +270,7 @@ export default function AppLayout() {
         </header>
         <main className="content" id="main-content" tabIndex={-1}>
           <div className="uma-print-header"><UmaBrand /><span>{t(pageTitle)}</span></div>
+          {user.onLeave && <div className="inline-alert alert-info leave-banner" role="status"><CalendarClock size={18} aria-hidden="true" /><div><strong>{user.leaveUntil ? t("You are on leave until {date}").replace("{date}", formatDate(`${String(user.leaveUntil).slice(0, 10)}T12:00:00Z`, language)) : t("You are on leave")}</strong><span>{t("Your approvals go to your substitute (or your jefe) until you are back.")}</span></div><button type="button" className="secondary-button" onClick={() => setLeaveOpen(true)}>{t("Manage leave")}</button></div>}
           <Suspense fallback={<WorkspaceSkeleton />}><MotionSurface changeKey={location.pathname}><Outlet /></MotionSurface></Suspense>
         </main>
       </div>
@@ -276,6 +281,7 @@ export default function AppLayout() {
         pendingLabel={pendingLabel}
       />
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} pages={commandPages} />
+      <MyLeavePanel open={leaveOpen} onClose={() => setLeaveOpen(false)} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { connectDB } from "../config/db.js";
 import Notification from "../models/Notification.js";
 import AuditLog from "../models/AuditLog.js";
 import { checkApprovalSlas } from "../services/slaMonitoringService.js";
+import { endExpiredLeaves } from "../services/userLeaveService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
 
 async function ensureIdempotencyIndexes() {
@@ -25,6 +26,9 @@ export function startSlaWorker({ once = false } = {}) {
   const done = (async () => {
     await ensureIdempotencyIndexes();
     do {
+      // Leaves past their last day end first, so their approvals are back before the SLA scan.
+      try { const { ended } = await endExpiredLeaves(); if (ended) console.log("Leaves ended", ended); }
+      catch (error) { console.error("Leave expiry failed", error); }
       try { console.log("SLA scan", await checkApprovalSlas({ config })); }
       catch (error) { console.error("SLA scan failed", error); if (once) throw error; }
       if (once || stopping) break;

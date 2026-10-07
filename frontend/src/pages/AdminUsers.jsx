@@ -26,6 +26,19 @@ export default function AdminUsers() {
     })().catch(err => mounted && setError(err.message));
     return () => { mounted = false; };
   }, []);
+  // People who can supervise or cover someone: everyone active except the person being edited.
+  const peopleOptions = (form, editing) => supervisors
+    .filter((user) => String(user._id) !== String(editing?._id || ""))
+    .map((user) => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}${user.onLeave ? ` (${t("On leave")})` : ""}` }));
+  const personById = (id) => supervisors.find((user) => String(user._id) === String(id || ""));
+  // Where this person's approvals go while they are away, from the choices in the form.
+  function coverageHint(form) {
+    const substitute = personById(form.substitute);
+    if (substitute && !substitute.onLeave) return t("While away, their approvals go to {name}, their substitute.").replace("{name}", substitute.name);
+    const jefe = personById(form.jefe);
+    if (jefe) return t("While away, their approvals go to their jefe ({name}) or the next available manager above. Set a substitute to choose who covers.").replace("{name}", jefe.name);
+    return t("Nobody can take this person's approvals while they are away: set a substitute.");
+  }
   const centerOptions = costCenters.map((item) => ({ value: item._id, label: `${item.code} - ${item.name}${item.organizationalUnitCode ? ` · ${item.organizationalUnitCode}` : ""}` }));
 
   return <>
@@ -44,8 +57,8 @@ export default function AdminUsers() {
         { name: "email", label: "Email", type: "email" },
         { name: "password", label: "Password", type: "password", requiredOnCreate: true, hint: "Min. 10 characters. Not saved in drafts." },
         { type: "section", label: "Organization" },
-        { name: "jefe", label: "Direct supervisor", type: "select", options: supervisors.map(user => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}` })), getValue: row => row.jefe?._id || row.jefe || "", wide: true },
-        { name: "substitute", label: "Substitute during leave", type: "select", options: supervisors.map(user => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}` })), getValue: row => row.substitute?._id || row.substitute || "", wide: true, hint: "Approves on this person's behalf while they are on leave or inactive. Without one, their approvals go to their nearest available jefe." },
+        { name: "jefe", label: "Direct supervisor", type: "search-select", options: peopleOptions, searchPlaceholder: "Search by name or job title...", getValue: row => row.jefe?._id || row.jefe || "", wide: true },
+        { name: "substitute", label: "Substitute during leave", type: "search-select", options: peopleOptions, searchPlaceholder: "Search by name or job title...", getValue: row => row.substitute?._id || row.substitute || "", wide: true, hint: (form) => form.substitute ? coverageHint(form) : "Approves on this person's behalf while they are on leave or inactive. Without one, their approvals go to their nearest available jefe." },
         { name: "jobTitle", label: "Job title" },
         { name: "organizationalUnit", label: "Organizational unit" },
         { name: "area", label: "Area", defaultValue: "General", required: true },
@@ -55,8 +68,8 @@ export default function AdminUsers() {
         { name: "approvalAreas", label: "Approval areas", type: "tags", placeholder: "Area, or * for all", getValue: (row) => row.approvalAreas || [] },
         { name: "permissions", label: "Additional permissions", type: "toggle-list", defaultValue: [], options: permissions, getValue: (row) => row.permissions || [], hint: "Extras on top of the user's role. The role already includes its own access; department duties such as accounting, payments or budget management come only with the role." },
         { name: "active", label: "Active", type: "checkbox", defaultValue: true, hint: "Deactivating moves this user's pending approvals to their substitute, or without one to their nearest available jefe." },
-        { name: "onLeave", label: "On leave", type: "checkbox", defaultValue: false, hint: "While on leave, this user's approvals go to their substitute (or nearest available jefe) and come back when the leave ends." },
-        { name: "leaveUntil", label: "On leave until", type: "date" },
+        { name: "onLeave", label: "On leave", type: "checkbox", defaultValue: false, hint: (form) => form.onLeave ? coverageHint(form) : "While on leave, this user's approvals go to their substitute (or nearest available jefe) and come back when the leave ends." },
+        { name: "leaveUntil", label: "On leave until", type: "date", hint: "Last day of leave. The day after, the leave ends by itself and the approvals come back." },
         { type: "section", label: "Cost centers" },
         { name: "costCenter", label: "Default Cost Center", type: "select", options: centerOptions, getValue: (row) => row.costCenter?._id || row.costCenter, wide: true },
         { name: "authorizedCostCenters", label: "Authorized Cost Centers", type: "multiselect", defaultValue: [], options: centerOptions, getValue: (row) => (row.authorizedCostCenters || []).map((item) => item._id || item) }

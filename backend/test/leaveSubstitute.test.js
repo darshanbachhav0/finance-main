@@ -11,7 +11,9 @@ import Supplier from "../src/models/Supplier.js";
 import User from "../src/models/User.js";
 import { activeApprovalStep, initializeApprovalRoute } from "../src/services/approvalRuleService.js";
 import { decideApproval, getApprovalDecisionOptions } from "../src/services/approvalService.js";
-import { updateMyLeave, updateUser } from "../src/controllers/userController.js";
+import { getMyLeave, updateMyLeave, updateUser } from "../src/controllers/userController.js";
+import { me } from "../src/controllers/authController.js";
+import { endExpiredLeaves } from "../src/services/userLeaveService.js";
 import { EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
@@ -146,6 +148,87 @@ test("a substitute covers an absent manager's approvals and hands them back on r
       await assert.rejects(() => submit(other), /No supervisor is available/);
       const stranded = await Notification.countDocuments({ type: "APPROVAL_UNASSIGNED" });
       assert.ok(stranded >= 1, "Admin is told the approvals waiting on her have nobody to go to");
+    });
+  } finally {
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});
+
+test("self-service leave: who covers, a last day that ends the leave by itself, and clear notifications", { timeout: 120000 }, async (t) => {
+  const databaseName = `erp_leave_self_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
+  try {
+    await Promise.all([Notification.init(), AuditLog.init()]);
+    await AccountingPeriod.create({ period: "2026-09", status: "OPEN" });
+    const center = await CostCenter.create({ code: "CC-SELF", name: "Self", area: "Gerencia", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
+    const expenseType = await ExpenseType.create({ code: "EXP-SELF", name: "Services", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", active: true });
+    const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20999999961", normalizedIdentifier: "20999999961", legalName: "Self Supplier SAC", name: "Self Supplier SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-9761", paymentTerms: { option: "CREDIT_30", days: 30 } });
+    const top = await User.create({ name: "Gerente", email: "self.top@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia" });
+    const deputy = await User.create({ name: "Encargada", jobTitle: "GERENTE ADMINISTRATIVA", email: "self.deputy@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia", jefe: top._id });
+    const manager = await User.create({ name: "Jefa de Area", email: "self.manager@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia", jefe: top._id });
+    const requester = await User.create({ name: "Analista", email: "self.requester@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia", jefe: top._id, costCenter: center._id });
+    await User.updateOne({ _id: top._id }, { $set: { substitute: deputy._id } });
+    const request = new FinancialRequest({
+      requestNumber: "REQ-2026-98001", requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.SERVICES,
+      issueDate: "2026-09-10", accountingPeriod: "2026-09", currency: "PEN", flowType: "A1",
+      solicitor: requester._id, requester: requester._id, requesterArea: "Gerencia", requesterCostCenter: center._id, supplier: supplier._id,
+      description: "Self-service leave test", status: REQUEST_STATUS.PENDING_APPROVAL,
+      attachments: [{ kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: requester._id }],
+      lines: [{ costCenter: center._id, expenseType: expenseType._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }]
+    });
+    await initializeApprovalRoute(request);
+    await request.save();
+    const myLeave = async (user) => (await callController(getMyLeave, { user })).data;
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+    await t.test("before leaving, a person sees who will cover them and what is waiting", async () => {
+      const summary = await myLeave(top);
+      assert.equal(summary.onLeave, false);
+      assert.deepEqual([summary.coverage.via, summary.coverage.person.name], ["SUBSTITUTE", "Encargada"]);
+      assert.equal(summary.pendingApprovals, 1);
+      const managerView = await myLeave(manager);
+      assert.deepEqual([managerView.coverage.via, managerView.coverage.person.name], ["SUPERVISOR", "Gerente"], "without a substitute, the jefe covers");
+      await User.updateOne({ _id: top._id }, { $set: { substitute: null } });
+      assert.equal((await myLeave(top)).coverage.via, null, "nobody can cover the top of the roster without a substitute");
+      await User.updateOne({ _id: top._id }, { $set: { substitute: deputy._id } });
+    });
+
+    await t.test("a last day in the past is refused", async () => {
+      const self = await User.findById(top._id);
+      await assert.rejects(() => callController(updateMyLeave, { body: { onLeave: true, leaveUntil: "2020-01-01" }, user: self }), /cannot be in the past/);
+    });
+
+    await t.test("starting leave tells the substitute and hands them the approvals, on her behalf", async () => {
+      const result = await callController(updateMyLeave, { body: { onLeave: true, leaveUntil: tomorrow }, user: await User.findById(top._id) });
+      assert.equal(result.leave.onLeave, true);
+      assert.equal(result.leave.leaveUntil, tomorrow);
+      const started = await Notification.findOne({ user: deputy._id, type: "LEAVE_COVERAGE_STARTED" });
+      assert.match(started.message, /Gerente is on leave until/);
+      const pending = await Notification.findOne({ user: deputy._id, type: "APPROVAL_PENDING", entityId: request._id });
+      assert.match(pending.message, /waiting for your approval on behalf of Gerente/);
+      const deputyView = await myLeave(deputy);
+      assert.deepEqual(deputyView.covering.map((item) => [item.name, item.count]), [["Gerente", 1]]);
+    });
+
+    await t.test("once the last day has passed, opening the app ends the leave and brings the approvals back", async () => {
+      await User.updateOne({ _id: top._id }, { $set: { leaveUntil: new Date(Date.now() - 2 * 86400000) } });
+      const session = await callController(me, { user: await User.findById(top._id) });
+      assert.equal(session.user.onLeave, false);
+      const step = activeApprovalStep(await FinancialRequest.findById(request._id));
+      assert.equal(String(step.approverUser), String(top._id));
+      assert.equal(step.coveringFor, undefined);
+      assert.ok(await Notification.findOne({ user: top._id, type: "LEAVE_ENDED" }), "she is welcomed back");
+      assert.ok(await Notification.findOne({ user: deputy._id, type: "LEAVE_COVERAGE_ENDED" }), "the substitute is told coverage ended");
+      assert.ok(await AuditLog.findOne({ entityId: top._id, action: "LEAVE_ENDED", comments: /automatically/ }));
+    });
+
+    await t.test("the scheduled scan ends leaves past their last day, and keeps those that are not", async () => {
+      await User.updateOne({ _id: top._id }, { $set: { onLeave: true, leaveUntil: new Date(`${tomorrow}T00:00:00Z`) } });
+      await User.updateOne({ _id: manager._id }, { $set: { onLeave: true, leaveUntil: new Date(Date.now() - 3 * 86400000) } });
+      assert.deepEqual(await endExpiredLeaves(), { ended: 1 });
+      assert.equal((await User.findById(manager._id)).onLeave, false);
+      assert.equal((await User.findById(top._id)).onLeave, true, "a leave ending tomorrow continues");
     });
   } finally {
     await mongoose.connection.dropDatabase();

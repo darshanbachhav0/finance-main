@@ -4,6 +4,8 @@ import User from "../models/User.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { reassignPendingApprovalsFor } from "../services/approvalService.js";
+import { leaveLastDay, leaveSummary, notifySubstituteOfLeave } from "../services/userLeaveService.js";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
 import { APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
@@ -127,7 +129,8 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
   if (req.body.substitute !== undefined) await validateSubstitute(user._id, req.body.substitute);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave) };
+  if (req.body.onLeave === true && req.body.leaveUntil && !user.onLeave) assertLeaveUntil(req.body.leaveUntil);
+  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveStartedAt: user.leaveStartedAt };
   Object.assign(user, editablePayload(req.body));
   applyLeaveDates(user, oldValues.onLeave);
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
@@ -165,7 +168,24 @@ async function reassignAfterAvailabilityChange(user, oldValues, req) {
   const substituteChanged = oldValues.substitute !== undefined && String(oldValues.substitute || "") !== String(user.substitute || "") && !available;
   const reason = deactivated ? "DEACTIVATED" : wentOnLeave ? "ON_LEAVE" : returned ? "RETURNED" : substituteChanged ? "SUBSTITUTE_CHANGED" : null;
   if (!reason) return undefined;
-  return reassignPendingApprovalsFor(user._id, { actor: req.user, req, reason });
+  const result = await reassignPendingApprovalsFor(user._id, { actor: req.user, req, reason });
+  // The substitute hears when coverage starts and ends, not only when an approval arrives.
+  if (wentOnLeave) await notifySubstituteOfLeave(user, { started: true });
+  if (returned && oldValues.onLeave) await notifySubstituteOfLeave({ ...user.toObject(), substitute: user.substitute, leaveStartedAt: oldValues.leaveStartedAt }, { started: false });
+  return result;
+}
+
+// The leave panel of the signed-in user: status, who covers their approvals, what is waiting.
+export const getMyLeave = asyncHandler(async (req, res) => {
+  res.json({ data: await leaveSummary(req.user._id) });
+});
+
+// "On leave until" is the last day of leave: never a day already past.
+function assertLeaveUntil(value) {
+  if (!value) return;
+  const day = leaveLastDay(value);
+  if (Number.isNaN(new Date(value).getTime())) throw new AppError(422, "Choose a valid last day of leave.", { field: "leaveUntil" }, ERROR_CODES.VALIDATION_ERROR);
+  if (day < limaDateKey(new Date())) throw new AppError(422, "The last day of leave cannot be in the past.", { field: "leaveUntil" }, ERROR_CODES.VALIDATION_ERROR);
 }
 
 // Self-service: a user may record their own leave (and return from it).
@@ -173,14 +193,15 @@ export const updateMyLeave = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) throw new AppError(404, "User not found.", undefined, ERROR_CODES.NOT_FOUND);
   if (typeof req.body.onLeave !== "boolean") throw new AppError(422, "onLeave must be true or false.", { field: "onLeave" }, ERROR_CODES.VALIDATION_ERROR);
-  const oldValues = { active: user.active, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil };
+  if (req.body.onLeave) assertLeaveUntil(req.body.leaveUntil);
+  const oldValues = { active: user.active, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, leaveStartedAt: user.leaveStartedAt };
   user.onLeave = req.body.onLeave;
   if (req.body.leaveUntil !== undefined) user.leaveUntil = req.body.leaveUntil || undefined;
   applyLeaveDates(user, oldValues.onLeave);
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: user.onLeave ? "LEAVE_STARTED" : "LEAVE_ENDED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { onLeave: user.onLeave, leaveUntil: user.leaveUntil } });
   const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
-  res.json({ data: user, approvalReassignment });
+  res.json({ data: user, approvalReassignment, leave: await leaveSummary(user._id) });
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {
