@@ -25,6 +25,7 @@ import {
   configuredDocumentRequirements,
   configuredQuotationPolicy,
   documentStatusByPhase,
+  SUBMISSION_DOCUMENT_KINDS,
   validateStructuredQuotationComparison
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
@@ -35,7 +36,7 @@ import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { assertSupplierEligibleForRequestReview, assertSupplierUsable } from "./supplierService.js";
 import { transitionRequest, canTransition } from "./workflowService.js";
-import { latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
+import { INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
 import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
@@ -454,6 +455,24 @@ function applyEditableFields(request, payload) {
   if (payload.capexDetails !== undefined) request.capexDetails = parseCapexDetails(payload.capexDetails);
   if (payload.opexDetails !== undefined) request.opexDetails = parseOpexDetails(payload.opexDetails);
   if (payload.quotations !== undefined) request.quotations = parseQuotations(payload.quotations);
+}
+
+// The requester takes back a wrong upload while the request is still theirs to edit. Only the
+// documents-step files qualify: quotation evidence is replaced from its own quotation, and later
+// phases' evidence (invoice registration, rendition) is not withdrawn from the request form.
+// Ids no longer on the request (removed in another tab) are ignored.
+function removeRequestAttachments(request, value) {
+  const parsed = parseJson(value, "removeAttachments") || [];
+  if (!Array.isArray(parsed)) throw new AppError(400, "removeAttachments must be an array.", { field: "removeAttachments" }, ERROR_CODES.VALIDATION_ERROR);
+  const ids = new Set(parsed.map(String));
+  const removed = (request.attachments || []).filter((attachment) => ids.has(String(attachment._id)));
+  const locked = removed.filter((attachment) => !SUBMISSION_DOCUMENT_KINDS.includes(attachment.kind));
+  if (locked.length) throw new AppError(422, "Only the request's own documents can be removed here.", { attachments: locked.map((attachment) => ({ id: attachment._id, kind: attachment.kind })) }, ERROR_CODES.VALIDATION_ERROR);
+  if (!removed.length) return [];
+  request.attachments = request.attachments.filter((attachment) => !ids.has(String(attachment._id)));
+  // A verification read from a removed invoice file no longer stands; any remaining file is read again.
+  if (removed.some((attachment) => INVOICE_EVIDENCE_KINDS.includes(attachment.kind))) request.xmlValidation = undefined;
+  return removed;
 }
 
 function normalizeTrackFields(request) {
@@ -883,6 +902,7 @@ export async function updateFinancialRequest({ id, payload, files, user, req }) 
   };
   if (payload.lines !== undefined) request.lines = parseRequestLines(payload.lines);
   applyEditableFields(request, payload);
+  const removedAttachments = removeRequestAttachments(request, payload.removeAttachments);
   request.draftSavedAt = new Date();
   let persistedFiles = {};
   let saved = false;
@@ -909,9 +929,13 @@ export async function updateFinancialRequest({ id, payload, files, user, req }) 
         supplier: request.supplier,
         totalAmount: request.totalAmount,
         accountingPeriod: request.accountingPeriod,
-        officialRequest: officialAuditSnapshot(request)
+        officialRequest: officialAuditSnapshot(request),
+        ...(removedAttachments.length ? { removedAttachments: removedAttachments.map((attachment) => ({ kind: attachment.kind, originalName: attachment.originalName, url: attachment.url })) } : {})
       }
     });
+    // A draft never sent drops the file itself; once approvers have seen a file it stays in storage,
+    // traceable from the audit entry above.
+    if (removedAttachments.length && !wasSubmitted(request)) await cleanupUploadedFiles({ attachments: removedAttachments.filter((attachment) => attachment.path) });
     if (submit) await submitPreparedRequest(request, { user, req, comments: payload.comments });
     await request.populate(requestPopulate);
     return request;

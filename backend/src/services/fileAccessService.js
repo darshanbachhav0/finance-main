@@ -39,7 +39,8 @@ export function resolveStoredAsset(resourcePath) {
 
 export async function assertStoredAssetAccess(asset, user) {
   if (asset.kind === "uploads" && asset.segments[0] === "requests") {
-    const request = await FinancialRequest.findById(asset.segments[1]).select("requester solicitor status");
+    // The approval route is loaded too: a chain approver who can open the request can open its files.
+    const request = await FinancialRequest.findById(asset.segments[1]).select("requester solicitor status approvalRouteSnapshot.approverUser");
     if (!request || !canViewRequest(request, user)) throw forbidden();
     return;
   }

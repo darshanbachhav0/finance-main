@@ -429,8 +429,11 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .document-upload strong { font-size: var(--font-sm); }
 .document-upload small { color: var(--gray-600); font-size: var(--font-xs); }
 .document-upload > input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.file-list { grid-column: 1 / -1; display: grid; gap: 3px; margin-top: 8px; }
-.file-list span { overflow: hidden; color: var(--gray-700); font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap; }
+.file-list { position: relative; z-index: 1; grid-column: 1 / -1; display: grid; gap: 3px; margin: 8px 0 0; padding: 0; list-style: none; cursor: default; }
+.file-list li { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.file-list li > span { flex: 1; min-width: 0; overflow: hidden; color: var(--gray-700); font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap; }
+.file-list li.is-removed > span { color: var(--gray-600); }
+.file-list .icon-button { flex: none; width: 30px; height: 30px; min-height: 30px; }
 .review-layout { display: grid; gap: 12px; }
 .review-section { padding: 14px; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); }
 .review-lines { display: grid; }
@@ -1148,12 +1151,14 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .supplier-inline-status > div { display: grid; min-width: 0; }
 .supplier-inline-status strong { overflow: hidden; font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap; }
 .supplier-inline-status span, .supplier-inline-status small { color: var(--gray-600); font-size: var(--font-xs); }
-.quotation-evidence { min-height: 52px; display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; padding: 9px; border: 1px dashed var(--gray-300); border-radius: var(--radius-sm); background: var(--gray-50); cursor: pointer; }
+.quotation-evidence { min-height: 52px; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px; border: 1px dashed var(--gray-300); border-radius: var(--radius-sm); background: var(--gray-50); cursor: pointer; }
 .quotation-evidence:hover { border-color: var(--accent-strong); background: var(--surface-tint-f4fbfa); }
 .quotation-evidence > span { display: grid; min-width: 0; }
 .quotation-evidence strong { overflow: hidden; font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap; }
 .quotation-evidence small { color: var(--gray-600); font-size: var(--font-xs); }
 .quotation-evidence input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.quotation-evidence-actions { display: flex; gap: 2px; }
+.quotation-evidence-actions .icon-button { width: 30px; height: 30px; min-height: 30px; }
 .quotation-actions { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding-top: 4px; border-top: 1px solid var(--gray-100); }
 .recommend-option { min-height: 38px; display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: var(--font-xs); font-weight: 750; cursor: pointer; }
 .recommend-option input { width: 16px; height: 16px; accent-color: var(--accent); }

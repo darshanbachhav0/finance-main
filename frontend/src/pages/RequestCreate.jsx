@@ -4,11 +4,14 @@ import { validationSummary } from "../utils/validationMessages.js";
 import MotionList from "../components/MotionList.jsx";
 import useWorkDraft from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
+import UploadedFileList, { openLocalFile } from "../components/UploadedFileList.jsx";
+import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Eye,
   FileCheck2,
   FileText,
   Plus,
@@ -165,7 +168,10 @@ export default function RequestCreate() {
   const [quotations, setQuotations] = useState([]);
   const [quotationFiles, setQuotationFiles] = useState({});
   const [files, setFiles] = useState(Object.fromEntries(documentDefinitions.map((item) => [item.key, []])));
-  const [existingAttachments, setExistingAttachments] = useState([]);
+  // Files already on the request; the ones marked for removal leave it when the form is saved.
+  const [storedAttachments, setStoredAttachments] = useState([]);
+  const [removedAttachmentIds, setRemovedAttachmentIds] = useState([]);
+  const existingAttachments = storedAttachments.filter((item) => !removedAttachmentIds.includes(String(item._id)));
   const [formPolicy, setFormPolicy] = useState({ documentRequirements: [], quotationPolicy: { enabled: false, minimumCount: 1 } });
   const [budgetPreview, setBudgetPreview] = useState({ status: "PENDING_VALIDATION", lines: [] });
   const [budgetRefresh, setBudgetRefresh] = useState(0);
@@ -276,7 +282,7 @@ export default function RequestCreate() {
           setOpexFrequency(request.opexDetails?.expenseFrequency || "ONE_OFF");
           setLines(serverLines.map(restoreEditorLine));
           setQuotations(serverQuotations);
-          setExistingAttachments(request.attachments || []);
+          setStoredAttachments(request.attachments || []);
         } else {
           const defaultCenter = supplierId(user.costCenter) || nextMasters.costCenters[0]?._id || "";
           setForm((current) => ({ ...current, requesterCostCenter: defaultCenter, schoolOrDepartment: user.area || "" }));
@@ -328,10 +334,10 @@ export default function RequestCreate() {
   }, [form.flowType, form.requestType, form.expenseNature, hydrated]);
 
   const draft = useWorkDraft({ scope: "request", recordId: id || "new", title: "Financial request", enabled: hydrated && !loading && hydratedRecord === (id || "new"), sourceVersion,
-    value: { form, capex, opexFrequency, lines, quotations, files, quotationFiles, stepId, visitedSteps, completedSteps },
+    value: { form, capex, opexFrequency, lines, quotations, files, quotationFiles, removedAttachmentIds, stepId, visitedSteps, completedSteps },
     restore: data => {
       if (!data) return;
-      setForm(data.form); setCapex(data.capex); setOpexFrequency(data.opexFrequency); setLines(data.lines.map(restoreEditorLine)); setQuotations(data.quotations); setFiles(data.files || Object.fromEntries(documentDefinitions.map(item => [item.key, []]))); setQuotationFiles(data.quotationFiles || {});
+      setForm(data.form); setCapex(data.capex); setOpexFrequency(data.opexFrequency); setLines(data.lines.map(restoreEditorLine)); setQuotations(data.quotations); setFiles(data.files || Object.fromEntries(documentDefinitions.map(item => [item.key, []]))); setQuotationFiles(data.quotationFiles || {}); setRemovedAttachmentIds(data.removedAttachmentIds || []);
       const legacy = (index) => LEGACY_STEPS[index] || "need";
       setStepId(data.stepId || legacy(data.step || 0));
       setVisitedSteps(data.visitedSteps || LEGACY_STEPS.slice(0, (data.maxStep || 0) + 1));
@@ -612,6 +618,7 @@ export default function RequestCreate() {
       attachment: quotationFiles[quotation.clientId] ? undefined : quotation.attachment
     }))));
     data.append("submit", String(sendForApproval));
+    if (removedAttachmentIds.length) data.append("removeAttachments", JSON.stringify(removedAttachmentIds));
     Object.entries(files).forEach(([key, selectedFiles]) => selectedFiles.forEach((file) => data.append(key, file)));
     quotations.forEach((quotation) => {
       const file = quotationFiles[quotation.clientId];
@@ -739,7 +746,9 @@ export default function RequestCreate() {
                 <div className="form-grid two-column-form"><label className={`field${errors[`quotations.${index}.amount`] ? " field-error" : ""}`}><span>{t("Amount")} *</span><input type="number" min="0" step="0.01" value={quotation.amount} onChange={(event) => updateQuotation(index, { amount: event.target.value })} onBlur={() => validateQuotationAmount(index)} aria-invalid={Boolean(errors[`quotations.${index}.amount`])} />{errors[`quotations.${index}.amount`] && <small className="field-error-text">{t(errors[`quotations.${index}.amount`])}</small>}</label><label className="field"><span>{t("Currency")}</span><select value={quotation.currency} onChange={(event) => updateQuotation(index, { currency: event.target.value })}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label><label className="field"><span>{t("Delivery period")}</span><input value={quotation.deliveryPeriod} onChange={(event) => updateQuotation(index, { deliveryPeriod: event.target.value })} /></label></div>
                 <QuotationPaymentTerms quotation={quotation} onChange={(changes) => updateQuotation(index, changes)} errors={errors} errorPrefix={`quotations.${index}.`} />
                 <label className="field"><span>{t("Commercial conditions")}</span><textarea rows="2" value={quotation.commercialConditions} onChange={(event) => updateQuotation(index, { commercialConditions: event.target.value })} /></label>
-                <label className={`quotation-evidence${errors[`quotations.${index}.attachment`] ? " field-error" : ""}`}><FileText size={18} /><span><strong>{quotationFiles[quotation.clientId]?.name || evidence?.originalName || t("Attach quotation evidence")}</strong><small>{quotationFiles[quotation.clientId] || evidence ? t("Evidence attached") : t("Evidence missing")}</small></span><input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" onChange={(event) => setQuotationFiles((current) => ({ ...current, [quotation.clientId]: event.target.files?.[0] }))} /></label>
+                <label className={`quotation-evidence${errors[`quotations.${index}.attachment`] ? " field-error" : ""}`}><FileText size={18} /><span><strong>{quotationFiles[quotation.clientId]?.name || evidence?.originalName || t("Attach quotation evidence")}</strong><small>{quotationFiles[quotation.clientId] || evidence ? t("Evidence attached") : t("Evidence missing")}</small></span>{quotationFiles[quotation.clientId]
+                  ? <span className="quotation-evidence-actions"><button type="button" className="icon-button quiet" onClick={() => openLocalFile(quotationFiles[quotation.clientId])} title={t("View document")} aria-label={`${t("View document")}: ${quotationFiles[quotation.clientId].name}`}><Eye size={15} aria-hidden="true" /></button><button type="button" className="icon-button quiet danger" onClick={() => setQuotationFiles((current) => ({ ...current, [quotation.clientId]: undefined }))} title={t("Remove document")} aria-label={`${t("Remove document")}: ${quotationFiles[quotation.clientId].name}`}><Trash2 size={15} aria-hidden="true" /></button></span>
+                  : evidence && <span className="quotation-evidence-actions"><ProtectedAssetButton className="icon-button quiet" resourcePath={evidence.url} fileName={evidence.originalName} preview title="View document" ariaLabel={`${t("View document")}: ${evidence.originalName}`}><Eye size={15} aria-hidden="true" /></ProtectedAssetButton></span>}<input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" onChange={(event) => { const file = event.target.files?.[0]; setQuotationFiles((current) => ({ ...current, [quotation.clientId]: file })); event.target.value = ""; }} /></label>
                 <div className="quotation-actions"><label className={`recommend-option${blocked ? " disabled" : ""}`} title={blocked ? t("Rejected or inactive suppliers cannot be recommended.") : ""}><input type="radio" name="recommended-quotation" checked={quotation.recommended} disabled={blocked || !quotation.supplier} onChange={() => { updateQuotation(index, { recommended: true }); setForm((current) => ({ ...current, supplier: quotation.supplier })); }} /><CheckCircle2 size={17} /><span>{t("Recommend supplier")}</span></label><button type="button" className="icon-button danger" onClick={() => setQuotations((current) => current.filter((_, currentIndex) => currentIndex !== index))} title={t("Remove quotation")} aria-label={t("Remove quotation")}><Trash2 size={16} /></button></div>
               </article>;
             })}</MotionList>
@@ -752,6 +761,7 @@ export default function RequestCreate() {
         {stepId === "documents" && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Supporting documents")}</h3><p>{t("Quotation evidence is attached to each supplier above; other configured evidence is uploaded here.")}</p></div></div><div className="document-requirement required"><FileText size={20} /><div><strong>{t("Mandatory document checklist")}</strong><p>{formPolicy.documentRequirements.length ? formPolicy.documentRequirements.map((rule) => isEitherOf(rule) ? t(rule.labelKey) : `${t(rule.labelKey)} x ${rule.minCount}`).join(" - ") : t("No additional configured evidence for this classification.")}</p></div></div><button type="button" className="text-button" aria-expanded={showOptionalDocuments} onClick={() => setShowOptionalDocuments(value => !value)}>{t(showOptionalDocuments ? "Hide optional documents" : "Additional documents")}</button><div className="document-grid">{documentDefinitions.map((document) => {
           const rule = ruleForKind(formPolicy.documentRequirements, document.kind);
           const existing = existingAttachments.filter((item) => item.kind === document.kind);
+          const removed = storedAttachments.filter((item) => item.kind === document.kind && removedAttachmentIds.includes(String(item._id)));
           const attached = existing.length + (files[document.key]?.length || 0);
           // "Invoice XML or factura PDF": each card says the other one also does, and once either is
           // attached the other is optional.
@@ -759,7 +769,14 @@ export default function RequestCreate() {
           const metByAlternative = alternatives.some((item) => existingAttachments.some((file) => file.kind === item.kind) || files[item.key]?.length);
           const required = rule && !metByAlternative;
           const state = attached ? t("Files attached") : metByAlternative ? t("Optional document") : isAnyDocument(rule) ? t("Any one document is enough") : alternatives.length ? t("Required: this or {other}").replace("{other}", alternatives.map((item) => t(item.label)).join(" / ")) : t(rule ? "Required document" : "Optional document");
-          return <label hidden={!showOptionalDocuments && !rule && !attached && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => setFiles((current) => ({ ...current, [document.key]: Array.from(event.target.files || []) }))} /><div className="file-list">{existing.map((file) => <span key={file._id}>{file.originalName} - {t("Already uploaded")}</span>)}{files[document.key].map((file) => <span key={`${file.name}-${file.size}`}>{file.name} - {(file.size / 1024).toFixed(0)} KB</span>)}</div>{errors[document.key] && <small className="field-error-text">{t(errors[document.key])}</small>}</label>;
+          return <label hidden={!showOptionalDocuments && !rule && !attached && !removed.length && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => { const chosen = Array.from(event.target.files || []); setFiles((current) => ({ ...current, [document.key]: chosen })); event.target.value = ""; }} /><UploadedFileList
+            stored={existing}
+            removed={removed}
+            chosen={files[document.key]}
+            onRemoveStored={(file) => setRemovedAttachmentIds((current) => [...current, String(file._id)])}
+            onRestoreStored={(file) => setRemovedAttachmentIds((current) => current.filter((item) => item !== String(file._id)))}
+            onRemoveChosen={(index) => setFiles((current) => ({ ...current, [document.key]: current[document.key].filter((_, position) => position !== index) }))}
+          />{errors[document.key] && <small className="field-error-text">{t(errors[document.key])}</small>}</label>;
         })}</div></div>}
 
         {stepId === "review" && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div>
