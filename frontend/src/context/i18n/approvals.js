@@ -26,8 +26,12 @@ export default {
   // Leave and My Team
   "On leave": "De licencia",
   "On leave until": "De licencia hasta",
-  "While on leave, pending approvals move to this user's nearest available jefe and new requests route past them.": "Mientras esté de licencia, sus aprobaciones pendientes pasan a su jefe disponible más cercano y las nuevas solicitudes se derivan sin pasar por esta persona.",
-  "Deactivating moves this user's pending approvals to their nearest available jefe.": "Al desactivar, las aprobaciones pendientes de este usuario pasan a su jefe disponible más cercano.",
+  "While on leave, this user's approvals go to their substitute (or nearest available jefe) and come back when the leave ends.": "Durante la licencia, las aprobaciones de este usuario pasan a su reemplazo (o a su jefe disponible más cercano) y vuelven al terminar la licencia.",
+  "Deactivating moves this user's pending approvals to their substitute, or without one to their nearest available jefe.": "Al desactivar, las aprobaciones pendientes de este usuario pasan a su reemplazo o, si no tiene, a su jefe disponible más cercano.",
+  "Substitute during leave": "Reemplazo durante ausencias",
+  "Approves on this person's behalf while they are on leave or inactive. Without one, their approvals go to their nearest available jefe.": "Aprueba en nombre de esta persona mientras está de licencia o inactiva. Sin reemplazo, sus aprobaciones pasan a su jefe disponible más cercano.",
+  "Substitute": "Reemplazo",
+  "on behalf of {name}": "en nombre de {name}",
   "You can open a team request only while it is on your approval route.": "Solo puede abrir una solicitud de su equipo mientras esté en su ruta de aprobación.",
 
   // Notifications raised by the approval workflow

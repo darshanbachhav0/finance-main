@@ -173,9 +173,13 @@ return or reject.
   `APPROVED`. Open steps become `SKIPPED`, the approver's task and SLA alerts are resolved, and a
   `REQUEST_WITHDRAWN` audit entry is written.
 - **Absence.** `User.onLeave` (set by Admin in Users, or by the user via `PUT /users/me/leave`) or
-  deactivation moves every pending manager-chain step waiting on that user to their nearest
-  available jefe, with an `APPROVAL_REASSIGNED` audit entry and a notification to the new
-  approver (Admin is notified when nobody above is available).
+  deactivation moves every pending manager-chain step waiting on that user to their
+  `User.substitute` when one is set and available (the step records `coveringFor`), otherwise to
+  their nearest available jefe, with an `APPROVAL_REASSIGNED` audit entry and a notification to the
+  new approver (Admin is notified when nobody is available). New submissions and "send to my jefe"
+  resolve the same way, and the next level above a covering step is above the absent manager. On
+  return from leave (or when the substitute changes) the covered steps are re-routed again
+  (`reassignPendingApprovalsFor`), so they go back to the manager.
 - **SLA in working days.** Due dates use the Peruvian working-day calendar
   (`businessCalendarService.addWorkingDays`: weekends, national holidays and `UMA_EXTRA_HOLIDAYS`
   excluded). `APPROVAL_SLA_WORKING_DAYS` (default 1, the former 24h) sets a chain step's SLA; a

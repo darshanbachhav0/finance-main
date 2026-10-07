@@ -534,7 +534,7 @@ export default function RequestDetail() {
       <div className="stage-row" role="group" aria-label={t("Current status")}>
         <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
-        {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}</p>}
+        {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
       </div>
       <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />

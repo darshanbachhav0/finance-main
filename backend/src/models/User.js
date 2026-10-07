@@ -18,6 +18,9 @@ const userSchema = new mongoose.Schema(
     failedLoginAttempts: { type: Number, default: 0, min: 0 },
     lockedUntil: { type: Date, default: null },
     jefe: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    // Who covers this person's approvals while they are on leave or inactive (e.g. the encargado/a
+    // de la Gerencia General). Without one, their approvals go to their nearest available jefe.
+    substitute: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     jobTitle: { type: String, trim: true },
     organizationalUnit: { type: String, trim: true },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.SOLICITOR, required: true },
@@ -40,7 +43,8 @@ const userSchema = new mongoose.Schema(
     active: { type: Boolean, default: true },
     // Temporary absence (vacation, medical leave). An on-leave user keeps their
     // account but is skipped as an approver: pending manager-chain steps move to
-    // their nearest available jefe and new submissions route past them.
+    // their substitute (or, without one, their nearest available jefe), new
+    // submissions route the same way, and the steps come back when they return.
     onLeave: { type: Boolean, default: false },
     leaveStartedAt: Date,
     leaveUntil: Date
