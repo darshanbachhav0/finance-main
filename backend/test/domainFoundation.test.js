@@ -32,9 +32,12 @@ test("stored financial files reject traversal and unsupported public paths", () 
 });
 
 test("generated financial files enforce the server-side role matrix", async () => {
+  // Bank files: the role matrix refuses everyone outside Finance before any data is read. Within
+  // it, Treasury's access also depends on Accounting's verification of the file, covered with a
+  // database in bankFileVerification.test.js.
   const bankFile = resolveStoredAsset("/generated/bank-files/BCP-DEMO.txt");
-  await assert.doesNotReject(() => assertStoredAssetAccess(bankFile, { role: ROLES.TREASURY }));
   await assert.rejects(() => assertStoredAssetAccess(bankFile, { role: ROLES.SOLICITOR }), /permission/);
+  await assert.rejects(() => assertStoredAssetAccess(bankFile, { role: ROLES.BUDGET }), /permission/);
 
   const report = resolveStoredAsset("/generated/reports/month-end.csv");
   await assert.doesNotReject(() => assertStoredAssetAccess(report, { role: ROLES.MANAGEMENT }));

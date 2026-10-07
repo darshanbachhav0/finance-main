@@ -33,6 +33,7 @@ import { allowedTransitions, transitionRequest } from "../src/services/workflowS
 import { getFinancialProgress, syncFinancialProgress } from "../src/services/financialProgressService.js";
 import { createAccountsPayableFromVoucher } from "../src/services/accountingService.js";
 import { generatePaymentBatch, confirmTreasuryPayable, reconcilePayment, listReconciliationQueue } from "../src/services/treasuryService.js";
+import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { updateFinancialRequest, submitFinancialRequest, deleteFinancialRequest, voidFinancialRequest, closeFinancialRequest, listRequestsPage } from "../src/services/requestService.js";
 import { deriveFinancialProgress, canonicalRequestStatus } from "../../shared/workflowStatus.mjs";
 import fs from "node:fs/promises";
@@ -86,6 +87,8 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     async function makeBatch(payables) {
       const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
+      // Accounting releases the TXT before Treasury sends it to the bank.
+      await verifyBankFile({ batchId: result.batch._id, user: admin, req });
       return result;
     }
     const confirm = ap => confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { operationNumber: "BANK-" + ap._id, paidAt: "2026-08-15", confirmedAmount: 118 }, user: treasury, req });

@@ -40,7 +40,10 @@ export const PERMISSIONS = Object.freeze({
   BATCH_INVOICE_UPLOAD: "batch-invoice:upload",
   BATCH_INVOICE_REVIEW: "batch-invoice:review",
   PAYMENT_REPROCESS: "payment:reprocess",
-  BANK_FORMAT_CERTIFY: "bank-format:certify"
+  BANK_FORMAT_CERTIFY: "bank-format:certify",
+  // Accounting checks each generated bank TXT before Treasury may download it. A department
+  // duty (with Admin), so it is not grantable piecemeal.
+  BANK_FILE_VERIFY: "bank-file:verify"
 });
 
 // Permissions Admin can grant to one person on top of their role ("Additional permissions").
@@ -90,7 +93,8 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT,
     PERMISSIONS.RENDITION_REVIEW,
     PERMISSIONS.BATCH_INVOICE_UPLOAD,
-    PERMISSIONS.BATCH_INVOICE_REVIEW
+    PERMISSIONS.BATCH_INVOICE_REVIEW,
+    PERMISSIONS.BANK_FILE_VERIFY
   ],
   [ROLES.TREASURY]: [
     PERMISSIONS.REQUEST_VIEW_ALL,
@@ -418,6 +422,9 @@ export const ERROR_CODES = Object.freeze({
   REIMBURSEMENT_BANK_PENDING_VERIFICATION: "REIMBURSEMENT_BANK_PENDING_VERIFICATION",
   UNAUTHORIZED_COST_CENTER: "UNAUTHORIZED_COST_CENTER",
   PAYABLE_BLOCKING_OBSERVATION: "PAYABLE_BLOCKING_OBSERVATION",
+  BANK_FILE_NOT_VERIFIED: "BANK_FILE_NOT_VERIFIED",
+  BANK_FILE_CHECKS_FAILED: "BANK_FILE_CHECKS_FAILED",
+  BANK_FILE_INTEGRITY_FAILED: "BANK_FILE_INTEGRITY_FAILED",
   FORBIDDEN: "FORBIDDEN",
   NOT_FOUND: "NOT_FOUND",
   CONFLICT: "CONFLICT",

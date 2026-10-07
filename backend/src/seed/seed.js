@@ -21,6 +21,7 @@ import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBan
 import FinanceConfiguration from "../models/FinanceConfiguration.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
+import PaymentBatch from "../models/PaymentBatch.js";
 import Project from "../models/Project.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
@@ -37,6 +38,7 @@ import { requiresPurchaseOrder } from "../services/procurementReadinessService.j
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
 import { reviewRendition, submitRendition } from "../services/renditionService.js";
 import { generatedRoot, uploadRoot } from "../services/storageService.js";
+import { verifyBankFile } from "../services/bankFileVerificationService.js";
 import {
   confirmTreasuryPayment,
   recordDetractionDeposit,
@@ -1373,6 +1375,10 @@ async function confirmPayment(request, users, operationSuffix) {
     REQUEST_STATUS.CLOSED
   ].includes(current.status)) return current;
   const accountsPayable = await AccountsPayable.findOne({ request: current._id, status: { $ne: "CANCELLED" } });
+  // Treasury sends a file to the bank only after Accounting verifies it. Files of scenarios that
+  // are not paid stay waiting for Accounting.
+  const batch = await PaymentBatch.findById(accountsPayable.paymentBatch).select("verification");
+  if (batch?.verification?.status === "PENDING") await verifyBankFile({ batchId: batch._id, user: users.accounting, req: fakeReq });
   // The BBVA transfer pays the supplier's portion; a SPOT detraccion is deposited separately.
   const detraction = pendingDetractionAmount(accountsPayable);
   await confirmTreasuryPayment({

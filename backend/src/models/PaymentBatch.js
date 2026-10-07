@@ -74,6 +74,19 @@ const paymentBatchSchema = new mongoose.Schema(
     },
     priority: { type: String, enum: ["NORMAL", "PRIORITY", "MIXED"], default: "NORMAL", index: true },
     status: { type: String, enum: ["GENERATED", "PARTIALLY_CONFIRMED", "CONFIRMED", "REJECTED", "REPROGRAMMED", "CANCELLED"], default: "GENERATED", index: true },
+    // Accounting verifies the TXT before Treasury may download it and send it to the bank
+    // (bankFileVerificationService). A batch stored before this control has no status and counts
+    // as verified; the migration marks it so (legacy).
+    verification: {
+      status: { type: String, enum: ["PENDING", "VERIFIED", "REJECTED"] },
+      legacy: Boolean,
+      checksum: String,
+      verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      verifiedAt: Date,
+      rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      rejectedAt: Date,
+      reason: { type: String, trim: true }
+    },
     scheduleOverrideReason: { type: String, trim: true, default: "" },
     cancellation: {
       reason: String,
@@ -87,6 +100,7 @@ const paymentBatchSchema = new mongoose.Schema(
 );
 
 paymentBatchSchema.index({ status: 1, paymentDate: 1 });
+paymentBatchSchema.index({ "verification.status": 1, paymentDate: 1 });
 paymentBatchSchema.index({ bank: 1, currency: 1, generatedAt: -1 });
 
 export default mongoose.model("PaymentBatch", paymentBatchSchema);

@@ -14,7 +14,9 @@ for (const role of authenticatedRoles) {
 }
 const accounting = grouped({ role: "Accounting" });
 assert.deepEqual(accounting.map((group) => group.label), ["Overview", "My work", "Invoices and payables", "Accounting", "Master Data"]);
-assert.deepEqual(accounting.find((group) => group.label === "Invoices and payables").items.map((item) => item.path), ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables"]);
+assert.deepEqual(accounting.find((group) => group.label === "Invoices and payables").items.map((item) => item.path), ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files"]);
+// Accounting verifies bank files; Treasury downloads them afterwards and has no verification page.
+assert.ok(!navigationForUser({ role: "Treasury" }).some(([, path]) => path === "/accounting/bank-files"));
 assert.deepEqual(accounting.find((group) => group.label === "Accounting").items.map((item) => item.path), ["/accounting", "/accounting/periods", "/accounting/sire"]);
 // A permission-granted page lands in its section, not at the end of the list.
 const treasuryRequester = grouped({ role: "Treasury", permissions: ["request:create"] });

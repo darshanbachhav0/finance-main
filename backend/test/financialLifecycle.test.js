@@ -38,6 +38,7 @@ import { assertRequestLines } from "../src/services/requestRules.js";
 import { createSupplierProposal, replaceActiveBankAccount } from "../src/services/supplierService.js";
 import { reviewRendition } from "../src/services/renditionService.js";
 import { confirmTreasuryPayment, generatePaymentBatch, reconcilePayment } from "../src/services/treasuryService.js";
+import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { validateInvoiceAgainstRequest } from "../src/services/xmlValidationService.js";
 import { recordAudit } from "../src/services/auditService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
@@ -338,6 +339,13 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.equal(await PaymentBatch.countDocuments(),before);
       assert.equal(await AuditLog.countDocuments({action:"GENERATED_BBVA_BANK_FILE"}),1);
       assert.deepEqual(await fs.readFile(path.join(generatedRoot,"bank-files",batch.fileName)),result.content);
+    });
+
+    await t.test("26b. Treasury confirms a payment only after Accounting verifies the TXT", async () => {
+      assert.equal(batch.verification.status, "PENDING");
+      await assert.rejects(() => confirmTreasuryPayment({ requestId: request._id, payload: { operationNumber: "OP-100", paidAt: issueDate, confirmedAmount: 118 }, user: users.treasury, req }), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
+      await verifyBankFile({ batchId: batch._id, user: users.accounting, req });
+      assert.equal((await PaymentBatch.findById(batch._id)).verification.status, "VERIFIED");
     });
 
     await t.test("28-29. payment confirmation settles CXP and creates payment journal", async () => {

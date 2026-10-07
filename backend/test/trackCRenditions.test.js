@@ -20,6 +20,7 @@ import { createEmployeeReimbursementBankAccount, reviewEmployeeReimbursementBank
 import { recoverRejectedRendition, rejectionRecoveryAmounts, reviewRendition, submitRendition } from "../src/services/renditionService.js";
 import { closeFinancialRequest, createFinancialRequest, normalizeRequestTypeForTrack } from "../src/services/requestService.js";
 import { confirmTreasuryPayable, generatePaymentBatch, reconcilePayment, renditionDueDate } from "../src/services/treasuryService.js";
+import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { generatedRoot } from "../src/services/storageService.js";
 import { AP_STATUS, ERROR_CODES, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
@@ -71,6 +72,8 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     const makeBatch = async (payable) => {
       const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
+      // Accounting releases the TXT before Treasury sends it to the bank.
+      await verifyBankFile({ batchId: result.batch._id, user: accounting, req });
       return result;
     };
     const createTrackC = (requestType, amount, expenseType = opex, extra = {}) => createFinancialRequest({

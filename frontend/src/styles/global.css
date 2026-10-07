@@ -1158,6 +1158,7 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .quotation-evidence small { color: var(--gray-600); font-size: var(--font-xs); }
 .quotation-evidence input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .quotation-evidence-actions { display: flex; gap: 2px; }
+.bank-file-items td.amount { white-space: nowrap; }
 .quotation-evidence-actions .icon-button { width: 30px; height: 30px; min-height: 30px; }
 .quotation-actions { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding-top: 4px; border-top: 1px solid var(--gray-100); }
 .recommend-option { min-height: 38px; display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: var(--font-xs); font-weight: 750; cursor: pointer; }

@@ -48,6 +48,7 @@ export const navigationAccess = Object.freeze({
   "/batch-invoices": ["Admin", "Solicitor", "Accounting"],
   "/accounting": ["Admin", "Accounting"],
   "/accounting/payables": ["Admin", "Accounting"],
+  "/accounting/bank-files": ["Admin", "Accounting"],
   "/accounting/invoice-observations": ["Admin", "Accounting"],
   "/treasury": ["Admin", "Treasury"],
   "/reimbursement-bank": ["Admin", "Solicitor", "Accounting", "Treasury"],
@@ -91,6 +92,7 @@ export const pageLabels = Object.freeze({
   "/batch-invoices": "A2 Batch Invoices",
   "/accounting/invoice-observations": "Invoice Observations",
   "/accounting/payables": "Accounts Payable",
+  "/accounting/bank-files": "Bank File Verification",
   "/reimbursement-bank": "Reimbursement Banking",
   "/treasury": "Payments",
   "/treasury/history": "Payment History",
@@ -167,7 +169,7 @@ export function approvesRequests(user, pendingApprovals = 0) {
 export const navigationSections = Object.freeze([
   ["Overview", ["/"]],
   ["My work", ["/requests", "/requests/new", "/approvals", "/my-team", "/operations"]],
-  ["Invoices and payables", ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/reimbursement-bank"]],
+  ["Invoices and payables", ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/reimbursement-bank"]],
   ["Treasury", ["/treasury", "/treasury/history"]],
   ["Accounting", ["/accounting", "/accounting/periods", "/accounting/sire"]],
   ["Planning and reports", ["/budget", "/reports", "/management-view"]],
@@ -183,7 +185,7 @@ const roleMenus = {
   ViceRector: ["/", "/approvals", "/requests"],
   Budget: ["/", "/budget", "/requests"],
   Procurement: ["/", "/requests", "/suppliers", "/reports"],
-  Accounting: ["/", "/accounting/payables", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire", "/operations"],
+  Accounting: ["/", "/accounting/payables", "/accounting/bank-files", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire", "/operations"],
   Treasury: ["/", "/treasury", "/treasury/history", "/operations"],
   // Management also decides budget exceptions and budget changes above the approval threshold.
   Management: ["/", "/approvals", "/budget", "/reports", "/management-view"],
