@@ -45,6 +45,7 @@ export default function AdminUsers() {
         { name: "password", label: "Password", type: "password", requiredOnCreate: true, hint: "Min. 10 characters. Not saved in drafts." },
         { type: "section", label: "Organization" },
         { name: "jefe", label: "Direct supervisor", type: "select", options: supervisors.map(user => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}` })), getValue: row => row.jefe?._id || row.jefe || "", wide: true },
+        { name: "substitute", label: "Substitute during leave", type: "select", options: supervisors.map(user => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}` })), getValue: row => row.substitute?._id || row.substitute || "", wide: true, hint: "Approves on this person's behalf while they are on leave or inactive. Without one, their approvals go to their nearest available jefe." },
         { name: "jobTitle", label: "Job title" },
         { name: "organizationalUnit", label: "Organizational unit" },
         { name: "area", label: "Area", defaultValue: "General", required: true },
@@ -53,8 +54,8 @@ export default function AdminUsers() {
         { name: "approvalLevel", label: "Approval level", type: "toggle-group", defaultValue: "AREA_DIRECTOR", options: approvalLevels },
         { name: "approvalAreas", label: "Approval areas", type: "tags", placeholder: "Area, or * for all", getValue: (row) => row.approvalAreas || [] },
         { name: "permissions", label: "Additional permissions", type: "toggle-list", defaultValue: [], options: permissions, getValue: (row) => row.permissions || [], hint: "Extras on top of the user's role. The role already includes its own access; department duties such as accounting, payments or budget management come only with the role." },
-        { name: "active", label: "Active", type: "checkbox", defaultValue: true, hint: "Deactivating moves this user's pending approvals to their nearest available jefe." },
-        { name: "onLeave", label: "On leave", type: "checkbox", defaultValue: false, hint: "While on leave, pending approvals move to this user's nearest available jefe and new requests route past them." },
+        { name: "active", label: "Active", type: "checkbox", defaultValue: true, hint: "Deactivating moves this user's pending approvals to their substitute, or without one to their nearest available jefe." },
+        { name: "onLeave", label: "On leave", type: "checkbox", defaultValue: false, hint: "While on leave, this user's approvals go to their substitute (or nearest available jefe) and come back when the leave ends." },
         { name: "leaveUntil", label: "On leave until", type: "date" },
         { type: "section", label: "Cost centers" },
         { name: "costCenter", label: "Default Cost Center", type: "select", options: centerOptions, getValue: (row) => row.costCenter?._id || row.costCenter, wide: true },
@@ -65,10 +66,10 @@ export default function AdminUsers() {
         { key: "approvalLevel", label: "Approval level", render: (row) => ["AreaDirector", "ViceRector", "Management"].includes(row.role) ? t(row.approvalLevel) : "-" },
         { key: "costCenter", label: "Default Cost Center", render: (row) => row.costCenter ? <div className="primary-cell"><strong>{row.costCenter.code} - {row.costCenter.name}</strong><span>{row.costCenter.organizationalUnitCode ? `${row.costCenter.organizationalUnitCode} · ${row.costCenter.organizationalUnit}` : row.area}</span></div> : t("Manual review") },
         { key: "authorizedCostCenters", label: "Authorized CeCos", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.authorizedCostCenters?.length || 0}</strong><span>{(row.authorizedCostCenters || []).slice(0, 3).map((item) => item.code || item).join(", ") || t("No additional CeCos")}{row.authorizedCostCenters?.length > 3 ? "…" : ""}</span></div> },
-        { key: "active", label: "Status", render: (row) => <div className="primary-cell"><StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} />{row.onLeave && <span>{t("On leave")}{row.leaveUntil ? ` · ${String(row.leaveUntil).slice(0, 10)}` : ""}</span>}</div> }
+        { key: "active", label: "Status", render: (row) => <div className="primary-cell"><StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} />{row.onLeave && <span>{t("On leave")}{row.leaveUntil ? ` · ${String(row.leaveUntil).slice(0, 10)}` : ""}</span>}{row.substitute?.name && <span>{t("Substitute")}: {row.substitute.name}</span>}</div> }
       ]}
       transformSubmit={(form) => {
-        const payload = { ...form, jefe: form.jefe || null };
+        const payload = { ...form, jefe: form.jefe || null, substitute: form.substitute || null };
         if (!payload.password) delete payload.password;
         if (!payload.costCenter) delete payload.costCenter;
         if (!payload.onLeave || !payload.leaveUntil) payload.leaveUntil = null;

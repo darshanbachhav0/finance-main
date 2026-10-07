@@ -221,6 +221,12 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
       dni: { type: String, select: false },
       jobTitle: String
     },
+    // A substitute approving on behalf of an absent manager: the manager whose step this is.
+    coveringFor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    coveringForSnapshot: {
+      name: String,
+      jobTitle: String
+    },
     source: { type: String, enum: Object.values(APPROVAL_ROUTING_MODE), default: APPROVAL_ROUTING_MODE.RULE_BASED }
   },
   { _id: true }

@@ -9,7 +9,8 @@ import {
   activateNextChainStep,
   finalizeChainApproval,
   initializeApprovalRoute,
-  nearestAvailableSupervisor,
+  approverFor,
+  isAvailableApprover,
   nextChainApprover,
   reassignChainStep,
   slaStatus,
@@ -653,42 +654,59 @@ export async function getApprovalDecisionOptions(id, user) {
   return approvalDecisionOptions(request);
 }
 
-// An approver who is deactivated or goes on leave never strands a request: every
-// pending manager-chain step waiting on them moves to their nearest available
-// jefe (inactive / on-leave managers skipped going up), with an audit record and
-// a notification for the new approver. When nobody above is available the step
-// stays where it is and Admin is told to correct the roster.
-export async function reassignPendingApprovalsFor(absentUserId, { actor, req, reason = "DEACTIVATED" } = {}) {
+const REASSIGNMENT_REASONS = Object.freeze({
+  DEACTIVATED: "deactivated",
+  ON_LEAVE: "on leave",
+  RETURNED: "back from leave",
+  SUBSTITUTE_CHANGED: "substitute changed"
+});
+
+// Re-routes every pending manager-chain step that belongs to a person whose availability or
+// substitute changed - steps waiting on them, and steps a substitute holds on their behalf. Each
+// step goes to whoever holds that person's approvals now (approverFor): the person while
+// available, otherwise their substitute, otherwise their nearest available jefe. So an absence
+// never strands a request, and the steps come back when the person returns. When nobody can take
+// a step from an unavailable approver it stays where it is and Admin is told to correct the roster.
+export async function reassignPendingApprovalsFor(personId, { actor, req, reason = "DEACTIVATED" } = {}) {
   const requests = await FinancialRequest.find({
     status: { $in: activeApprovalStatuses },
-    approvalRouteSnapshot: { $elemMatch: { approverUser: absentUserId, status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN } }
+    approvalRouteSnapshot: { $elemMatch: { status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN, $or: [{ approverUser: personId }, { coveringFor: personId }] } }
   });
   const summary = { reassigned: 0, unassigned: 0, requests: [] };
   const systemActor = actor || { name: "System", role: "SYSTEM" };
   for (const request of requests) {
     const step = activeApprovalStep(request);
-    if (!step || String(step.approverUser) !== String(absentUserId) || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) continue;
+    if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) continue;
+    if (![step.approverUser, step.coveringFor].some((id) => id && String(id) === String(personId))) continue;
+    // The manager whose step this is: the absent one a substitute stands in for, else the holder.
+    const owner = step.coveringFor || step.approverUser;
     const exclude = [
       request.requester || request.solicitor,
       ...request.approvalRouteSnapshot.filter((item) => item.status === "APPROVED" && item.approverUser).map((item) => item.approverUser)
     ];
-    let approver = null;
+    let target = { approver: null, coveringFor: null };
     try {
-      ({ approver } = await nearestAvailableSupervisor(absentUserId, { exclude }));
+      target = await approverFor(owner, { exclude });
     } catch {
-      approver = null;
+      target = { approver: null, coveringFor: null };
     }
+    const { approver, coveringFor } = target;
+    if (approver && String(approver._id) === String(step.approverUser) && String(coveringFor?._id || "") === String(step.coveringFor || "")) continue;
     if (!approver) {
+      // Someone who can still act keeps the step; only a stranded step needs Admin.
+      const holder = await User.findById(step.approverUser).select("active onLeave role").lean();
+      if (isAvailableApprover(holder)) continue;
       summary.unassigned += 1;
-      await recordAudit({ entityType: "FinancialRequest", entity: request, action: "APPROVAL_REASSIGNMENT_FAILED", user: systemActor, req, module: "APPROVALS", comments: `No available supervisor above ${step.approverSnapshot?.name || "the approver"} (${reason}).`, oldValues: { approverUser: step.approverUser, approvalStage: step.approvalLevel } });
+      await recordAudit({ entityType: "FinancialRequest", entity: request, action: "APPROVAL_REASSIGNMENT_FAILED", user: systemActor, req, module: "APPROVALS", comments: `No available substitute or supervisor for ${step.coveringForSnapshot?.name || step.approverSnapshot?.name || "the approver"} (${reason}).`, oldValues: { approverUser: step.approverUser, approvalStage: step.approvalLevel } });
       await notifyRoles({ roles: [ROLES.ADMIN], eventKey: `request:${request._id}:approval-unassigned:${step._id}`, type: "APPROVAL_UNASSIGNED", title: notificationText("Approval without an available approver"), message: step.approverSnapshot?.name
         ? notificationText("{requestNumber} waits on {approverName} and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber, approverName: step.approverSnapshot.name })
         : notificationText("{requestNumber} waits on an unavailable approver and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
       continue;
     }
     const oldNotificationKey = `request:${request._id}:approval:${step.approvalLevel}`;
-    const previous = reassignChainStep(request, step, approver);
-    const comments = `Pending approval moved from ${previous.approverSnapshot?.name || "the previous approver"} to ${approver.name} (${reason === "ON_LEAVE" ? "on leave" : "deactivated"}).`;
+    const previous = reassignChainStep(request, step, approver, new Date(), { coveringFor });
+    const onBehalf = coveringFor ? ` on behalf of ${coveringFor.name}` : "";
+    const comments = `Pending approval moved from ${previous.approverSnapshot?.name || "the previous approver"} to ${approver.name}${onBehalf} (${REASSIGNMENT_REASONS[reason] || reason}).`;
     request.approvalHistory.push(workflowEvent({ action: "APPROVAL_REASSIGNED", from: request.status, to: request.status, user: systemActor, req, comments, stage: step.approvalLevel, dueAt: step.dueAt, request }));
     await request.save();
     await recordAudit({
@@ -699,8 +717,8 @@ export async function reassignPendingApprovalsFor(absentUserId, { actor, req, re
       req,
       module: "APPROVALS",
       comments,
-      oldValues: { approverUser: previous.approverUser, approverName: previous.approverSnapshot?.name, approvalStage: previous.approvalLevel },
-      newValues: { approverUser: approver._id, approverName: approver.name, approvalStage: step.approvalLevel, dueAt: step.dueAt, reason }
+      oldValues: { approverUser: previous.approverUser, approverName: previous.approverSnapshot?.name, approvalStage: previous.approvalLevel, coveringFor: previous.coveringFor },
+      newValues: { approverUser: approver._id, approverName: approver.name, approvalStage: step.approvalLevel, dueAt: step.dueAt, coveringFor: coveringFor?._id, coveringForName: coveringFor?.name, reason }
     });
     await resolveNotification(oldNotificationKey);
     await notifyApprovalStep(request);

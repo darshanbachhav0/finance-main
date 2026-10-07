@@ -10,7 +10,7 @@ import { APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
-const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil"];
+const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil"];
 
 // Area Director and Vice-Rector are single-level roles: their approvalLevel is
 // implied by the role itself, never a separate admin choice (unlike Management,
@@ -23,6 +23,8 @@ const IMPLIED_APPROVAL_LEVEL = Object.freeze({
 function editablePayload(body) {
   const payload = Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
   if (payload.role && IMPLIED_APPROVAL_LEVEL[payload.role]) payload.approvalLevel = IMPLIED_APPROVAL_LEVEL[payload.role];
+  // "No substitute" arrives as an empty choice.
+  if (payload.substitute === "") payload.substitute = null;
   // Only grantable extras are stored; a legacy, non-grantable value (which never had any effect)
   // is dropped the next time the user is saved.
   if (Array.isArray(payload.permissions)) payload.permissions = [...new Set(payload.permissions.filter((permission) => GRANTABLE_PERMISSIONS.includes(permission)))];
@@ -50,6 +52,15 @@ export async function validateSupervisor(userId, supervisorId) {
     if (!manager || manager.active === false || manager.role === "ManagementViewer") throw new AppError(422, "Choose an active, internal supervisor.");
     next = manager.jefe;
   }
+}
+
+// The substitute covers this person's approvals while they are away, so it must be someone else
+// who can approve: an active, internal account.
+export async function validateSubstitute(userId, substituteId) {
+  if (!substituteId) return;
+  if (userId && String(substituteId) === String(userId)) throw new AppError(422, "A person cannot be their own substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
+  const substitute = await User.findById(substituteId).select("active role").lean();
+  if (!substitute || substitute.active === false || substitute.role === ROLES.MANAGEMENT_VIEWER) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
 }
 
 // Availability follows active direct reports, rather than a fixed role.
@@ -83,7 +94,7 @@ export const listUsers = asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination({ ...req.query, pageSize: req.query.pageSize || 100 });
   const sort = parseSort(req.query, ["name", "email", "role", "area", "active", "createdAt"], { name: 1 });
   const [data, total] = await Promise.all([
-    User.find(query).populate("costCenter authorizedCostCenters").populate("jefe", "name jobTitle").sort(sort).skip(skip).limit(pageSize),
+    User.find(query).populate("costCenter authorizedCostCenters").populate("jefe substitute", "name jobTitle").sort(sort).skip(skip).limit(pageSize),
     User.countDocuments(query)
   ]);
   res.json(paginatedPayload(data, total, page, pageSize));
@@ -97,6 +108,7 @@ export const createUser = asyncHandler(async (req, res) => {
   if (!/^\d{8}$/.test(normalizedDni)) throw new AppError(422, "DNI must contain 8 digits.");
   assertManagementViewerPermissions(role, req.body.permissions);
   await validateSupervisor(null, req.body.jefe);
+  await validateSubstitute(null, req.body.substitute);
   if (await User.exists({ dni: normalizedDni })) throw new AppError(409, "A user with this DNI already exists.", undefined, ERROR_CODES.CONFLICT);
   if (email) {
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -113,8 +125,9 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (String(user._id) === String(req.user._id) && req.body.active === false) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
   assertManagementViewerPermissions(req.body.role ?? user.role, req.body.permissions ?? user.permissions);
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
+  if (req.body.substitute !== undefined) await validateSubstitute(user._id, req.body.substitute);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, onLeave: Boolean(user.onLeave) };
+  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave) };
   Object.assign(user, editablePayload(req.body));
   applyLeaveDates(user, oldValues.onLeave);
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
@@ -128,7 +141,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.lockedUntil = null;
   }
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, passwordChanged: Boolean(req.body.password) } });
+  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, passwordChanged: Boolean(req.body.password) } });
   const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
   res.json({ data: user, approvalReassignment });
 });
@@ -141,13 +154,18 @@ function applyLeaveDates(user, wasOnLeave) {
   }
 }
 
-// A user who was just deactivated or put on leave hands every pending approval
-// waiting on them to their nearest available jefe.
+// When someone becomes unavailable (deactivated, on leave) their pending approvals move to their
+// substitute or nearest available jefe; when they are back, the approvals a substitute held for
+// them return; a new substitute for someone still away takes over what they hold.
 async function reassignAfterAvailabilityChange(user, oldValues, req) {
   const deactivated = oldValues.active !== false && user.active === false;
   const wentOnLeave = !oldValues.onLeave && Boolean(user.onLeave);
-  if (!deactivated && !wentOnLeave) return undefined;
-  return reassignPendingApprovalsFor(user._id, { actor: req.user, req, reason: deactivated ? "DEACTIVATED" : "ON_LEAVE" });
+  const available = user.active !== false && !user.onLeave;
+  const returned = available && (Boolean(oldValues.onLeave) || oldValues.active === false);
+  const substituteChanged = oldValues.substitute !== undefined && String(oldValues.substitute || "") !== String(user.substitute || "") && !available;
+  const reason = deactivated ? "DEACTIVATED" : wentOnLeave ? "ON_LEAVE" : returned ? "RETURNED" : substituteChanged ? "SUBSTITUTE_CHANGED" : null;
+  if (!reason) return undefined;
+  return reassignPendingApprovalsFor(user._id, { actor: req.user, req, reason });
 }
 
 // Self-service: a user may record their own leave (and return from it).

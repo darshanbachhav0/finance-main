@@ -106,6 +106,30 @@ export function isAvailableApprover(user) {
   return Boolean(user) && user.active !== false && !user.onLeave && user.role !== ROLES.MANAGEMENT_VIEWER;
 }
 
+const APPROVER_FIELDS = "name jobTitle active onLeave jefe substitute role approvalLevel";
+
+// The substitute who covers an unavailable manager, when one is set and can act now. One level
+// only: a substitute's own substitute is not followed (the chain above takes over instead).
+export async function availableSubstituteOf(user, { exclude = [] } = {}) {
+  if (!user?.substitute) return null;
+  const substitute = await User.findById(idOf(user.substitute)).select(APPROVER_FIELDS).lean();
+  if (!isAvailableApprover(substitute) || exclude.some((id) => idOf(id) === idOf(substitute._id))) return null;
+  return substitute;
+}
+
+// Who holds the approvals of `owner` right now: the owner while available, otherwise their
+// substitute, otherwise the nearest available supervisor above them. coveringFor names the absent
+// manager when a substitute stands in.
+export async function approverFor(owner, { exclude = [] } = {}) {
+  const person = owner?.name !== undefined ? owner : await User.findById(idOf(owner)).select(APPROVER_FIELDS).lean();
+  if (!person) return { approver: null, coveringFor: null };
+  if (isAvailableApprover(person) && !exclude.some((id) => idOf(id) === idOf(person._id))) return { approver: person, coveringFor: null };
+  const substitute = await availableSubstituteOf(person, { exclude });
+  if (substitute) return { approver: substitute, coveringFor: person };
+  const { approver, coveringFor } = await nearestAvailableSupervisor(person._id, { exclude });
+  return { approver, coveringFor };
+}
+
 // Every supervisor above userId, nearest first: [jefe, jefe's jefe, ...]. A cycle
 // or an over-deep hierarchy is a data-entry error in the org roster and is refused.
 export async function supervisorChainOf(userId) {
@@ -117,7 +141,7 @@ export async function supervisorChainOf(userId) {
     const jefeId = idOf(current.jefe);
     if (visited.has(jefeId)) throw new AppError(422, "The supervisor hierarchy contains a cycle. Administration must correct it before submission.");
     visited.add(jefeId);
-    const jefe = await User.findById(jefeId).select("name jobTitle active onLeave jefe role approvalLevel").lean();
+    const jefe = await User.findById(jefeId).select(APPROVER_FIELDS).lean();
     if (!jefe) break;
     chain.push(jefe);
     current = jefe;
@@ -125,17 +149,22 @@ export async function supervisorChainOf(userId) {
   return chain;
 }
 
-// The nearest supervisor above userId who can act now. Inactive and on-leave
-// managers are skipped going up, so an absence never strands a request.
+// The nearest supervisor above userId who can act now. An inactive or on-leave manager hands over
+// to their substitute when one is set and available (coveringFor names the absent manager);
+// otherwise they are skipped going up, so an absence never strands a request.
 export async function nearestAvailableSupervisor(userId, { exclude = [] } = {}) {
   const excluded = new Set(exclude.filter(Boolean).map(idOf));
   const chain = await supervisorChainOf(userId);
   const skipped = [];
   for (const jefe of chain) {
-    if (isAvailableApprover(jefe) && !excluded.has(idOf(jefe._id))) return { approver: jefe, skipped, hasSupervisor: true };
+    if (isAvailableApprover(jefe) && !excluded.has(idOf(jefe._id))) return { approver: jefe, coveringFor: null, skipped, hasSupervisor: true };
+    if (!isAvailableApprover(jefe)) {
+      const substitute = await availableSubstituteOf(jefe, { exclude: [...excluded] });
+      if (substitute) return { approver: substitute, coveringFor: jefe, skipped, hasSupervisor: true };
+    }
     skipped.push(jefe);
   }
-  return { approver: null, skipped, hasSupervisor: chain.length > 0 };
+  return { approver: null, coveringFor: null, skipped, hasSupervisor: chain.length > 0 };
 }
 
 export function noAvailableApproverError(details) {
@@ -147,11 +176,12 @@ export function noAvailableApproverError(details) {
   );
 }
 
-function chainStep(jefe, { sequence, startedAt }) {
+function chainStep(jefe, { sequence, startedAt, coveringFor = null }) {
   const slaHours = approvalStepSlaHours();
   return {
     approverUser: jefe._id,
     approverSnapshot: approverSnapshotOf(jefe),
+    ...(coveringFor ? { coveringFor: coveringFor._id, coveringForSnapshot: approverSnapshotOf(coveringFor) } : {}),
     approvalLevel: chainStepLabel(jefe),
     role: jefe.role,
     sequence,
@@ -178,10 +208,10 @@ function chainStep(jefe, { sequence, startedAt }) {
 export async function resolveManagerChain(request) {
   const requesterId = request.requester || request.solicitor;
   if (!requesterId) return null;
-  const { approver, skipped, hasSupervisor } = await nearestAvailableSupervisor(requesterId, { exclude: [requesterId] });
+  const { approver, coveringFor, skipped, hasSupervisor } = await nearestAvailableSupervisor(requesterId, { exclude: [requesterId] });
   if (!hasSupervisor) return null;
   if (!approver) throw noAvailableApproverError({ unavailableSupervisors: skipped.map((user) => user.name) });
-  return [chainStep(approver, { sequence: 1, startedAt: new Date() })];
+  return [chainStep(approver, { sequence: 1, startedAt: new Date(), coveringFor })];
 }
 
 // Every submission, including a resubmission after OBSERVE or RETURN, resolves a
@@ -260,21 +290,28 @@ function skipLegacyChainLevels(request, currentStep, completedAt) {
 // Who "Send to my jefe" would reach from this chain step: the current approver's
 // nearest available supervisor (inactive/on-leave managers skipped), never the
 // requester or someone who already approved this route. null when there is none.
-export async function nextChainApprover(request, currentStep = activeApprovalStep(request)) {
-  if (!currentStep || currentStep.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN || !currentStep.approverUser) return null;
-  const exclude = [request.requester || request.solicitor, ...approvedChainApproverIds(request)];
+// The next chain level above the current step. A substitute stands in the absent manager's
+// position, so "send to my jefe" goes above that manager, not above the substitute.
+export async function nextChainApproval(request, currentStep = activeApprovalStep(request)) {
+  if (!currentStep || currentStep.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN || !currentStep.approverUser) return { approver: null, coveringFor: null };
+  const exclude = [request.requester || request.solicitor, currentStep.approverUser, ...approvedChainApproverIds(request)];
   try {
-    return (await nearestAvailableSupervisor(currentStep.approverUser, { exclude })).approver;
+    const { approver, coveringFor } = await nearestAvailableSupervisor(currentStep.coveringFor || currentStep.approverUser, { exclude });
+    return { approver, coveringFor };
   } catch {
-    return null;
+    return { approver: null, coveringFor: null };
   }
+}
+
+export async function nextChainApprover(request, currentStep = activeApprovalStep(request)) {
+  return (await nextChainApproval(request, currentStep)).approver;
 }
 
 // "Send to my jefe": records this level's approval and adds the approver's own
 // jefe as the next chain level, resolved now (not frozen at submission), ahead of
 // any configured policy stage.
 export async function activateNextChainStep(request, currentStep, decidingUser) {
-  const nextApprover = await nextChainApprover(request, currentStep);
+  const { approver: nextApprover, coveringFor } = await nextChainApproval(request, currentStep);
   if (!nextApprover) {
     throw new AppError(422, "There is no available manager above this approver (none, or they are inactive or on leave); the approval must be finalized here.", undefined, ERROR_CODES.VALIDATION_ERROR);
   }
@@ -284,7 +321,7 @@ export async function activateNextChainStep(request, currentStep, decidingUser) 
   for (const step of request.approvalRouteSnapshot || []) {
     if (step.sequence > currentStep.sequence) step.sequence += 1;
   }
-  request.approvalRouteSnapshot.push(chainStep(nextApprover, { sequence: currentStep.sequence + 1, startedAt: completedAt }));
+  request.approvalRouteSnapshot.push(chainStep(nextApprover, { sequence: currentStep.sequence + 1, startedAt: completedAt, coveringFor }));
   const nextStep = activeApprovalStep(request);
   request.approvalStage = nextStep.approvalLevel;
   request.approvalDueAt = nextStep.dueAt;
@@ -310,12 +347,15 @@ export async function finalizeChainApproval(request, currentStep, decidingUser) 
   return { complete: true, next: null };
 }
 
-// Moves a pending chain step from an approver who left or went on leave to their
-// nearest available jefe, with a fresh working-day SLA. Returns the previous holder.
-export function reassignChainStep(request, step, approver, at = new Date()) {
-  const previous = { approverUser: step.approverUser, approverSnapshot: step.approverSnapshot ? { name: step.approverSnapshot.name, jobTitle: step.approverSnapshot.jobTitle } : undefined, approvalLevel: step.approvalLevel };
+// Moves a pending chain step to whoever holds it now (the substitute or nearest available jefe
+// of an absent approver, or the approver back from leave), with a fresh working-day SLA.
+// Returns the previous holder.
+export function reassignChainStep(request, step, approver, at = new Date(), { coveringFor = null } = {}) {
+  const previous = { approverUser: step.approverUser, approverSnapshot: step.approverSnapshot ? { name: step.approverSnapshot.name, jobTitle: step.approverSnapshot.jobTitle } : undefined, approvalLevel: step.approvalLevel, coveringFor: step.coveringFor };
   step.approverUser = approver._id;
   step.approverSnapshot = approverSnapshotOf(approver);
+  step.coveringFor = coveringFor?._id || undefined;
+  step.coveringForSnapshot = coveringFor ? approverSnapshotOf(coveringFor) : undefined;
   step.approvalLevel = chainStepLabel(approver);
   step.role = approver.role;
   step.startedAt = at;

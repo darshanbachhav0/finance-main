@@ -51,7 +51,8 @@ async function deliverOnce({ userId, eventKey, type, title, message, request }) 
 async function escalationRecipients(request, approvers, users) {
   const step = activeApprovalStep(request);
   const requesterId = request.requester || request.solicitor;
-  const sources = step?.approverUser ? [step.approverUser] : approvers.map(user => user._id);
+  // A substitute stands in an absent manager's position: escalate above that manager.
+  const sources = step?.approverUser ? [step.coveringFor || step.approverUser] : approvers.map(user => user._id);
   const targets = new Map();
   for (const source of sources) {
     try {
