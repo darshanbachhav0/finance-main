@@ -10,6 +10,7 @@ const Operations = lazy(() => import("./pages/Operations.jsx"));
 const SettingsHub = lazy(() => import("./pages/SettingsHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
+const BankFileVerification = lazy(() => import("./pages/BankFileVerification.jsx"));
 const AccountingPeriods = lazy(() => import("./pages/AccountingPeriods.jsx"));
 const AdminUsers = lazy(() => import("./pages/AdminUsers.jsx"));
 const ApprovalInbox = lazy(() => import("./pages/ApprovalInbox.jsx"));
@@ -77,6 +78,7 @@ export default function App() {
             <Route index element={<AccountingEntries />} />
             <Route path="invoices" element={<Navigate to="/accounting/payables" replace />} />
             <Route path="payables" element={<AccountsPayable />} />
+            <Route path="bank-files" element={<BankFileVerification />} />
             <Route path="periods" element={<AccountingPeriods />} />
             <Route path="sire" element={<SireExport />} />
           </Route>

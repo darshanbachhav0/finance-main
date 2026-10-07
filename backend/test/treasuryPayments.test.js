@@ -21,6 +21,7 @@ import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
 import { importStatement, confirmStatementMatch } from "../src/services/reconciliationSuggestionService.js";
 import { previewPaymentBatch } from "../src/services/treasuryService.js";
+import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import {
   cancelPaymentBatch,
   confirmTreasuryPayable,
@@ -114,9 +115,11 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       await ap.save();
       return { request, ap };
     }
-    async function makeFile(payables, { currency = "PEN", paymentDate = cycle, paymentDateReason } = {}) {
+    async function makeFile(payables, { currency = "PEN", paymentDate = cycle, paymentDateReason, verify = true } = {}) {
       const result = await generatePaymentBatch({ payableIds: payables.map((ap) => String(ap._id)), bank: "BBVA", currency, paymentDate, paymentDateReason, user: treasury, req });
       cleanupPaths.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
+      // Accounting releases the TXT before Treasury sends it to the bank.
+      if (verify) await verifyBankFile({ batchId: result.batch._id, user: accounting, req });
       return result.batch;
     }
     const confirm = (ap, operationNumber, confirmedAmount, paidAt = today) => confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { operationNumber, paidAt, confirmedAmount }, user: treasury, req });

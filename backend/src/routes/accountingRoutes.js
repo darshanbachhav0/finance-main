@@ -14,9 +14,10 @@ import {
   applyCredit,
   recoverCredit
 } from "../controllers/accountingController.js";
-import { authorize, protect } from "../middleware/auth.js";
+import { listBankFiles, rejectBankFileAction, reviewBankFileChecks, verifyBankFileAction } from "../controllers/bankFileVerificationController.js";
+import { authorize, authorizePermission, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
-import { ROLES } from "../utils/constants.js";
+import { PERMISSIONS, ROLES } from "../utils/constants.js";
 
 const router = Router();
 
@@ -34,5 +35,10 @@ router.post("/requests/:id/process", processPayable);
 router.get("/consolidation", consolidationPreview);
 router.get("/consolidation/export", exportConsolidation);
 router.get("/exports", listAccountingExports);
+// Bank TXT verification: Treasury downloads a file only after Accounting verifies it here.
+router.get("/bank-files", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), listBankFiles);
+router.get("/bank-files/:id/checks", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), reviewBankFileChecks);
+router.post("/bank-files/:id/verify", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), verifyBankFileAction);
+router.post("/bank-files/:id/reject", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), rejectBankFileAction);
 
 export default router;

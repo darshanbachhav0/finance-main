@@ -188,6 +188,15 @@ async function buildTasks(user) {
     items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: supplierBankReviews, path: (await singleRecordPath(supplierBankReviews, SupplierBankAccount, bankReviewQuery, (record) => `/suppliers?record=${record.supplier}`)) || "/suppliers", tone: "warning" });
     items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "accent" });
     items.push({ key: "suppliers", label: "Suppliers awaiting homologation", count: suppliers, path: (await singleRecordPath(suppliers, Supplier, { homologationStatus: "PENDING_VALIDATION" }, (record) => `/suppliers?record=${record._id}`)) || "/suppliers", tone: "warning" });
+    // Treasury downloads a bank TXT only after Accounting verifies it; the earliest payment date
+    // drives the urgency, and a file whose payment date has passed counts as overdue.
+    const bankFileQuery = { status: "GENERATED", "verification.status": "PENDING" };
+    const [bankFiles, bankFilesOverdue, bankFileDueAt] = await Promise.all([
+      PaymentBatch.countDocuments(bankFileQuery),
+      PaymentBatch.countDocuments({ ...bankFileQuery, paymentDate: { $lt: now } }),
+      earliestDate(PaymentBatch, bankFileQuery, "paymentDate")
+    ]);
+    items.push({ key: "bankFileVerification", label: "Bank files awaiting verification", count: bankFiles, path: (await singleRecordPath(bankFiles, PaymentBatch, bankFileQuery, (record) => `/accounting/bank-files?record=${record._id}`)) || "/accounting/bank-files", tone: bankFilesOverdue ? "danger" : "warning", dueAt: bankFileDueAt, overdue: bankFilesOverdue });
     items.push({ key: "invoiceObservations", label: "Open invoice observations", count: await InvoiceObservation.countDocuments({ resolutionStatus: "OPEN" }), path: "/accounting/invoice-observations", tone: "warning" });
     const missingDates = await missingExchangeRateDates();
     items.push({ key: "missingExchangeRate", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "danger" });

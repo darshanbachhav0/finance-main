@@ -4,8 +4,8 @@ import { requestStage } from "../src/utils/requestStage.js";
 import { displayedRequestStatus } from "../src/utils/requestPresentation.js";
 for (const [role, items] of Object.entries(roleNavigation)) {
   // Admin runs the whole system from the grouped menu; Accounting's daily work spans invoices,
-  // payables, entries, periods and SIRE. Everyone else keeps a short list.
-  if (role !== "Admin") assert.ok(items.length <= (role === "Accounting" ? 8 : 5), `${role}: primary menu stays focused`);
+  // payables, bank-file verification, entries, periods and SIRE. Everyone else keeps a short list.
+  if (role !== "Admin") assert.ok(items.length <= (role === "Accounting" ? 9 : 5), `${role}: primary menu stays focused`);
   assert.equal(new Set(items.map(([, path]) => path)).size, items.length);
   items.forEach(([, path]) => assert.ok(canAccessNavigation(role, path), `${role}: ${path}`));
 }

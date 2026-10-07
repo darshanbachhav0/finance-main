@@ -6,6 +6,8 @@ Detailed access and workflow reference for the ten operational profiles
 
 ## Changelog
 
+**Bank TXT verification.** Accounting now verifies every bank TXT that Treasury generates before Treasury can download it and send it to the bank (permission `bank-file:verify`, held by Accounting and Admin, not grantable piecemeal). Verifying re-runs automatic checks (the file is unchanged since generation, every payment still waits in it, every beneficiary account is still verified, no payable has an open observation). Rejecting needs a reason, cancels the file and returns its CXPs to Treasury's queue. Until a file is verified Treasury can neither download it nor confirm or bounce its payments. Whoever generated a file cannot verify it, except Admin. Files generated before this control count as verified (`npm run migrate:bank-file-verification:apply` records that). A file whose payment date is reached while it waits is flagged, never blocked.
+
 This revision replaces the generic **Approver** role with two distinct stored roles, **AreaDirector** and **ViceRector**, that carry identical permissions (`REQUEST_VIEW_ALL`, `REQUEST_APPROVE`, `BUDGET_VIEW`, `REPORT_VIEW`) — exactly what the former Approver role held. Every route guard, dashboard filter, workflow role-target list, visibility filter, file-access rule and seeded `ApprovalRule.role` value that used to check `role === "Approver"` now checks both roles; this was a mechanical one-role-to-two-roles split, not a permissions change. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is now implied by the role itself and set automatically by the backend the moment Admin assigns that role, rather than a separate field Admin chooses on the Users screen — Management's approval level (RECTORATE / GENERAL_MANAGEMENT) is unaffected and remains admin-editable. The only functional difference between the two new roles remains directional: an Area Director may forward a manager-chain approval up to the Vice-Rector; the Vice-Rector, sitting at the top of that pair, cannot forward further.
 
 This guide explains what each profile can view, create, change, approve, and execute in the UMA finance platform. It also identifies the conditions that can block an otherwise permitted action. Use it for onboarding, assigning accounts, reviewing responsibilities, and diagnosing access issues.
@@ -140,6 +142,7 @@ Use the same profile abbreviations as the preceding matrix. **P** means propose 
 | View and export management reports | Y | - | R | R | R | R | R | R |
 | Export accounting consolidation or SIRE | Y | - | - | - | Y | - | - | - |
 | Download existing generated bank file | Y | - | - | - | R | Y | - | - |
+| Verify a bank file before Treasury downloads it | Y | - | - | - | Y | - | - | - |
 | Use global audit log | Y | - | - | - | R | - | - | - |
 | Create update deactivate user accounts | Y | - | - | - | - | - | - | - |
 
@@ -168,10 +171,11 @@ Use the same profile abbreviations as the preceding matrix. **P** means propose 
 | View and export management reports | R | - |
 | Export accounting consolidation or SIRE | - | - |
 | Download existing generated bank file | - | - |
+| Verify a bank file before Treasury downloads it | - | - |
 | Use global audit log | - | - |
 | Create update deactivate user accounts | - | - |
 
-**Important differences.** Reading a supplier does not authorize verifying its bank account. Downloading an already generated bank file does not authorize generating, scheduling, or confirming payments. Budget's configuration menu does not grant project-master write access; project writes remain Admin/Accounting. Bank-format certification is a narrow, additional exception to Admin-only configuration: Treasury holds `bank-format:certify` and can certify or decertify an existing bank-file format, but creating, editing, deactivating or reactivating that configuration record remains Admin-only. Only BBVA is a supported source/generator format (`SOURCE_BANKS`); BCP, Interbank, Scotiabank and Banco de la Nación (`BENEFICIARY_BANKS`) can be a supplier's or employee's beneficiary bank for a CCI transfer, but none of them is a format UMA can generate an outbound payment file through. Procurement's Supplier Master access mirrors Treasury's: read-only, for confirming an eligible homologated supplier before issuing an order, never a proposal, verification or homologation action.
+**Important differences.** Reading a supplier does not authorize verifying its bank account. Downloading an already generated bank file does not authorize generating, scheduling, or confirming payments, and Treasury downloads a new file only after Accounting has verified it. Budget's configuration menu does not grant project-master write access; project writes remain Admin/Accounting. Bank-format certification is a narrow, additional exception to Admin-only configuration: Treasury holds `bank-format:certify` and can certify or decertify an existing bank-file format, but creating, editing, deactivating or reactivating that configuration record remains Admin-only. Only BBVA is a supported source/generator format (`SOURCE_BANKS`); BCP, Interbank, Scotiabank and Banco de la Nación (`BENEFICIARY_BANKS`) can be a supplier's or employee's beneficiary bank for a CCI transfer, but none of them is a format UMA can generate an outbound payment file through. Procurement's Supplier Master access mirrors Treasury's: read-only, for confirming an eligible homologated supplier before issuing an order, never a proposal, verification or homologation action.
 
 Supplier proposals are correctable only while pending validation or observed. A Requester must also be the proposer. Supplier bank entry does not permit changing verification, ownership-review, active/preferred, or Finance decision fields. Employee profile preference/deactivation follows the separate owner permissions shown above.
 
@@ -361,7 +365,7 @@ SOURCES S01 S02 S03 S04 S06 S07 S23
 
 All requests, including drafts; Supplier Master and full banking data; employee bank profiles; Accounting and Accounts Payable; invoice observations and batches; budget plans/commitments/exceptions; reports; accounting/SIRE exports; and the global audit log.
 
-Accounting can download existing generated bank files through the file-access rule. This does not grant the Treasury workspace or payment generation/execution actions.
+Accounting can download existing generated bank files through the file-access rule, and verifies each new file before Treasury can download it. This does not grant the Treasury workspace or payment generation/execution actions.
 
 ### What Accounting can do
 
@@ -370,6 +374,7 @@ Accounting can download existing generated bank files through the file-access ru
 - Register A1 invoice evidence across requests; upload/retry invoice batches; review and resolve fiscal observations; process accounting entries/payables and export consolidation or SIRE files.
 - Review employee bank profiles; observe, reject, approve or validate submitted renditions; settle eligible non-deductible Account 14 balances.
 - Close or void requests through eligible workflow actions. Voiding requires a reason.
+- Verify or reject each bank TXT Treasury generates (Bank File Verification, `bank-file:verify`). Verifying releases the file to Treasury; rejecting needs a reason, cancels the file and returns its CXPs to Treasury's queue. Nobody verifies a file they generated, except Admin.
 
 ### Limitations
 
@@ -400,7 +405,7 @@ Treasury does not have the dedicated Budget, Accounting, SIRE, global audit or c
 ### What Treasury can do
 
 - Schedule eligible requests or individual payables using the selected bank, currency, payment date and eligible account. Only BBVA is a supported source/generator bank format (SOURCE_BANKS); the other supported banks (BCP, Interbank, Scotiabank, Banco de la Nación) are beneficiary-only destinations reached by CCI transfer, never a format Treasury generates a file through.
-- Generate supported bank files; inspect existing files and payment batches. Certify or decertify an existing bank-file format (bank-format:certify) — a narrow exception shared with Admin; creating, editing or deactivating the format configuration itself remains Admin-only.
+- Generate supported bank files; inspect existing files and payment batches. A new file is downloaded, and its payments confirmed or reported as bounced, only after Accounting verifies it; a file Accounting rejects is cancelled and its CXPs return to the payment queue. Certify or decertify an existing bank-file format (bank-format:certify) — a narrow exception shared with Admin; creating, editing or deactivating the format configuration itself remains Admin-only.
 - Confirm a request/payable payment in full or in part — a partial confirmation moves the CXP to PARTIALLY_PAID rather than PAID and remains open for a further confirmation — record a bank rejection, and reprogram a bounced payable after required replacement evidence.
 - Reconcile the recorded payment with bank evidence/reference.
 - Read eligible employee reimbursement destinations and settle validated non-deductible rendition balances using the supported reimbursement/payroll-deduction methods.
@@ -651,7 +656,7 @@ Related payable/payment-batch serializers mask bank account values for users out
 | --- | --- |
 | Request uploads | Allowed when the user can view the parent request |
 | Supplier uploads | Supplier-view roles; Requester additionally must own a pending/observed proposal |
-| Generated bank files | Admin, Accounting and Treasury |
+| Generated bank files | Admin and Accounting at any time; Treasury once Accounting has verified the file. Every download must match the checksum recorded at generation |
 | Generated accounting files | Admin and Accounting |
 | Generated management reports | Admin, AreaDirector, ViceRector, Accounting, Treasury, Budget and Management |
 | Batch observation XML/PDF | Dedicated batch-review permission; Admin/Accounting by default |
@@ -703,6 +708,7 @@ SOURCES S01 S02 S03 S06 S07 S15 S18 S19 S23 S26
 | Treasury cannot select a bank account | Check active CURRENT type, bank/currency, verification/ownership, and whether a destination is frozen. Accounting/Admin verifies supplier banking. |
 | A requester cannot resolve a batch observation | Uploading is separate from reviewing. Accounting/Admin resolves the observation and retries processing where appropriate. |
 | Accounting cannot generate a payment file | Accounting can download an existing bank file but Treasury/Admin performs generation and payment actions. |
+| Treasury cannot download a new bank file | Accounting must verify it first (Bank File Verification). A rejected file is cancelled and its CXPs are back in the payment queue to be generated again. |
 | An extra permission does not reveal a menu | The menu and many API routes use stored roles. Admin must review the complete assignment rather than assuming the token unlocks a module. |
 | A Management approval is complete but funding is pending | Management completion is deliberately handed to Budget for the financial step. |
 | A period blocks an otherwise permitted action | Admin/Accounting reviews the period and the relevant policy. Broad permissions do not automatically bypass it. |
@@ -756,8 +762,9 @@ The following table is generated from the current default permission catalog. It
 | batch-invoice:review | ADM, ACC |
 | payment:reprocess | ADM, TRE |
 | bank-format:certify | ADM, TRE |
+| bank-file:verify | ADM, ACC |
 
-The default counts are Admin 29, Requester 4, Director 4, Vice Rector 4, Accounting 14, Treasury 10, Budget 4, Procurement 4, Management 5 and ManagementViewer 1. A token is only one layer of access: use the capability matrices and limitations above when assigning responsibilities.
+The default counts are Admin 30, Requester 4, Director 4, Vice Rector 4, Accounting 15, Treasury 10, Budget 4, Procurement 4, Management 5 and ManagementViewer 1. A token is only one layer of access: use the capability matrices and limitations above when assigning responsibilities.
 
 SOURCES S01 S02
 

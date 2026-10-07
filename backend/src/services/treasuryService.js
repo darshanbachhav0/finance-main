@@ -40,6 +40,7 @@ import { cleanupUploadedFiles, generatedRoot, persistUploadedFiles } from "./sto
 import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
+import { BANK_FILE_VERIFICATION, assertBankFileReleased, bankFileVerificationTaskKey } from "../utils/bankFileVerification.js";
 import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 
 // A payment date typed as "YYYY-MM-DD" is a Lima calendar date, not UTC midnight
@@ -608,6 +609,8 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         specificationVersion: adapter.specificationVersion,
         certificationSnapshot,
         status: "GENERATED",
+        // Treasury may download the TXT only once Accounting verifies it.
+        verification: { status: BANK_FILE_VERIFICATION.PENDING },
         generatedBy: user._id,
         generatedAt: new Date()
       }], session ? { session } : undefined);
@@ -665,6 +668,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
           certificationSnapshot,
           paymentConfirmed: false,
           paymentEntriesCreated: false,
+          verification: { status: BANK_FILE_VERIFICATION.PENDING },
           notice: "BBVA fixed-width payment instruction. Payment requires separate bank confirmation."
         }
       }], session ? { session } : undefined);
@@ -675,11 +679,21 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
         user,
         req,
         module: "TREASURY",
-        message: "BBVA fixed-width file generated; payment awaits bank confirmation.",
+        message: "BBVA fixed-width file generated; it awaits Accounting verification before download.",
         newValues: { batchId: batch._id, batchNumber, bank: normalizedBank, currency, totalAmount: batch.totalAmount, itemCount: items.length, checksum, specificationVersion: adapter.specificationVersion, generatedAt: batch.generatedAt, adapterMode: adapter.mode },
         session
       });
       return { batch, content };
+    });
+    await notifyRoles({
+      roles: [ROLES.ACCOUNTING],
+      eventKey: bankFileVerificationTaskKey(result.batch._id),
+      type: "BANK_FILE_VERIFICATION",
+      title: notificationText("Bank file awaiting verification"),
+      message: notificationText("{batchNumber} ({count} payments) must be verified before Treasury can download it.", { batchNumber, count: items.length }),
+      path: `/accounting/bank-files?record=${result.batch._id}`,
+      entityType: "PaymentBatch",
+      entityId: result.batch._id
     });
     for (const item of items) {
       await resolveNotification(`request:${item.request._id}:treasury`);
@@ -713,6 +727,8 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   if (!accountsPayable || ![AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status) || !accountsPayable.paymentBatch) {
     throw new AppError(409, "The CXP is not awaiting payment confirmation.", { status: accountsPayable?.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
+  // The bank can only have executed a file Treasury was allowed to download.
+  assertBankFileReleased(await PaymentBatch.findById(accountsPayable.paymentBatch).select("batchNumber verification"), "confirm payments from");
   const request = await FinancialRequest.findById(accountsPayable.request).populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId: accountsPayable.request }, ERROR_CODES.NOT_FOUND);
   assertRequestActive(request);
@@ -848,6 +864,7 @@ export async function markPaymentBounced({ accountsPayableId, payload, user, req
   const current = accountsPayable.paymentBatch ? await PaymentBatch.findById(accountsPayable.paymentBatch) : null;
   const currentItem = batchItemFor(current, accountsPayable);
   const inFile = currentItem && ["INSTRUCTION_CREATED", "PARTIALLY_CONFIRMED"].includes(currentItem.status) && !currentItem.remainderMovedTo;
+  if (inFile) assertBankFileReleased(current, "report bounced payments from");
   if (![AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status) || (accountsPayable.status === AP_STATUS.PARTIALLY_PAID && !inFile)) {
     throw new AppError(409, "Only a CXP in a generated payment file can be marked bounced.", { status: accountsPayable.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
@@ -1069,6 +1086,8 @@ export async function cancelPaymentBatch({ batchId, payload = {}, user, req }) {
     return { batch, accountsPayables: items.map((item) => payableMap.get(String(item.accountsPayable))) };
   });
   for (const ap of result.accountsPayables) await resolveNotification(`request:${ap.request}:payment-confirmation:${ap._id}`);
+  // A cancelled file no longer waits for Accounting.
+  if (result.batch.status === "CANCELLED") await resolveNotification(bankFileVerificationTaskKey(result.batch._id));
   return result;
 }
 
@@ -1263,7 +1282,7 @@ export async function listPaymentConfirmationQueue(queryParams = {}) {
   const [records, total] = await Promise.all([
     AccountsPayable.find(query)
       .populate({ path: "request", populate: { path: "supplier" } })
-      .populate("paymentBatch", "batchNumber bank currency paymentDate status")
+      .populate("paymentBatch", "batchNumber bank currency paymentDate status verification")
       .sort(sort).skip(skip).limit(pageSize),
     AccountsPayable.countDocuments(query)
   ]);
