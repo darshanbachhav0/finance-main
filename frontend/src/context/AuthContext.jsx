@@ -35,6 +35,16 @@ export function AuthProvider({ children }) {
   const expiredNoticeShown = useRef(false);
   const warnedFor = useRef(null);
 
+  // A preference the signed-in user changed (e.g. email notifications): kept in the session copy.
+  const updateUserFields = useCallback((fields) => {
+    setUser((current) => {
+      if (!current) return current;
+      const next = { ...current, ...fields };
+      localStorage.setItem("erp_user", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const storeSession = useCallback((data) => {
     localStorage.setItem("erp_token", data.token);
     localStorage.setItem("erp_user", JSON.stringify(data.user));
@@ -168,7 +178,7 @@ export function AuthProvider({ children }) {
     await finishLogout();
   }
 
-  const value = useMemo(() => ({ user, loading, login, logout, changePassword, extendSession, sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user) }), [user, loading, expiresAt]);
+  const value = useMemo(() => ({ user, loading, login, logout, changePassword, extendSession, updateUserFields, sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user) }), [user, loading, expiresAt, updateUserFields]);
 
   return (
     <AuthContext.Provider value={value}>

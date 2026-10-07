@@ -7,6 +7,7 @@ import { allowedRequestActions } from "./requestActionPolicy.js";
 import { classifyApprovalSla, escalationCandidateCutoff, isApprovalEscalated, slaConfiguration } from "./slaPolicy.js";
 import { recordAudit } from "./auditService.js";
 import { notificationFields, notificationText } from "./notificationService.js";
+import { queueNotificationEmail } from "./notificationEmailService.js";
 
 export const SLA_TYPES = ["SLA_DUE_SOON", "SLA_OVERDUE", "SLA_ESCALATION"];
 const ACTIVE_STATUSES = ["PENDIENTE_APROBACION", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR"];
@@ -37,6 +38,7 @@ async function deliverOnce({ userId, eventKey, type, title, message, request }) 
       user: userId, eventKey, type, ...notificationFields({ title, message }),
       path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id
     } }, { upsert: true });
+    if (result.upsertedCount) await queueNotificationEmail({ _id: result.upsertedId, user: userId });
     return result.upsertedCount || 0;
   } catch (error) {
     if (error.code !== 11000) throw error;

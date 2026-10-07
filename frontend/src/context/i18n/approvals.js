@@ -34,6 +34,15 @@ export default {
   "on behalf of {name}": "en nombre de {name}",
   "You can open a team request only while it is on your approval route.": "Solo puede abrir una solicitud de su equipo mientras esté en su ruta de aprobación.",
 
+  // Notification emails
+  "Email notifications": "Notificaciones por correo",
+  "No email address on file": "Sin correo registrado",
+  "No email address on file. Ask an administrator to add it.": "No tiene un correo registrado. Pida a un administrador que lo agregue.",
+  "New notifications will also be emailed to you.": "Las nuevas notificaciones también se le enviarán por correo.",
+  "Notification emails turned off.": "Se desactivaron las notificaciones por correo.",
+  "Could not update email notifications. Try again.": "No se pudieron actualizar las notificaciones por correo. Inténtelo de nuevo.",
+  "New notifications in the bell are also emailed to this address. The person can turn this off from their account menu.": "Las nuevas notificaciones de la campana también se envían a este correo. La persona puede desactivarlo desde el menú de su cuenta.",
+
   // Notifications raised by the approval workflow
 
 };

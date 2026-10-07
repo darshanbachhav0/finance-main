@@ -42,6 +42,7 @@ export default function AdminUsers() {
         { name: "dni", label: "Employee DNI", placeholder: "8 digits", validate: (value) => value && !/^\d{8}$/.test(String(value)) ? "Enter an 8-digit DNI." : "" },
         { name: "employeeCode", label: "Employee code" },
         { name: "email", label: "Email", type: "email" },
+        { name: "emailNotifications", label: "Email notifications", type: "checkbox", defaultValue: true, getValue: (row) => row.emailNotifications !== false, hint: "New notifications in the bell are also emailed to this address. The person can turn this off from their account menu." },
         { name: "password", label: "Password", type: "password", requiredOnCreate: true, hint: "Min. 10 characters. Not saved in drafts." },
         { type: "section", label: "Organization" },
         { name: "jefe", label: "Direct supervisor", type: "select", options: supervisors.map(user => ({ value: user._id, label: `${user.name}${user.jobTitle ? ` · ${user.jobTitle}` : ""}` })), getValue: row => row.jefe?._id || row.jefe || "", wide: true },

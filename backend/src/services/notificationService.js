@@ -1,6 +1,7 @@
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import { activeApprovalStep } from "./approvalRuleService.js";
+import { queueNotificationEmail } from "./notificationEmailService.js";
 
 // Notification copy is a template with named placeholders plus its params, e.g.
 // notificationText("{requestNumber} is waiting for {approvalLevel} approval.", { requestNumber, approvalLevel }).
@@ -61,15 +62,19 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
   if (!userId) return null;
   const path = recordLinkFor(requestedPath, entityType, entityId);
   const copy = notificationFields({ title, message });
-  if (once) return Notification.findOneAndUpdate({ user: userId, eventKey }, {
-    $setOnInsert: { user: userId, eventKey, type, ...copy, path, entityType, entityId }
-  }, { upsert: true, new: true, setDefaultsOnInsert: true });
+  if (once) {
+    const result = await Notification.findOneAndUpdate({ user: userId, eventKey }, {
+      $setOnInsert: { user: userId, eventKey, type, ...copy, path, entityType, entityId }
+    }, { upsert: true, new: true, setDefaultsOnInsert: true, includeResultMetadata: true });
+    if (!result.lastErrorObject?.updatedExisting) await queueNotificationEmail(result.value);
+    return result.value;
+  }
   // Re-sent plain-string copy must not keep a previous template (it would render stale text).
   const staleKeys = {};
   if (copy.title !== undefined && !copy.titleKey) staleKeys.titleKey = 1;
   if (copy.message !== undefined && !copy.messageKey) staleKeys.messageKey = 1;
   if (staleKeys.titleKey && staleKeys.messageKey) staleKeys.params = 1;
-  return Notification.findOneAndUpdate(
+  const { value: before } = await Notification.findOneAndUpdate(
     { user: userId, eventKey },
     // A re-sent notification (same event key, e.g. an approval that comes back to
     // the same approver after a resubmission) must reach the bell again as unread
@@ -79,8 +84,13 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
       $set: { ...Object.fromEntries(Object.entries({ type, ...copy, path }).filter(([, value]) => value !== undefined)), resolvedAt: null },
       $unset: { readAt: 1, ...staleKeys }
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, new: false, setDefaultsOnInsert: true, includeResultMetadata: true }
   );
+  const notification = await Notification.findOne({ user: userId, eventKey });
+  // Emailed when it is new or comes back after being read or closed - not when an alert that is
+  // still unread only has its wording refreshed.
+  if (!before || before.readAt || before.resolvedAt) await queueNotificationEmail(notification);
+  return notification;
 }
 
 export async function notifyRoles({ once = false, roles, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas }) {

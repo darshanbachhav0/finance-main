@@ -8,17 +8,22 @@ import { runPadronWorker } from "../src/workers/padronWorker.js";
 
 test("in-process workers default on in production and can each be switched off", () => {
   const production = { NODE_ENV: "production", SUNAT_PROVIDER_MODE: "PADRON" };
-  assert.deepEqual(inProcessWorkerFlags(production), { batchInvoice: true, sla: true, padron: true });
-  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", SUNAT_PROVIDER_MODE: "PADRON" }), { batchInvoice: false, sla: false, padron: false });
+  assert.deepEqual(inProcessWorkerFlags(production), { batchInvoice: true, sla: true, padron: true, notificationEmail: false });
+  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", SUNAT_PROVIDER_MODE: "PADRON" }), { batchInvoice: false, sla: false, padron: false, notificationEmail: false });
   assert.equal(inProcessWorkerFlags({ ...production, BATCH_INVOICE_WORKER_ENABLED: "false" }).batchInvoice, false);
   assert.equal(inProcessWorkerFlags({ ...production, SLA_WORKER_ENABLED: "0" }).sla, false);
   assert.equal(inProcessWorkerFlags({ ...production, SUNAT_PADRON_WORKER_ENABLED: "off" }).padron, false);
+  // The notification-email sender only runs once emails are switched on.
+  assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "SMTP" }).notificationEmail, true);
+  assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "OFF" }).notificationEmail, false);
+  assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "SMTP", NOTIFICATION_EMAIL_WORKER_ENABLED: "false" }).notificationEmail, false);
+  assert.equal(inProcessWorkerFlags({ NODE_ENV: "development", NOTIFICATION_EMAIL_MODE: "LOG", NOTIFICATION_EMAIL_WORKER_ENABLED: "true" }).notificationEmail, true);
   // Inline processing (a dev convenience) and the durable worker never run together.
   assert.equal(inProcessWorkerFlags({ ...production, BATCH_INVOICE_INLINE_PROCESSING: "true" }).batchInvoice, false);
   // The Padrón refresh only matters in public-Padrón mode.
   assert.equal(inProcessWorkerFlags({ NODE_ENV: "production", SUNAT_PROVIDER_MODE: "MOCK" }).padron, false);
   // Explicit opt-in outside production (the demo launcher sets these).
-  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", BATCH_INVOICE_INLINE_PROCESSING: "false", BATCH_INVOICE_WORKER_ENABLED: "true", SLA_WORKER_ENABLED: "true" }), { batchInvoice: true, sla: true, padron: false });
+  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", BATCH_INVOICE_INLINE_PROCESSING: "false", BATCH_INVOICE_WORKER_ENABLED: "true", SLA_WORKER_ENABLED: "true" }), { batchInvoice: true, sla: true, padron: false, notificationEmail: false });
 });
 
 test("worker modules do not start on import and render.yaml runs them inside the web service", async () => {

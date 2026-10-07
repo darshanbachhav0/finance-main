@@ -10,7 +10,7 @@ import { APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
-const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil"];
+const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil", "emailNotifications"];
 
 // Area Director and Vice-Rector are single-level roles: their approvalLevel is
 // implied by the role itself, never a separate admin choice (unlike Management,
@@ -127,7 +127,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
   if (req.body.substitute !== undefined) await validateSubstitute(user._id, req.body.substitute);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave) };
+  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), emailNotifications: user.emailNotifications !== false };
   Object.assign(user, editablePayload(req.body));
   applyLeaveDates(user, oldValues.onLeave);
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
@@ -141,7 +141,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.lockedUntil = null;
   }
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, passwordChanged: Boolean(req.body.password) } });
+  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, emailNotifications: user.emailNotifications !== false, passwordChanged: Boolean(req.body.password) } });
   const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
   res.json({ data: user, approvalReassignment });
 });
@@ -183,7 +183,19 @@ export const updateMyLeave = asyncHandler(async (req, res) => {
   res.json({ data: user, approvalReassignment });
 });
 
-export const deleteUser = asyncHandler(async (req, res) => {
+// Self-service: the signed-in user turns the emailed copy of their notifications on or off.
+export const updateMyNotificationPreferences = asyncHandler(async (req, res) => {
+  if (typeof req.body.emailNotifications !== "boolean") throw new AppError(422, "emailNotifications must be true or false.", { field: "emailNotifications" }, ERROR_CODES.VALIDATION_ERROR);
+  const user = await User.findById(req.user._id);
+  if (!user) throw new AppError(404, "User not found.", undefined, ERROR_CODES.NOT_FOUND);
+  const oldValues = { emailNotifications: user.emailNotifications !== false };
+  user.emailNotifications = req.body.emailNotifications;
+  await user.save();
+  await recordAudit({ entityType: "User", entity: user, action: "NOTIFICATION_PREFERENCES_UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { emailNotifications: user.emailNotifications } });
+  res.json({ data: user });
+});
+
+export const deleteUser =asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id)) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);

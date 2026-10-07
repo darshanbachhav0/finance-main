@@ -61,6 +61,12 @@ Background workers (see §4 — in production they run inside the web service pr
 - `BATCH_INVOICE_POLL_MS`, `BATCH_INVOICE_STALE_MINUTES`, `BATCH_INVOICE_WORKER_CONCURRENCY` —
   batch worker tuning; `SLA_POLL_MS`, `SLA_DUE_SOON_HOURS`, `APPROVAL_SLA_WORKING_DAYS`, `SLA_ESCALATION_WORKING_DAYS` (Peruvian working days; the dashboard and management-portal escalation counters use the same rule) — SLA worker
   tuning. All have safe defaults.
+- `NOTIFICATION_EMAIL_MODE` (`OFF` | `LOG` | `SMTP`, default `OFF`), `SMTP_HOST`, `SMTP_PORT`,
+  `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `NOTIFICATION_EMAIL_FROM`,
+  `NOTIFICATION_EMAIL_REPLY_TO`, `APP_PUBLIC_URL`, `NOTIFICATION_EMAIL_ALLOWED_DOMAINS`,
+  `NOTIFICATION_EMAIL_DELAY_MINUTES`, `NOTIFICATION_EMAIL_POLL_MS`,
+  `NOTIFICATION_EMAIL_MAX_ATTEMPTS`, `NOTIFICATION_EMAIL_WORKER_ENABLED` — notification emails
+  (see §4 "Notification emails").
 
 Authentication:
 - `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 15) — per-account
@@ -157,9 +163,10 @@ process**, started by `backend/server.js` (`backend/src/workers/inProcessWorkers
 | A2 batch invoice | `BATCH_INVOICE_WORKER_ENABLED` (`true`) | Processes queued mass-invoice uploads | MongoDB + uploaded files on the disk |
 | Approval SLA | `SLA_WORKER_ENABLED` (`true`) | Due-soon / overdue notifications and escalation | MongoDB |
 | SUNAT Padrón refresh | `SUNAT_PADRON_WORKER_ENABLED` (`true`, PADRON mode only) | Keeps the local RUC registry fresh (daily 03:00 Lima) | `SUNAT_PADRON_DATA_DIR` on the disk |
+| Notification email | `NOTIFICATION_EMAIL_WORKER_ENABLED` (`true`, only when `NOTIFICATION_EMAIL_MODE` is `LOG`/`SMTP`) | Emails new bell notifications to each person (see below) | MongoDB + SMTP server |
 
-The boot log prints one line with the state of all three
-(`[WORKERS] In-process: batch-invoice=on, sla=on, sunat-padron=on`). On `SIGTERM` (every Render
+The boot log prints one line with the state of all of them
+(`[WORKERS] In-process: batch-invoice=on, sla=on, sunat-padron=on, notification-email=on`). On `SIGTERM` (every Render
 deploy) the server stops accepting requests and lets in-flight worker work finish (up to ~25s).
 
 Running more than one copy is safe: the batch worker claims each `QUEUED` batch with an atomic
@@ -188,6 +195,43 @@ The four SUNAT padrón CLI scripts under `backend/scripts/` (`syncSunatPadron.js
 `indexSunatPadron.js`, `padronStatus.js`) serve different one-off purposes (sync once, run as a
 daemon, rebuild the search index only, or print status) — each has a short comment at its top saying
 which of the other three to reach for instead.
+
+### Notification emails
+
+Every bell notification (approval pending, request observed, payment bounced, SLA overdue…) can also
+be emailed to the person it is for. `notifyUser()` queues a `NotificationDelivery` when a
+notification is new or comes back unread; the notification-email worker waits
+`NOTIFICATION_EMAIL_DELAY_MINUTES` (default 5) and then sends each person **one** email listing all
+their news, in Spanish, greeting them by name, with an "Abrir en el sistema" button per item that
+opens the exact record. An alert already read in the app, resolved meanwhile (someone else approved)
+or for a person without an address, inactive or who turned emails off is skipped and recorded with
+its `skipReason`. A failed send is retried (1, 5, 15, 60 minutes) up to
+`NOTIFICATION_EMAIL_MAX_ATTEMPTS` (default 5) and never affects the business action. Emails carry
+no bank data.
+
+Setup (Render → Environment):
+
+1. `NOTIFICATION_EMAIL_MODE=SMTP` (`OFF` disables everything; `LOG` prints emails instead of
+   sending — local development).
+2. SMTP account of a sender mailbox such as `notificaciones@uma.edu.pe`:
+   - Microsoft 365: `SMTP_HOST=smtp.office365.com`, `SMTP_PORT=587`, `SMTP_USER`/`SMTP_PASSWORD`
+     of the mailbox (IT must enable *Authenticated SMTP* for it).
+   - Google Workspace: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, the mailbox and an app password
+     (or the Workspace SMTP relay).
+   - A transactional provider (Amazon SES, Brevo, Resend…) works the same with its SMTP settings.
+3. `NOTIFICATION_EMAIL_FROM="UMA Finanzas <notificaciones@uma.edu.pe>"` — the domain must have
+   SPF/DKIM set up for that sender, or messages land in spam.
+4. `APP_PUBLIC_URL=https://<the web app address>` for the links (defaults to the first
+   `CLIENT_URLS` entry).
+5. Optional: `NOTIFICATION_EMAIL_ALLOWED_DOMAINS=uma.edu.pe` only emails institutional addresses.
+
+The boot log shows `notification-email=on`; an incomplete setup logs what is missing and sends
+nothing. People turn emails on/off in their account menu ("Notificaciones por correo");
+administrators can do it in User Administration. For one manual pass: `npm run email:send-due
+--workspace backend`.
+
+People's addresses come from the HR contracts master (`MAESTRO_CONTRATOS_<date>.xlsx`, column
+"CORREO INSTITUCIONAL"), matched by DNI — see §5.
 
 ### Demo-only public links (not production)
 
@@ -220,6 +264,22 @@ Migration reports are written under `backend/migration-reports`. Every migration
 its own key already exists in the `migrationruns` collection, so re-running an already-applied
 migration is always safe. Back up first; ambiguous historical records are reported for manual review
 rather than silently reinterpreted, and no collection is ever dropped.
+
+People's emails (for notification emails) are imported from the HR contracts master. The workbook
+holds personal data — keep it out of the repository and pass its path:
+
+```powershell
+npm run import:emails -- --file="C:\path\MAESTRO_CONTRATOS_2026-09-30.xlsx"         # dry run
+npm run import:emails:apply -- --file="C:\path\MAESTRO_CONTRATOS_2026-09-30.xlsx"   # apply
+```
+
+Each active person is matched by DNI and gets the "CORREO INSTITUCIONAL" address; only
+`@uma.edu.pe` addresses are taken unless `--allow-domains=uma.edu.pe,gmail.com` (or `--any-domain`)
+says otherwise. Ceased employees (`CESADO`), cells that are not an address (e.g. a program name),
+an address shared by two people, an address another user already has and DNIs with no user are
+skipped and listed in the report (`data/reports/contract-email-import*.json`). Every change is
+audited (`EMAIL_IMPORTED`, with the previous address). The email also works as a secondary sign-in
+identifier, as before.
 
 Other one-off/maintenance scripts under `backend/scripts/` (cost-center import, deployment password
 rotation, demo-data cleanup) are documented individually at the top of each script. Presentation-only

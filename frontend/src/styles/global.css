@@ -2121,6 +2121,11 @@ input::placeholder, textarea::placeholder { color: var(--gray-500); opacity: 1; 
 .brand::after { content: ""; pointer-events: none; position: absolute; right: -52px; bottom: -110px; width: 180px; height: 180px; opacity: .065; background: repeating-conic-gradient(from 0deg, var(--uma-primary) 0deg 1deg, transparent 1deg 30deg); border-radius: 50%; }
 .theme-control { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: var(--font-sm); color: var(--gray-700); }
 .theme-control select { min-height: 38px; min-width: 90px; border: 1px solid var(--gray-300); border-radius: var(--radius-md); padding: 7px; margin-left: auto; }
+.email-notifications-control { padding-top: 4px; cursor: pointer; }
+.email-notifications-control > span { display: flex; flex-direction: column; }
+.email-notifications-control small { color: var(--gray-600); font-size: var(--font-xs); }
+.email-notifications-control input { width: 18px; height: 18px; margin-left: auto; accent-color: var(--uma-primary); cursor: pointer; }
+.email-notifications-control input:disabled { cursor: not-allowed; }
 .login-language { display: flex; align-items: center; gap: 8px; }
 .login-language .theme-control { padding: 0; }
 .login-language .theme-control > span { display: none; }

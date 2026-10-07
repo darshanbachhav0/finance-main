@@ -16,7 +16,7 @@ import uxformsSpanish from "./i18n/uxforms.js";
 import uxlistsSpanish from "./i18n/uxlists.js";
 import uxshellSpanish from "./i18n/uxshell.js";
 import rowactionsSpanish from "./i18n/rowactions.js";
-import notificationsSpanish from "./i18n/notifications.js";
+import notificationsSpanish from "../../../shared/notificationTranslations.mjs";
 import navigationSpanish from "./i18n/navigation.js";
 import feedbackSpanish from "./i18n/feedback.js";
 import suppliersSpanish from "./i18n/suppliers.js";
