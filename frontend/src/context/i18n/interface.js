@@ -109,6 +109,12 @@ export default {
   "at least one supporting document": "al menos un documento de sustento",
   "Upload at least one document: any of these files is enough.": "Sube al menos un documento: basta con cualquiera de estos archivos.",
   "Any one document is enough": "Basta con un documento cualquiera",
+  // Uploaded documents: view any of them, take back a wrong one.
+  "View document": "Ver documento",
+  "Remove document": "Quitar documento",
+  "Keep document": "Conservar documento",
+  "Removed when you save": "Se quitará al guardar",
+  "Only the request's own documents can be removed here.": "Aquí solo se pueden quitar los documentos propios de la solicitud.",
   "electronic fee receipt (XML or PDF)": "recibo por honorarios electrónico (XML o PDF)",
   "Upload the invoice XML or its factura PDF.": "Sube el XML del comprobante o el PDF de la factura.",
   "Track B requires a verified invoice (its XML or factura PDF).": "La vía B requiere un comprobante verificado (su XML o el PDF de la factura).",

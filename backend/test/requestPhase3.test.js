@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import mongoose from "mongoose";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
+import AuditLog from "../src/models/AuditLog.js";
+import { assertStoredAssetAccess, resolveStoredAsset } from "../src/services/fileAccessService.js";
 import ApprovalRule from "../src/models/ApprovalRule.js";
 import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import CostCenter from "../src/models/CostCenter.js";
@@ -188,6 +193,42 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       assert.equal(stored.totalNet, 2542.37);
       assert.equal(stored.totalIGV, 457.63);
       assert.equal(stored.commercialTotalStatus, "MATCH");
+    });
+
+    await t.test("the requester removes a wrong document while editing; quotation evidence stays", async () => {
+      const wrongPath = path.join(os.tmpdir(), `wrong-contract-${process.pid}-${Date.now()}.pdf`);
+      await fs.writeFile(wrongPath, "%PDF-1.4 wrong document");
+      const contractId = new mongoose.Types.ObjectId();
+      const supportingId = new mongoose.Types.ObjectId();
+      const request = await officialDocument();
+      request.attachments.push(
+        { _id: contractId, kind: "CONTRACT", originalName: "wrong-contract.pdf", filename: "wrong-contract.pdf", path: wrongPath, url: "/uploads/requests/x/wrong-contract.pdf", mimetype: "application/pdf", size: 24, uploadedBy: solicitor._id },
+        { _id: supportingId, kind: "SUPPORTING", originalName: "annex.pdf", filename: "annex.pdf", url: "/uploads/requests/x/annex.pdf", mimetype: "application/pdf", size: 10, uploadedBy: solicitor._id }
+      );
+      await request.save();
+      const quotationEvidence = request.attachments.find((item) => item.kind === "QUOTATION");
+      await assert.rejects(
+        () => updateFinancialRequest({ id: request._id, payload: { removeAttachments: JSON.stringify([String(quotationEvidence._id)]) }, files: {}, user: solicitor, req }),
+        (error) => error.statusCode === 422 && error.code === ERROR_CODES.VALIDATION_ERROR
+      );
+      await updateFinancialRequest({ id: request._id, payload: { removeAttachments: JSON.stringify([String(contractId), String(new mongoose.Types.ObjectId())]) }, files: {}, user: solicitor, req });
+      const stored = await FinancialRequest.findById(request._id);
+      assert.deepEqual(stored.attachments.map((item) => item.kind).sort(), ["QUOTATION", "QUOTATION", "QUOTATION", "SUPPORTING"]);
+      // Never sent for approval, so the file itself is gone; the audit keeps what was removed.
+      await assert.rejects(() => fs.access(wrongPath));
+      const audit = await AuditLog.findOne({ entityId: request._id, action: "UPDATED" }).sort({ createdAt: -1 });
+      assert.deepEqual(audit.newValues.removedAttachments.map((item) => item.originalName), ["wrong-contract.pdf"]);
+    });
+
+    await t.test("everyone who can open the request can open its documents, a chain approver included", async () => {
+      const request = await officialDocument();
+      const manager = await User.create({ employeeCode: `UMA-PH3-JEFE-${Date.now()}`, name: "Phase 3 Jefe", email: `phase3.jefe.${Date.now()}@uma.edu.pe`, passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id });
+      const outsider = await User.create({ employeeCode: `UMA-PH3-OUT-${Date.now()}`, name: "Phase 3 Outsider", email: `phase3.outsider.${Date.now()}@uma.edu.pe`, passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id });
+      await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { status: REQUEST_STATUS.PENDING_APPROVAL, approvalRouteSnapshot: [{ sequence: 1, approvalLevel: "MANAGER_CHAIN", approverUser: manager._id, status: "PENDING" }] } });
+      const asset = resolveStoredAsset(`/uploads/requests/${request._id}/contract.pdf`);
+      await assert.doesNotReject(() => assertStoredAssetAccess(asset, solicitor));
+      await assert.doesNotReject(() => assertStoredAssetAccess(asset, manager));
+      await assert.rejects(() => assertStoredAssetAccess(asset, outsider), /permission/);
     });
 
     await t.test("configured quotation policy exposes its real minimum and detailed recommendation errors", async () => {

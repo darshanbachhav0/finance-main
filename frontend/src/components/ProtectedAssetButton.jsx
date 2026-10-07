@@ -10,6 +10,7 @@ export default function ProtectedAssetButton({
   preview = false,
   className = "asset-button-link",
   title,
+  ariaLabel,
   children
 }) {
   const { t } = useLanguage();
@@ -55,6 +56,7 @@ export default function ProtectedAssetButton({
       disabled={loading || !resourcePath}
       aria-busy={loading}
       title={title ? t(title) : undefined}
+      aria-label={ariaLabel}
     >
       {loading ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : children}
     </button>

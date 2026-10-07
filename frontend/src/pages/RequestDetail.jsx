@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   CornerUpLeft,
   Download,
+  Eye,
   FileCheck2,
   FileText,
   Forward,
@@ -732,7 +733,7 @@ export default function RequestDetail() {
                 { key: "originalName", label: "File" },
                 { key: "size", label: "Size", render: (row) => row.size ? `${(row.size / 1024).toFixed(0)} KB` : "-" },
                 { key: "uploadedAt", label: "Uploaded", render: (row) => formatDateTime(row.uploadedAt, language) },
-                { key: "download", label: "", sortable: false, render: (row) => <ProtectedAssetButton className="icon-button" resourcePath={row.url} fileName={row.originalName} preview title="Preview or download"><Download size={16} /></ProtectedAssetButton> }
+                { key: "download", label: "", sortable: false, render: (row) => <div className="row-actions"><ProtectedAssetButton className="icon-button" resourcePath={row.url} fileName={row.originalName} preview title="View document" ariaLabel={`${t("View document")}: ${row.originalName}`}><Eye size={16} aria-hidden="true" /></ProtectedAssetButton><ProtectedAssetButton className="icon-button" resourcePath={row.url} fileName={row.originalName} title="Download" ariaLabel={`${t("Download")}: ${row.originalName}`}><Download size={16} aria-hidden="true" /></ProtectedAssetButton></div> }
               ]}
             />
             <div className={`xml-result ${request.xmlValidation?.validated ? "valid" : request.xmlValidation?.status === "INVALID" ? "invalid" : "neutral"}`}>
