@@ -17,7 +17,8 @@ async function main() {
   if (apply && !process.env.MONGODB_URI) throw new Error("Apply mode requires an explicit MONGODB_URI. Dry-run mode may use the local default.");
   await connectDB();
   const plan = await prepareCecoImport(inputPath);
-  if (apply && (plan.validation.cecoConflicts.length || plan.validation.ambiguousEmployees.length)) throw new Error("Apply blocked: resolve ambiguous Cost Centers and employee mappings in the dry-run report before institutional cutover.");
+  // CeCos with several area names and people who cannot be matched safely are reported, not
+  // blocking: everyone else is applied. Review the report's validation section after each run.
   const summary = cecoImportSummary(plan, apply ? "APPLY" : "DRY_RUN");
   const applied = apply ? await applyCecoImport(plan) : undefined;
   const report = {
