@@ -199,3 +199,18 @@ test("every skipped email is explained in the logs, with the address masked", ()
   // Without NOTIFICATION_EMAIL_ALLOWED_DOMAINS any address saved on the user is emailed.
   assert.deepEqual(notificationEmailConfiguration(EMAIL_ENV).allowedDomains, []);
 });
+
+test("a deployment still set to the removed GMAIL_API mode keeps sending through its SMTP settings", () => {
+  const smtp = { SMTP_HOST: "smtp-relay.brevo.com", SMTP_PORT: "2525", SMTP_SECURE: "false", SMTP_USER: "login@smtp-brevo.com", SMTP_PASSWORD: "key", NOTIFICATION_EMAIL_FROM: "UMA Finanzas <sender@gmail.com>" };
+  const legacy = notificationEmailConfiguration({ ...EMAIL_ENV, ...smtp, NOTIFICATION_EMAIL_MODE: "GMAIL_API", RENDER: "true" });
+  assert.equal(legacy.mode, "SMTP");
+  assert.equal(legacy.enabled, true);
+  assert.deepEqual(legacy.problems, []);
+  assert.equal(legacy.warnings.length, 1, "port 2525 is fine on Render; only the mode is reported");
+  assert.match(legacy.warnings[0], /GMAIL_API is no longer supported; sending through SMTP \(smtp-relay\.brevo\.com:2525\)/);
+  // Without SMTP settings, or with any other unknown mode, emails stay off and say why.
+  const bare = notificationEmailConfiguration({ ...EMAIL_ENV, NOTIFICATION_EMAIL_MODE: "GMAIL_API" });
+  assert.equal(bare.enabled, false);
+  assert.match(bare.problems[0], /Unknown NOTIFICATION_EMAIL_MODE "GMAIL_API".*emails are OFF/);
+  assert.equal(notificationEmailConfiguration({ ...EMAIL_ENV, ...smtp, NOTIFICATION_EMAIL_MODE: "PIGEON" }).enabled, false);
+});

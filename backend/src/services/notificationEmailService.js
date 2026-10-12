@@ -57,7 +57,10 @@ export function emailDomain(value) {
 
 export function notificationEmailConfiguration(env = process.env) {
   const requestedMode = String(env.NOTIFICATION_EMAIL_MODE || "OFF").trim().toUpperCase();
-  const mode = MODES.includes(requestedMode) ? requestedMode : "OFF";
+  // GMAIL_API was removed (SMTP only). A deployment still set to it that has SMTP configured keeps
+  // sending through SMTP instead of silently switching every email off.
+  const legacySmtp = requestedMode === "GMAIL_API" && Boolean(String(env.SMTP_HOST || "").trim());
+  const mode = MODES.includes(requestedMode) ? requestedMode : legacySmtp ? "SMTP" : "OFF";
   const port = numberFromEnv(env.SMTP_PORT, 587, 1);
   const config = {
     mode,
@@ -84,7 +87,7 @@ export function notificationEmailConfiguration(env = process.env) {
     onRender: String(env.RENDER || "").trim().toLowerCase() === "true"
   };
   const problems = [];
-  if (requestedMode !== mode) problems.push(`Unknown NOTIFICATION_EMAIL_MODE "${requestedMode}" (use OFF, LOG or SMTP).`);
+  if (!MODES.includes(requestedMode) && !legacySmtp) problems.push(`Unknown NOTIFICATION_EMAIL_MODE "${requestedMode}" (use OFF, LOG or SMTP), so notification emails are OFF.`);
   if (mode !== "OFF" && !/^https?:\/\//i.test(config.appUrl)) problems.push("APP_PUBLIC_URL (or CLIENT_URLS) must be the web app's address for the links in each email.");
   if (mode === "SMTP") {
     if (!config.smtp.host) problems.push("SMTP_HOST is required when NOTIFICATION_EMAIL_MODE=SMTP.");
@@ -93,6 +96,7 @@ export function notificationEmailConfiguration(env = process.env) {
   }
   // Not blocking (a paid Render instance can use any port), but worth saying at startup.
   const warnings = config.onRender && mode === "SMTP" && BLOCKED_ON_RENDER_FREE.includes(config.smtp.port) ? [RENDER_FREE_SMTP] : [];
+  if (legacySmtp) warnings.push(`NOTIFICATION_EMAIL_MODE=GMAIL_API is no longer supported; sending through SMTP (${config.smtp.host}:${config.smtp.port}). Set NOTIFICATION_EMAIL_MODE=SMTP in the environment.`);
   return { ...config, problems, warnings, enabled: mode !== "OFF" && !problems.length };
 }
 
