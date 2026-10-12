@@ -2129,9 +2129,6 @@ input::placeholder, textarea::placeholder { color: var(--gray-500); opacity: 1; 
 .email-notifications-control small { color: var(--gray-600); font-size: var(--font-xs); }
 .email-notifications-control input { width: 18px; height: 18px; margin-left: auto; accent-color: var(--uma-primary); cursor: pointer; }
 .email-notifications-control input:disabled { cursor: not-allowed; }
-.email-test-action { padding: 0 16px 10px 41px; }
-.email-test-action .text-button { display: inline-flex; align-items: center; gap: 6px; font-size: var(--font-xs); }
-.email-test-error { display: block; margin-top: 6px; color: var(--red-700); font-size: var(--font-xs); white-space: pre-line; overflow-wrap: anywhere; }
 .login-language { display: flex; align-items: center; gap: 8px; }
 .login-language .theme-control { padding: 0; }
 .login-language .theme-control > span { display: none; }

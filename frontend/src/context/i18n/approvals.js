@@ -67,9 +67,6 @@ export default {
 
   // Notification emails
   "Email notifications": "Notificaciones por correo",
-  "Send test email": "Enviar correo de prueba",
-  "Sending test email...": "Enviando correo de prueba...",
-  "Test email sent to your address. Check your inbox and the spam folder.": "Se envió un correo de prueba a su dirección. Revise su bandeja de entrada y la carpeta de spam.",
   "No email address on file": "Sin correo registrado",
   "No email address on file. Ask an administrator to add it.": "No tiene un correo registrado. Pida a un administrador que lo agregue.",
   "New notifications will also be emailed to you.": "Las nuevas notificaciones también se le enviarán por correo.",
