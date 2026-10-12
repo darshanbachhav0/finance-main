@@ -21,6 +21,7 @@
     "verify:data": "node scripts/verifyCanonicalData.js",
     "verify:uma-demo": "node scripts/verifyUmaDemoData.js",
     "rotate:deployment-passwords": "node scripts/rotateDeploymentPasswords.js",
+    "account:recover": "node scripts/recoverAccount.js",
     "test": "node test/run.js",
     "test:workflow": "node test/workflowRegression.js",
     "migrate:workflow-statuses": "node scripts/migrateWorkflowStatusesV2.js",

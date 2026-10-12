@@ -71,7 +71,15 @@ Background workers (see §4 — in production they run inside the web service pr
 Authentication:
 - `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 15) — per-account
   lockout after repeated failed sign-ins. Failed, locked-out and successful sign-ins and sign-outs
-  are written to the audit log (module `AUTH`).
+  are written to the audit log (module `AUTH`). The lock ends by itself after the lockout time (the
+  sign-in page says when); an administrator's password reset in User Administration also lifts it.
+  Wrong passwords and **inactive accounts** both count as failures.
+- Locked-out administrator and no shell (Render free): from your own computer, with the production
+  `MONGODB_URI` (Render → Environment) set in the terminal:
+  `npm run account:recover -- --dni=<DNI>` shows the account's status (exists, active, locked until)
+  and changes nothing; add `--apply` to unlock, `--activate` to reactivate, and `--reset-password` for
+  a temporary password (printed once; it must be changed at the next sign-in, and existing sessions
+  end). Every recovery is audited (`ACCOUNT_RECOVERED`).
 
 ## 2. Local development
 
