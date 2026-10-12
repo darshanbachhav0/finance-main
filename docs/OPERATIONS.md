@@ -229,6 +229,8 @@ Setup (Render → Environment):
 4. `APP_PUBLIC_URL=https://<the web app address>` for the links (defaults to the first
    `CLIENT_URLS` entry).
 5. Optional: `NOTIFICATION_EMAIL_ALLOWED_DOMAINS=uma.edu.pe` only emails institutional addresses.
+   Leave it unset to email whatever address is saved on each user (the contracts import already
+   takes only `@uma.edu.pe` addresses).
 
 **Render's free plan blocks outgoing SMTP on ports 25, 465 and 587** (since September 2025), so
 Gmail and Microsoft 365 SMTP cannot be reached from a free instance. Either upgrade the instance,
@@ -239,8 +241,11 @@ or use an SMTP provider that also listens on port **2525**, e.g. Brevo: `SMTP_HO
 
 To check it, create a real request and look in **Render → Logs**: at startup
 `Notification email: SMTP sign-in OK` (or `sign-in FAILED` with the reason and what to change), then
-`Notification email pass { … sent: 1 … }` about `NOTIFICATION_EMAIL_DELAY_MINUTES` after the
-notification.
+`Notification email sent to <name> (ab***@domain)` about `NOTIFICATION_EMAIL_DELAY_MINUTES` after the
+notification. An email that is not sent says why, e.g. `Notification email to <name> skipped (1):
+READ_IN_APP - the alert was opened in the app within the 5-minute wait`, or `… failed: <SMTP error>`.
+If the log says "sent" but nothing arrives, check the provider's own log (Brevo: Transactional →
+Logs) and the recipient's spam folder.
 
 The boot log shows `notification-email=on`; an incomplete setup logs what is missing and sends
 nothing. People turn emails on/off in their account menu ("Notificaciones por correo");

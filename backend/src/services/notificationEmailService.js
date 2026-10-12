@@ -232,6 +232,27 @@ function notificationSkipReason(notification) {
 
 const ids = (rows) => rows.map((row) => row._id);
 
+// "abhiraj.k@uma.edu.pe" -> "ab***@uma.edu.pe": enough to recognise the address in the logs.
+export function maskedEmail(value) {
+  const [local = "", domain = ""] = String(value || "").trim().toLowerCase().split("@");
+  return domain ? `${local.slice(0, 2)}***@${domain}` : "(none)";
+}
+
+// Logged for every skipped email (Render: Logs tab), so "the email never came" has an answer.
+export function skipExplanation(reason, user, config) {
+  switch (reason) {
+    case "USER_NOT_FOUND": return "the user no longer exists";
+    case "USER_INACTIVE": return "the user is inactive";
+    case "OPTED_OUT": return "the user turned off \"Notificaciones por correo\" (account menu, or User Administration)";
+    case "NO_EMAIL": return "the user has no email address (add it in User Administration)";
+    case "DOMAIN_NOT_ALLOWED": return `${maskedEmail(user?.email)} is not on NOTIFICATION_EMAIL_ALLOWED_DOMAINS=${config.allowedDomains.join(",")} (clear that variable to email any domain)`;
+    case "RESOLVED": return "the task was already done or closed before the email was due";
+    case "READ_IN_APP": return `the alert was opened in the app within the ${config.delayMs / 60000}-minute wait`;
+    case "NOTIFICATION_DELETED": return "the notification no longer exists";
+    default: return reason;
+  }
+}
+
 // Back to PENDING for a retry - unless the notification was re-armed meanwhile and already has a
 // newer waiting delivery (unique per notification), which then carries the email.
 async function retryOrFail(delivery, error, config, now) {
@@ -257,7 +278,7 @@ async function deliverToUser(userId, { config, transport, now }) {
     { $set: { status: "SENDING", claimToken, claimedAt: now }, $inc: { attempts: 1 } }
   );
   const deliveries = await NotificationDelivery.find({ claimToken }).lean();
-  const result = { sent: 0, skipped: 0, failed: 0, retried: 0, emails: 0 };
+  const result = { sent: 0, skipped: 0, failed: 0, retried: 0, emails: 0, skipReasons: {} };
   if (!deliveries.length) return result;
   const [user, notifications] = await Promise.all([
     User.findById(userId).select("name email active emailNotifications").lean(),
@@ -276,6 +297,8 @@ async function deliverToUser(userId, { config, transport, now }) {
   for (const [reason, rows] of skipped) {
     await NotificationDelivery.updateMany({ _id: { $in: ids(rows) } }, { $set: { status: "SKIPPED", skipReason: reason }, $unset: { claimToken: 1 } });
     result.skipped += rows.length;
+    result.skipReasons[reason] = (result.skipReasons[reason] || 0) + rows.length;
+    console.log(`Notification email to ${user?.name || `user ${userId}`} skipped (${rows.length}): ${reason} - ${skipExplanation(reason, user, config)}`);
   }
   if (!sendable.length) return result;
 
@@ -284,7 +307,7 @@ async function deliverToUser(userId, { config, transport, now }) {
   try {
     await transport.send({ from: config.from || `${PRODUCT_NAME} <no-reply@localhost>`, replyTo: config.replyTo, to, ...email });
   } catch (error) {
-    console.error(`Notification email to user ${userId} failed: ${error?.message || error}${emailErrorHint(error, config) ? `
+    console.error(`Notification email to ${user.name || `user ${userId}`} (${maskedEmail(to)}) failed: ${error?.message || error}${emailErrorHint(error, config) ? `
 ${emailErrorHint(error, config)}` : ""}`);
     for (const { delivery } of sendable) {
       if (await retryOrFail(delivery, error, config, now) === "failed") result.failed += 1;
@@ -296,6 +319,7 @@ ${emailErrorHint(error, config)}` : ""}`);
     { _id: { $in: sendable.map((item) => item.delivery._id) } },
     { $set: { status: "SENT", sentAt: new Date(), recipient: to }, $unset: { claimToken: 1, lastError: 1 } }
   );
+  console.log(`Notification email sent to ${user.name || `user ${userId}`} (${maskedEmail(to)}): ${sendable.length} notification(s)`);
   result.sent += sendable.length;
   result.emails += 1;
   return result;
@@ -304,7 +328,7 @@ ${emailErrorHint(error, config)}` : ""}`);
 // One worker pass: every person with deliveries due gets one email listing them.
 export async function processNotificationEmails({ env = process.env, transport, now = new Date() } = {}) {
   const config = notificationEmailConfiguration(env);
-  const summary = { users: 0, emails: 0, sent: 0, skipped: 0, failed: 0, retried: 0 };
+  const summary = { users: 0, emails: 0, sent: 0, skipped: 0, failed: 0, retried: 0, skipReasons: {} };
   if (!config.enabled) return summary;
   // A pass that crashed mid-send leaves rows SENDING; after a while they are retried.
   const stale = await NotificationDelivery.find({ status: "SENDING", claimedAt: { $lt: new Date(now.getTime() - STALE_CLAIM_MS) } }).lean();
@@ -315,6 +339,7 @@ export async function processNotificationEmails({ env = process.env, transport, 
     const result = await deliverToUser(userId, { config, transport, now });
     summary.users += 1;
     for (const key of ["emails", "sent", "skipped", "failed", "retried"]) summary[key] += result[key];
+    for (const [reason, count] of Object.entries(result.skipReasons)) summary.skipReasons[reason] = (summary.skipReasons[reason] || 0) + count;
   }
   return summary;
 }
