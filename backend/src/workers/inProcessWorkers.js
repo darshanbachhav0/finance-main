@@ -1,4 +1,5 @@
 import { cloudTaxpayerMode } from "../services/taxpayerProfileCache.js";
+import { notificationEmailConfiguration } from "../services/notificationEmailService.js";
 // Background workers that run inside the web service process.
 //
 // On Render a persistent disk belongs to exactly one service, so the batch-invoice worker (reads
@@ -27,12 +28,8 @@ export function inProcessWorkerFlags(env = process.env) {
     sla: boolFromEnv(env.SLA_WORKER_ENABLED, production),
     padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production),
     // Only when notification emails are switched on (NOTIFICATION_EMAIL_MODE=LOG or SMTP).
-    notificationEmail: emailsSwitchedOn(env) && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production)
+    notificationEmail: notificationEmailConfiguration(env).mode !== "OFF" && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production)
   };
-}
-
-function emailsSwitchedOn(env) {
-  return ["LOG", "SMTP"].includes(String(env.NOTIFICATION_EMAIL_MODE || "").trim().toUpperCase());
 }
 
 // Starts the enabled workers on the already-open Mongoose connection. Returns a stop() that
@@ -49,6 +46,8 @@ export async function startInProcessWorkers(env = process.env) {
   if (flags.sla) workers.push((await import("./slaWorker.js")).startSlaWorker());
   if (flags.padron) workers.push((await import("./padronWorker.js")).startPadronWorker());
   if (flags.notificationEmail) workers.push((await import("./notificationEmailWorker.js")).startNotificationEmailWorker());
+  // A mode the app does not know leaves emails off: say so loudly instead of only "off" below.
+  else for (const problem of notificationEmailConfiguration(env).problems) console.error(`[WORKERS] Notification emails: ${problem}`);
   console.log(`[WORKERS] In-process: batch-invoice=${flags.batchInvoice ? "on" : "off"}, sla=${flags.sla ? "on" : "off"}, sunat-padron=${flags.padron ? "on" : "off"}, notification-email=${flags.notificationEmail ? "on" : "off"}`);
   return {
     flags,
