@@ -214,3 +214,46 @@ test("a deployment still set to the removed GMAIL_API mode keeps sending through
   assert.match(bare.problems[0], /Unknown NOTIFICATION_EMAIL_MODE "GMAIL_API".*emails are OFF/);
   assert.equal(notificationEmailConfiguration({ ...EMAIL_ENV, ...smtp, NOTIFICATION_EMAIL_MODE: "PIGEON" }).enabled, false);
 });
+
+test("emails go out about a second after the notification, without waiting for the poll", { timeout: 30000 }, async () => {
+  const { startNotificationEmailWorker } = await import("../src/workers/notificationEmailWorker.js");
+  assert.equal(notificationEmailConfiguration({ NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://x.test" }).delayMs, 0, "no delay by default");
+  const database = `erp_notification_email_now_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`, { serverSelectionTimeoutMS: 5000 });
+  // A 60 s poll: only the "queued" wake-up can explain a send within a few seconds.
+  const env = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test", NOTIFICATION_EMAIL_POLL_MS: "60000" };
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  delete process.env.NOTIFICATION_EMAIL_DELAY_MINUTES;
+  Object.assign(process.env, env);
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => { lines.push(args.join(" ")); };
+  let worker;
+  try {
+    await Promise.all([Notification.init(), NotificationDelivery.init()]);
+    const abhiraj = await User.create({ name: "Abhiraj", email: "abhiraj@uma.edu.pe", passwordHash: "unused" });
+    worker = startNotificationEmailWorker({ env: process.env });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const started = Date.now();
+    // One action raising two notifications for the same person (e.g. approval + budget alert).
+    await notifyUser({ userId: abhiraj._id, eventKey: "req:now:approval", type: "APPROVAL_PENDING", title: notificationText("Approval pending"), message: notificationText("{requestNumber} is waiting for {approvalLevel} approval.", { requestNumber: "SOL-1", approvalLevel: "AREA_DIRECTOR" }), path: "/approvals" });
+    await notifyUser({ userId: abhiraj._id, eventKey: "req:now:budget", type: "BUDGET_EXCEPTION", title: "Budget exception pending", message: "SOL-1", path: "/budget" });
+    let sent = 0;
+    while (Date.now() - started < 10000) {
+      sent = await NotificationDelivery.countDocuments({ user: abhiraj._id, status: "SENT" });
+      if (sent === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const elapsed = Date.now() - started;
+    assert.equal(sent, 2);
+    assert.ok(elapsed < 5000, `sent ${elapsed} ms after the notification`);
+    assert.equal(lines.filter((line) => line.startsWith("[notification-email] LOG")).length, 1, "both notifications in one email");
+    assert.ok(lines.some((line) => /Notification email sent to Abhiraj \(ab\*\*\*@uma\.edu\.pe\): 2 notification/.test(line)));
+  } finally {
+    await worker?.stop();
+    console.log = log;
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    if (mongoose.connection.name === database) await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});

@@ -208,8 +208,10 @@ which of the other three to reach for instead.
 
 Every bell notification (approval pending, request observed, payment bounced, SLA overdue…) can also
 be emailed to the person it is for. `notifyUser()` queues a `NotificationDelivery` when a
-notification is new or comes back unread; the notification-email worker waits
-`NOTIFICATION_EMAIL_DELAY_MINUTES` (default 5) and then sends each person **one** email listing all
+notification is new or comes back unread, and the notification-email worker is woken at once: the
+email goes out about a second after the request is submitted (the pause groups everything one action
+raises into **one** email per person). Set `NOTIFICATION_EMAIL_DELAY_MINUTES` (default 0) to wait
+some minutes instead, so alerts already read in the app are not emailed. Each email lists all
 their news, in Spanish, greeting them by name, with an "Abrir en el sistema" button per item that
 opens the exact record. An alert already read in the app, resolved meanwhile (someone else approved)
 or for a person without an address, inactive or who turned emails off is skipped and recorded with
@@ -249,9 +251,10 @@ or use an SMTP provider that also listens on port **2525**, e.g. Brevo: `SMTP_HO
 
 To check it, create a real request and look in **Render → Logs**: at startup
 `Notification email: SMTP sign-in OK` (or `sign-in FAILED` with the reason and what to change), then
-`Notification email sent to <name> (ab***@domain)` about `NOTIFICATION_EMAIL_DELAY_MINUTES` after the
-notification. An email that is not sent says why, e.g. `Notification email to <name> skipped (1):
-READ_IN_APP - the alert was opened in the app within the 5-minute wait`, or `… failed: <SMTP error>`.
+`Notification email sent to <name> (ab***@domain)` a second or two after the notification (or
+`NOTIFICATION_EMAIL_DELAY_MINUTES` later, when set). An email that is not sent says why, e.g.
+`Notification email to <name> skipped (1): NO_EMAIL - the user has no email address`, or
+`… failed: <SMTP error>`.
 If the log says "sent" but nothing arrives, check the provider's own log (Brevo: Transactional →
 Logs) and the recipient's spam folder.
 
