@@ -235,3 +235,35 @@ test("administrators can send a test email from the app; other roles cannot", { 
     await mongoose.disconnect();
   }
 });
+
+test("SMTP on Render: gives up quickly and says exactly what to change", { timeout: 20000 }, async () => {
+  const net = await import("node:net");
+  // An SMTP server that accepts the connection but never greets, like a blocked/black-holed port.
+  const sockets = new Set();
+  const silent = net.createServer((socket) => { sockets.add(socket); socket.on("error", () => {}); });
+  await new Promise((resolve) => silent.listen(0, "127.0.0.1", resolve));
+  const env = {
+    ...EMAIL_ENV, RENDER: "true", NOTIFICATION_EMAIL_MODE: "SMTP", SMTP_HOST: "127.0.0.1", SMTP_PORT: String(silent.address().port),
+    SMTP_SECURE: "false", SMTP_TIMEOUT_MS: "300", NOTIFICATION_EMAIL_FROM: "UMA Finanzas <sender@gmail.com>"
+  };
+  try {
+    const config = notificationEmailConfiguration(env);
+    assert.equal(config.enabled, true);
+    assert.equal(config.smtp.timeoutMs, 300);
+    assert.equal(notificationEmailConfiguration({ ...EMAIL_ENV }).smtp.timeoutMs, 10000, "10 s by default");
+    assert.match(config.warnings[0], /free plan blocks outgoing SMTP/, "startup warning on Render");
+    assert.deepEqual(notificationEmailConfiguration({ ...env, RENDER: "" }).warnings, []);
+    const started = Date.now();
+    await assert.rejects(sendTestNotificationEmail({ to: "admin@uma.edu.pe", env, createTransport: createEmailTransport }), (error) => {
+      assert.equal(error.mode, "SMTP");
+      assert.match(error.hint, /runs on Render with NOTIFICATION_EMAIL_MODE=SMTP/);
+      for (const key of ["NOTIFICATION_EMAIL_MODE=GMAIL_API", "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN", "npm run email:gmail-auth"]) assert.ok(error.hint.includes(key), key);
+      return true;
+    });
+    assert.ok(Date.now() - started < 5000, "fails within seconds, not the 2-minute default");
+    assert.match(emailErrorHint(new Error("The operation was aborted due to timeout"), { mode: "GMAIL_API" }), /Could not reach Google/);
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => silent.close(resolve));
+  }
+});

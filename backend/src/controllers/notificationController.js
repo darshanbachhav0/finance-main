@@ -41,6 +41,6 @@ export const sendTestEmail = asyncHandler(async (req, res) => {
     await recordAudit({ entityType: "User", entity: req.user, action: "NOTIFICATION_TEST_EMAIL_SENT", user: req.user, req, module: "USER_ADMIN", newValues: { to: data.to, transport: data.transport } });
     res.json({ data });
   } catch (error) {
-    throw new AppError(502, `Test email failed: ${error?.message || error}${error?.hint ? ` ${error.hint}` : ""}`, { hint: error?.hint || undefined }, ERROR_CODES.VALIDATION_ERROR);
+    throw new AppError(502, `Test email failed${error?.mode ? ` (NOTIFICATION_EMAIL_MODE=${error.mode})` : ""}: ${error?.message || error}${error?.hint ? `\n${error.hint}` : ""}`, { hint: error?.hint || undefined }, ERROR_CODES.VALIDATION_ERROR);
   }
 });

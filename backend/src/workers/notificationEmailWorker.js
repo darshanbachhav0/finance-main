@@ -19,12 +19,13 @@ export function startNotificationEmailWorker({ once = false, env = process.env }
       console.log(config.mode === "OFF" ? "Notification email worker: NOTIFICATION_EMAIL_MODE=OFF, nothing to send." : `Notification email worker not started: ${config.problems.join(" ")}`);
       return;
     }
+    for (const warning of config.warnings) console.warn(`Notification email: ${warning}`);
     const transport = createEmailTransport(config);
     console.log(`Notification email worker: ${transport.name} every ${config.pollMs}ms; emails wait ${config.delayMs / 60000} min so alerts read in the app are not emailed`);
     // Visible in the host's logs (Render: Logs tab): proves the sender can sign in before any email.
     transport.verify()
       .then(() => console.log(`Notification email: ${transport.name} sign-in OK, sending as ${config.from || "(default sender)"}`))
-      .catch((error) => console.error(`Notification email: ${transport.name} sign-in FAILED - ${error?.message || error}${emailErrorHint(error) ? `\n${emailErrorHint(error)}` : ""}`));
+      .catch((error) => console.error(`Notification email: ${transport.name} sign-in FAILED - ${error?.message || error}${emailErrorHint(error, config) ? `\n${emailErrorHint(error, config)}` : ""}`));
     await NotificationDelivery.createIndexes();
     try {
       do {

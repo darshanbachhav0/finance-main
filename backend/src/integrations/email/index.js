@@ -18,7 +18,10 @@ export function createEmailTransport(config, { fetch: fetchImpl = globalThis.fet
       // false = STARTTLS on 587; true = implicit TLS on 465. Plain text is never accepted.
       secure: config.smtp.secure,
       requireTLS: !config.smtp.secure,
-      auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.password } : undefined
+      auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.password } : undefined,
+      connectionTimeout: config.smtp.timeoutMs,
+      greetingTimeout: config.smtp.timeoutMs,
+      socketTimeout: config.smtp.timeoutMs * 3
     });
     return {
       name: "SMTP",

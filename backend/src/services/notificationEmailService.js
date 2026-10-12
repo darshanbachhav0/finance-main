@@ -60,6 +60,8 @@ export function notificationEmailConfiguration(env = process.env) {
     pollMs: numberFromEnv(env.NOTIFICATION_EMAIL_POLL_MS, 30000, 1000),
     maxAttempts: numberFromEnv(env.NOTIFICATION_EMAIL_MAX_ATTEMPTS, 5, 1),
     usersPerPass: numberFromEnv(env.NOTIFICATION_EMAIL_USERS_PER_PASS, 50, 1),
+    // Render sets RENDER=true; its free plan blocks outgoing SMTP.
+    onRender: String(env.RENDER || "").trim().toLowerCase() === "true",
     // Optional safety net (e.g. "uma.edu.pe"): addresses on other domains are skipped.
     allowedDomains: String(env.NOTIFICATION_EMAIL_ALLOWED_DOMAINS || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean),
     smtp: {
@@ -67,7 +69,9 @@ export function notificationEmailConfiguration(env = process.env) {
       port,
       secure: boolFromEnv(env.SMTP_SECURE, port === 465),
       user: String(env.SMTP_USER || "").trim(),
-      password: String(env.SMTP_PASSWORD || "")
+      password: String(env.SMTP_PASSWORD || ""),
+      // Give up quickly on a server that never answers (e.g. a host that blocks SMTP ports).
+      timeoutMs: numberFromEnv(env.SMTP_TIMEOUT_MS, 10000, 100)
     },
     gmail: {
       clientId: String(env.GMAIL_CLIENT_ID || "").trim(),
@@ -88,7 +92,9 @@ export function notificationEmailConfiguration(env = process.env) {
       if (!value) problems.push(`${key} is required when NOTIFICATION_EMAIL_MODE=GMAIL_API (see docs/OPERATIONS.md).`);
     }
   }
-  return { ...config, problems, enabled: mode !== "OFF" && !problems.length };
+  // Not blocking (a paid Render instance can use SMTP), but worth saying at startup.
+  const warnings = config.onRender && mode === "SMTP" ? ["NOTIFICATION_EMAIL_MODE=SMTP on Render: the free plan blocks outgoing SMTP (ports 25, 465, 587), so emails will time out there. Use NOTIFICATION_EMAIL_MODE=GMAIL_API unless this is a paid instance (docs/OPERATIONS.md §4)."] : [];
+  return { ...config, problems, warnings, enabled: mode !== "OFF" && !problems.length };
 }
 
 // Called by notifyUser() for a new or re-armed notification. Never throws: an email problem must
@@ -315,9 +321,14 @@ export async function processNotificationEmails({ env = process.env, transport, 
 
 // --- Setup check --------------------------------------------------------------------------------
 
-// What to do about the usual setup failures, shown next to the raw error.
-export function emailErrorHint(error) {
+const RENDER_SMTP_FIX = "This server runs on Render with NOTIFICATION_EMAIL_MODE=SMTP, and Render's free plan blocks outgoing SMTP (ports 25, 465 and 587), so it can never connect from there. Switch to the Gmail API: in Render → Environment set NOTIFICATION_EMAIL_MODE=GMAIL_API, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN (create them once with npm run email:gmail-auth on your computer; steps in docs/OPERATIONS.md §4), save, and send the test again.";
+const CONNECTION_ERROR = /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ESOCKET|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ECONNECTION|timeout/i;
+
+// What to do about the usual setup failures, shown next to the raw error. With the configuration,
+// the advice is specific to it (e.g. SMTP on Render).
+export function emailErrorHint(error, config) {
   const text = `${error?.code || ""} ${error?.responseCode || ""} ${error?.message || ""}`;
+  if (config?.mode === "SMTP" && config.onRender && CONNECTION_ERROR.test(text)) return RENDER_SMTP_FIX;
   if (/invalid_grant/i.test(text)) return "Google refused the refresh token: it was revoked, the Gmail password changed, or the OAuth app is still in \"Testing\" (tokens then expire after 7 days). Publish the app and run npm run email:gmail-auth again.";
   if (/invalid_client|unauthorized_client/i.test(text)) return "Google refused GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET. Copy both again from the OAuth client (type Desktop app) in Google Cloud.";
   if (/Gmail API has not been used|accessNotConfigured|SERVICE_DISABLED/i.test(text)) return "Enable the Gmail API for the Google Cloud project (APIs & Services → Library → Gmail API).";
@@ -325,7 +336,8 @@ export function emailErrorHint(error) {
   if (/EAUTH|535|534|Username and Password not accepted|Application-specific password required/i.test(text)) {
     return "The SMTP server refused the user/password. Gmail and Microsoft 365 do not accept the normal account password here: for Gmail turn on 2-Step Verification and use a 16-character App Password (https://myaccount.google.com/apppasswords); for Microsoft 365 IT must enable Authenticated SMTP for the mailbox.";
   }
-  if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ESOCKET|ECONNRESET/i.test(text)) return "Could not reach the SMTP server. Render's free plan blocks outgoing SMTP (ports 25, 465 and 587): use NOTIFICATION_EMAIL_MODE=GMAIL_API there. Elsewhere check SMTP_HOST, SMTP_PORT (587 with SMTP_SECURE=false, or 465 with SMTP_SECURE=true) and the network.";
+  if (config?.mode === "GMAIL_API" && /timeout|abort|fetch failed|ENOTFOUND|ECONNRESET/i.test(text)) return "Could not reach Google (oauth2.googleapis.com / gmail.googleapis.com) over HTTPS. Check the server's internet access and try again.";
+  if (CONNECTION_ERROR.test(text)) return "Could not reach the SMTP server. Render's free plan blocks outgoing SMTP (ports 25, 465 and 587): use NOTIFICATION_EMAIL_MODE=GMAIL_API there. Elsewhere check SMTP_HOST, SMTP_PORT (587 with SMTP_SECURE=false, or 465 with SMTP_SECURE=true) and the network.";
   return "";
 }
 
@@ -347,7 +359,8 @@ export async function sendTestNotificationEmail({ to, env = process.env, createT
     const info = await transport.send({ from: config.from, replyTo: config.replyTo, to: String(to).trim(), ...email, subject: `[Prueba] ${email.subject}` });
     return { to: String(to).trim(), transport: transport.name, messageId: info?.messageId || null };
   } catch (error) {
-    error.hint = emailErrorHint(error);
+    error.hint = emailErrorHint(error, config);
+    error.mode = config.mode;
     throw error;
   } finally {
     transport.close();
