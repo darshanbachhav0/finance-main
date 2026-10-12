@@ -12,9 +12,7 @@ import notificationsSpanish from "../../../shared/notificationTranslations.mjs";
 // read in the app, resolved (someone else approved) or for a person who turned emails off, is
 // skipped instead. A failed send is retried with backoff and never affects the business action.
 
-// SMTP, or the Gmail API over HTTPS (GMAIL_API) where outgoing SMTP ports are blocked (Render free).
-export const EMAIL_MODES = Object.freeze(["OFF", "LOG", "SMTP", "GMAIL_API"]);
-const MODES = EMAIL_MODES;
+const MODES = ["OFF", "LOG", "SMTP"];
 const PRODUCT_NAME = "UMA · Gestión Financiera";
 const MAX_LISTED = 20;
 const STALE_CLAIM_MS = 15 * 60 * 1000;
@@ -32,14 +30,25 @@ function numberFromEnv(value, fallback, min) {
   return Number.isFinite(number) && number >= min ? number : fallback;
 }
 
-export function isValidEmail(value) {
-  return EMAIL_PATTERN.test(String(value || "").trim());
+const BLOCKED_ON_RENDER_FREE = [25, 465, 587];
+const RENDER_FREE_SMTP = "Render's free plan blocks outgoing SMTP on ports 25, 465 and 587, so this server cannot reach the SMTP server there (Gmail only offers 465/587). Either upgrade the Render instance, or use an SMTP provider that also listens on port 2525, e.g. Brevo: SMTP_HOST=smtp-relay.brevo.com, SMTP_PORT=2525, its SMTP login and key as SMTP_USER/SMTP_PASSWORD, and a sender verified in Brevo as NOTIFICATION_EMAIL_FROM.";
+const CONNECTION_ERROR = /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ESOCKET|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ECONNECTION|timeout/i;
+
+// What to do about the usual SMTP failures, logged next to the raw error by the email worker.
+export function emailErrorHint(error, config) {
+  const text = `${error?.code || ""} ${error?.responseCode || ""} ${error?.message || ""}`;
+  if (/EAUTH|535|534|Username and Password not accepted|Application-specific password required/i.test(text)) {
+    return "The SMTP server refused SMTP_USER / SMTP_PASSWORD. Gmail needs a 16-character App Password (2-Step Verification on; https://myaccount.google.com/apppasswords), not the normal password; Microsoft 365 needs Authenticated SMTP enabled for the mailbox.";
+  }
+  if (CONNECTION_ERROR.test(text)) {
+    if (config?.onRender && BLOCKED_ON_RENDER_FREE.includes(config.smtp?.port)) return RENDER_FREE_SMTP;
+    return "Could not reach the SMTP server. Check SMTP_HOST, SMTP_PORT (587 with SMTP_SECURE=false, or 465 with SMTP_SECURE=true) and that the host allows outgoing SMTP.";
+  }
+  return "";
 }
 
-// "UMA Finanzas <a@b.pe>" -> "a@b.pe"
-export function senderAddress(from) {
-  const value = String(from || "").trim();
-  return value.match(/<([^>]+)>/)?.[1] || value;
+export function isValidEmail(value) {
+  return EMAIL_PATTERN.test(String(value || "").trim());
 }
 
 export function emailDomain(value) {
@@ -67,28 +76,24 @@ export function notificationEmailConfiguration(env = process.env) {
       port,
       secure: boolFromEnv(env.SMTP_SECURE, port === 465),
       user: String(env.SMTP_USER || "").trim(),
-      password: String(env.SMTP_PASSWORD || "")
+      password: String(env.SMTP_PASSWORD || ""),
+      // Give up quickly on a server that never answers (e.g. a host that blocks SMTP ports).
+      timeoutMs: numberFromEnv(env.SMTP_TIMEOUT_MS, 10000, 100)
     },
-    gmail: {
-      clientId: String(env.GMAIL_CLIENT_ID || "").trim(),
-      clientSecret: String(env.GMAIL_CLIENT_SECRET || "").trim(),
-      refreshToken: String(env.GMAIL_REFRESH_TOKEN || "").trim()
-    }
+    // Render sets RENDER=true; its free plan blocks outgoing SMTP on ports 25, 465 and 587.
+    onRender: String(env.RENDER || "").trim().toLowerCase() === "true"
   };
   const problems = [];
-  if (requestedMode !== mode) problems.push(`Unknown NOTIFICATION_EMAIL_MODE "${requestedMode}" (use OFF, LOG, SMTP or GMAIL_API).`);
+  if (requestedMode !== mode) problems.push(`Unknown NOTIFICATION_EMAIL_MODE "${requestedMode}" (use OFF, LOG or SMTP).`);
   if (mode !== "OFF" && !/^https?:\/\//i.test(config.appUrl)) problems.push("APP_PUBLIC_URL (or CLIENT_URLS) must be the web app's address for the links in each email.");
-  if (["SMTP", "GMAIL_API"].includes(mode) && !isValidEmail(senderAddress(config.from))) problems.push("NOTIFICATION_EMAIL_FROM must be the sender address, e.g. \"UMA Finanzas <notificaciones@uma.edu.pe>\".");
   if (mode === "SMTP") {
     if (!config.smtp.host) problems.push("SMTP_HOST is required when NOTIFICATION_EMAIL_MODE=SMTP.");
+    if (!isValidEmail(config.from.match(/<([^>]+)>/)?.[1] || config.from)) problems.push("NOTIFICATION_EMAIL_FROM must be the sender address, e.g. \"UMA Finanzas <notificaciones@uma.edu.pe>\".");
     if (config.smtp.user && !config.smtp.password) problems.push("SMTP_PASSWORD is required when SMTP_USER is set.");
   }
-  if (mode === "GMAIL_API") {
-    for (const [key, value] of [["GMAIL_CLIENT_ID", config.gmail.clientId], ["GMAIL_CLIENT_SECRET", config.gmail.clientSecret], ["GMAIL_REFRESH_TOKEN", config.gmail.refreshToken]]) {
-      if (!value) problems.push(`${key} is required when NOTIFICATION_EMAIL_MODE=GMAIL_API (see docs/OPERATIONS.md).`);
-    }
-  }
-  return { ...config, problems, enabled: mode !== "OFF" && !problems.length };
+  // Not blocking (a paid Render instance can use any port), but worth saying at startup.
+  const warnings = config.onRender && mode === "SMTP" && BLOCKED_ON_RENDER_FREE.includes(config.smtp.port) ? [RENDER_FREE_SMTP] : [];
+  return { ...config, problems, warnings, enabled: mode !== "OFF" && !problems.length };
 }
 
 // Called by notifyUser() for a new or re-armed notification. Never throws: an email problem must
@@ -279,7 +284,8 @@ async function deliverToUser(userId, { config, transport, now }) {
   try {
     await transport.send({ from: config.from || `${PRODUCT_NAME} <no-reply@localhost>`, replyTo: config.replyTo, to, ...email });
   } catch (error) {
-    console.error(`Notification email to user ${userId} failed: ${error?.message || error}`);
+    console.error(`Notification email to user ${userId} failed: ${error?.message || error}${emailErrorHint(error, config) ? `
+${emailErrorHint(error, config)}` : ""}`);
     for (const { delivery } of sendable) {
       if (await retryOrFail(delivery, error, config, now) === "failed") result.failed += 1;
       else result.retried += 1;
@@ -311,45 +317,4 @@ export async function processNotificationEmails({ env = process.env, transport, 
     for (const key of ["emails", "sent", "skipped", "failed", "retried"]) summary[key] += result[key];
   }
   return summary;
-}
-
-// --- Setup check --------------------------------------------------------------------------------
-
-// What to do about the usual setup failures, shown next to the raw error.
-export function emailErrorHint(error) {
-  const text = `${error?.code || ""} ${error?.responseCode || ""} ${error?.message || ""}`;
-  if (/invalid_grant/i.test(text)) return "Google refused the refresh token: it was revoked, the Gmail password changed, or the OAuth app is still in \"Testing\" (tokens then expire after 7 days). Publish the app and run npm run email:gmail-auth again.";
-  if (/invalid_client|unauthorized_client/i.test(text)) return "Google refused GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET. Copy both again from the OAuth client (type Desktop app) in Google Cloud.";
-  if (/Gmail API has not been used|accessNotConfigured|SERVICE_DISABLED/i.test(text)) return "Enable the Gmail API for the Google Cloud project (APIs & Services → Library → Gmail API).";
-  if (/insufficient|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(text)) return "The refresh token lacks the gmail.send permission. Run npm run email:gmail-auth again and allow sending email.";
-  if (/EAUTH|535|534|Username and Password not accepted|Application-specific password required/i.test(text)) {
-    return "The SMTP server refused the user/password. Gmail and Microsoft 365 do not accept the normal account password here: for Gmail turn on 2-Step Verification and use a 16-character App Password (https://myaccount.google.com/apppasswords); for Microsoft 365 IT must enable Authenticated SMTP for the mailbox.";
-  }
-  if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ESOCKET|ECONNRESET/i.test(text)) return "Could not reach the SMTP server. Render's free plan blocks outgoing SMTP (ports 25, 465 and 587): use NOTIFICATION_EMAIL_MODE=GMAIL_API there. Elsewhere check SMTP_HOST, SMTP_PORT (587 with SMTP_SECURE=false, or 465 with SMTP_SECURE=true) and the network.";
-  return "";
-}
-
-// Sends one sample notification email (npm run email:test, and the admin "Send test email" button)
-// with the live configuration. Throws with .hint on failure.
-export async function sendTestNotificationEmail({ to, env = process.env, createTransport }) {
-  const config = notificationEmailConfiguration(env);
-  const fail = (message) => Object.assign(new Error(message), { hint: "" });
-  if (config.mode === "OFF") throw fail("Notification emails are off: set NOTIFICATION_EMAIL_MODE (GMAIL_API, SMTP, or LOG to only print them).");
-  if (config.problems.length) throw fail(config.problems.join(" "));
-  if (!isValidEmail(to)) throw fail("There is no valid recipient address for the test email.");
-  const transport = createTransport(config);
-  try {
-    const email = composeNotificationEmail({
-      user: { name: "Prueba de configuración" },
-      appUrl: config.appUrl,
-      notifications: [{ titleKey: "Approval pending", title: "Approval pending", messageKey: "{requestNumber} is waiting for {approvalLevel} approval.", params: { requestNumber: "SOL-PRUEBA", approvalLevel: "AREA_DIRECTOR" }, path: "/" }]
-    });
-    const info = await transport.send({ from: config.from, replyTo: config.replyTo, to: String(to).trim(), ...email, subject: `[Prueba] ${email.subject}` });
-    return { to: String(to).trim(), transport: transport.name, messageId: info?.messageId || null };
-  } catch (error) {
-    error.hint = emailErrorHint(error);
-    throw error;
-  } finally {
-    transport.close();
-  }
 }
