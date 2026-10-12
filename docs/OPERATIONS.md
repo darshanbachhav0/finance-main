@@ -216,14 +216,23 @@ Setup (Render → Environment):
 2. SMTP account of a sender mailbox such as `notificaciones@uma.edu.pe`:
    - Microsoft 365: `SMTP_HOST=smtp.office365.com`, `SMTP_PORT=587`, `SMTP_USER`/`SMTP_PASSWORD`
      of the mailbox (IT must enable *Authenticated SMTP* for it).
-   - Google Workspace: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, the mailbox and an app password
-     (or the Workspace SMTP relay).
+   - Gmail / Google Workspace: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER` = the
+     Gmail address and `SMTP_PASSWORD` = a 16-character **App Password**. Gmail rejects the normal
+     account password: turn on 2-Step Verification, then create one at
+     https://myaccount.google.com/apppasswords. `NOTIFICATION_EMAIL_FROM` must use that same
+     address (Gmail rewrites any other sender). A free Gmail account sends to about 500 recipients a
+     day; emails are grouped per person, so that covers UMA's roster, but an institutional mailbox
+     is more trusted by recipients' spam filters.
    - A transactional provider (Amazon SES, Brevo, Resend…) works the same with its SMTP settings.
 3. `NOTIFICATION_EMAIL_FROM="UMA Finanzas <notificaciones@uma.edu.pe>"` — the domain must have
    SPF/DKIM set up for that sender, or messages land in spam.
 4. `APP_PUBLIC_URL=https://<the web app address>` for the links (defaults to the first
    `CLIENT_URLS` entry).
 5. Optional: `NOTIFICATION_EMAIL_ALLOWED_DOMAINS=uma.edu.pe` only emails institutional addresses.
+
+Check the setup with one sample email (no database needed; in Render, run it from the service's
+Shell): `npm run email:test -- --to=you@uma.edu.pe`. It explains the usual failures (wrong App
+Password, blocked port).
 
 The boot log shows `notification-email=on`; an incomplete setup logs what is missing and sends
 nothing. People turn emails on/off in their account menu ("Notificaciones por correo");
