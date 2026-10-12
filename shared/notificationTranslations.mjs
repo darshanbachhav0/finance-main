@@ -1,6 +1,7 @@
 // Spanish copy for notifications. Keys are the English templates the backend passes to
 // notificationText() (stored as titleKey / messageKey); each translation keeps the same
-// {placeholders}, which the bell fills in from the notification's params after t().
+// {placeholders}, which the bell fills in from the notification's params after t(). Shared so
+// notification emails (backend/src/services/notificationEmailService.js) use the bell's wording.
 export default {
   // Approvals
   "Approval pending": "Aprobación pendiente",

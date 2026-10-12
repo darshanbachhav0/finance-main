@@ -67,4 +67,26 @@ services:
         value: 60000
       - key: SUNAT_PADRON_WORKER_ENABLED
         value: "true"
+      # Notification emails (docs/OPERATIONS.md §4). Nothing is sent until the SMTP_* values and
+      # NOTIFICATION_EMAIL_FROM are filled in; an incomplete setup is reported in the boot log.
+      - key: NOTIFICATION_EMAIL_MODE
+        value: SMTP
+      - key: NOTIFICATION_EMAIL_WORKER_ENABLED
+        value: "true"
+      - key: APP_PUBLIC_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: NOTIFICATION_EMAIL_FROM
+        sync: false
+      - key: NOTIFICATION_EMAIL_ALLOWED_DOMAINS
+        value: uma.edu.pe
+      - key: NOTIFICATION_EMAIL_DELAY_MINUTES
+        value: 5
 

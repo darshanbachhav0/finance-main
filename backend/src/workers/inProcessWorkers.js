@@ -25,8 +25,14 @@ export function inProcessWorkerFlags(env = process.env) {
   return {
     batchInvoice: !inline && boolFromEnv(env.BATCH_INVOICE_WORKER_ENABLED, production),
     sla: boolFromEnv(env.SLA_WORKER_ENABLED, production),
-    padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production)
+    padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production),
+    // Only when notification emails are switched on (NOTIFICATION_EMAIL_MODE=LOG or SMTP).
+    notificationEmail: emailsSwitchedOn(env) && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production)
   };
+}
+
+function emailsSwitchedOn(env) {
+  return ["LOG", "SMTP"].includes(String(env.NOTIFICATION_EMAIL_MODE || "").trim().toUpperCase());
 }
 
 // Starts the enabled workers on the already-open Mongoose connection. Returns a stop() that
@@ -42,7 +48,8 @@ export async function startInProcessWorkers(env = process.env) {
   if (flags.batchInvoice) workers.push((await import("./batchInvoiceWorker.js")).startBatchInvoiceWorker());
   if (flags.sla) workers.push((await import("./slaWorker.js")).startSlaWorker());
   if (flags.padron) workers.push((await import("./padronWorker.js")).startPadronWorker());
-  console.log(`[WORKERS] In-process: batch-invoice=${flags.batchInvoice ? "on" : "off"}, sla=${flags.sla ? "on" : "off"}, sunat-padron=${flags.padron ? "on" : "off"}`);
+  if (flags.notificationEmail) workers.push((await import("./notificationEmailWorker.js")).startNotificationEmailWorker());
+  console.log(`[WORKERS] In-process: batch-invoice=${flags.batchInvoice ? "on" : "off"}, sla=${flags.sla ? "on" : "off"}, sunat-padron=${flags.padron ? "on" : "off"}, notification-email=${flags.notificationEmail ? "on" : "off"}`);
   return {
     flags,
     workers,

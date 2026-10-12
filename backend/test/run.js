@@ -24,6 +24,8 @@ import "./bankFileVerification.test.js";
 import "./leaveSubstitute.test.js";
 import "./notificationBell.test.js";
 import "./notificationText.test.js";
+import "./notificationEmail.test.js";
+import "./contractEmailImport.test.js";
 import "./budgetSimulator.test.js";
 
 import "./workDrafts.test.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import approvalsSpanish from "../src/context/i18n/approvals.js";
-import notificationsSpanish from "../src/context/i18n/notifications.js";
+import notificationsSpanish from "../../shared/notificationTranslations.mjs";
 
 const read = file => fs.readFileSync(new URL(file, import.meta.url), "utf8");
 const inbox = read("../src/pages/ApprovalInbox.jsx");

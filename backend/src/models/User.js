@@ -47,7 +47,16 @@ const userSchema = new mongoose.Schema(
     // submissions route the same way, and the steps come back when they return.
     onLeave: { type: Boolean, default: false },
     leaveStartedAt: Date,
-    leaveUntil: Date
+    leaveUntil: Date,
+    // New bell notifications are also emailed to the user's address unless they turn it off
+    // (services/notificationEmailService.js).
+    emailNotifications: { type: Boolean, default: true },
+    // Where the address came from when it was set by the contracts-master import.
+    emailImport: {
+      source: { type: String, trim: true },
+      sourceRow: Number,
+      importedAt: Date
+    }
   },
   { timestamps: true }
 );

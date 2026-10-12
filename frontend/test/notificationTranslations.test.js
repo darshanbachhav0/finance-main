@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import notificationsSpanish from "../src/context/i18n/notifications.js";
+import notificationsSpanish from "../../shared/notificationTranslations.mjs";
 import { notificationCopy, notificationMessage, notificationTitle } from "../src/utils/notificationText.js";
 
 const backendSource = fileURLToPath(new URL("../../backend/src", import.meta.url));

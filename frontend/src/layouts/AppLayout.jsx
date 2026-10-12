@@ -10,6 +10,7 @@ import CommandPalette from "../components/CommandPalette.jsx";
 import MyLeavePanel from "../components/MyLeavePanel.jsx";
 import UmaBrand from "../components/UmaBrand.jsx";
 import ThemeControl from "../components/ThemeControl.jsx";
+import EmailNotificationsControl from "../components/EmailNotificationsControl.jsx";
 import LanguageToggle from "../components/LanguageToggle.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
@@ -263,6 +264,7 @@ export default function AppLayout() {
                   {!managementViewer && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
                   <button type="button" onClick={logout}><LogOut size={16} /><span>{t("Log out")}</span></button>
                   <ThemeControl />
+                  {!managementViewer && <EmailNotificationsControl />}
                 </div>
               )}
             </div>
