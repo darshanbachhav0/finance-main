@@ -6,6 +6,7 @@ export default {
   "Sign out anyway": "Cerrar sesión de todos modos",
   "Stay signed in": "Permanecer conectado",
   "This account is temporarily locked after repeated failed sign-in attempts. Try again later.": "Esta cuenta está bloqueada temporalmente tras varios intentos fallidos de inicio de sesión. Inténtalo más tarde.",
+  "You can sign in again from {time}.": "Podrás iniciar sesión de nuevo desde: {time}.",
   "Invalid credentials.": "Credenciales inválidas.",
   "Your credentials changed. Sign in again.": "Tus credenciales cambiaron. Inicia sesión nuevamente.",
   "Invalid or expired authentication token.": "El token de autenticación no es válido o expiró.",

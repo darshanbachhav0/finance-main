@@ -7,6 +7,7 @@ import UmaBrand from "../components/UmaBrand.jsx";
 import ThemeControl from "../components/ThemeControl.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { formatDateTime } from "../utils/formatters.js";
 
 const DEMO_LOGIN_ENABLED = import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
 
@@ -24,7 +25,7 @@ const demos = DEMO_LOGIN_ENABLED ? [
 
 export default function Login() {
   const { login, changePassword, user, isAuthenticated } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [selectedDemo, setSelectedDemo] = useState("");
   const [dni, setDni] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +45,12 @@ export default function Login() {
       if (resetRequired) await changePassword(password, newPassword);
       else await login(dni, password);
     } catch (err) {
-      setError(err.message);
+      // A locked account says when it opens again (the server sends lockedUntil).
+      const lockedUntil = err.code === "ACCOUNT_LOCKED" ? new Date(err.details?.lockedUntil) : null;
+      setError(lockedUntil && !Number.isNaN(lockedUntil.getTime())
+        ? `${err.message}
+${t("You can sign in again from {time}.").replace("{time}", formatDateTime(lockedUntil, language))}`
+        : err.message);
     } finally {
       setLoading(false);
     }
