@@ -37,6 +37,7 @@
     "worker:sla": "npm run worker:sla --workspace backend",
     "worker:email": "npm run worker:email --workspace backend",
     "email:test": "npm run email:test --workspace backend --",
+    "email:gmail-auth": "npm run email:gmail-auth --workspace backend --",
     "migrate:triple-track": "npm run migrate:triple-track --workspace backend",
     "migrate:triple-track:apply": "npm run migrate:triple-track:apply --workspace backend",
     "migrate:org-roster": "npm run migrate:org-roster --workspace backend",
