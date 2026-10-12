@@ -4,6 +4,7 @@ import DraftPanel from "../components/DraftPanel.jsx";
 import { Eye, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import api from "../api/client.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
@@ -100,9 +101,11 @@ export default function ResourceManager({
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const inputFields = fields.filter(isInput);
-  const canCreate = allowCreate ?? !readOnly;
-  const canEdit = allowEdit ?? !readOnly;
-  const canDelete = allowDelete ?? !readOnly;
+  // A read-only user (the Super Admin) never gets create, edit or delete, whatever the page allows.
+  const { readOnly: readOnlyUser } = useAuth();
+  const canCreate = !readOnlyUser && (allowCreate ?? !readOnly);
+  const canEdit = !readOnlyUser && (allowEdit ?? !readOnly);
+  const canDelete = !readOnlyUser && (allowDelete ?? !readOnly);
   const resourceTable = usePaginatedResource(endpoint);
   const { rows, loading } = resourceTable;
   const draftScope = `resource:${endpoint.replace(/^\//, "")}`;

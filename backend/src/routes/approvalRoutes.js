@@ -9,7 +9,8 @@ const router = Router();
 // org roster) are ordinary employees with no special role — who can actually
 // act on a given request is enforced downstream by identity (assertApprovalActor
 // / isActiveChainApprover), not by this role gate.
-router.use(protect, authorize(...Object.values(ROLES).filter(role => role !== ROLES.MANAGEMENT_VIEWER)));
+// The Super Admin never approves (it still reads the inbox like an Admin, see authorize()).
+router.use(protect, authorize(...Object.values(ROLES).filter(role => ![ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(role))));
 router.get("/inbox", getApprovalInbox);
 // Declared before the /:id routes. Approve only; each request is still decided by decideApproval.
 router.post("/bulk", bulkApproveRequestsHandler);

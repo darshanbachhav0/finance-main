@@ -14,6 +14,7 @@ import SupplierCreditsPanel from "../components/SupplierCreditsPanel.jsx";
 import Tabs, { tabId } from "../components/Tabs.jsx";
 import PayableDetail from "../components/payables/PayableDetail.jsx";
 import { cancelBlockedReason, supplierLabel, voucherLabel } from "../utils/payables.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
@@ -36,6 +37,7 @@ const VIEW_IDS = VIEWS.map(([id]) => id);
 
 export default function AccountsPayable() {
   const { t, language } = useLanguage();
+  const { readOnly } = useAuth();
   const { notify } = useToast();
   const money = (currency, value) => formatCurrency(value, currency || "PEN", language);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -132,8 +134,9 @@ export default function AccountsPayable() {
   }
 
   // Actions stay visible; an unavailable cancel says why instead of disappearing.
-  const canNote = (row) => Boolean(row.sunatVoucher) && row.status !== "CANCELLED";
-  const showCancel = (row) => !["PAID", "CANCELLED"].includes(row.status);
+  // The read-only Super Admin sees the records without their actions.
+  const canNote = (row) => !readOnly && Boolean(row.sunatVoucher) && row.status !== "CANCELLED";
+  const showCancel = (row) => !readOnly && !["PAID", "CANCELLED"].includes(row.status);
   const rowActions = (row) => [
     // A row click opens the record too, so the menu keeps the table narrow enough to show every column.
     { label: "View CXP details", icon: Eye, onClick: () => setSelected(row) },

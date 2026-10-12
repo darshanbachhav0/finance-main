@@ -13,10 +13,26 @@ const userSchema = new mongoose.Schema(
     email: { type: String, unique: true, sparse: true, lowercase: true, trim: true, set: optionalIdentifier },
     passwordHash: { type: String, required: true },
     passwordResetRequired: { type: Boolean, default: false },
+    // Drives the password expiry policy (Super Admin > Platform settings); accounts that predate
+    // it count from createdAt.
+    passwordChangedAt: Date,
     tokenVersion: { type: Number, default: 0 },
     // Per-account sign-in lockout (authController.login).
     failedLoginAttempts: { type: Number, default: 0, min: 0 },
     lockedUntil: { type: Date, default: null },
+    lastLoginAt: Date,
+    lastLoginIp: String,
+    // Authenticator-app (TOTP) sign-in, mandatory for the Super Admin. The secrets are encrypted
+    // (services/twoFactorService.js) and never leave the server.
+    twoFactor: {
+      enabled: { type: Boolean, default: false },
+      secret: String,
+      pendingSecret: String,
+      enabledAt: Date,
+      lastUsedStep: Number
+    },
+    // The role a person had before the Super Admin promoted them to Admin; demoting restores it.
+    previousRole: { type: String, enum: Object.values(ROLES).filter((role) => ![ROLES.ADMIN, ROLES.SUPER_ADMIN].includes(role)) },
     jefe: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     // Who covers this person's approvals while they are on leave or inactive (e.g. the encargado/a
     // de la Gerencia General). Without one, their approvals go to their nearest available jefe.
@@ -71,6 +87,17 @@ userSchema.pre("validate", function restrictManagementViewerPermissions(next) {
   next();
 });
 
+// The Super Admin never takes part in a process: no extra permissions, no approval areas, and no
+// place in the reporting line (nobody's jefe or substitute is checked elsewhere; here, their own).
+userSchema.pre("validate", function restrictSuperAdmin(next) {
+  if (this.role === ROLES.SUPER_ADMIN) {
+    if ((this.permissions || []).length) this.invalidate("permissions", "The Super Admin cannot be granted additional permissions.");
+    if ((this.approvalAreas || []).length) this.invalidate("approvalAreas", "The Super Admin does not approve requests.");
+    if (this.jefe || this.substitute) this.invalidate("jefe", "The Super Admin is outside the approval hierarchy.");
+  }
+  next();
+});
+
 userSchema.methods.comparePassword = function comparePassword(password) {
   return bcrypt.compare(password, this.passwordHash);
 };
@@ -80,6 +107,8 @@ userSchema.methods.toJSON = function toJSON() {
   delete obj.passwordHash;
   delete obj.failedLoginAttempts;
   delete obj.lockedUntil;
+  obj.twoFactorEnabled = Boolean(obj.twoFactor?.enabled);
+  delete obj.twoFactor;
   return obj;
 };
 

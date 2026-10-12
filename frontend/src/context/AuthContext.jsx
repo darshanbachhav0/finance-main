@@ -1,9 +1,11 @@
 import { flushAllDrafts, clearDraftSessions } from "../utils/workDrafts.js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import api, { SESSION_EXPIRED_EVENT } from "../api/client.js";
+import api, { MAINTENANCE_EVENT, SESSION_EXPIRED_EVENT } from "../api/client.js";
+import { translateMessage } from "./LanguageContext.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import SessionExpiryNotice from "../components/SessionExpiryNotice.jsx";
 import { minutesLeft, sessionExpiresAt, sessionPhase } from "../utils/sessionExpiry.js";
+import { isReadOnlyRole } from "../utils/readOnly.js";
 import { useToast } from "./ToastContext.jsx";
 
 const AuthContext = createContext(null);
@@ -32,6 +34,8 @@ export function AuthProvider({ children }) {
   const [expiresAt, setExpiresAt] = useState(storedExpiry);
   const [now, setNow] = useState(() => Date.now());
   const [extending, setExtending] = useState(false);
+  // Proof of a correct password while the authenticator code is asked for (lives 5 minutes).
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState(null);
   const expiredNoticeShown = useRef(false);
   const warnedFor = useRef(null);
 
@@ -68,8 +72,22 @@ export function AuthProvider({ children }) {
         notify("Your session has expired. Sign in again to continue; your drafts were kept.", "warning", { duration: 10000 });
       }
     };
+    // Maintenance started while signed in: only administrators keep working, so the session ends
+    // with the reason instead of a series of failing screens.
+    const maintenance = (event) => {
+      if (!localStorage.getItem("erp_token")) return;
+      clearStoredSession();
+      setUser(null);
+      setExpiresAt(null);
+      setLoading(false);
+      notify([translateMessage("The platform is in maintenance. Try again later.", localStorage.getItem("erp_language") || "es"), event.detail].filter(Boolean).join(" "), "warning", { duration: 12000 });
+    };
     window.addEventListener(SESSION_EXPIRED_EVENT, expire);
-    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expire);
+    window.addEventListener(MAINTENANCE_EVENT, maintenance);
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, expire);
+      window.removeEventListener(MAINTENANCE_EVENT, maintenance);
+    };
   }, [notify]);
 
   useEffect(() => {
@@ -141,10 +159,37 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Returns { twoFactorRequired: true } when the account signs in with an authenticator app; the
+  // session starts once verifyTwoFactor() gets a valid code.
   async function login(dni, password) {
     const response = await api.post("/auth/login", { dni, password });
+    if (response.data.twoFactorRequired) {
+      setTwoFactorChallenge(response.data.challengeToken);
+      return { twoFactorRequired: true };
+    }
     clearDraftSessions();
     expiredNoticeShown.current = false;
+    storeSession(response.data);
+    return {};
+  }
+
+  async function verifyTwoFactor(code) {
+    const response = await api.post("/auth/login/two-factor", { challengeToken: twoFactorChallenge, code });
+    setTwoFactorChallenge(null);
+    clearDraftSessions();
+    expiredNoticeShown.current = false;
+    storeSession(response.data);
+  }
+
+  const cancelTwoFactor = useCallback(() => setTwoFactorChallenge(null), []);
+
+  async function setupTwoFactor() {
+    return (await api.post("/auth/two-factor/setup")).data.data;
+  }
+
+  // Enrolment signs out every other session and returns a fresh one.
+  async function enableTwoFactor(code) {
+    const response = await api.post("/auth/two-factor/enable", { code });
     storeSession(response.data);
   }
 
@@ -186,7 +231,13 @@ export function AuthProvider({ children }) {
     return response.data.user;
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, logout, changePassword, extendSession, refreshUser, updateUserFields, sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user) }), [user, loading, expiresAt, refreshUser, updateUserFields]);
+  const value = useMemo(() => ({
+    user, loading, login, logout, changePassword, extendSession, refreshUser, updateUserFields,
+    verifyTwoFactor, cancelTwoFactor, setupTwoFactor, enableTwoFactor, twoFactorPending: Boolean(twoFactorChallenge),
+    // The Super Admin oversees read-only: pages hide their actions for it (the backend refuses them too).
+    readOnly: isReadOnlyRole(user?.role),
+    sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user)
+  }), [user, loading, expiresAt, refreshUser, updateUserFields, twoFactorChallenge, cancelTwoFactor]);
 
   return (
     <AuthContext.Provider value={value}>

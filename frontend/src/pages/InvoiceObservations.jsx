@@ -10,6 +10,7 @@ import Drawer from "../components/Drawer.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
@@ -18,6 +19,7 @@ import { formatCurrency } from "../utils/formatters.js";
 
 export default function InvoiceObservations() {
   const { t, language } = useLanguage();
+  const { readOnly } = useAuth();
   const { notify } = useToast();
   // ?record=<observation id> (task links) opens that observation; ?batch=<batch id> (batch
   // completion notifications) lists the observations of that batch.
@@ -122,7 +124,7 @@ export default function InvoiceObservations() {
       <Message type="error">{(selected ? "" : error) || table.error}</Message>
       {deepLink.active && <DeepLinkNotice title={deepLink.link.record ? "Showing the observed invoice linked from your notification" : "Showing the observed invoices of the linked batch"} missing={!table.loading && !table.rows.length} missingDescription="No open observation remains for this link. The invoices may already have been revalidated." clearLabel="Show all observations" onClear={deepLink.clear} />}
       <div className="workspace-panel">
-        <DataTable selection={{ selected: bulkIds, onChange: setBulkIds }} rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => [{ label: "Revalidate", icon: RotateCcw, primary: true, onClick: () => open(row) }]} columns={[
+        <DataTable selection={readOnly ? undefined : { selected: bulkIds, onChange: setBulkIds }} rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => readOnly ? [] : [{ label: "Revalidate", icon: RotateCcw, primary: true, onClick: () => open(row) }]} columns={[
           { key: "request", type: "code", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },
           { key: "purchaseOrder", type: "code", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
           { key: "rucIssuer", type: "code", label: "RUC" },

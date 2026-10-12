@@ -1,7 +1,7 @@
 // Display copy only. Status keys, API values and financial decisions are unchanged.
 export const umaCopy = {
   "GOODS": "Goods", "SERVICES": "Services", "BAJA": "Low", "MEDIA": "Medium", "ALTA": "High",
-  "AreaDirector": "Area Director", "ViceRector": "Vice Rector", "ManagementViewer": "Management viewer",
+  "AreaDirector": "Area Director", "ViceRector": "Vice Rector", "ManagementViewer": "Management viewer", "SuperAdmin": "Super Admin",
   "AreaDirector Dashboard": "Area Director Dashboard", "ViceRector Dashboard": "Vice Rector Dashboard",
   "AREA_DIRECTOR": "Area Director", "VICE_RECTOR": "Vice Rector", "RECTORATE": "Rectorate", "GENERAL_MANAGEMENT": "General management",
   "NOT_CONFIGURED": "Not configured", "PENDING_VALIDATION": "Pending validation", "OBSERVED": "Needs correction",

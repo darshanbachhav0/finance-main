@@ -125,5 +125,13 @@ export default {
   "{name} is on leave. Their approvals come to you meanwhile.": "{name} está de licencia. Mientras tanto, sus aprobaciones llegan a ti.",
   "{name} is back. The approvals you were holding for them have returned to them.": "{name} regresó. Las aprobaciones que tenías en su nombre volvieron a esa persona.",
   "Welcome back": "Bienvenido de vuelta",
-  "Your leave ended after {until}. Your approvals come to you again.": "Tu licencia terminó después del {until}. Tus aprobaciones vuelven a llegarte."
+  "Your leave ended after {until}. Your approvals come to you again.": "Tu licencia terminó después del {until}. Tus aprobaciones vuelven a llegarte.",
+  // Security alerts (Super Admin).
+  "Security alert": "Alerta de seguridad",
+  "{actor} reopened accounting period {period}.": "{actor} reabrió el período contable {period}.",
+  "{actor} changed the approval rule {name}.": "{actor} cambió la regla de aprobación {name}.",
+  "{actor} changed a bank file format.": "{actor} cambió un formato de archivo bancario.",
+  "{actor} changed the additional permissions of {name}.": "{actor} cambió los permisos adicionales de {name}.",
+  "{actor} gave {name} the {role} role.": "{actor} asignó a {name} el rol {role}.",
+  "The administrator account of {name} was locked after repeated failed sign-ins.": "La cuenta de administrador de {name} se bloqueó tras varios intentos fallidos de inicio de sesión."
 };

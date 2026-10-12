@@ -10,6 +10,7 @@ import Drawer from "../components/Drawer.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
@@ -17,6 +18,7 @@ import { formatDateTime } from "../utils/formatters.js";
 
 export default function AccountingPeriods() {
   const { t } = useLanguage();
+  const { readOnly } = useAuth();
   const { notify } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ period: new Date().toISOString().slice(0, 7), comments: "" });
@@ -72,9 +74,9 @@ export default function AccountingPeriods() {
   }
 
   return <section>
-    <PageHeader title="Accounting Periods" description="Open, close, and reopen fiscal periods through explicit audited controls." actions={<><button type="button" className="secondary-button" onClick={periodTable.reload} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button><button type="button" className="primary-button" onClick={() => setCreateOpen(true)}><CalendarPlus size={16} /><span>{t("New period")}</span></button></>} />
+    <PageHeader title="Accounting Periods" description="Open, close, and reopen fiscal periods through explicit audited controls." actions={<><button type="button" className="secondary-button" onClick={periodTable.reload} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>{!readOnly && <button type="button" className="primary-button" onClick={() => setCreateOpen(true)}><CalendarPlus size={16} /><span>{t("New period")}</span></button>}</>} />
     <Message type="error">{(createOpen ? "" : actionError) || periodTable.error}</Message>
-    <div className="workspace-panel"><DataTable rows={rows} loading={loading} remote={periodTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OPEN", "CLOSED"] }]} searchPlaceholder="Search accounting period..." rowActions={(row) => [{ label: row.status === "OPEN" ? "Close period" : "Reopen period", icon: row.status === "OPEN" ? LockKeyhole : LockOpen, tone: row.status === "OPEN" ? "danger" : "default", onClick: () => requestStatusChange(row) }]} columns={[
+    <div className="workspace-panel"><DataTable rows={rows} loading={loading} remote={periodTable.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OPEN", "CLOSED"] }]} searchPlaceholder="Search accounting period..." rowActions={(row) => readOnly ? [] : [{ label: row.status === "OPEN" ? "Close period" : "Reopen period", icon: row.status === "OPEN" ? LockKeyhole : LockOpen, tone: row.status === "OPEN" ? "danger" : "default", onClick: () => requestStatusChange(row) }]} columns={[
       { key: "period", label: "Period" }, { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
       { key: "openedAt", label: "Opened", render: (row) => row.openedAt ? formatDateTime(row.openedAt) : "-" }, { key: "openedBy", label: "Opened by", render: (row) => row.openedBy?.name || "-" },
       { key: "closedAt", label: "Closed", render: (row) => row.closedAt ? formatDateTime(row.closedAt) : "-" }, { key: "closedBy", label: "Closed by", render: (row) => row.closedBy?.name || "-" }, { key: "comments", label: "Comments" }

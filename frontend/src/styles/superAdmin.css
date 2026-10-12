@@ -1,0 +1,67 @@
+/* Super Admin console (pages/superadmin), its sign-in steps and the read-only / announcement
+   banners. Tokens only, so both themes work. */
+
+/* Message type="warning" (maintenance notice on the sign-in page). */
+.message-warning { color: var(--amber-700); background: var(--amber-100); border-color: var(--amber-700); }
+
+/* Sign-in: authenticator setup. */
+.two-factor-steps { display: grid; gap: 12px; margin: 0; padding-left: 20px; color: var(--gray-800); font-size: var(--font-sm); line-height: 1.5; }
+.two-factor-steps li > span { display: block; }
+.two-factor-key { display: block; margin: 8px 0; padding: 10px 12px; color: var(--gray-950); background: var(--gray-50); border: 1px dashed var(--gray-300); border-radius: var(--radius-sm); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-md); letter-spacing: 0.08em; overflow-wrap: anywhere; user-select: all; }
+
+/* App shell banners. */
+.platform-banner, .read-only-banner { margin: 0 0 14px; }
+/* Theme-aware colours (the shared alert colours are light-only). */
+.platform-banner.alert-info, .read-only-banner { color: var(--blue-700); background: var(--blue-100); border-color: color-mix(in srgb, var(--blue-700) 35%, transparent); }
+.platform-banner.alert-warning, .super-admin-page .inline-alert.alert-warning { color: var(--amber-700); background: var(--amber-100); border-color: color-mix(in srgb, var(--amber-700) 35%, transparent); }
+.platform-banner span, .read-only-banner span { overflow-wrap: anywhere; }
+
+/* Console layout. */
+.super-admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.super-admin-summary { margin: 0 0 12px; color: var(--gray-600); font-size: var(--font-sm); }
+.super-admin-note { display: block; margin-top: 3px; color: var(--gray-600); font-size: var(--font-xs); font-weight: 500; }
+
+.super-admin-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.super-admin-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--gray-200); font-size: var(--font-sm); }
+.super-admin-list li:last-child { border-bottom: 0; }
+.super-admin-count { flex: 0 0 auto; color: var(--gray-950); }
+.super-admin-count.is-overdue { color: var(--red-700); }
+.super-admin-issues { display: grid; gap: 6px; margin: 0; padding-left: 18px; }
+.super-admin-issues small { color: var(--gray-600); }
+
+.super-admin-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+
+/* Promote: candidate list. */
+.super-admin-candidates { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.super-admin-candidates label { display: flex; align-items: flex-start; gap: 10px; padding: 9px 11px; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); cursor: pointer; }
+.super-admin-candidates label.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+.super-admin-candidates input { margin-top: 3px; accent-color: var(--accent); }
+.super-admin-candidates span { display: grid; gap: 2px; }
+.super-admin-candidates small { color: var(--gray-600); font-size: var(--font-xs); }
+
+/* Activity drawer. */
+.super-admin-timeline { display: grid; gap: 0; margin: 0 0 18px; padding: 0; list-style: none; }
+.super-admin-timeline li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--gray-200); font-size: var(--font-sm); }
+.super-admin-timeline li > span { grid-column: 1; color: var(--gray-600); font-size: var(--font-xs); overflow-wrap: anywhere; }
+.super-admin-timeline li > small { grid-column: 2; grid-row: 1 / span 2; color: var(--gray-600); font-size: var(--font-xs); white-space: nowrap; }
+.super-admin-timeline li.is-blocked > strong { color: var(--red-700); }
+
+/* Temporary password, shown once. */
+.super-admin-secret { display: block; padding: 12px; color: var(--gray-950); background: var(--gray-50); border: 1px dashed var(--gray-300); border-radius: var(--radius-sm); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-lg); overflow-wrap: anywhere; user-select: all; }
+
+/* Audit log. */
+.super-admin-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.super-admin-filters .field { min-width: 180px; }
+.super-admin-changes { width: 100%; border-collapse: collapse; font-size: var(--font-xs); }
+.super-admin-changes th, .super-admin-changes td { padding: 7px 8px; border-bottom: 1px solid var(--gray-200); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.super-admin-changes thead th { color: var(--gray-600); font-weight: 750; }
+
+/* Platform settings. */
+.super-admin-settings .form-grid { margin-top: 4px; }
+.super-admin-form-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.super-admin-form-actions small { margin-right: auto; color: var(--gray-600); font-size: var(--font-xs); }
+
+@media (max-width: 768px) {
+  .super-admin-grid { grid-template-columns: minmax(0, 1fr); }
+  .super-admin-filters .field { min-width: 0; flex: 1 1 100%; }
+}

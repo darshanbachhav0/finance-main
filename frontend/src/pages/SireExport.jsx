@@ -8,6 +8,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import StatCard from "../components/StatCard.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
@@ -28,6 +29,7 @@ function downloadText(fileName, content) {
 
 export default function SireExport() {
   const { t, language } = useLanguage();
+  const { readOnly } = useAuth();
   const { notify } = useToast();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [records, setRecords] = useState([]);
@@ -108,7 +110,7 @@ export default function SireExport() {
       <div className="period-toolbar">
         <label className="field compact-period"><span>{t("Accounting period")}</span><MonthInput value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
         <button type="button" className="secondary-button" onClick={preview} disabled={loading}><Search size={16} /><span>{t(loading ? "Loading preview..." : "Validate preview")}</span></button>
-        <button type="button" className="primary-button" onClick={exportTxt} disabled={exporting || loading || !canExport} title={exportHint}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Download SUNAT TXT")}</span></button>
+        {!readOnly && <button type="button" className="primary-button" onClick={exportTxt} disabled={exporting || loading || !canExport} title={exportHint}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Download SUNAT TXT")}</span></button>}
       </div>
 
       {previewedPeriod && (

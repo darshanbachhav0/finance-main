@@ -37,6 +37,7 @@ import "./managerChainApproval.test.js";
 import "./hierarchyFinalizationMigration.test.js";
 import "./authDni.test.js";
 import "./accountRecovery.test.js";
+import "./superAdmin.test.js";
 import "./userIdentifiers.test.js";
 import "./budgetFiscalImprovements.test.js";
 import "./cecoImport.test.js";

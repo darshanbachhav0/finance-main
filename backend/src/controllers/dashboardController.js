@@ -118,6 +118,8 @@ async function openBudgetExceptions({ awaitingDecision = false } = {}) {
 // dueAt (earliest due date), overdue (how many are past due), kind (the variant of the task this
 // role sees) and partOf (a detail shown inside another task rather than as its own row).
 async function buildTasks(user) {
+  // The Super Admin acts in no queue, so it has no tasks (its bell carries security alerts only).
+  if (user.role === ROLES.SUPER_ADMIN) return { items: [], total: 0, counters: {} };
   const items = [];
   const now = new Date();
   if (user.role !== ROLES.MANAGEMENT_VIEWER) {
@@ -397,6 +399,13 @@ async function roleDetails(user, common) {
 }
 
 export const getTaskSummary = asyncHandler(async (req, res) => res.json(await buildTasks(req.user)));
+
+// Pending work across every department, as the Admin's queues count it, for the Super Admin's
+// monitoring view. Counts only: nothing here is the Super Admin's to act on.
+export async function platformWorkload(viewer) {
+  const { items } = await buildTasks({ _id: viewer._id, role: ROLES.ADMIN, permissions: [] });
+  return items.filter((item) => !item.partOf || ["approvalOverdue", "approvalEscalated"].includes(item.key)).map(({ key, label, count, tone, overdue, dueAt }) => ({ key, label, count, tone, overdue, dueAt }));
+}
 
 export const getBudgetExceptionDecisions = asyncHandler(async (req, res) => res.json(await listBudgetExceptionDecisionQueue(req.user)));
 

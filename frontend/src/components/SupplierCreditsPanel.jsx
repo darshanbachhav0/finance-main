@@ -5,6 +5,7 @@ import api from "../api/client.js";
 import DataTable from "./DataTable.jsx";
 import Drawer from "./Drawer.jsx";
 import StatusBadge from "./StatusBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
@@ -13,6 +14,7 @@ import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 // applies them to a future unpaid invoice of the same supplier or records the supplier's refund.
 export default function SupplierCreditsPanel({ table, onChanged }) {
   const { t, language } = useLanguage();
+  const { readOnly } = useAuth();
   const { notify } = useToast();
   const [action, setAction] = useState(null);
   const [form, setForm] = useState({});
@@ -56,7 +58,7 @@ export default function SupplierCreditsPanel({ table, onChanged }) {
   return (
     <div className="workspace-panel section-spacer">
       <div className="section-heading"><div><h3>{t("Supplier credits")}</h3><p>{t("Credit notes received after an invoice was paid. Recover the money from the supplier or apply it to a future invoice from the same supplier.")}</p></div><span className="section-count">{table.pagination.total}</span></div>
-      <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "statuses", allLabel: "All statuses", options: ["OPEN", "PARTIALLY_APPLIED", "SETTLED"] }]} rowActions={(row) => row.status === "SETTLED" ? [] : [
+      <DataTable rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "statuses", allLabel: "All statuses", options: ["OPEN", "PARTIALLY_APPLIED", "SETTLED"] }]} rowActions={(row) => readOnly || row.status === "SETTLED" ? [] : [
         { label: "Apply to an invoice", icon: HandCoins, onClick: () => open("apply", row) },
         { label: "Record supplier refund", icon: Landmark, onClick: () => open("recover", row) }
       ]} columns={[

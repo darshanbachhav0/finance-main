@@ -1,7 +1,10 @@
 import { Suspense } from "react";
 import MotionSurface from "../components/MotionSurface.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
-import { Bell, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu, Search, X } from "lucide-react";
+import { Bell, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, LogOut, Megaphone, Menu, Search, Wrench, X } from "lucide-react";
+import api from "../api/client.js";
+import "../styles/superAdmin.css";
+import { PLATFORM_STATUS_CHANGED_EVENT } from "../utils/superAdmin.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import useNotificationBell from "../hooks/useNotificationBell.js";
@@ -23,8 +26,13 @@ import MobileBottomNav from "../components/MobileBottomNav.jsx";
 import { bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
 import { navigationIcon } from "../utils/navigationIcons.js";
 
+// Announcement banner and maintenance state, re-read now and then while signed in, and at once
+// when the Super Admin saves the platform settings.
+const PLATFORM_STATUS_REFRESH_MS = 5 * 60 * 1000;
+
 export default function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, readOnly } = useAuth();
+  const [platform, setPlatform] = useState(null);
   const { t, language } = useLanguage();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
@@ -72,6 +80,15 @@ export default function AppLayout() {
   }, [location.pathname, location.search, loadTasks]);
 
   useEffect(() => { document.title = `${t(pageTitle)} · UMA`; }, [pageTitle, t]);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => api.get("/auth/platform-status").then((response) => active && setPlatform(response.data.data)).catch(() => {});
+    load();
+    const timer = window.setInterval(load, PLATFORM_STATUS_REFRESH_MS);
+    window.addEventListener(PLATFORM_STATUS_CHANGED_EVENT, load);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener(PLATFORM_STATUS_CHANGED_EVENT, load); };
+  }, []);
 
   useEffect(() => {
     const closeMenus = (event) => !menusRef.current?.contains(event.target) && (setTaskOpen(false), setUserOpen(false));
@@ -261,7 +278,7 @@ export default function AppLayout() {
                     <span>{user.email}</span>
                     <small>{t(user.role)} · {user.area}</small>
                   </div>
-                  {!managementViewer && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
+                  {!managementViewer && !readOnly && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
                   <button type="button" onClick={logout}><LogOut size={16} /><span>{t("Log out")}</span></button>
                   <ThemeControl />
                   {!managementViewer && <EmailNotificationsControl />}
@@ -272,6 +289,9 @@ export default function AppLayout() {
         </header>
         <main className="content" id="main-content" tabIndex={-1}>
           <div className="uma-print-header"><UmaBrand /><span>{t(pageTitle)}</span></div>
+          {platform?.announcement?.enabled && <div className={`inline-alert alert-${platform.announcement.tone === "warning" ? "warning" : "info"} platform-banner`} role="status"><Megaphone size={18} aria-hidden="true" /><div><span>{platform.announcement.message}</span></div></div>}
+          {platform?.maintenance?.enabled && <div className="inline-alert alert-warning platform-banner" role="status"><Wrench size={18} aria-hidden="true" /><div><strong>{t("Maintenance mode is on")}</strong><span>{t("Only administrators can sign in and use the platform until it is turned off.")}</span></div></div>}
+          {readOnly && !location.pathname.startsWith("/super-admin") && <div className="inline-alert alert-info read-only-banner" role="status"><Eye size={18} aria-hidden="true" /><div><strong>{t("Read-only oversight")}</strong><span>{t("You can see everything here, but the work itself (requests, approvals, payments, settings) is done by the Admin and each department.")}</span></div></div>}
           {user.onLeave && <div className="inline-alert alert-info leave-banner" role="status"><CalendarClock size={18} aria-hidden="true" /><div><strong>{user.leaveUntil ? t("You are on leave until {date}").replace("{date}", formatDate(`${String(user.leaveUntil).slice(0, 10)}T12:00:00Z`, language)) : t("You are on leave")}</strong><span>{t("Your approvals go to your substitute (or your jefe) until you are back.")}</span></div><button type="button" className="secondary-button" onClick={() => setLeaveOpen(true)}>{t("Manage leave")}</button></div>}
           <Suspense fallback={<WorkspaceSkeleton />}><MotionSurface changeKey={location.pathname}><Outlet /></MotionSurface></Suspense>
         </main>

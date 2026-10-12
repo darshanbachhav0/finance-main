@@ -64,7 +64,7 @@ export default function AdminUsers() {
         { name: "organizationalUnit", label: "Organizational unit" },
         { name: "area", label: "Area", defaultValue: "General", required: true },
         { type: "section", label: "Access" },
-        { name: "role", label: "Role", type: "toggle-group", required: true, options: roles, onSelect: (value) => value === "AreaDirector" ? { approvalLevel: "AREA_DIRECTOR" } : value === "ViceRector" ? { approvalLevel: "VICE_RECTOR" } : undefined },
+        { name: "role", label: "Role", type: "toggle-group", required: true, options: (form, editing) => editing?.role === "Admin" ? ["Admin"] : roles.filter((role) => role !== "Admin"), hint: (form, editing) => editing?.role === "Admin" ? "Administrator accounts are managed by the Super Admin. You can still change their organization, cost centers and leave." : "Only the Super Admin can give someone the Admin role.", onSelect: (value) => value === "AreaDirector" ? { approvalLevel: "AREA_DIRECTOR" } : value === "ViceRector" ? { approvalLevel: "VICE_RECTOR" } : undefined },
         { name: "approvalLevel", label: "Approval level", type: "toggle-group", defaultValue: "AREA_DIRECTOR", options: approvalLevels },
         { name: "approvalAreas", label: "Approval areas", type: "tags", placeholder: "Area, or * for all", getValue: (row) => row.approvalAreas || [] },
         { name: "permissions", label: "Additional permissions", type: "toggle-list", defaultValue: [], options: permissions, getValue: (row) => row.permissions || [], hint: "Extras on top of the user's role. The role already includes its own access; department duties such as accounting, payments or budget management come only with the role." },

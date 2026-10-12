@@ -80,6 +80,22 @@ Authentication:
   and changes nothing; add `--apply` to unlock, `--activate` to reactivate, and `--reset-password` for
   a temporary password (printed once; it must be changed at the next sign-in, and existing sessions
   end). Every recovery is audited (`ACCOUNT_RECOVERED`).
+- Super Admin (manages the Admin accounts and oversees the platform read-only; see the role guide):
+  created only from the server, at most two, against the target `MONGODB_URI` like `account:recover`:
+  `npm run superadmin:create -- --dni=<DNI> --name="<Name>" [--email=<email>]` prints a temporary
+  password once; the first sign-in asks to change it and to set up an authenticator app.
+  `npm run superadmin:list` lists them; `npm run superadmin:reset-2fa -- --dni=<DNI>` removes the
+  authenticator of someone who lost their phone (they set it up again at the next sign-in).
+- `TWO_FACTOR_ENCRYPTION_KEY` (optional, recommended in production) — encrypts the authenticator
+  secrets. Without it the key derives from `JWT_SECRET`, so rotating `JWT_SECRET` means running
+  `superadmin:reset-2fa` for each Super Admin. `SUPER_ADMIN_2FA_REQUIRED=false` skips the
+  authenticator for local development only (ignored in production).
+- Platform settings saved by the Super Admin (password minimum length and expiry, failed sign-ins
+  before locking, lock duration, session length, maintenance mode, announcement) override
+  `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES` and `JWT_EXPIRES_IN`; an empty value falls
+  back to the environment.
+- `BACKUP_DIR` (default `backend/backups`) — where `npm run backup` and the Super Admin's "Start
+  backup" write. On a host without a persistent disk, copy each backup somewhere safe.
 
 ## 2. Local development
 

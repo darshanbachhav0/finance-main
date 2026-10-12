@@ -2,10 +2,15 @@ import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workf
 import { activeApprovalStep } from "../services/approvalRuleService.js";
 import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
-export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT];
-// Roles that work with every supplier (not only the proposals they made themselves).
-export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT];
+export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT, ROLES.SUPER_ADMIN];
+// Roles that see every supplier (not only the proposals they made themselves). The Super Admin
+// only reads them.
+export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.SUPER_ADMIN];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
+
+export function isSuperAdmin(user) {
+  return user?.role === ROLES.SUPER_ADMIN;
+}
 
 export function permissionsFor(userOrRole) {
   const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
