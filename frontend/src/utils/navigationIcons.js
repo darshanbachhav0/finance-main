@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BellRing,
   BookOpenCheck,
   Building2,
   CalendarRange,
@@ -10,16 +11,20 @@ import {
   FileArchive,
   FileCheck2,
   FilePlus2,
+  Gauge,
   FileSpreadsheet,
   History,
   Landmark,
   ListChecks,
   ReceiptText,
+  ScrollText,
   Settings2,
   SlidersHorizontal,
   TriangleAlert,
+  UserCog,
   Users,
-  WalletCards
+  WalletCards,
+  Wrench
 } from "lucide-react";
 
 // Icons for the pages in utils/navigationAccess.js (pageLabels). Kept apart so the navigation
@@ -51,7 +56,12 @@ const icons = {
   "/expense-types": BookOpenCheck,
   "/exchange-rates": CircleDollarSign,
   "/configuration/bank-formats": Landmark,
-  "/configuration/accounting-mappings": BookOpenCheck
+  "/configuration/accounting-mappings": BookOpenCheck,
+  "/super-admin": Gauge,
+  "/super-admin/administrators": UserCog,
+  "/super-admin/alerts": BellRing,
+  "/super-admin/audit": ScrollText,
+  "/super-admin/settings": Wrench
 };
 
 export function navigationIcon(path) {

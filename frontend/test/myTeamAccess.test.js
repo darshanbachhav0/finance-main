@@ -3,8 +3,9 @@ import {authenticatedRoles, canAccessNavigation, navigationForUser, visibleNavig
 for (const role of authenticatedRoles) {
   for (const hasTeam of [undefined,false,true]) {
     const user={role,hasTeam};
-    // ManagementViewer is portal-only (and can never be a supervisor), so it never gets My Team.
-    const expected=hasTeam===true&&role!=='ManagementViewer';
+    // ManagementViewer is portal-only and the Super Admin is outside the hierarchy (neither can be a
+    // supervisor), so they never get My Team.
+    const expected=hasTeam===true&&!['ManagementViewer','SuperAdmin'].includes(role);
     assert.equal(canAccessNavigation(role,'/my-team',user),expected);
     assert.equal(navigationForUser(user).some(([,path])=>path==='/my-team'),expected);
     assert.equal(visibleNavigationPaths(role,user).includes('/my-team'),expected);

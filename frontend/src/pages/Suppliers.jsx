@@ -85,7 +85,8 @@ function freshLookupState() {
 
 export default function Suppliers() {
   const {
-    user
+    user,
+    readOnly
   } =
     useAuth();
 
@@ -114,9 +115,10 @@ export default function Suppliers() {
   const recordId = /^[a-f0-9]{24}$/i.test(routeId || "") ? routeId : "";
   const [actionError, setActionError] = useState("");
 
-  // Every internal user can propose a supplier; Accounting validates and homologates it.
+  // Every internal user can propose a supplier; Accounting validates and homologates it. The
+  // read-only Super Admin only looks.
   const canPropose =
-    user.role !== "ManagementViewer";
+    user.role !== "ManagementViewer" && !readOnly;
 
   const canFinance =
     [

@@ -9,6 +9,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
@@ -48,6 +49,7 @@ const warningText = {
 export default function BankFileVerification() {
   const { t, language } = useLanguage();
   const { notify } = useToast();
+  const { readOnly } = useAuth();
   const deepLink = useDeepLink(["record"]);
   const table = usePaginatedResource("/accounting/bank-files", { fixedParams: deepLink.link, deepLink: deepLink.active, initialFilters: { verificationStatus: "PENDING" } });
   const [selected, setSelected] = useState(null);
@@ -152,7 +154,7 @@ export default function BankFileVerification() {
         title={pending ? "Verify bank file" : "Bank file"}
         description={selected ? `${selected.batchNumber} · ${money(selected.currency, selected.totalAmount)} · ${formatDate(selected.paymentDate, language)}` : ""}
         onClose={() => !processing && setSelected(null)}
-        footer={pending ? <>
+        footer={pending && !readOnly ? <>
           <button type="button" className="danger-button" disabled={processing} onClick={() => setDecision("reject")}><XCircle size={16} />{t("Reject")}</button>
           <button type="button" className="primary-button" disabled={processing || checks.loading || checks.problems.length > 0 || Boolean(checks.error)} onClick={() => setDecision("verify")}><CheckCircle2 size={16} />{t("Verify")}</button>
         </> : <button type="button" className="secondary-button" onClick={() => setSelected(null)}>{t("Close")}</button>}

@@ -335,7 +335,7 @@ export default function DataTable({
             <tr>
               {selection && (
                 <th className="checkbox-column">
-                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t("Select all visible rows")} />
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} disabled={!selectableVisible.length} aria-label={t("Select all visible rows")} />
                 </th>
               )}
               {primaryColumns.map((column) => {

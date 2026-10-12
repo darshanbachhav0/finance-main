@@ -8,8 +8,15 @@ export const ROLES = Object.freeze({
   BUDGET: "Budget",
   PROCUREMENT: "Procurement",
   MANAGEMENT: "Management",
-  MANAGEMENT_VIEWER: "ManagementViewer"
+  MANAGEMENT_VIEWER: "ManagementViewer",
+  // Manages administrator accounts and oversees the platform read-only; never acts in a process.
+  SUPER_ADMIN: "SuperAdmin"
 });
+
+// Accounts only the Super Admin creates, edits, deactivates or resets.
+export const ADMINISTRATOR_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
+// Super Admin accounts are created from the server (npm run superadmin:create), never from the UI.
+export const MAX_SUPER_ADMINS = 2;
 
 export const PERMISSIONS = Object.freeze({
   REQUEST_CREATE: "request:create",
@@ -116,14 +123,18 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
   // Management portal only: the aggregate /api/management/v1 API and nothing internal (no
   // Reports, dashboards, audit or request data). Enforced for custom grants too - see
   // MANAGEMENT_VIEWER_PERMISSIONS below. Do not add permissions here.
-  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]
+  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
+  // Read-only oversight. Route guards also let the Super Admin read whatever an Admin reads (GET
+  // only, see middleware/auth.js); these are what services check for data-level decisions, so bank
+  // details stay masked and no workflow action is ever offered. Do not add write permissions here.
+  [ROLES.SUPER_ADMIN]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.AUDIT_VIEW, PERMISSIONS.USER_MANAGE]
 });
 
 // Every internal user can propose a supplier (Accounting then validates and homologates it).
-// The portal-only ManagementViewer cannot.
+// The portal-only ManagementViewer and the read-only Super Admin cannot.
 export const ROLE_PERMISSIONS = Object.freeze(Object.fromEntries(Object.entries(ROLE_BASE_PERMISSIONS).map(([role, permissions]) => [
   role,
-  role === ROLES.MANAGEMENT_VIEWER ? permissions : [...new Set([...permissions, PERMISSIONS.SUPPLIER_PROPOSE])]
+  [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(role) ? permissions : [...new Set([...permissions, PERMISSIONS.SUPPLIER_PROPOSE])]
 ])));
 
 // The only permissions a ManagementViewer account may ever hold, including per-user extras.
@@ -428,7 +439,13 @@ export const ERROR_CODES = Object.freeze({
   FORBIDDEN: "FORBIDDEN",
   NOT_FOUND: "NOT_FOUND",
   CONFLICT: "CONFLICT",
-  INTEGRATION_NOT_CONFIGURED: "INTEGRATION_NOT_CONFIGURED"
+  INTEGRATION_NOT_CONFIGURED: "INTEGRATION_NOT_CONFIGURED",
+  READ_ONLY_ROLE: "READ_ONLY_ROLE",
+  ADMIN_ACCOUNT_PROTECTED: "ADMIN_ACCOUNT_PROTECTED",
+  LAST_ADMIN: "LAST_ADMIN",
+  TWO_FACTOR_SETUP_REQUIRED: "TWO_FACTOR_SETUP_REQUIRED",
+  TWO_FACTOR_INVALID: "TWO_FACTOR_INVALID",
+  MAINTENANCE_MODE: "MAINTENANCE_MODE"
 });
 
 export const CLOSED_PERIOD_MESSAGE =

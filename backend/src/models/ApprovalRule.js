@@ -5,7 +5,8 @@ const approvalRuleSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     approvalLevel: { type: String, enum: Object.values(APPROVAL_STAGES), required: true },
-    role: { type: String, enum: Object.values(ROLES), required: true },
+    // The Super Admin never approves, so no rule can route a step to it.
+    role: { type: String, enum: Object.values(ROLES).filter((role) => role !== ROLES.SUPER_ADMIN), required: true },
     area: { type: String, trim: true, default: "*" },
     amountFrom: { type: Number, min: 0, default: 0 },
     amountTo: { type: Number, min: 0 },

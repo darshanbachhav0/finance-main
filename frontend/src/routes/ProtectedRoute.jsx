@@ -10,7 +10,8 @@ export default function ProtectedRoute({ roles, permissions = [], requiresTeam =
   if (loading) return <div className="page-loader">{t("Loading session...")}</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (requiresTeam && user.hasTeam !== true) return <Navigate to="/" replace />;
-  if (user.passwordResetRequired) return <Navigate to="/login" replace />;
+  // Both are finished on the sign-in page: a new password, then (Super Admin) the authenticator app.
+  if (user.passwordResetRequired || user.twoFactorSetupRequired) return <Navigate to="/login" replace />;
   const granted = permissions.some((permission) => (user.permissions || []).includes(permission));
   if (roles?.length && !roles.includes(user.role) && !granted) return <Navigate to="/" replace />;
 

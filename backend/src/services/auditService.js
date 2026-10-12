@@ -2,6 +2,7 @@ import crypto from "crypto";
 import AuditLog from "../models/AuditLog.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import User from "../models/User.js";
+import { securityAlertKind } from "./securityAlertRules.js";
 
 export function clientIp(req) {
   return String(req?.headers?.["x-forwarded-for"] || req?.ip || req?.socket?.remoteAddress || "unknown")
@@ -109,5 +110,11 @@ export async function recordAudit({
     period
   };
   const [audit] = await AuditLog.create([payload], session ? { session } : undefined);
+  // Sensitive events also alert the Super Admin. Inside a transaction the alert would outlive an
+  // abort, so only audits recorded outside one raise it (no sensitive event uses a session).
+  if (!session && securityAlertKind(payload)) {
+    const { raiseSecurityAlert } = await import("./securityAlertService.js");
+    await raiseSecurityAlert(audit, entity);
+  }
   return audit;
 }

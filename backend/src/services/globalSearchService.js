@@ -22,9 +22,10 @@ export const SEARCH_MIN_LENGTH = 2;
 export const SEARCH_MAX_LENGTH = 80;
 export const SEARCH_GROUP_LIMIT = 5;
 
-const INTERNAL_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT]);
-const PAYABLE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
-const USER_ROLES = Object.freeze([ROLES.ADMIN]);
+// The read-only Super Admin finds what an Admin finds.
+const INTERNAL_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.SUPER_ADMIN]);
+const PAYABLE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SUPER_ADMIN]);
+const USER_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
 
 export const SEARCH_GROUPS = Object.freeze(["requests", "suppliers", "vouchers", "payables", "users"]);
 
@@ -166,8 +167,10 @@ async function searchPayables(term, search) {
   });
 }
 
-async function searchUsers(term, search) {
-  const rows = await User.find({ $or: [{ name: search }, { dni: search }, { email: search }, { employeeCode: search }] })
+async function searchUsers(term, search, user) {
+  // Like the Users list, Super Admin accounts are found only by the Super Admin.
+  const scope = user?.role === ROLES.SUPER_ADMIN ? {} : { role: { $ne: ROLES.SUPER_ADMIN } };
+  const rows = await User.find({ ...scope, $or: [{ name: search }, { dni: search }, { email: search }, { employeeCode: search }] })
     .select("name dni email employeeCode role active")
     .sort({ active: -1, name: 1 })
     .limit(SEARCH_GROUP_LIMIT)

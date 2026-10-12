@@ -25,6 +25,7 @@ import "./bulkActionsContracts.test.js";
 import "./uiCleanup.test.js";
 import "./managementPortal.test.js";
 import "./operationsAccess.test.js";
+import "./superAdminAccess.test.js";
 import "./notificationTranslations.test.js";
 import "./notificationLinks.test.js";
 import "./uiPolish.test.js";

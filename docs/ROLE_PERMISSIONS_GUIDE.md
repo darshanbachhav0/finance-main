@@ -6,6 +6,8 @@ Detailed access and workflow reference for the ten operational profiles
 
 ## Changelog
 
+**Super Admin.** A new stored role, **SuperAdmin**, sits above Admin without taking part in any process. It is the only role that creates, edits, activates, deactivates, resets, unlocks, promotes or demotes **Admin** accounts (an Admin can no longer create an Admin, give the Admin role, or change an Admin's identity, password or status; it can still set an Admin's jefe, substitute, cost centers, approval areas and leave). It reads everything an Admin reads, read-only, and has its own console: platform overview, administrators, security alerts, audit log and platform settings (password policy, session length, maintenance mode, announcement banner, backups). It signs in with an authenticator app, is created only from the server (`npm run superadmin:create`, at most two) and is never anyone's jefe or substitute. See "Super Admin" below.
+
 **Bank TXT verification.** Accounting now verifies every bank TXT that Treasury generates before Treasury can download it and send it to the bank (permission `bank-file:verify`, held by Accounting and Admin, not grantable piecemeal). Verifying re-runs automatic checks (the file is unchanged since generation, every payment still waits in it, every beneficiary account is still verified, no payable has an open observation). Rejecting needs a reason, cancels the file and returns its CXPs to Treasury's queue. Until a file is verified Treasury can neither download it nor confirm or bounce its payments. Whoever generated a file cannot verify it, except Admin. Files generated before this control count as verified (`npm run migrate:bank-file-verification:apply` records that). A file whose payment date is reached while it waits is flagged, never blocked.
 
 This revision replaces the generic **Approver** role with two distinct stored roles, **AreaDirector** and **ViceRector**, that carry identical permissions (`REQUEST_VIEW_ALL`, `REQUEST_APPROVE`, `BUDGET_VIEW`, `REPORT_VIEW`) — exactly what the former Approver role held. Every route guard, dashboard filter, workflow role-target list, visibility filter, file-access rule and seeded `ApprovalRule.role` value that used to check `role === "Approver"` now checks both roles; this was a mechanical one-role-to-two-roles split, not a permissions change. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is now implied by the role itself and set automatically by the backend the moment Admin assigns that role, rather than a separate field Admin chooses on the Users screen — Management's approval level (RECTORATE / GENERAL_MANAGEMENT) is unaffected and remains admin-editable. The only functional difference between the two new roles remains directional: an Area Director may forward a manager-chain approval up to the Vice-Rector; the Vice-Rector, sitting at the top of that pair, cannot forward further.
@@ -230,7 +232,7 @@ All requests, including other users' drafts; supplier and banking information; b
 - Create, edit and submit requests, register invoices, upload batches, manage renditions, and execute authorized approval decisions.
 - Maintain annual/monthly plans, allocations and budget rules; commit approved budgets; and issue eligible procurement orders (the same order-issuance action Procurement holds). Admin can prepare a budget exception or mark it reviewed, and can repair a broken exception-approver configuration, but cannot approve or reject the exception itself — see Limitations.
 - Review and homologate suppliers, verify banking, process Accounting, control periods, generate exports, schedule and confirm payments, reconcile, and handle bounced payments.
-- Create, update or deactivate users; assign the role, approval areas, primary/authorized CECOs, and additional permissions — plus the approval level for a Management profile (RECTORATE or GENERAL_MANAGEMENT). For Area Director and Vice-Rector, approval level is derived automatically from the role and is not a separate field to set.
+- Create, update or deactivate users; assign the role, approval areas, primary/authorized CECOs, and additional permissions — plus the approval level for a Management profile (RECTORATE or GENERAL_MANAGEMENT). For Area Director and Vice-Rector, approval level is derived automatically from the role and is not a separate field to set. Administrator accounts are the exception: only the Super Admin creates them, gives the Admin role, or changes an Admin's name, DNI, email, status, password or permissions. On an Admin's record an Admin can still change the organization fields (jefe, substitute, cost centers, approval areas, leave). Super Admin accounts are not listed to Admins.
 - Maintain approval rules, bank formats, document rules, accounting mappings, projects, expense types and exchange rates.
 
 ### Limitations and exceptions
@@ -556,6 +558,34 @@ ManagementViewer cannot create, edit, approve, commit, homologate, schedule, con
 An institutional trustee is given a ManagementViewer account to review spend, budget, workflow and payment aggregates in the management portal without seeing or acting on any individual request, supplier, or payment.
 
 SOURCES S01 S02 S03 S16 S18 S26 S27
+
+<!-- pagebreak -->
+
+## Super Admin
+
+**Stored role SuperAdmin.** The Super Admin decides who the administrators are and oversees the platform, but never acts in a financial process. It is not one of the ten operational profiles: it holds only read permissions (`request:view-all`, `budget:view`, `report:view`, `management-portal:view`, `audit:view`, `user:manage`) and cannot be granted any other.
+
+### What the Super Admin can view
+
+Everything an Admin can open, read-only: requests and their approval history, suppliers (bank numbers masked), budgets, accounting entries and payables, bank-file verification, Treasury queues and history, accounting periods, the SIRE preview, reports, the management portal, users and every master-data screen. On every GET request the backend lets the Super Admin pass any route guard an Admin passes.
+
+### What the Super Admin can do
+
+- **Administrators:** create an Admin (a temporary password is shown once), edit name, DNI, email and area, activate or deactivate, reset the password, unlock, sign out everywhere, promote an internal user to Admin (their role is remembered) and return an Admin to a previous role. At least one active Admin always remains.
+- **Audit log:** the full, append-only audit trail filtered by administrator, module, action, record type, dates or blocked actions, with each record's before/after values; per-Admin activity (last sign-in, sign-ins, failed sign-ins, changes in the last 30 days).
+- **Security alerts:** a bell notification (and its email copy) when an Admin reopens an accounting period, changes an approval rule or a bank format, changes someone's additional permissions, or gives someone the Treasury or Accounting role, and when an administrator account is locked after failed sign-ins.
+- **Platform settings:** password minimum length and expiry, failed sign-ins before locking and lock duration, session length (the Super Admin's own sessions default to 60 minutes), maintenance mode (only Admin and Super Admin can sign in) and an announcement banner for every user; start a backup and see the backup history.
+- **Overview:** administrator counts, alerts and blocked sign-ins, pending work in every department (counts only), configuration checks, email and SUNAT status, and the last backup.
+
+### Limitations
+
+The backend refuses every write from the Super Admin outside its console and its own notification and email preferences (`READ_ONLY_ROLE`), so it cannot create, approve, register, commit, pay, verify, post, close, reopen, export the official SIRE TXT or the accounting consolidation, or change master data. It is never a jefe, substitute or approval-rule role, receives no workflow tasks and has no leave. Super Admin accounts are created and recovered only from the server: `npm run superadmin:create`, `npm run superadmin:list`, `npm run superadmin:reset-2fa` (lost phone) and `npm run account:recover` (locked account).
+
+### Sign-in
+
+The first sign-in asks for a new password and then to set up an authenticator app (Google Authenticator, Microsoft Authenticator or similar) with a setup key. From then on every sign-in asks for the 6-digit code after the password; wrong codes count toward the account lock.
+
+SOURCES S01 S02 S16
 
 <!-- pagebreak -->
 

@@ -8,7 +8,8 @@ import { leaveLastDay, leaveSummary, notifySubstituteOfLeave } from "../services
 import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
+import { assertPasswordPolicy, getPlatformSettings } from "../services/platformSettingsService.js";
+import { ADMINISTRATOR_ROLES, APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
@@ -43,6 +44,47 @@ function assertManagementViewerPermissions(role, permissions) {
   }
 }
 
+// Administrator accounts belong to the Super Admin (Super Admin > Administrators). On this screen an
+// Admin may still place an Admin in the organization (jefe, substitute, cost centers, approval
+// areas, leave), but not change who they are or what they can do.
+const ADMIN_IDENTITY_FIELDS = ["name", "dni", "email", "employeeCode", "role", "active", "permissions"];
+const FINANCE_ROLES = [ROLES.ACCOUNTING, ROLES.TREASURY];
+
+function protectedAccount(message, details) {
+  return new AppError(403, message, details, ERROR_CODES.ADMIN_ACCOUNT_PROTECTED);
+}
+
+function sameValue(field, current, next) {
+  if (field === "permissions") {
+    const set = (values) => [...new Set((values || []).filter((permission) => GRANTABLE_PERMISSIONS.includes(permission)))].sort().join(",");
+    return set(current) === set(next);
+  }
+  if (field === "active") return Boolean(current) === Boolean(next);
+  const normalize = (value) => String(value ?? "").trim().toLowerCase();
+  return normalize(current) === normalize(next);
+}
+
+export function assertAdminAccountEdit(target, body) {
+  if (target.role === ROLES.SUPER_ADMIN) throw protectedAccount("Super Admin accounts are managed from the server, not from this screen.");
+  if (body.role !== undefined && ADMINISTRATOR_ROLES.includes(body.role) && body.role !== target.role) throw protectedAccount("Only the Super Admin can give someone the Admin role.");
+  if (target.role !== ROLES.ADMIN) return;
+  if (body.password) throw protectedAccount("Only the Super Admin can reset an administrator's password.");
+  const changed = ADMIN_IDENTITY_FIELDS.filter((field) => body[field] !== undefined && !sameValue(field, target[field], body[field]));
+  if (changed.length) throw protectedAccount("Administrator accounts are managed by the Super Admin. You can still change their organization, cost centers and leave.", { fields: changed });
+}
+
+// Sensitive changes get their own audit event, which also alerts the Super Admin.
+async function auditSensitiveUserChanges(user, before, req) {
+  const permissionsBefore = [...(before.permissions || [])].sort();
+  const permissionsAfter = [...(user.permissions || [])].sort();
+  if (permissionsBefore.join(",") !== permissionsAfter.join(",")) {
+    await recordAudit({ entityType: "User", entity: user, action: "PERMISSIONS_CHANGED", user: req.user, req, module: "USER_ADMIN", oldValues: { permissions: permissionsBefore }, newValues: { name: user.name, permissions: permissionsAfter } });
+  }
+  if (FINANCE_ROLES.includes(user.role) && before.role !== user.role) {
+    await recordAudit({ entityType: "User", entity: user, action: "FINANCE_ROLE_ASSIGNED", user: req.user, req, module: "USER_ADMIN", oldValues: { role: before.role }, newValues: { name: user.name, role: user.role } });
+  }
+}
+
 export async function validateSupervisor(userId, supervisorId) {
   if (!supervisorId) return;
   const visited = new Set([String(userId)]);
@@ -51,7 +93,7 @@ export async function validateSupervisor(userId, supervisorId) {
     if (depth >= MAX_APPROVAL_CHAIN_DEPTH || visited.has(String(next))) throw new AppError(422, "Supervisor assignment creates a cycle or exceeds the hierarchy depth.");
     visited.add(String(next));
     const manager = await User.findById(next).select("jefe active role").lean();
-    if (!manager || manager.active === false || manager.role === "ManagementViewer") throw new AppError(422, "Choose an active, internal supervisor.");
+    if (!manager || manager.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(manager.role)) throw new AppError(422, "Choose an active, internal supervisor.");
     next = manager.jefe;
   }
 }
@@ -62,7 +104,7 @@ export async function validateSubstitute(userId, substituteId) {
   if (!substituteId) return;
   if (userId && String(substituteId) === String(userId)) throw new AppError(422, "A person cannot be their own substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
   const substitute = await User.findById(substituteId).select("active role").lean();
-  if (!substitute || substitute.active === false || substitute.role === ROLES.MANAGEMENT_VIEWER) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
+  if (!substitute || substitute.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(substitute.role)) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
 }
 
 // Availability follows active direct reports, rather than a fixed role.
@@ -89,6 +131,8 @@ export const listUsers = asyncHandler(async (req, res) => {
   const query = {};
   if (req.query.active !== undefined) query.active = req.query.active === "true";
   if (req.query.role) query.role = req.query.role;
+  // Super Admin accounts are not listed to Admins: they are managed from the server.
+  if (req.user?.role !== ROLES.SUPER_ADMIN) query.$and = [{ role: { $ne: ROLES.SUPER_ADMIN } }];
   if (req.query.search) {
     const search = new RegExp(escapedRegex(req.query.search), "i");
     query.$or = [{ name: search }, { email: search }, { employeeCode: search }, { dni: search }, { area: search }];
@@ -105,10 +149,11 @@ export const listUsers = asyncHandler(async (req, res) => {
 export const createUser = asyncHandler(async (req, res) => {
   const { name, dni, email, password, role } = req.body;
   if (!name || !dni || !password || !role) throw new AppError(400, "Name, DNI, password, and role are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  if (String(password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
+  if (ADMINISTRATOR_ROLES.includes(role)) throw protectedAccount("Only the Super Admin can create administrator accounts.");
   const normalizedDni = String(dni).trim();
   if (!/^\d{8}$/.test(normalizedDni)) throw new AppError(422, "DNI must contain 8 digits.");
   assertManagementViewerPermissions(role, req.body.permissions);
+  assertPasswordPolicy(String(password), await getPlatformSettings());
   await validateSupervisor(null, req.body.jefe);
   await validateSubstitute(null, req.body.substitute);
   if (await User.exists({ dni: normalizedDni })) throw new AppError(409, "A user with this DNI already exists.", undefined, ERROR_CODES.CONFLICT);
@@ -116,8 +161,9 @@ export const createUser = asyncHandler(async (req, res) => {
     const normalizedEmail = String(email).trim().toLowerCase();
     if (await User.exists({ email: normalizedEmail })) throw new AppError(409, "A user with this email already exists.", undefined, ERROR_CODES.CONFLICT);
   }
-  const user = await User.create({ ...editablePayload(req.body), dni: normalizedDni, email: email ? String(email).trim().toLowerCase() : undefined, passwordResetRequired: true, passwordHash: await bcrypt.hash(password, 12) });
-  await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, dni: user.dni, role: user.role, area: user.area, active: user.active } });
+  const user = await User.create({ ...editablePayload(req.body), dni: normalizedDni, email: email ? String(email).trim().toLowerCase() : undefined, passwordResetRequired: true, passwordChangedAt: new Date(), passwordHash: await bcrypt.hash(password, 12) });
+  await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, dni: user.dni, role: user.role, area: user.area, active: user.active, permissions: user.permissions } });
+  await auditSensitiveUserChanges(user, { role: undefined, permissions: [] }, req);
   res.status(201).json({ data: user });
 });
 
@@ -125,19 +171,21 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id) && req.body.active === false) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
+  assertAdminAccountEdit(user, req.body);
   assertManagementViewerPermissions(req.body.role ?? user.role, req.body.permissions ?? user.permissions);
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
   if (req.body.substitute !== undefined) await validateSubstitute(user._id, req.body.substitute);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
   if (req.body.onLeave === true && req.body.leaveUntil && !user.onLeave) assertLeaveUntil(req.body.leaveUntil);
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveStartedAt: user.leaveStartedAt, emailNotifications: user.emailNotifications !== false };
+  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveStartedAt: user.leaveStartedAt, emailNotifications: user.emailNotifications !== false, permissions: [...(user.permissions || [])] };
   Object.assign(user, editablePayload(req.body));
   applyLeaveDates(user, oldValues.onLeave);
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
   if (req.body.password) {
-    if (String(req.body.password).length < 10) throw new AppError(422, "Password must contain at least 10 characters.", { field: "password" }, ERROR_CODES.VALIDATION_ERROR);
+    assertPasswordPolicy(String(req.body.password), await getPlatformSettings());
     user.passwordHash = await bcrypt.hash(req.body.password, 12);
     user.passwordResetRequired = true;
+    user.passwordChangedAt = new Date();
     user.tokenVersion = (user.tokenVersion || 0) + 1;
     // An administrator's password reset also lifts a sign-in lockout.
     user.failedLoginAttempts = 0;
@@ -145,6 +193,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, emailNotifications: user.emailNotifications !== false, passwordChanged: Boolean(req.body.password) } });
+  await auditSensitiveUserChanges(user, oldValues, req);
   const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
   res.json({ data: user, approvalReassignment });
 });
@@ -216,10 +265,11 @@ export const updateMyNotificationPreferences = asyncHandler(async (req, res) => 
   res.json({ data: user });
 });
 
-export const deleteUser =asyncHandler(async (req, res) => {
+export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id)) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
+  if (ADMINISTRATOR_ROLES.includes(user.role)) throw protectedAccount("Only the Super Admin can deactivate an administrator account.");
   const oldValues = { active: user.active };
   user.active = false;
   await user.save();
