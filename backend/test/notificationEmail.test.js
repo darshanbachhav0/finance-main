@@ -6,7 +6,7 @@ import NotificationDelivery from "../src/models/NotificationDelivery.js";
 import User from "../src/models/User.js";
 import { markNotificationRead, notificationText, notifyUser, resolveNotification } from "../src/services/notificationService.js";
 import { createEmailTransport } from "../src/integrations/email/index.js";
-import { composeNotificationEmail, displayName, emailErrorHint, notificationEmailConfiguration, processNotificationEmails, spanishNotificationCopy } from "../src/services/notificationEmailService.js";
+import { composeNotificationEmail, displayName, emailErrorHint, maskedEmail, notificationEmailConfiguration, processNotificationEmails, skipExplanation, spanishNotificationCopy } from "../src/services/notificationEmailService.js";
 
 const EMAIL_ENV = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test/", NOTIFICATION_EMAIL_DELAY_MINUTES: "5" };
 
@@ -95,6 +95,7 @@ test("bell notifications are emailed once per person, after the delay, unless re
       assert.match(sent[0].text, /SOL-1 está pendiente de aprobación por Director de área\./);
       assert.match(sent[0].text, /SOL-2/);
       assert.deepEqual({ sent: summary.sent, skipped: summary.skipped }, { sent: 2, skipped: 2 });
+      assert.deepEqual(summary.skipReasons, { OPTED_OUT: 1, NO_EMAIL: 1 }, "the pass summary says why emails were skipped");
       assert.equal((await NotificationDelivery.findOne({ user: luis._id })).skipReason, "OPTED_OUT");
       assert.equal((await NotificationDelivery.findOne({ user: noEmail._id })).skipReason, "NO_EMAIL");
       assert.equal((await processNotificationEmails({ env: process.env, transport, now: later(7) })).emails, 0, "already sent");
@@ -183,4 +184,18 @@ test("SMTP gives up quickly on a server that never answers, and on Render says w
     for (const socket of sockets) socket.destroy();
     await new Promise((resolve) => silent.close(resolve));
   }
+});
+
+test("every skipped email is explained in the logs, with the address masked", () => {
+  assert.equal(maskedEmail("Abhiraj.K@gmail.com"), "ab***@gmail.com");
+  assert.equal(maskedEmail(""), "(none)");
+  const gated = notificationEmailConfiguration({ ...EMAIL_ENV, NOTIFICATION_EMAIL_ALLOWED_DOMAINS: "uma.edu.pe" });
+  const domain = skipExplanation("DOMAIN_NOT_ALLOWED", { email: "abhiraj@gmail.com" }, gated);
+  assert.match(domain, /ab\*\*\*@gmail\.com is not on NOTIFICATION_EMAIL_ALLOWED_DOMAINS=uma\.edu\.pe/);
+  assert.match(domain, /clear that variable/);
+  assert.match(skipExplanation("READ_IN_APP", {}, gated), /5-minute wait/);
+  assert.match(skipExplanation("NO_EMAIL", {}, gated), /User Administration/);
+  assert.match(skipExplanation("OPTED_OUT", {}, gated), /Notificaciones por correo/);
+  // Without NOTIFICATION_EMAIL_ALLOWED_DOMAINS any address saved on the user is emailed.
+  assert.deepEqual(notificationEmailConfiguration(EMAIL_ENV).allowedDomains, []);
 });

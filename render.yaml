@@ -85,8 +85,6 @@ services:
         sync: false
       - key: NOTIFICATION_EMAIL_FROM
         sync: false
-      - key: NOTIFICATION_EMAIL_ALLOWED_DOMAINS
-        value: uma.edu.pe
       - key: NOTIFICATION_EMAIL_DELAY_MINUTES
         value: 5
 

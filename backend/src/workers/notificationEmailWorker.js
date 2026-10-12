@@ -20,6 +20,7 @@ export function startNotificationEmailWorker({ once = false, env = process.env }
       return;
     }
     for (const warning of config.warnings) console.warn(`Notification email: ${warning}`);
+    if (config.allowedDomains.length) console.log(`Notification email: only addresses @${config.allowedDomains.join(", @")} are emailed (NOTIFICATION_EMAIL_ALLOWED_DOMAINS); others are skipped.`);
     const transport = createEmailTransport(config);
     console.log(`Notification email worker: ${transport.name} every ${config.pollMs}ms; emails wait ${config.delayMs / 60000} min so alerts read in the app are not emailed`);
     // Visible in the host's logs (Render: Logs tab): whether the SMTP server accepts the sign-in.
