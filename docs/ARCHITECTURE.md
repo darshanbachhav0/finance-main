@@ -179,7 +179,10 @@ return or reject.
   new approver (Admin is notified when nobody is available). New submissions and "send to my jefe"
   resolve the same way, and the next level above a covering step is above the absent manager. On
   return from leave (or when the substitute changes) the covered steps are re-routed again
-  (`reassignPendingApprovalsFor`), so they go back to the manager.
+  (`reassignPendingApprovalsFor`), so they go back to the manager. `GET /users/me/leave`
+  (`userLeaveService.leaveSummary`) previews who covers and what is waiting; a leave past its
+  `leaveUntil` (the last day) ends by itself on the SLA worker scan or when the person opens the app
+  (`endExpiredLeaves`).
 - **SLA in working days.** Due dates use the Peruvian working-day calendar
   (`businessCalendarService.addWorkingDays`: weekends, national holidays and `UMA_EXTRA_HOLIDAYS`
   excluded). `APPROVAL_SLA_WORKING_DAYS` (default 1, the former 24h) sets a chain step's SLA; a

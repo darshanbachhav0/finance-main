@@ -178,7 +178,15 @@ export function AuthProvider({ children }) {
     await finishLogout();
   }
 
-  const value = useMemo(() => ({ user, loading, login, logout, changePassword, extendSession, updateUserFields, sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user) }), [user, loading, expiresAt, updateUserFields]);
+  // Reloads the signed-in user after a change to their own account (e.g. starting leave).
+  const refreshUser = useCallback(async () => {
+    const response = await api.get("/auth/me");
+    setUser(response.data.user);
+    localStorage.setItem("erp_user", JSON.stringify(response.data.user));
+    return response.data.user;
+  }, []);
+
+  const value = useMemo(() => ({ user, loading, login, logout, changePassword, extendSession, refreshUser, updateUserFields, sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user) }), [user, loading, expiresAt, refreshUser, updateUserFields]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -966,6 +966,9 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .inline-alert { display: flex; align-items: flex-start; gap: 9px; margin: 8px 0; padding: 10px 12px; border: 1px solid; border-radius: var(--radius-sm); font-size: var(--font-xs); line-height: 1.45; }
 .inline-alert > svg { flex: 0 0 auto; margin-top: 1px; }
 .inline-alert > div { display: grid; gap: 2px; }
+.leave-banner { align-items: center; margin: 0 0 12px; }
+.leave-banner > div { flex: 1; }
+.leave-covering { margin: 4px 0 0; padding-left: 18px; }
 .alert-error { color: #8d2028; border-color: #efc3c6; background: var(--surface-tint-fff5f5); }
 .alert-warning { color: #6d4b0a; border-color: #e8d199; background: var(--surface-tint-fffaf0); }
 .alert-info { color: #24536f; border-color: #bdd7e5; background: var(--surface-tint-f4f9fc); }
