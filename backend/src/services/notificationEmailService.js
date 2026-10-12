@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
 import Notification from "../models/Notification.js";
 import NotificationDelivery from "../models/NotificationDelivery.js";
 import User from "../models/User.js";
@@ -7,12 +8,17 @@ import notificationsSpanish from "../../../shared/notificationTranslations.mjs";
 // Emailed copies of bell notifications.
 //
 // notifyUser() queues a NotificationDelivery when a notification is new or comes back unread. The
-// notification-email worker (workers/notificationEmailWorker.js) sends each person one email with
-// everything that became due for them, after NOTIFICATION_EMAIL_DELAY_MINUTES: an alert already
-// read in the app, resolved (someone else approved) or for a person who turned emails off, is
-// skipped instead. A failed send is retried with backoff and never affects the business action.
+// notification-email worker (workers/notificationEmailWorker.js) is woken straight away and sends
+// each person one email with everything that became due for them - immediately by default, or after
+// NOTIFICATION_EMAIL_DELAY_MINUTES when set. An alert already read in the app, resolved (someone
+// else approved) or for a person who turned emails off, is skipped instead. A failed send is retried
+// with backoff and never affects the business action.
 
 const MODES = ["OFF", "LOG", "SMTP"];
+
+// "queued" fires when a notification email is queued, so the in-process worker sends it right away
+// instead of waiting for its next poll.
+export const notificationEmailEvents = new EventEmitter();
 const PRODUCT_NAME = "UMA · Gestión Financiera";
 const MAX_LISTED = 20;
 const STALE_CLAIM_MS = 15 * 60 * 1000;
@@ -68,7 +74,8 @@ export function notificationEmailConfiguration(env = process.env) {
     replyTo: String(env.NOTIFICATION_EMAIL_REPLY_TO || "").trim() || undefined,
     // Links in the email open the record in the web app (BrowserRouter paths).
     appUrl: String(env.APP_PUBLIC_URL || String(env.CLIENT_URLS || "").split(",")[0] || "").trim().replace(/\/+$/, ""),
-    delayMs: numberFromEnv(env.NOTIFICATION_EMAIL_DELAY_MINUTES, 5, 0) * 60 * 1000,
+    // 0 = send as soon as the notification exists (default).
+    delayMs: numberFromEnv(env.NOTIFICATION_EMAIL_DELAY_MINUTES, 0, 0) * 60 * 1000,
     pollMs: numberFromEnv(env.NOTIFICATION_EMAIL_POLL_MS, 30000, 1000),
     maxAttempts: numberFromEnv(env.NOTIFICATION_EMAIL_MAX_ATTEMPTS, 5, 1),
     usersPerPass: numberFromEnv(env.NOTIFICATION_EMAIL_USERS_PER_PASS, 50, 1),
@@ -107,11 +114,13 @@ export async function queueNotificationEmail(notification, { env = process.env, 
   const config = notificationEmailConfiguration(env);
   if (!config.enabled) return null;
   try {
-    return await NotificationDelivery.findOneAndUpdate(
+    const delivery = await NotificationDelivery.findOneAndUpdate(
       { notification: notification._id, channel: "EMAIL", status: "PENDING" },
       { $setOnInsert: { notification: notification._id, user: notification.user, channel: "EMAIL", status: "PENDING", sendAfter: new Date(now.getTime() + config.delayMs) } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    notificationEmailEvents.emit("queued", delivery);
+    return delivery;
   } catch (error) {
     // A concurrent call queued it first.
     if (error?.code !== 11000) console.error("Queueing a notification email failed", error);
@@ -251,7 +260,7 @@ export function skipExplanation(reason, user, config) {
     case "NO_EMAIL": return "the user has no email address (add it in User Administration)";
     case "DOMAIN_NOT_ALLOWED": return `${maskedEmail(user?.email)} is not on NOTIFICATION_EMAIL_ALLOWED_DOMAINS=${config.allowedDomains.join(",")} (clear that variable to email any domain)`;
     case "RESOLVED": return "the task was already done or closed before the email was due";
-    case "READ_IN_APP": return `the alert was opened in the app within the ${config.delayMs / 60000}-minute wait`;
+    case "READ_IN_APP": return config.delayMs ? `the alert was opened in the app within the ${config.delayMs / 60000}-minute wait` : "the alert was opened in the app before the email went out";
     case "NOTIFICATION_DELETED": return "the notification no longer exists";
     default: return reason;
   }
