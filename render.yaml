@@ -67,10 +67,17 @@ services:
         value: 60000
       - key: SUNAT_PADRON_WORKER_ENABLED
         value: "true"
-      # Notification emails (docs/OPERATIONS.md §4). Nothing is sent until the SMTP_* values and
-      # NOTIFICATION_EMAIL_FROM are filled in; an incomplete setup is reported in the boot log.
+      # Notification emails (docs/OPERATIONS.md §4). NOTIFICATION_EMAIL_MODE is set in the dashboard:
+      # GMAIL_API on the free plan (it blocks outgoing SMTP ports 25/465/587), SMTP on a paid plan.
+      # Nothing is sent until its values are filled in; an incomplete setup is reported in the logs.
       - key: NOTIFICATION_EMAIL_MODE
-        value: SMTP
+        sync: false
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
       - key: NOTIFICATION_EMAIL_WORKER_ENABLED
         value: "true"
       - key: APP_PUBLIC_URL

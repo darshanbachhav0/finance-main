@@ -4,7 +4,7 @@ import { isMainModule } from "./isMainModule.js";
 import { connectDB } from "../config/db.js";
 import NotificationDelivery from "../models/NotificationDelivery.js";
 import { createEmailTransport } from "../integrations/email/index.js";
-import { notificationEmailConfiguration, processNotificationEmails } from "../services/notificationEmailService.js";
+import { emailErrorHint, notificationEmailConfiguration, processNotificationEmails } from "../services/notificationEmailService.js";
 
 // Sends the queued notification emails (services/notificationEmailService.js) on an already-open
 // Mongoose connection until stop() is called. Each pass claims a person's due deliveries with a
@@ -21,6 +21,10 @@ export function startNotificationEmailWorker({ once = false, env = process.env }
     }
     const transport = createEmailTransport(config);
     console.log(`Notification email worker: ${transport.name} every ${config.pollMs}ms; emails wait ${config.delayMs / 60000} min so alerts read in the app are not emailed`);
+    // Visible in the host's logs (Render: Logs tab): proves the sender can sign in before any email.
+    transport.verify()
+      .then(() => console.log(`Notification email: ${transport.name} sign-in OK, sending as ${config.from || "(default sender)"}`))
+      .catch((error) => console.error(`Notification email: ${transport.name} sign-in FAILED - ${error?.message || error}${emailErrorHint(error) ? `\n${emailErrorHint(error)}` : ""}`));
     await NotificationDelivery.createIndexes();
     try {
       do {

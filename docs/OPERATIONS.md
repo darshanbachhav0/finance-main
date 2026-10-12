@@ -61,7 +61,8 @@ Background workers (see §4 — in production they run inside the web service pr
 - `BATCH_INVOICE_POLL_MS`, `BATCH_INVOICE_STALE_MINUTES`, `BATCH_INVOICE_WORKER_CONCURRENCY` —
   batch worker tuning; `SLA_POLL_MS`, `SLA_DUE_SOON_HOURS`, `APPROVAL_SLA_WORKING_DAYS`, `SLA_ESCALATION_WORKING_DAYS` (Peruvian working days; the dashboard and management-portal escalation counters use the same rule) — SLA worker
   tuning. All have safe defaults.
-- `NOTIFICATION_EMAIL_MODE` (`OFF` | `LOG` | `SMTP`, default `OFF`), `SMTP_HOST`, `SMTP_PORT`,
+- `NOTIFICATION_EMAIL_MODE` (`OFF` | `LOG` | `SMTP` | `GMAIL_API`, default `OFF`), `GMAIL_CLIENT_ID`,
+  `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `SMTP_HOST`, `SMTP_PORT`,
   `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `NOTIFICATION_EMAIL_FROM`,
   `NOTIFICATION_EMAIL_REPLY_TO`, `APP_PUBLIC_URL`, `NOTIFICATION_EMAIL_ALLOWED_DOMAINS`,
   `NOTIFICATION_EMAIL_DELAY_MINUTES`, `NOTIFICATION_EMAIL_POLL_MS`,
@@ -209,7 +210,34 @@ its `skipReason`. A failed send is retried (1, 5, 15, 60 minutes) up to
 `NOTIFICATION_EMAIL_MAX_ATTEMPTS` (default 5) and never affects the business action. Emails carry
 no bank data.
 
-Setup (Render → Environment):
+**Render's free plan blocks outgoing SMTP** (ports 25, 465 and 587, since September 2025), so
+there use `NOTIFICATION_EMAIL_MODE=GMAIL_API`: it sends as a Gmail account through the Gmail API over
+HTTPS. SMTP works on paid instances and other hosts.
+
+Setup with the Gmail API (Render free):
+
+1. https://console.cloud.google.com → create a project (e.g. "UMA Finanzas").
+2. *APIs & Services → Library → Gmail API → Enable*.
+3. *APIs & Services → OAuth consent screen* (Google Auth Platform): user type **External**, app
+   name, support email = the sender Gmail. Under *Audience* click **Publish app** (status "In
+   production"): while it stays in "Testing" the token expires after 7 days. Google shows an
+   "unverified app" warning when you sign in in step 5 — that is expected for your own account
+   (*Advanced → Go to … (unsafe)*).
+4. *Credentials → Create credentials → OAuth client ID → Application type **Desktop app*** → copy
+   the client ID and client secret.
+5. On your own computer, in the project folder:
+   `npm run email:gmail-auth -- --client-id=<id> --client-secret=<secret>`, open the printed link,
+   sign in with the sender Gmail and allow "Send email on your behalf" (`gmail.send` only — the app
+   cannot read the mailbox). The terminal prints `GMAIL_REFRESH_TOKEN`.
+6. Render → Environment: `NOTIFICATION_EMAIL_MODE=GMAIL_API`, `GMAIL_CLIENT_ID`,
+   `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `NOTIFICATION_EMAIL_FROM="UMA Finanzas
+   <the-sender@gmail.com>"` (same address as step 5) and `APP_PUBLIC_URL`. Save (Render redeploys).
+
+The token stops working if the Gmail password changes or the access is removed at
+https://myaccount.google.com/permissions — run step 5 again. A free Gmail account sends to about
+500 recipients a day; emails are grouped per person, so that covers UMA's roster.
+
+Setup with SMTP (paid Render instance or other host):
 
 1. `NOTIFICATION_EMAIL_MODE=SMTP` (`OFF` disables everything; `LOG` prints emails instead of
    sending — local development).
@@ -230,9 +258,16 @@ Setup (Render → Environment):
    `CLIENT_URLS` entry).
 5. Optional: `NOTIFICATION_EMAIL_ALLOWED_DOMAINS=uma.edu.pe` only emails institutional addresses.
 
-Check the setup with one sample email (no database needed; in Render, run it from the service's
-Shell): `npm run email:test -- --to=you@uma.edu.pe`. It explains the usual failures (wrong App
-Password, blocked port).
+Check the setup — no server shell needed (Render free has none):
+
+- **In the app:** sign in as an administrator → account menu → **Enviar correo de prueba**. It sends a
+  sample to your own address with the live configuration, or shows why it failed and what to do.
+- **Render → Logs** after each deploy: `notification-email=on` and
+  `Notification email: GMAIL_API sign-in OK, sending as …` — or `sign-in FAILED` with the reason.
+- **On your computer** with the same values in `backend/.env`: `npm run email:test -- --to=you@uma.edu.pe`.
+
+Render's free service sleeps after ~15 minutes without visits; queued emails are sent when it wakes
+(the next visit), so keep `NOTIFICATION_EMAIL_DELAY_MINUTES` short (default 5).
 
 The boot log shows `notification-email=on`; an incomplete setup logs what is missing and sends
 nothing. People turn emails on/off in their account menu ("Notificaciones por correo");

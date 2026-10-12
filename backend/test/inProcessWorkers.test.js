@@ -16,6 +16,7 @@ test("in-process workers default on in production and can each be switched off",
   // The notification-email sender only runs once emails are switched on.
   assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "SMTP" }).notificationEmail, true);
   assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "OFF" }).notificationEmail, false);
+  assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "GMAIL_API" }).notificationEmail, true);
   assert.equal(inProcessWorkerFlags({ ...production, NOTIFICATION_EMAIL_MODE: "SMTP", NOTIFICATION_EMAIL_WORKER_ENABLED: "false" }).notificationEmail, false);
   assert.equal(inProcessWorkerFlags({ NODE_ENV: "development", NOTIFICATION_EMAIL_MODE: "LOG", NOTIFICATION_EMAIL_WORKER_ENABLED: "true" }).notificationEmail, true);
   // Inline processing (a dev convenience) and the durable worker never run together.

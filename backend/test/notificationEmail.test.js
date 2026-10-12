@@ -5,7 +5,8 @@ import Notification from "../src/models/Notification.js";
 import NotificationDelivery from "../src/models/NotificationDelivery.js";
 import User from "../src/models/User.js";
 import { markNotificationRead, notificationText, notifyUser, resolveNotification } from "../src/services/notificationService.js";
-import { composeNotificationEmail, displayName, notificationEmailConfiguration, processNotificationEmails, spanishNotificationCopy } from "../src/services/notificationEmailService.js";
+import { createEmailTransport } from "../src/integrations/email/index.js";
+import { composeNotificationEmail, displayName, emailErrorHint, notificationEmailConfiguration, processNotificationEmails, sendTestNotificationEmail, spanishNotificationCopy } from "../src/services/notificationEmailService.js";
 
 const EMAIL_ENV = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test/", NOTIFICATION_EMAIL_DELAY_MINUTES: "5" };
 
@@ -146,6 +147,90 @@ test("bell notifications are emailed once per person, after the delay, unless re
     });
   } finally {
     for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    if (mongoose.connection.name === database) await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});
+
+const GMAIL_ENV = { ...EMAIL_ENV, NOTIFICATION_EMAIL_MODE: "GMAIL_API", GMAIL_CLIENT_ID: "client.apps.googleusercontent.com", GMAIL_CLIENT_SECRET: "secret", GMAIL_REFRESH_TOKEN: "refresh", NOTIFICATION_EMAIL_FROM: "UMA Finanzas <sender@gmail.com>" };
+
+test("Gmail API mode sends over HTTPS with a refresh token (for hosts that block SMTP, e.g. Render free)", async () => {
+  const incomplete = notificationEmailConfiguration({ ...EMAIL_ENV, NOTIFICATION_EMAIL_MODE: "GMAIL_API" });
+  assert.equal(incomplete.enabled, false);
+  for (const key of ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN", "NOTIFICATION_EMAIL_FROM"]) assert.ok(incomplete.problems.some((problem) => problem.includes(key)), key);
+  const config = notificationEmailConfiguration(GMAIL_ENV);
+  assert.equal(config.enabled, true);
+
+  const calls = [];
+  const fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (url.includes("oauth2.googleapis.com/token")) return { ok: true, status: 200, json: async () => ({ access_token: "access-1", expires_in: 3600 }) };
+    return { ok: true, status: 200, json: async () => ({ id: `gmail-${calls.length}` }) };
+  };
+  const transport = createEmailTransport(config, { fetch });
+  assert.equal(transport.name, "GMAIL_API");
+  const email = composeNotificationEmail({ user: { name: "Ana" }, appUrl: config.appUrl, notifications: [{ title: "Aprobación pendiente", message: "SOL-1", path: "/approvals" }] });
+  const first = await transport.send({ from: config.from, to: "ana.torres@uma.edu.pe", ...email });
+  await transport.send({ from: config.from, to: "luis@uma.edu.pe", ...email });
+  assert.equal(first.messageId, "gmail-2");
+  assert.equal(calls.filter((call) => call.url.includes("/token")).length, 1, "the access token is reused while valid");
+  const tokenBody = new URLSearchParams(calls[0].options.body);
+  assert.deepEqual([tokenBody.get("grant_type"), tokenBody.get("refresh_token"), tokenBody.get("client_id")], ["refresh_token", "refresh", "client.apps.googleusercontent.com"]);
+  const sendCall = calls[1];
+  assert.equal(sendCall.url, "https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
+  assert.equal(sendCall.options.headers.authorization, "Bearer access-1");
+  const raw = Buffer.from(JSON.parse(sendCall.options.body).raw, "base64url").toString("utf8");
+  assert.match(raw, /^To: ana\.torres@uma\.edu\.pe$/m);
+  assert.match(raw, /^From: UMA Finanzas <sender@gmail\.com>$/m);
+  assert.match(raw, /^Subject: =\?UTF-8\?/m, "the Spanish subject is MIME-encoded");
+  assert.match(raw, /text\/html/);
+  transport.close();
+
+  const refused = createEmailTransport(config, { fetch: async () => ({ ok: false, status: 400, json: async () => ({ error: "invalid_grant", error_description: "Token has been expired or revoked." }) }) });
+  await assert.rejects(refused.verify(), (error) => error.code === "invalid_grant" && /expired or revoked/.test(error.message));
+  assert.match(emailErrorHint({ code: "invalid_grant" }), /Testing/);
+  assert.match(emailErrorHint({ code: "ETIMEDOUT", message: "Connection timeout" }), /Render's free plan blocks outgoing SMTP/);
+  assert.match(emailErrorHint({ code: "EAUTH", message: "535-5.7.8 Username and Password not accepted" }), /App Password/);
+});
+
+test("the setup check sends one sample email with the live configuration and explains failures", async () => {
+  const sent = [];
+  const fake = (config) => ({ name: config.mode, async send(message) { sent.push(message); return { messageId: "m1" }; }, close() {} });
+  const result = await sendTestNotificationEmail({ to: "admin@uma.edu.pe", env: EMAIL_ENV, createTransport: fake });
+  assert.deepEqual(result, { to: "admin@uma.edu.pe", transport: "LOG", messageId: "m1" });
+  assert.match(sent[0].subject, /^\[Prueba\] Aprobación pendiente/);
+  await assert.rejects(sendTestNotificationEmail({ to: "admin@uma.edu.pe", env: {}, createTransport: fake }), /off/);
+  await assert.rejects(sendTestNotificationEmail({ to: "admin@uma.edu.pe", env: { ...EMAIL_ENV, NOTIFICATION_EMAIL_MODE: "GMAIL_API" }, createTransport: fake }), /GMAIL_REFRESH_TOKEN/);
+  const failing = () => ({ name: "SMTP", async send() { throw Object.assign(new Error("connect ETIMEDOUT 1.2.3.4:587"), { code: "ETIMEDOUT" }); }, close() {} });
+  await assert.rejects(sendTestNotificationEmail({ to: "admin@uma.edu.pe", env: EMAIL_ENV, createTransport: failing }), (error) => /Render/.test(error.hint));
+});
+
+test("administrators can send a test email from the app; other roles cannot", { timeout: 60000 }, async () => {
+  const { default: app } = await import("../src/app.js");
+  const { default: jwt } = await import("jsonwebtoken");
+  const database = `erp_notification_test_email_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`, { serverSelectionTimeoutMS: 5000 });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.on("listening", resolve));
+  const saved = Object.fromEntries(Object.keys(EMAIL_ENV).map((key) => [key, process.env[key]]));
+  try {
+    const admin = await User.create({ name: "Admin", dni: "70000001", email: "admin@uma.edu.pe", passwordHash: "unused", role: "Admin" });
+    const solicitor = await User.create({ name: "Solicitante", dni: "70000002", email: "sol@uma.edu.pe", passwordHash: "unused", role: "Solicitor" });
+    const post = (user) => fetch(`http://127.0.0.1:${server.address().port}/api/notifications/test-email`, {
+      method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${jwt.sign({ id: user._id }, process.env.JWT_SECRET || "dev_secret_change_me")}` }, body: "{}"
+    });
+    delete process.env.NOTIFICATION_EMAIL_MODE;
+    const off = await post(admin);
+    assert.equal(off.status, 502);
+    assert.match((await off.json()).message, /off/);
+    Object.assign(process.env, EMAIL_ENV);
+    assert.equal((await post(solicitor)).status, 403);
+    const sent = await post(admin);
+    assert.equal(sent.status, 200);
+    assert.deepEqual((await sent.json()).data, { to: "admin@uma.edu.pe", transport: "LOG", messageId: "log" });
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    await new Promise((resolve) => server.close(resolve));
     if (mongoose.connection.name === database) await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
   }

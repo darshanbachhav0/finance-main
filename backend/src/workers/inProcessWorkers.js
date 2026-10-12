@@ -26,13 +26,13 @@ export function inProcessWorkerFlags(env = process.env) {
     batchInvoice: !inline && boolFromEnv(env.BATCH_INVOICE_WORKER_ENABLED, production),
     sla: boolFromEnv(env.SLA_WORKER_ENABLED, production),
     padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production),
-    // Only when notification emails are switched on (NOTIFICATION_EMAIL_MODE=LOG or SMTP).
+    // Only when notification emails are switched on (NOTIFICATION_EMAIL_MODE=LOG, SMTP or GMAIL_API).
     notificationEmail: emailsSwitchedOn(env) && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production)
   };
 }
 
 function emailsSwitchedOn(env) {
-  return ["LOG", "SMTP"].includes(String(env.NOTIFICATION_EMAIL_MODE || "").trim().toUpperCase());
+  return ["LOG", "SMTP", "GMAIL_API"].includes(String(env.NOTIFICATION_EMAIL_MODE || "").trim().toUpperCase());
 }
 
 // Starts the enabled workers on the already-open Mongoose connection. Returns a stop() that
