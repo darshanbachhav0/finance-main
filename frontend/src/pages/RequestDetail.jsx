@@ -62,6 +62,7 @@ import {
 } from "../utils/options.js";
 
 import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
+import { invoiceMismatchLines } from "../utils/validationMessages.js";
 
 const workflow = REQUEST_LIFECYCLE;
 const documentPhaseOrder = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
@@ -743,7 +744,7 @@ export default function RequestDetail() {
                 {["Accounting", "Admin"].includes(user.role) && <details><summary>{t("Advanced validation details")}</summary><p>{request.xmlValidation
                   ? ["supplierMatch", "documentNumberMatch", "dateMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
                   : t("No XML validation result is stored.")}</p></details>}
-                {request.xmlValidation?.errors?.length > 0 && <p className="text-danger">{request.xmlValidation.errors.join(" ")}</p>}
+                {!request.xmlValidation?.validated && invoiceMismatchLines(request.xmlValidation, t).map((line) => <p key={line} className="text-danger">{line}</p>)}
               </div>
             </div>
           </Section>

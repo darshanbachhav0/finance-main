@@ -23,6 +23,34 @@ export function validationSummary(errors, t = value => value) {
   return [t("Please complete or correct:"), ...Object.entries(errors).map(([field, reason]) =>
     `• ${validationFieldLabel(field, t)}: ${t(reason)}`)].join("\n");
 }
+// Invoice check (backend xmlValidationService): each difference between the request and the
+// invoice file, as { field, expected, found }; found is null when the file does not show it.
+const invoiceFieldLabels = {
+  supplier: "Supplier RUC/DNI", currency: "Currency", documentNumber: "Voucher number", issueDate: "Issue date",
+  netAmount: "Net amount", igvAmount: "IGV amount", totalAmount: "Total amount"
+};
+const invoiceAmountFields = new Set(["netAmount", "igvAmount", "totalAmount"]);
+const fill = (template, params) => template.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match));
+
+function invoiceValue(field, value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (invoiceAmountFields.has(field) && Number.isFinite(Number(value))) return Number(value).toFixed(2);
+  if (field === "issueDate") return String(value).slice(0, 10);
+  return String(value);
+}
+
+export function invoiceMismatchLines(validation, t = value => value) {
+  const mismatches = Array.isArray(validation?.mismatches) ? validation.mismatches : [];
+  // Results stored before mismatches existed only carry English sentences.
+  if (!mismatches.length) return (Array.isArray(validation?.errors) ? validation.errors : []).map((text) => t(text));
+  const document = t(validation.source === "PDF" ? "factura PDF" : "invoice XML");
+  return mismatches.map(({ field, expected, found }) => {
+    const params = { field: t(invoiceFieldLabels[field] || field), expected: invoiceValue(field, expected), found: invoiceValue(field, found), document };
+    if (params.found) return fill(t("{field}: expected {expected}, the {document} shows {found}."), params);
+    return fill(params.expected ? t("{field}: expected {expected}, but the {document} does not show it.") : t("{field}: the {document} does not show it."), params);
+  });
+}
+
 export function apiErrorMessage(error, t = value => value) {
   const body = error.response?.data;
   if (!error.response) return t("Could not connect to the server. Check your connection and try again.");
@@ -42,6 +70,8 @@ export function apiErrorMessage(error, t = value => value) {
     else issues.push(`${t(item.label || item.kind || item.field || "Document")}: ${t("required")} ${item.required ?? item.minCount ?? 1}, ${t("uploaded")} ${item.present ?? 0}`);
   }
   if (Array.isArray(details?.required)) for (const field of details.required) issues.push(`${validationFieldLabel(field, t)}: ${t("This field is required.")}`);
+  // The invoice XML or factura PDF does not match: say which values differ, not only that they do.
+  if (details?.validation) issues.push(...invoiceMismatchLines(details.validation, t));
   if (details?.field && !issues.length) issues.push(validationFieldLabel(details.field, t));
   return [t(message), ...[...new Set(issues)].map(issue => `• ${issue}`)].join("\n");
 }

@@ -185,6 +185,9 @@ const xmlValidationSchema = new mongoose.Schema(
     totalMatch: Boolean,
     errors: [String],
     errorMessages: [String],
+    // Each difference with the invoice file: field, the value expected and the value found (null when
+    // the file does not show it). services/xmlValidationService.js
+    mismatches: [{ _id: false, field: String, expected: mongoose.Schema.Types.Mixed, found: mongoose.Schema.Types.Mixed }],
     rawMetadataReference: String,
     data: {
       ruc: String,
