@@ -24,7 +24,7 @@ for (const field of [
   "exportStatus"
 ]) assert.ok(page.includes(field), `SIRE screen is missing ${field}`);
 assert.ok(page.includes('options: ["PENDING", "EXPORTED", "MANUAL_REVIEW", "EXCLUDED"]'));
-assert.ok(page.includes("Only individually validated vouchers are written to the SUNAT TXT"));
+assert.ok(page.includes("Vouchers validated with SUNAT, or accepted by Accounting through a manual SUNAT exception, are written to the SUNAT TXT"));
 assert.ok(page.includes("format: \"txt\""), "SIRE export must request SUNAT's official TXT format");
 assert.ok(page.includes("summary.fileName"), "SIRE screen must show the official SUNAT file name");
 

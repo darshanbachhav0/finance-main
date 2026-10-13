@@ -27,8 +27,11 @@ SIRE / RCE export (`backend/src/services/sireService.js`, screen Accounting → 
   and the preview shows a configuration error until it is set to a valid RUC.
 - `SIRE_TAXPAYER_NAME` — UMA's legal name exactly as registered with SUNAT (field 2). Required.
 - `SIRE_RCE_IGV_DESTINATION` — which Anexo 11 column pair receives the base/IGV of taxed purchases:
-  `DG` (15/16, default), `DGNG` (17/18) or `DNG` (19/20). **Must be confirmed by UMA's accountant**
-  (it depends on whether UMA's own operations are taxed with IGV).
+  `DG` (15/16, default), `DGNG` (17/18) or `DNG` (19/20). It depends on whether UMA's own
+  operations are taxed with IGV; UMA's accounting confirmed **`DNG`**.
+
+`render.yaml` sets UMA's values: RUC `20550807123`, name `UNIVERSIDAD MARIA AUXILIADORA S.A.C.`,
+`DNG` and `PEN`.
 - `SIRE_RCE_BOOK_CURRENCY` — `PEN` (default) or `USD`; sets the file name's currency indicator.
 
 The export is SUNAT's RCE "reemplazo de la propuesta" TXT, structure **Anexo 11 of RS
@@ -37,6 +40,9 @@ RS 000138-2023/SUNAT did not modify Anexo 11). 37 pipe-separated fields per vouc
 DD/MM/AAAA, amounts with 2 decimals and no thousands separator (credit notes negative), exchange
 rate `#.###`, CRLF line endings, UTF-8, no header. File name per Tabla 13.1:
 `LE<RUC><AAAA><MM>00080400021<I><M>2.TXT`, e.g. `LE2010000000920260800080400021112.TXT` for RUC 20100000009, August 2026, with data, in soles.
+A voucher goes into the file when SUNAT verified it individually, or when Accounting accepted it
+through the audited manual SUNAT exception (always the case in `PADRON` mode, which never verifies a
+CPE); the latter is listed with a warning, and SUNAT still compares it with its proposal.
 Cancelled CXPs and duplicate voucher links are excluded and listed; any other failing
 voucher blocks the file and is listed with its errors. Upload to SUNAT is manual (SUNAT Operaciones
 en Línea → SIRE → RCE → Propuesta → Reemplazar); SUNAT's API upload additionally requires zipping.

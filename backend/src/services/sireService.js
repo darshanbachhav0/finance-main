@@ -33,6 +33,7 @@ import GeneratedFile from "../models/GeneratedFile.js";
 import JournalEntry from "../models/JournalEntry.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import { SireProvider } from "../integrations/sire/SireProvider.js";
+import { hasManualSunatException } from "./sunatVoucherService.js";
 import { generatedRoot } from "./storageService.js";
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES } from "../utils/constants.js";
@@ -77,6 +78,8 @@ const NOTE_TYPES = new Set(["07", "08", "87", "88"]);
 const NEGATIVE_TYPES = new Set(["07", "87"]);
 const CUSTOMS_TYPES = new Set(["50", "51", "52", "53", "54"]);
 const DUE_DATE_TYPES = new Set(["14", "46", "50", "51", "52", "53", "54"]);
+// Internal payables to an employee (directPaymentService, renditionService), never a supplier voucher.
+const EMPLOYEE_PAYABLE_TYPES = new Set(["ANTICIPO", "REEMBOLSO"]);
 // Field 23 (ICBPER) "Obligatorio si el campo 7 = '01', '03', '07', '08' o '12'. De no tener informacion consignar 0.00."
 const IGV_DESTINATIONS = new Set(["DG", "DGNG", "DNG"]);
 
@@ -314,7 +317,13 @@ function validateCandidate(row, voucher) {
   const errors = [];
   const warnings = [];
   if (!voucher) errors.push("A valid SunatVoucher link is missing; manual review is required.");
-  if (voucher && !hasAuthoritativeVoucherValidation(voucher)) errors.push("Individual fiscal voucher validation has not passed.");
+  // A voucher SUNAT could not verify (always so in the Padrón mode, which never verifies a CPE) and
+  // that Accounting accepted through the audited manual SUNAT exception belongs in the purchase
+  // register too: SIRE compares the replacement with its own proposal, so SUNAT checks it there.
+  else if (!hasAuthoritativeVoucherValidation(voucher)) {
+    if (hasManualSunatException(voucher)) warnings.push("Accepted by Accounting through a manual SUNAT exception (SUNAT did not verify it individually). SIRE will compare it with its proposal; keep the exception evidence.");
+    else errors.push("Individual fiscal voucher validation has not passed.");
+  }
   if (!row.supplierRuc) errors.push("Supplier RUC is missing.");
   if (!row.supplierName) errors.push("Supplier name is missing.");
   if (!row.documentType) errors.push("Document type is missing.");
@@ -542,6 +551,15 @@ export async function buildSirePreview(period) {
       continue;
     }
 
+    // Track C advances (ANTICIPO) and undocumented reimbursements (REEMBOLSO) pay an employee under an
+    // internal "UMA" voucher, not a supplier's comprobante: there is nothing to annotate in the
+    // purchase register, so they are listed as excluded instead of blocking the file.
+    if (!voucher && EMPLOYEE_PAYABLE_TYPES.has(String(payable.voucher?.voucherType || "").toUpperCase())) {
+      row.exportStatus = "EXCLUDED";
+      records.push({ ...base, eligible: false, excluded: true, excludedReason: "NOT_A_PURCHASE_VOUCHER", manualReview: false, duplicate: false, errors: [], warnings: ["Employee advance or reimbursement (Track C): not a supplier voucher, so it is not part of the RCE."], row });
+      continue;
+    }
+
     const validation = validateCandidate(row, voucher);
     let duplicate = false;
     if (row.voucherKey && !row.voucherKey.startsWith("|||")) {
@@ -586,6 +604,7 @@ export async function buildSirePreview(period) {
       eligible: rows.length,
       excluded: records.length - rows.length,
       cancelledExcluded: records.filter((record) => record.excludedReason === "CANCELLED").length,
+      employeePayablesExcluded: records.filter((record) => record.excludedReason === "NOT_A_PURCHASE_VOUCHER").length,
       duplicatesExcluded: records.filter((record) => record.excludedReason === "DUPLICATE").length,
       blockingErrors: blocking,
       manualReview: records.filter((record) => record.manualReview).length,

@@ -10,6 +10,7 @@ import Supplier from "../src/models/Supplier.js";
 import SunatVoucher from "../src/models/SunatVoucher.js";
 import { buildSirePreview, exportSireFile, hasAuthoritativeVoucherValidation, sireVoucherKey } from "../src/services/sireService.js";
 import { generatedRoot } from "../src/services/storageService.js";
+import { manualExceptionEvidence } from "../src/services/sunatVoucherService.js";
 
 test("SIRE/RCE uses one validated fiscal voucher per row", { timeout: 120000 }, async (t) => {
   const database = `erp_sire_voucher_${process.pid}_${Date.now()}`;
@@ -146,6 +147,40 @@ test("SIRE/RCE uses one validated fiscal voucher per row", { timeout: 120000 }, 
       assert.equal(preview.validations.length, 2);
       assert.ok(preview.validations.every((record) => record.manualReview));
       assert.ok(preview.validations.some((record) => record.row.fiscalValidationStatus === "MISSING_VOUCHER_LINK"));
+    });
+
+    await t.test("a voucher Accounting accepted through the manual SUNAT exception goes into the file, with a warning", async () => {
+      const parent = await request("2026-08");
+      const accepted = await invoice({ request: parent, number: "000021", valid: false });
+      // As sunatVoucherService.applyManualSunatOverride stores it (the Padrón mode never verifies a CPE).
+      accepted.voucher.validationStatus = "MANUAL_EXCEPTION";
+      accepted.voucher.manualOverride = { reason: "SUNAT could not verify the CPE; checked against the supplier's PDF.", evidenceReference: "PDF", overriddenBy: user._id, overriddenAt: new Date(), previousValidationStatus: "OBSERVED_SUNAT" };
+      accepted.voucher.validationEvidence = manualExceptionEvidence(accepted.voucher);
+      await accepted.voucher.save();
+      // The status alone, without the audited decision, is not enough.
+      const unaudited = await invoice({ request: parent, number: "000022", valid: false });
+      await SunatVoucher.updateOne({ _id: unaudited.voucher._id }, { $set: { validationStatus: "MANUAL_EXCEPTION" } });
+      const preview = await buildSirePreview("2026-08");
+      const record = (voucher) => preview.validations.find((item) => item.voucherId === String(voucher._id));
+      assert.equal(record(accepted.voucher).eligible, true, JSON.stringify(record(accepted.voucher).errors));
+      assert.ok(record(accepted.voucher).warnings.some((warning) => /manual SUNAT exception/.test(warning)));
+      assert.equal(record(unaudited.voucher).eligible, false);
+      assert.deepEqual(record(unaudited.voucher).errors, ["Individual fiscal voucher validation has not passed."]);
+      assert.equal(preview.rows.length, 1);
+    });
+
+    await t.test("Track C advances and undocumented reimbursements are excluded, not blocking", async () => {
+      const parent = await request("2026-09", "C");
+      await invoice({ request: parent, number: "000023" });
+      for (const [voucherType, total] of [["ANTICIPO", 4000], ["REEMBOLSO", 850]]) {
+        // As directPaymentService / renditionService create them: an employee payable under an internal "UMA" voucher.
+        await AccountsPayable.create({ request: parent._id, flowType: "C", supplierIdentifierSnapshot: "12345678", voucher: { voucherType, documentType: voucherType, series: "UMA", number: `${voucherType}-1`, documentDate: new Date("2026-09-10T12:00:00Z") }, originalAmount: total, currency: "PEN", exchangeRate: 1, penEquivalent: total, outstandingAmount: total, status: "OPEN" });
+      }
+      const preview = await buildSirePreview("2026-09");
+      assert.equal(preview.summary.blockingErrors, 0);
+      assert.equal(preview.summary.employeePayablesExcluded, 2);
+      assert.equal(preview.rows.length, 1, "the supplier invoice is still filed");
+      assert.ok(preview.validations.filter((record) => record.excludedReason === "NOT_A_PURCHASE_VOUCHER").every((record) => record.excluded && !record.manualReview));
     });
 
     await t.test("USD and Track B invoices retain exact CXP exchange rates", async () => {
