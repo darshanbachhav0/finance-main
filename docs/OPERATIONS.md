@@ -37,6 +37,9 @@ RS 000138-2023/SUNAT did not modify Anexo 11). 37 pipe-separated fields per vouc
 DD/MM/AAAA, amounts with 2 decimals and no thousands separator (credit notes negative), exchange
 rate `#.###`, CRLF line endings, UTF-8, no header. File name per Tabla 13.1:
 `LE<RUC><AAAA><MM>00080400021<I><M>2.TXT`, e.g. `LE2010000000920260800080400021112.TXT` for RUC 20100000009, August 2026, with data, in soles.
+A voucher goes into the file when SUNAT verified it individually, or when Accounting accepted it
+through the audited manual SUNAT exception (always the case in `PADRON` mode, which never verifies a
+CPE); the latter is listed with a warning, and SUNAT still compares it with its proposal.
 Cancelled CXPs and duplicate voucher links are excluded and listed; any other failing
 voucher blocks the file and is listed with its errors. Upload to SUNAT is manual (SUNAT Operaciones
 en Línea → SIRE → RCE → Propuesta → Reemplazar); SUNAT's API upload additionally requires zipping.

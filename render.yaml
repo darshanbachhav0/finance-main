@@ -38,6 +38,14 @@ services:
         value: /var/data/sunat-padron
       - key: SUNAT_PROVIDER_MODE
         value: PADRON
+      # SIRE / RCE export (Accounting > SIRE). UMA's RUC and legal name exactly as registered with
+      # SUNAT; the IGV columns (DG, DGNG or DNG) must be confirmed by UMA's accountant.
+      - key: SIRE_TAXPAYER_RUC
+        sync: false
+      - key: SIRE_TAXPAYER_NAME
+        sync: false
+      - key: SIRE_RCE_IGV_DESTINATION
+        sync: false
       - key: MANAGEMENT_API_CACHE_SECONDS
         value: 15
       - key: MANAGEMENT_API_RATE_LIMIT

@@ -133,7 +133,7 @@ export default function SireExport() {
         <StatCard label="Reviewed vouchers" value={summary.reviewed || 0} tone="neutral" />
         <StatCard label="Rows in SUNAT file" value={summary.eligible || 0} tone="success" />
         <StatCard label="Vouchers with errors" value={summary.blockingErrors || 0} tone={summary.blockingErrors ? "danger" : "success"} />
-        <StatCard label="Excluded (cancelled or duplicate)" value={(summary.excluded || 0) - (summary.blockingErrors || 0)} tone="warning" />
+        <StatCard label="Excluded (cancelled, duplicate or employee payment)" value={(summary.excluded || 0) - (summary.blockingErrors || 0)} tone="warning" />
         <StatCard label="Purchase total" value={purchaseTotal} tone="accent" />
       </div>
 
@@ -151,7 +151,7 @@ export default function SireExport() {
       )}
 
       <div className="workspace-panel">
-        <div className="section-heading"><div><h3>{t("SIRE voucher preview")}</h3><p>{t("Each row represents one fiscal voucher. Only individually validated vouchers are written to the SUNAT TXT; cancelled payables are excluded.")}</p></div><span className="section-count">{records.length}</span></div>
+        <div className="section-heading"><div><h3>{t("SIRE voucher preview")}</h3><p>{t("Each row represents one fiscal voucher. Vouchers validated with SUNAT, or accepted by Accounting through a manual SUNAT exception, are written to the SUNAT TXT; cancelled payables are excluded.")}</p></div><span className="section-count">{records.length}</span></div>
         <DataTable rows={records} rowKey="id" loading={loading} searchPlaceholder="Search supplier, RUC, voucher, request, or CXP..." filters={[
           { key: "currency", label: "currencies", allLabel: "All currencies", options: ["PEN", "USD"] },
           { key: "exportStatus", label: "export status", allLabel: "All export statuses", options: ["PENDING", "EXPORTED", "MANUAL_REVIEW", "EXCLUDED"] }
