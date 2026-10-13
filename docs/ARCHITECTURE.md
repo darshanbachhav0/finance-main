@@ -115,12 +115,10 @@ the actual child records before allowing it).
   (`/batch-invoices`), processed asynchronously by `backend/src/workers/batchInvoiceWorker.js`.
   Valid invoices post automatically; invalid ones become `InvoiceObservation`s for Accounting to
   resolve. **Requires the batch worker to actually be running** — see `OPERATIONS.md`.
-- **B — direct payment.** Skips A1's Purchase Order/quotation steps for a configured exception case
-  (e.g. a small recurring service payment) — but **only when a matching, Admin-configured
-  `DirectPaymentEligibilityRule` exists** for the request's area/expense-nature/amount
-  (`/configuration/direct-payment-eligibility`). Absent a matching rule, submitting via Track B is
-  rejected outright; there is no free choice or hardcoded fallback threshold. When eligible, the
-  invoice/XML is validated up front and the request auto-provisions to Treasury on approval.
+- **B — direct payment.** Skips A1's Purchase Order/quotation steps (e.g. a small recurring service
+  payment). The requester chooses it; there is no eligibility rule by area, expense nature or amount
+  (the former `DirectPaymentEligibilityRule` was removed). The invoice/XML is validated up front, the
+  Track B approval route applies, and the request auto-provisions to Treasury on approval.
 - **C — advances (`ENTREGA_RENDIR`) and undocumented reimbursements
   (`REEMBOLSO_SIN_SUSTENTO`).** An advance pays out first (against Account 14), then requires the
   employee to submit a rendition within a configurable deadline counted in **working days** from

@@ -14,7 +14,6 @@ const descriptions = {
   "/configuration/finance-configurations": "Financial limits and thresholds, such as mobility and rendition deadlines.",
   "/exchange-rates": "Daily SUNAT exchange rates used for USD amounts.",
   "/configuration/approval-rules": "Who approves which requests, by amount, area and track.",
-  "/configuration/direct-payment-eligibility": "Where Track B (direct payment) is allowed.",
   "/configuration/budget-rules": "Budget control mode and what happens when budget is insufficient.",
   "/configuration/budget-allocations": "Assigned budget by period, cost center and project.",
   "/configuration/bank-formats": "BBVA payment file formats in PEN and USD."

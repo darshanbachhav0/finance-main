@@ -29,7 +29,6 @@ import {
   budgetAllocationRouter,
   budgetRuleRouter,
   costCenterRouter,
-  directPaymentEligibilityRuleRouter,
   documentRuleRouter,
   exchangeRateRouter,
   expenseTypeRouter,
@@ -73,7 +72,6 @@ router.use("/approval-rules", approvalRuleRouter);
 router.use("/budget-rules", budgetRuleRouter);
 router.use("/budget-allocations", budgetAllocationRouter);
 router.use("/document-rules", documentRuleRouter);
-router.use("/direct-payment-eligibility-rules", directPaymentEligibilityRuleRouter);
 router.use("/accounting-mappings", accountingMappingRouter);
 router.use("/bank-formats", bankFormatRouter);
 router.use("/finance-configurations", financeConfigurationRouter);

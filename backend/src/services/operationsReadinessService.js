@@ -1,6 +1,6 @@
 import Supplier from "../models/Supplier.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
-import { assertTrackEligible, parseRequestLines, getRequestDetail, previewFinancialRequestBudget } from "./requestService.js";
+import { parseRequestLines, getRequestDetail, previewFinancialRequestBudget } from "./requestService.js";
 import { documentStatusByPhase, configuredQuotationPolicy, validateStructuredQuotationComparison } from "./documentRuleService.js";
 import { assertSupplierEligibleForRequestReview } from "./supplierService.js";
 import { activeApprovalStep } from "./approvalRuleService.js";
@@ -37,8 +37,6 @@ export async function submissionReadiness(payload, user) {
   try { request.lines = parseRequestLines(request.lines); } catch (error) { add("LINES_INVALID", error.message); }
   if (budget?.status === "PENDING_VALIDATION") add("BUDGET_PENDING", "Budget or exchange-rate information is incomplete.", "Budget / Accounting", "/budget");
   if (budget?.status === "INSUFFICIENT") add("BUDGET_SHORTFALL", "Budget is insufficient. Budget review and any required Management exception must be completed before accounting.", "Budget / Management", "/budget");
-  // Amounts are recomputed from submitted lines, never trusted as a claimed total.
-  try { await assertTrackEligible(request); } catch (error) { if (!error.statusCode) throw error; add(error.code, error.message, "Admin", "/configuration/direct-payment-eligibility", error.details); }
   return { issues, documents, budget, ready: issues.length === 0, checkedAt: new Date(), informational: true };
 }
 

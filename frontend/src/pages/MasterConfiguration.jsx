@@ -110,18 +110,6 @@ export default function MasterConfiguration() {
       ],
       columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "flowType", label: "Track" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
     },
-    "direct-payment-eligibility": {
-      label: "Track B Eligibility", roles: ["Admin", "SuperAdmin"], endpoint: "/direct-payment-eligibility-rules",
-      description: "Track B (direct payment) shortens the normal A1 procurement path - it is only available where a matching active rule exists for the request's area, expense nature, and amount. No matching rule means Track B is refused at submission.",
-      fields: [
-        { type: "section", label: "Applies to" }, { name: "name", label: "Name", required: true }, { name: "area", label: "Area", defaultValue: "*", required: true },
-        { name: "expenseNature", label: "Expense nature", type: "select", defaultValue: "*", options: natureOptions },
-        { name: "maxAmount", label: "Max amount (PEN)", type: "number", min: 0, step: "0.01", hint: "Leave blank for no amount limit within this area/expense-nature match." },
-        { type: "section", label: "Validity" }, { name: "effectiveFrom", label: "Effective from", type: "date" }, { name: "effectiveTo", label: "Effective to", type: "date" },
-        { name: "notes", label: "Notes", type: "textarea" }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
-      ],
-      columns: [{ key: "name", label: "Name" }, { key: "area", label: "Area" }, { key: "expenseNature", label: "Expense nature" }, { key: "maxAmount", label: "Max amount", render: (row) => row.maxAmount >= 0 ? formatCurrency(row.maxAmount, "PEN", language) : "No limit" }, { key: "active", label: "Status" }]
-    },
     "finance-configurations": {
       label: "Finance Configurations", roles: ["Admin", "Accounting", "SuperAdmin"], endpoint: "/finance-configurations",
       description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",

@@ -25,7 +25,6 @@ export const superAdminConsolePaths = Object.freeze(["/super-admin", "/super-adm
 // the per-resource roles in pages/MasterConfiguration.jsx; the backend still decides writes.
 export const configurationAccess = Object.freeze({
   "approval-rules": ["Admin", "SuperAdmin"],
-  "direct-payment-eligibility": ["Admin", "SuperAdmin"],
   "finance-configurations": ["Admin", "Accounting", "SuperAdmin"],
   "accounting-mappings": ["Admin", "Accounting", "SuperAdmin"],
   "budget-rules": ["Admin", "Budget", "SuperAdmin"],
@@ -117,7 +116,6 @@ export const pageLabels = Object.freeze({
   "/expense-types": "Accounting Accounts",
   "/exchange-rates": "Exchange Rates",
   "/configuration/approval-rules": "Approval Rules",
-  "/configuration/direct-payment-eligibility": "Track B Eligibility",
   "/configuration/finance-configurations": "Finance Configurations",
   "/configuration/budget-rules": "Budget Rules",
   "/configuration/budget-allocations": "Budget Allocations",
@@ -141,7 +139,7 @@ export function pageLabel(path, role) {
 export const settingsGroups = Object.freeze([
   ["Organization", ["/users", "/cost-centers"]],
   ["Finance", ["/expense-types", "/configuration/accounting-mappings", "/configuration/finance-configurations", "/exchange-rates"]],
-  ["Approval and budget rules", ["/configuration/approval-rules", "/configuration/direct-payment-eligibility", "/configuration/budget-rules", "/configuration/budget-allocations"]],
+  ["Approval and budget rules", ["/configuration/approval-rules", "/configuration/budget-rules", "/configuration/budget-allocations"]],
   ["Banking", ["/configuration/bank-formats"]]
 ]);
 

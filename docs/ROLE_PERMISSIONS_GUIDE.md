@@ -265,7 +265,7 @@ The dedicated Budget and Management Reports modules are unavailable. Authorized 
 
 ### What the requester can do
 
-- Create A1 procurement requests, Track B direct-payment requests, and Track C advances/renditions supported by the form; enter items, quotations and required supporting documents. Track B is not a free choice: submission is only accepted when an active Track B eligibility rule (matching area, expense nature and PEN-equivalent amount, configured by Admin) covers the request; otherwise the requester must use Track A1 instead.
+- Create A1 procurement requests, Track B direct-payment requests, and Track C advances/renditions supported by the form; enter items, quotations and required supporting documents. Track B is the requester's choice: there is no eligibility rule by area, expense nature or amount; its approval route and evidence checks still apply.
 - Withdraw an owned submitted request back to draft while no approver has approved it yet (Withdraw, in the request detail or the requests list).
 - Edit and resubmit owned draft, rejected, returned, observed, budget-observed, SUNAT-observed, amount-exceeded-observed, or batch-observed requests. Delete only owned draft or rejected requests.
 - Propose a supplier; correct a proposal they created while pending validation or observed; add bank facts and supporting documents for that eligible proposal.
@@ -452,7 +452,7 @@ Budget does not have Supplier Master, full employee banking, Accounting, Treasur
 
 Budget cannot approve requests, edit request item/quotation facts, create or verify suppliers, register invoices, **issue a Purchase or Service Order**, decide (approve/reject) a budget exception, process Accounting, control accounting periods, pay or reconcile, or maintain user accounts. This guide previously described order issuance as a Budget action, which was accurate before Procurement existed as a distinct stored role; `procurement-order:create` has since moved to Procurement's permission set, and Budget's own set no longer includes it.
 
-The configuration menu does not grant project create/update/delete authority. Project Master writes remain Admin/Accounting. Approval-rule configuration and the Track B eligibility-rule configuration are Admin-only. Bank-format configuration is also Admin-only for creating, editing or deactivating a format, though Treasury shares the narrow certify/decertify action on an existing one.
+The configuration menu does not grant project create/update/delete authority. Project Master writes remain Admin/Accounting. Approval-rule configuration is Admin-only. Bank-format configuration is also Admin-only for creating, editing or deactivating a format, though Treasury shares the narrow certify/decertify action on an existing one.
 
 The role cannot commit an unapproved request. Order issuance — now a Procurement/Admin action, not Budget's — requires the applicable A1 procurement flow, completed required approvals, Budget's eligible commitment, mandatory documents/quotations, and a usable homologated supplier with a PRV code. Reissuing the same request is designed to return the existing order rather than create a second one.
 
@@ -609,7 +609,7 @@ When the requester has a jefe in the organizational roster, the route starts wit
 - **Withdrawal.** The requester can withdraw a submitted request back to draft until their first approver approves it; the approver's pending task is closed.
 - **My Team.** A manager with active direct reports sees their team and the requests the team has submitted — never team members' drafts. A team request links to its detail page only when the manager may open it (for example, it is on their approval route). Admin sees only its own team there, not every request.
 
-Track B eligibility is gated separately from its approval route: a request can only be submitted as Track B when an active Track B eligibility rule — matching area, expense nature and PEN-equivalent amount, configured by Admin — covers it. This check runs at submission (not at draft save), and a request with no matching rule is rejected before any route is even selected; the requester must resubmit through Track A1 instead.
+Track B has no eligibility rule: any area, expense nature or amount can be submitted as Track B. What controls it is its approval route (the Track B approval rules) and the invoice evidence validated at submission.
 
 Seed examples include area Director rules, Vice Rector, and a CAPEX Rectorate threshold of PEN 100,000 with a 36-hour SLA. Admin can change the rules. Check the current rule and request snapshot for a specific case; do not treat seed amounts as fixed spending authority.
 
@@ -619,7 +619,7 @@ Seed examples include area Director rules, Vice Rector, and a CAPEX Rectorate th
 | --- | --- |
 | A1 formal procurement | Requester supplies need and quotations; configured approvers decide; final approval automatically reserves/commits the budget. Order issuance is a separate, manual step: Admin/Procurement issue the Purchase or Service Order once that commitment exists (Budget's part ends at the commitment). Requester or Accounting supplies XML, PDF and conformity after the order stage. Valid invoices can provision CXP before Treasury payment, which can now be confirmed in full or in part (PARTIALLY_PAID) rather than only fully paid. |
 | A2 invoice batches | Requester or Accounting uploads a batch against an eligible order; the worker validates invoices and provisions valid items. Accounting/Admin resolves observed items. An upload permission does not authorize overriding duplicate, SUNAT or order-ceiling controls. |
-| B direct payment | Only available when an active Track B eligibility rule matches the request's area, expense nature and amount; otherwise submission is rejected. Requester supplies the required fiscal evidence; express approval is selected by rule. Successful final processing validates fiscal data, reserves applicable budget and provisions CXP (also capable of a PARTIALLY_PAID state before full payment). Treasury performs the payment. |
+| B direct payment | Chosen by the requester (no eligibility rule by area, expense nature or amount). Requester supplies the required fiscal evidence; express approval is selected by rule. Successful final processing validates fiscal data, reserves applicable budget and provisions CXP (also capable of a PARTIALLY_PAID state before full payment). Treasury performs the payment. |
 | C advance and rendition | Requester obtains advance approval and later submits the rendition. The workflow provisions the advance and Treasury pays. Accounting validates the final expense treatment and any non-deductible balance; eligible settlement can be recorded by Accounting/Treasury/Admin. |
 
 ### Decisions that stop or defer progress
@@ -642,7 +642,7 @@ Budget availability is calculated from the applicable dimensions, period and com
 
 ### Periods and master data
 
-Admin/Accounting maintain accounting periods, cost centers, expense types, projects, exchange rates, document rules, accounting mappings and Finance settings. Admin alone maintains approval rules and the Track B eligibility-rule configuration (area/expense-nature/amount) that now gates whether a requester can submit through Track B at all. Admin alone creates, edits, and deactivates bank-file format configurations; Treasury shares only the narrow certify/decertify action on an existing format. Budget writes budget rules/allocations and can read Finance settings.
+Admin/Accounting maintain accounting periods, cost centers, expense types, projects, exchange rates, document rules, accounting mappings and Finance settings. Admin alone maintains approval rules. Admin alone creates, edits, and deactivates bank-file format configurations; Treasury shares only the narrow certify/decertify action on an existing format. Budget writes budget rules/allocations and can read Finance settings.
 
 Closed-period controls are action-specific. They affect request changes, approvals and financial transitions according to the saved policy. Admin/Accounting may reopen a period through its controlled action; broad role access does not implicitly override the closed-period guard.
 
