@@ -32,20 +32,34 @@ services:
         value: 8h
       - key: DRAFT_ENCRYPTION_KEY
         generateValue: true
+      # Encrypts the Super Admin authenticator secrets. If a Super Admin set up their authenticator
+      # before this key existed, run `npm run superadmin:reset-2fa -- --dni=<DNI>` once.
+      - key: TWO_FACTOR_ENCRYPTION_KEY
+        generateValue: true
       - key: UMA_STORAGE_ROOT
         value: /var/data
+      # Backups (npm run backup and the Super Admin console) on the persistent disk.
+      - key: BACKUP_DIR
+        value: /var/data/backups
       - key: SUNAT_PADRON_DATA_DIR
         value: /var/data/sunat-padron
       - key: SUNAT_PROVIDER_MODE
         value: PADRON
+      # Without a contracted SUNAT exchange-rate API, USD requests use the daily rate Accounting
+      # enters in Exchange rates (recorded as a reference fallback, never as authoritative).
+      - key: EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK
+        value: "true"
       # SIRE / RCE export (Accounting > SIRE). UMA's RUC and legal name exactly as registered with
-      # SUNAT; the IGV columns (DG, DGNG or DNG) must be confirmed by UMA's accountant.
+      # SUNAT (Padron: ACTIVO / HABIDO). DNG = UMA's purchases go to Anexo 11 columns 19/20,
+      # confirmed by UMA's accounting.
       - key: SIRE_TAXPAYER_RUC
-        sync: false
+        value: "20550807123"
       - key: SIRE_TAXPAYER_NAME
-        sync: false
+        value: UNIVERSIDAD MARIA AUXILIADORA S.A.C.
       - key: SIRE_RCE_IGV_DESTINATION
-        sync: false
+        value: DNG
+      - key: SIRE_RCE_BOOK_CURRENCY
+        value: PEN
       - key: MANAGEMENT_API_CACHE_SECONDS
         value: 15
       - key: MANAGEMENT_API_RATE_LIMIT
@@ -83,8 +97,9 @@ services:
         value: "true"
       - key: APP_PUBLIC_URL
         sync: false
+      # uma.edu.pe mail is Microsoft 365; the sender mailbox needs "Authenticated SMTP" enabled.
       - key: SMTP_HOST
-        sync: false
+        value: smtp.office365.com
       - key: SMTP_PORT
         value: 587
       - key: SMTP_USER

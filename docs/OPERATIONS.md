@@ -27,8 +27,11 @@ SIRE / RCE export (`backend/src/services/sireService.js`, screen Accounting → 
   and the preview shows a configuration error until it is set to a valid RUC.
 - `SIRE_TAXPAYER_NAME` — UMA's legal name exactly as registered with SUNAT (field 2). Required.
 - `SIRE_RCE_IGV_DESTINATION` — which Anexo 11 column pair receives the base/IGV of taxed purchases:
-  `DG` (15/16, default), `DGNG` (17/18) or `DNG` (19/20). **Must be confirmed by UMA's accountant**
-  (it depends on whether UMA's own operations are taxed with IGV).
+  `DG` (15/16, default), `DGNG` (17/18) or `DNG` (19/20). It depends on whether UMA's own
+  operations are taxed with IGV; UMA's accounting confirmed **`DNG`**.
+
+`render.yaml` sets UMA's values: RUC `20550807123`, name `UNIVERSIDAD MARIA AUXILIADORA S.A.C.`,
+`DNG` and `PEN`.
 - `SIRE_RCE_BOOK_CURRENCY` — `PEN` (default) or `USD`; sets the file name's currency indicator.
 
 The export is SUNAT's RCE "reemplazo de la propuesta" TXT, structure **Anexo 11 of RS
