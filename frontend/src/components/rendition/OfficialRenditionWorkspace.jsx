@@ -244,7 +244,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
   return <div className="workspace-panel detail-section official-rendition-workspace">
     <div className="section-heading"><div><h3>{t("Expense Rendition")}</h3><p>{t(isAdvance ? "Settle the paid advance with official detail while existing Accounting lines remain authoritative." : "Declare the expenses you already paid without a fiscal receipt. Accounting reviews the declaration before Treasury reimburses your verified account.")}</p></div><div className="rendition-heading-status"><strong>{request.rendition?.number || t("Assigned on submission")}</strong><StatusBadge status={request.rendition?.financeReview?.result || request.rendition?.status || "PENDING"} /></div></div>
     <Message type="error">{error}</Message>
-    {canSubmit && <DraftPanel busy={processing} draft={draft} onDiscard={() => { draft.separateCopy(); window.location.reload(); }} />}
+    {canSubmit && <DraftPanel busy={processing} draft={draft} onDiscard={() => window.location.reload()} />}
     {isAdvance && dueAt && <div className={`rendition-deadline-card${renditionOverdue ? " overdue" : ""}`}><AlertTriangle size={18} /><div><strong>{t(renditionOverdue ? "Rendition overdue" : "Rendition deadline")}</strong><p>{t("The deadline counts working days from the advance payment (weekends and holidays excluded). Only an overdue rendition that has not been submitted blocks new advances.")} {t("Due")}: {formatDate(dueAt)}</p></div><StatusBadge status={renditionOverdue ? "OVERDUE" : request.rendition?.status || "PENDING"} /></div>}
 
     <fieldset className="work-draft-fields" disabled={processing}>

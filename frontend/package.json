@@ -15,7 +15,8 @@
     "test:notification-bell-ui": "node test/notificationBell.browser.mjs",
     "test:budget-experience-ui": "node test/budgetExperience.browser.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test:drafts-ui": "node test/workDrafts.browser.mjs"
+    "test:drafts-ui": "node test/workDrafts.browser.mjs",
+    "test:request-drafts-ui": "node test/requestDrafts.browser.mjs"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.20",
