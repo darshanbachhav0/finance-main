@@ -7,7 +7,6 @@ import {
   budgetAllocations,
   budgetRules,
   costCenters,
-  directPaymentEligibilityRules,
   documentRules,
   exchangeRates,
   expenseTypes,
@@ -49,9 +48,6 @@ bindCrud(budgetAllocationRouter, budgetAllocations, [ROLES.ADMIN, ROLES.BUDGET])
 
 export const documentRuleRouter = Router();
 bindCrud(documentRuleRouter, documentRules, [ROLES.ADMIN, ROLES.ACCOUNTING]);
-
-export const directPaymentEligibilityRuleRouter = Router();
-bindCrud(directPaymentEligibilityRuleRouter, directPaymentEligibilityRules, [ROLES.ADMIN]);
 
 // GL account mappings are Accounting master data: only Admin and Accounting read or maintain them
 // (Configuration > Accounting mappings). Posting services read the model directly, not this API.

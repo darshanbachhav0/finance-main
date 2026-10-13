@@ -390,7 +390,6 @@ export default {
   "Title": "Título",
   "To": "Hasta",
   "Track B (direct payment) shortens the normal A1 procurement path - it is only available where a matching active rule exists for the request's area, expense nature, and amount. No matching rule means Track B is refused at submission.": "La Vía B (pago directo) acorta el flujo A1 y solo aplica si existe una regla activa para el área, la naturaleza del gasto y el monto. Sin regla, la Vía B se rechaza al enviar.",
-  "Track B Eligibility": "Elegibilidad Vía B",
   "Track B has no prior Purchase Order. Provide a clear business justification and the required supporting evidence for this capital expenditure.": "La Vía B no tiene OC previa. Incluye una justificación clara y la evidencia requerida para este gasto de capital.",
   "Track C - Advance to render": "Vía C - Entrega a rendir",
   "Track C rendition is shown separately from payment status.": "La rendición de la Vía C se muestra aparte del estado de pago.",

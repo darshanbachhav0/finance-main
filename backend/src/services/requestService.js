@@ -16,7 +16,6 @@ import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.
 import SunatVoucher from "../models/SunatVoucher.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
-import DirectPaymentEligibilityRule from "../models/DirectPaymentEligibilityRule.js";
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { initializeApprovalRoute } from "./approvalRuleService.js";
@@ -496,52 +495,6 @@ function normalizeTrackFields(request) {
   }
 }
 
-// Track B legitimately shortens the normal A1 path; it must never be a free choice that skips
-// A1's quotation/procurement controls. Only proceed when Finance/Admin has configured a matching
-// eligibility rule for this area/expense-nature/amount - no rule means no exception, so the
-// requester must use Track A1 instead. Enforced at submission (not draft save) so the wizard
-// doesn't block a requester before they've entered the fields the rule is matched against.
-// The cap is checked against the PEN equivalent of the lines as submitted: prepareRequest calls
-// this only after the exchange rate is applied and the totals are recomputed (request.validate),
-// and the amount is derived from the lines here rather than trusting a stored total that may be
-// stale (update+submit) or still the schema default of 0 (create+submit).
-function trackEligibilityAmount(request) {
-  const rate = Number(request.exchangeRate) > 0 ? Number(request.exchangeRate) : 1;
-  const lines = request.lines || [];
-  if (lines.length) {
-    return lines.reduce((sum, line) => {
-      const pen = Number(line.penEquivalent) > 0 ? Number(line.penEquivalent) : multiplyMoney(Number(line.totalAmount || 0), Number(line.exchangeRate) > 0 ? Number(line.exchangeRate) : rate);
-      return Math.round((sum + pen) * 100) / 100;
-    }, 0);
-  }
-  return Number(request.totalPENEquivalent || 0) || multiplyMoney(Number(request.totalAmount || 0), rate);
-}
-
-export async function assertTrackEligible(request) {
-  if (request.flowType !== FLOW_TYPE.B) return;
-  const amount = trackEligibilityAmount(request);
-  const area = request.requesterArea || request.requestingArea || "General";
-  const now = request.issueDate ? new Date(request.issueDate) : new Date();
-  const rules = await DirectPaymentEligibilityRule.find({
-    active: true,
-    $and: [
-      { $or: [{ area: "*" }, { area }] },
-      { $or: [{ expenseNature: "*" }, { expenseNature: request.expenseNature }] },
-      { $or: [{ effectiveFrom: { $exists: false } }, { effectiveFrom: null }, { effectiveFrom: { $lte: now } }] },
-      { $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: now } }] }
-    ]
-  }).sort({ area: -1, expenseNature: -1 });
-  const eligible = rules.some((rule) => !(rule.maxAmount >= 0) || amount <= rule.maxAmount);
-  if (!eligible) {
-    throw new AppError(
-      422,
-      "Track B (direct payment) is not configured as an exception for this area, expense nature, and amount. Submit through Track A1 (standard procurement), or ask Finance/Admin to configure a Track B eligibility rule if this truly qualifies for direct payment.",
-      { area, expenseNature: request.expenseNature, amount },
-      ERROR_CODES.VALIDATION_ERROR
-    );
-  }
-}
-
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
   const officialRequest = isOfficialCapexOpexRequest(request);
@@ -562,8 +515,6 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   await applyProjectSnapshot(request);
   await applyExchangeRate(request);
   await request.validate();
-  // After the exchange rate and totals exist, so the Track B cap sees the real PEN amount.
-  if (validateSubmission) await assertTrackEligible(request);
 
   // Track B carries its invoice: the XML when there is one, otherwise the factura PDF. Other tracks
   // check an XML attached early, as before; their invoice is registered later.

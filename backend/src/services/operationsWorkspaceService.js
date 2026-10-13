@@ -67,7 +67,7 @@ export async function configurationHealth() {
   for (const purpose of ["ACCOUNTS_PAYABLE", "BANK", "IGV", "ADVANCE_TRANSIT"]) {
     if (!await AccountingMapping.exists({ active: true, purpose })) issues.push({ message: `No active ${purpose} accounting mapping.`, owner: "Accounting", path: "/configuration/accounting-mappings" });
   }
-  for (const resource of ["direct-payment-eligibility-rules", "users", "approval-rules", "bank-formats", "finance-configurations", "document-rules", "budget-allocations"]) {
+  for (const resource of ["users", "approval-rules", "bank-formats", "finance-configurations", "document-rules", "budget-allocations"]) {
     try { assertDraftScope({ role: "Admin" }, `resource:${resource}`); }
     catch { issues.push({ message: `${resource}: draft permissions do not match Admin configuration access.`, owner: "Admin", path: "/settings" }); }
   }

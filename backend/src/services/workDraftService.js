@@ -23,12 +23,12 @@ const grants = {
   "employee-bank": [PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],
   "batch-invoice": [PERMISSIONS.BATCH_INVOICE_UPLOAD], "invoice-resolution": [PERMISSIONS.BATCH_INVOICE_REVIEW]
 };
-const resources = new Set(["cost-centers", "expense-types", "exchange-rates", "projects", "approval-rules", "budget-rules", "budget-allocations", "document-rules", "accounting-mappings", "bank-formats", "finance-configurations", "direct-payment-eligibility-rules", "users"]);
+const resources = new Set(["cost-centers", "expense-types", "exchange-rates", "projects", "approval-rules", "budget-rules", "budget-allocations", "document-rules", "accounting-mappings", "bank-formats", "finance-configurations", "users"]);
 export function assertDraftScope(user, scope) {
   if (typeof scope !== "string") throw new AppError(422, "Invalid draft form.");
   const resource = String(scope).replace(/^resource:/, "");
   const allowed = scope?.startsWith("resource:") && resources.has(resource)
-    ? ["users", "approval-rules", "bank-formats", "finance-configurations", "direct-payment-eligibility-rules"].includes(resource) ? ["Admin"]
+    ? ["users", "approval-rules", "bank-formats", "finance-configurations"].includes(resource) ? ["Admin"]
       : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Budget"] : ["Admin", "Accounting"] : roles[scope];
   const granted = (grants[scope] || []).some((permission) => hasPermission(user, permission));
   if (!allowed?.includes(user.role) && !granted) throw new AppError(403, "Draft access is not available for this role.");

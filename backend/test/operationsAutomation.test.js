@@ -11,7 +11,6 @@ import AccountsPayable from '../src/models/AccountsPayable.js';
 import WorkDraft from '../src/models/WorkDraft.js';
 import Notification from '../src/models/Notification.js';
 import AccountingPeriod from '../src/models/AccountingPeriod.js';
-import DirectPaymentEligibilityRule from '../src/models/DirectPaymentEligibilityRule.js';
 import { uploadRoot } from '../src/services/storageService.js';
 import { archiveAsset, readAsset, assetKey } from '../src/services/durableAssetService.js';
 import { recurringDraftValue, createRecurringTemplate, generateDueDrafts, RecurringTemplate } from '../src/services/recurringDraftService.js';
@@ -74,15 +73,13 @@ test('operations API, durable evidence, recurring idempotency and statement clai
       assert.throws(() => assetKey('C:/elsewhere/private.txt'), /outside protected/);
       process.env.DURABLE_ASSETS = 'false';
     });
-    await t.test('submission collects multiple issues and Track B preview honors area and amount', async () => {
+    await t.test('submission collects multiple issues and never refuses Track B for its area or amount', async () => {
       const base = { flowType: 'B', requestType: 'OPEX', expenseNature: 'SERVICES', issueDate: '2026-10-01', accountingPeriod: '2026-10', currency: 'PEN', lines: [{ quantity: 1, unitPrice: 600, priceIncludesIGV: true }] };
       const before = await submissionReadiness(base, owner);
-      assert.ok(before.issues.length >= 3);
-      assert.ok(before.issues.some(i => i.message.includes('Track B')));
-      await DirectPaymentEligibilityRule.create({ name: 'IT only', area: 'IT', expenseNature: 'SERVICES', maxAmount: 700 });
-      assert.equal((await submissionReadiness(base, owner)).issues.some(i => i.message.includes('Track B')), false);
-      assert.equal((await submissionReadiness({ ...base, requesterArea: 'IT' }, { ...owner.toObject(), area: 'Other' })).issues.some(i => i.message.includes('Track B')), true);
-      assert.equal((await submissionReadiness({ ...base, lines: [{ quantity: 2, unitPrice: 600, priceIncludesIGV: true }] }, owner)).issues.some(i => i.message.includes('Track B')), true);
+      assert.ok(before.issues.length >= 2);
+      assert.equal(before.issues.some(i => i.message.includes('Track B')), false);
+      assert.equal((await submissionReadiness({ ...base, requesterArea: 'IT' }, { ...owner.toObject(), area: 'Other' })).issues.some(i => i.message.includes('Track B')), false);
+      assert.equal((await submissionReadiness({ ...base, lines: [{ quantity: 200, unitPrice: 600, priceIncludesIGV: true }] }, owner)).issues.some(i => i.message.includes('Track B')), false);
       assert.equal(await FinancialRequest.countDocuments(), 0);
     });
     const source = id();

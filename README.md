@@ -129,7 +129,7 @@ records retain their existing server-side visibility and action permissions.
 | Improvement | Where it works |
 | --- | --- |
 | Durable evidence copies | Uploads, invoice/XML reads, A2 ZIP extraction, BBVA files, SIRE and report downloads retain their protected URLs and access checks. |
-| Submission readiness | Request form preview collects document, quotation, supplier, period, budget and Track B eligibility issues. Final submission still runs the authoritative controls. |
+| Submission readiness | Request form preview collects document, quotation, supplier, period and budget issues. Final submission still runs the authoritative controls. |
 | Next action and owner | Request detail and the work-review queue explain the current task and responsible role. |
 | Track eligibility | Track B is checked against the configured area, nature, date and amount; no automatic exception approval. |
 | XML preparation | Read an XML, compare entered values and use extracted invoice fields in Accounting. This is parsing, not SUNAT certification. |

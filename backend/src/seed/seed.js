@@ -13,7 +13,6 @@ import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetRule from "../models/BudgetRule.js";
 import CostCenter from "../models/CostCenter.js";
 import Counter from "../models/Counter.js";
-import DirectPaymentEligibilityRule from "../models/DirectPaymentEligibilityRule.js";
 import DocumentRule from "../models/DocumentRule.js";
 import ExchangeRate from "../models/ExchangeRate.js";
 import ExpenseType from "../models/ExpenseType.js";
@@ -862,17 +861,6 @@ async function seedRulesAndMappings({ costCenters }) {
     slaHours: 4,
     active: true
   });
-  // Track B (direct payment) is only available where Finance has configured it as an
-  // exception - a modest starter threshold demonstrating the feature, adjustable by Admin.
-  await upsert(DirectPaymentEligibilityRule, { name: "Excepción estándar de pago directo" }, {
-    area: "*",
-    expenseNature: "*",
-    maxAmount: 5000,
-    active: true,
-    effectiveFrom: new Date(Date.UTC(2026, 0, 1)),
-    notes: "Umbral inicial de demostración; ajustar según la política real de Finanzas."
-  });
-
   const documentRules = [
     ["DOC-A1-GOODS-SUBMISSION", FLOW_TYPE.A1, "SUBMISSION", "*", EXPENSE_NATURE.GOODS, [{ kind: "QUOTATION", minCount: 1, labelKey: "al menos una cotización" }]],
     ["DOC-A1-GOODS-INVOICE", FLOW_TYPE.A1, "INVOICE_REGISTRATION", "*", EXPENSE_NATURE.GOODS, [{ kind: "XML", minCount: 1, labelKey: "XML de factura" }, { kind: "PDF", minCount: 1, labelKey: "PDF de factura" }]],
@@ -1942,7 +1930,7 @@ async function seedScenarios({ users, suppliers, costCenters, expenseTypes }) {
     period: closedPeriod
   });
 
-  // Track B: a small recurring service paid directly under the configured eligibility rule. The
+  // Track B: a small recurring service paid directly. The
   // XML is validated at submission, the request auto-provisions on approval, and it rests
   // reconciled (not yet closed) so Accounting can demo the closure.
   scenarios.directPayment = await seedRequest({

@@ -110,8 +110,8 @@ npm run dev
 - Backend: `http://localhost:5000`
 
 `npm run seed` populates a fictional but internally-consistent UMA demo dataset (nine role
-profiles, faculties/cost centers, suppliers, approval rules, budget rules, one Track B eligibility
-rule, requests across every lifecycle stage). The demo password is **not** a fixed value in source —
+profiles, faculties/cost centers, suppliers, approval rules, budget rules,
+requests across every lifecycle stage). The demo password is **not** a fixed value in source —
 it comes from `SEED_DEMO_PASSWORD` if set, otherwise a random password is generated per run and
 printed in the seed's final JSON summary (`password`/`passwordSource` fields). Capture it from that
 output; it is not written anywhere else.

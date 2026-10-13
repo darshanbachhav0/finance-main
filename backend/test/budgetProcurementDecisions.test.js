@@ -10,7 +10,6 @@ import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import BudgetException from "../src/models/BudgetException.js";
 import BudgetRule from "../src/models/BudgetRule.js";
 import CostCenter from "../src/models/CostCenter.js";
-import DirectPaymentEligibilityRule from "../src/models/DirectPaymentEligibilityRule.js";
 import DocumentRule from "../src/models/DocumentRule.js";
 import ExpenseType from "../src/models/ExpenseType.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
@@ -99,13 +98,13 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
       assert.equal(result.accountsPayable.purchaseOrder, undefined);
     });
 
-    await t.test("6. the Track B cap uses the real PEN total on create+submit and update+submit", async () => {
-      await DirectPaymentEligibilityRule.create({ name: "Small direct payments", area: "*", expenseNature: "*", maxAmount: 100, active: true });
+    await t.test("6. Track B has no eligibility rule: any amount goes on to the usual submission checks", async () => {
       const payload = (totalAmount, submit) => ({ flowType: FLOW_TYPE.B, requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.MAINTENANCE, issueDate: "2026-08-10", accountingPeriod: "2026-08", currency: "PEN", supplier: supplier._id.toString(), requesterCostCenter: center._id.toString(), description: "Direct payment", lines: line(center._id.toString(), totalAmount), submit });
-      await assert.rejects(() => createFinancialRequest({ payload: payload(118, true), files: {}, user: users.solicitor, req }), (error) => /Track B/.test(error.message) && error.details.amount === 118);
-      await assert.rejects(() => createFinancialRequest({ payload: payload(90, true), files: {}, user: users.solicitor, req }), (error) => !/Track B/.test(error.message), "within the cap, eligibility passes and the usual XML requirement applies");
+      for (const amount of [90, 118, 50000]) {
+        await assert.rejects(() => createFinancialRequest({ payload: payload(amount, true), files: {}, user: users.solicitor, req }), (error) => !/Track B/.test(error.message), `${amount}: no Track B refusal; the usual XML requirement applies`);
+      }
       const draft = await createFinancialRequest({ payload: payload(90, false), files: {}, user: users.solicitor, req });
-      await assert.rejects(() => updateFinancialRequest({ id: draft._id, payload: { lines: line(center._id.toString(), 180), submit: true }, files: {}, user: users.solicitor, req }), (error) => /Track B/.test(error.message) && error.details.amount === 180);
+      await assert.rejects(() => updateFinancialRequest({ id: draft._id, payload: { lines: line(center._id.toString(), 180), submit: true }, files: {}, user: users.solicitor, req }), (error) => !/Track B/.test(error.message));
     });
 
     await t.test("7. TRANSITIONAL budget never blocks a larger (USD) invoice and its usage is reported", async () => {

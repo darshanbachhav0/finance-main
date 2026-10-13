@@ -6,7 +6,6 @@ import BankFormatConfiguration from "../models/BankFormatConfiguration.js";
 import BudgetAllocation from "../models/BudgetAllocation.js";
 import BudgetRule from "../models/BudgetRule.js";
 import CostCenter from "../models/CostCenter.js";
-import DirectPaymentEligibilityRule from "../models/DirectPaymentEligibilityRule.js";
 import DocumentRule from "../models/DocumentRule.js";
 import ExchangeRate from "../models/ExchangeRate.js";
 import ExpenseType from "../models/ExpenseType.js";
@@ -167,15 +166,6 @@ export const budgetRules = resourceController({
   searchFields: ["name", "project"],
   sortFields: ["name", "mode", "active", "createdAt"],
   populate: ["costCenter"]
-});
-
-export const directPaymentEligibilityRules = resourceController({
-  Model: DirectPaymentEligibilityRule,
-  label: "DirectPaymentEligibilityRule",
-  fields: ["name", "area", "expenseNature", "maxAmount", "active", "effectiveFrom", "effectiveTo", "notes"],
-  searchFields: ["name", "area"],
-  sortFields: ["name", "area", "active", "createdAt"],
-  defaultSort: { createdAt: -1 }
 });
 
 export const budgetAllocations = resourceController({

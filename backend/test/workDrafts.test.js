@@ -23,9 +23,9 @@ test("private drafts: ownership, encrypted attachments, atomic conflicts, retry,
       return { status: response.status, body: await response.json() };
     };
     // ResourceManager derives its scope from the API endpoint, not the configuration page slug.
-    const eligibilityScope = "resource:direct-payment-eligibility-rules";
+    const eligibilityScope = "resource:approval-rules";
     const eligibilityId = crypto.randomUUID();
-    const eligibilityBody = { scope: eligibilityScope, recordId: "new", route: "/configuration/direct-payment-eligibility", title: "Track B Eligibility", revision: 0, mutationId: crypto.randomUUID(), value: { name: "IT direct payments", area: "IT", expenseNature: "Services", maxAmount: 500, active: true } };
+    const eligibilityBody = { scope: eligibilityScope, recordId: "new", route: "/configuration/approval-rules", title: "Approval Rules", revision: 0, mutationId: crypto.randomUUID(), value: { name: "IT approvals", area: "IT", role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", maxAmount: 500, active: true } };
     assert.equal((await call(`?scope=${eligibilityScope}&recordId=new`, "GET", undefined, 3)).status, 200);
     assert.equal((await call(`/${eligibilityId}`, "PUT", eligibilityBody, 3)).status, 200);
     assert.equal((await call(`/${eligibilityId}`, "GET", undefined, 3)).body.data.value.maxAmount, 500);
@@ -35,7 +35,7 @@ test("private drafts: ownership, encrypted attachments, atomic conflicts, retry,
       assert.equal((await call(`/${crypto.randomUUID()}`, "PUT", eligibilityBody, index)).status, 403);
       assert.equal((await call(`/${eligibilityId}`, "GET", undefined, index)).status, 404);
     }
-    assert.equal(await mongoose.connection.db.collection("directpaymenteligibilityrules").countDocuments(), 0, "Saving a draft must not enable Track B");
+    assert.equal(await mongoose.connection.db.collection("approvalrules").countDocuments(), 0, "Saving a draft must not create the rule");
     assert.equal((await call(`/${eligibilityId}?revision=1`, "DELETE", undefined, 3)).status, 200);
     const id = crypto.randomUUID();
     const body = { scope: "supplier", recordId: "new", route: "/suppliers", title: "Supplier proposal", revision: 0, mutationId: crypto.randomUUID(), value: { identifier: "20123456789", form: { contactName: "Saved contact", bankAccount: "0123456789" } } };
