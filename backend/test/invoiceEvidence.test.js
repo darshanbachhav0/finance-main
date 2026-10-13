@@ -72,6 +72,17 @@ test("the request is verified from the factura PDF exactly as from an XML", asyn
   assert.equal(wrong.validated, false);
   assert.ok(wrong.errors.some((error) => /Total amount does not match the factura PDF/.test(error)), JSON.stringify(wrong.errors));
   assert.ok(wrong.errors.some((error) => /Supplier RUC\/DNI does not match the factura PDF/.test(error)));
+  // Each difference also comes structured, so the screen can list expected vs found per field.
+  assert.deepEqual(wrong.mismatches, [
+    { field: "supplier", expected: "20999999991", found: voucher.ruc },
+    { field: "totalAmount", expected: 1190, found: 1180 }
+  ]);
+  assert.deepEqual(valid.mismatches, []);
+  const late = await buildInvoiceValidationResult(filePath, { ...request, issueDate: "2026-10-12", currency: "USD" });
+  assert.deepEqual(late.mismatches, [
+    { field: "currency", expected: "USD", found: "PEN" },
+    { field: "issueDate", expected: "2026-10-12", found: "2026-10-05" }
+  ]);
 });
 
 test("the XML is preferred when both files are attached", () => {

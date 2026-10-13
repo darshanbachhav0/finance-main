@@ -200,20 +200,29 @@ export async function buildInvoiceValidationResult(filePath, requestData) {
     totalMatch: data.totalAmount !== undefined && moneyEquals(data.totalAmount, requestData.totalAmount)
   };
 
-  if (!comparisons.currencyMatch) errors.push(`Currency does not match the ${file}. Form ${requestData.currency}, ${file} ${data.currency || "missing"}.`);
-  if (!data.ruc) errors.push(`The ${file} does not include the supplier RUC/DNI.`);
-  else if (!comparisons.supplierMatch) errors.push(`Supplier RUC/DNI does not match the ${file}. Expected ${expectedIdentifier}, ${file} ${data.ruc}.`);
+  // Each problem is also returned as { field, expected, found } (found null: the file does not show
+  // it), so the screen can list every difference in the user's language. One entry per field.
+  const mismatches = [];
+  const report = (field, message, expected, found) => {
+    errors.push(message);
+    if (!mismatches.some((item) => item.field === field)) mismatches.push({ field, expected: expected ?? null, found: found ?? null });
+  };
+  const expectedNet = requestData.totalNet ?? requestData.netAmount;
+  const expectedIgv = requestData.totalIGV ?? requestData.igvAmount;
+  if (!comparisons.currencyMatch) report("currency", `Currency does not match the ${file}. Form ${requestData.currency}, ${file} ${data.currency || "missing"}.`, requestData.currency, data.currency);
+  if (!data.ruc) report("supplier", `The ${file} does not include the supplier RUC/DNI.`, expectedIdentifier, null);
+  else if (!comparisons.supplierMatch) report("supplier", `Supplier RUC/DNI does not match the ${file}. Expected ${expectedIdentifier}, ${file} ${data.ruc}.`, expectedIdentifier, data.ruc);
   // A PDF must show the voucher's identity itself: SUNAT is consulted with it later.
-  if (source === "PDF" && !data.invoiceNumber) errors.push("The factura PDF does not show the voucher series and number.");
-  if (expectedDocument && !comparisons.documentNumberMatch) errors.push(`Voucher number does not match the ${file}. Expected ${expectedDocument}, ${file} ${data.invoiceNumber || "missing"}.`);
-  if (source === "PDF" && !data.issueDate) errors.push("The factura PDF does not show the issue date.");
-  if (expectedDate && !comparisons.dateMatch) errors.push(`Issue date does not match the ${file}. Expected ${dateOnly(expectedDate)}, ${file} ${data.issueDate || "missing"}.`);
-  if (data.netAmount === undefined) errors.push(`The ${file} does not include the Net amount.`);
-  else if (!comparisons.netMatch) errors.push(`Net amount does not match the ${file}. Form ${requestData.totalNet ?? requestData.netAmount}, ${file} ${data.netAmount}.`);
-  if (data.igvAmount === undefined) errors.push(`The ${file} does not include the IGV amount.`);
-  else if (!comparisons.igvMatch) errors.push(`IGV amount does not match the ${file}. Form ${requestData.totalIGV ?? requestData.igvAmount}, ${file} ${data.igvAmount}.`);
-  if (data.totalAmount === undefined) errors.push(`The ${file} does not include the Total amount.`);
-  else if (!comparisons.totalMatch) errors.push(`Total amount does not match the ${file}. Form ${requestData.totalAmount}, ${file} ${data.totalAmount}.`);
+  if (expectedDocument && !comparisons.documentNumberMatch) report("documentNumber", `Voucher number does not match the ${file}. Expected ${expectedDocument}, ${file} ${data.invoiceNumber || "missing"}.`, expectedDocument, data.invoiceNumber);
+  if (source === "PDF" && !data.invoiceNumber) report("documentNumber", "The factura PDF does not show the voucher series and number.", expectedDocument, null);
+  if (expectedDate && !comparisons.dateMatch) report("issueDate", `Issue date does not match the ${file}. Expected ${dateOnly(expectedDate)}, ${file} ${data.issueDate || "missing"}.`, dateOnly(expectedDate), data.issueDate);
+  if (source === "PDF" && !data.issueDate) report("issueDate", "The factura PDF does not show the issue date.", expectedDate ? dateOnly(expectedDate) : null, null);
+  if (data.netAmount === undefined) report("netAmount", `The ${file} does not include the Net amount.`, expectedNet, null);
+  else if (!comparisons.netMatch) report("netAmount", `Net amount does not match the ${file}. Form ${expectedNet}, ${file} ${data.netAmount}.`, expectedNet, data.netAmount);
+  if (data.igvAmount === undefined) report("igvAmount", `The ${file} does not include the IGV amount.`, expectedIgv, null);
+  else if (!comparisons.igvMatch) report("igvAmount", `IGV amount does not match the ${file}. Form ${expectedIgv}, ${file} ${data.igvAmount}.`, expectedIgv, data.igvAmount);
+  if (data.totalAmount === undefined) report("totalAmount", `The ${file} does not include the Total amount.`, requestData.totalAmount, null);
+  else if (!comparisons.totalMatch) report("totalAmount", `Total amount does not match the ${file}. Form ${requestData.totalAmount}, ${file} ${data.totalAmount}.`, requestData.totalAmount, data.totalAmount);
 
   const checksum = await fileChecksum(filePath);
   return {
@@ -225,6 +234,7 @@ export async function buildInvoiceValidationResult(filePath, requestData) {
     ...comparisons,
     errors,
     errorMessages: errors,
+    mismatches,
     rawMetadataReference: checksum,
     data
   };
