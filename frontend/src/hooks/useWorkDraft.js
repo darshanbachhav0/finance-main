@@ -30,17 +30,25 @@ export function useDraftResume(scope, open) {
   }, [location.search, scope, open]);
 }
 
-export default function useWorkDraft({ scope, recordId = "new", title, value, restore, enabled = true, route, sourceVersion }) {
+// resumeLatest: without a draft named in the address, reopen the latest saved draft of this form.
+// Off for forms where opening means starting something new; their drafts are reached by link.
+export default function useWorkDraft({ scope, recordId = "new", title, value, restore, enabled = true, route, sourceVersion, resumeLatest = true }) {
   const { user } = useAuth();
   const location = useLocation();
   const [, render] = useReducer(x => x + 1, 0);
   const [generation, setGeneration] = useState(0);
   const [restoration, setRestoration] = useState(0);
   const copiedFrom = useRef(null);
+  // The form as first loaded for this record, before any draft was restored into it.
+  const blank = useRef(null);
   const params = new URLSearchParams(location.search);
   const requestedId = params.get("workScope") === scope ? params.get("workDraft") : null;
+  // A link to a saved draft opens that draft, even after this form started a new or copied one.
+  const [opened, setOpened] = useState(requestedId);
+  if (opened !== requestedId) { setOpened(requestedId); if (requestedId) setGeneration(0); }
   const key = `${user?._id}:${scope}:${recordId}:${requestedId || "latest"}:${generation}`;
   const session = draftSession(key, { owner: user?._id, scope, recordId: String(recordId), title, route: route || location.pathname, sourceVersion });
+  session.title = title;
   if (generation && copiedFrom.current) session.copySource = copiedFrom.current;
   const current = useRef({ value, restore }); current.current = { value, restore };
   const [hydratedKey, setHydratedKey] = useState("");
@@ -53,14 +61,17 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
     try {
       if (!session.loaded || force) {
         if (!force && !generation) cached = await readCachedDraft(user._id, scope, String(recordId), requestedId).catch(() => null);
+        // Unsynchronized new work is still recovered; a draft already on the server waits for its link.
+        if (cached?.revision && !requestedId && !resumeLatest) cached = null;
         let row;
         if ((requestedId || cached?.revision) && !generation) row = (await api.get(`/work-drafts/${requestedId || cached.id}`)).data.data;
-        else if (!generation) {
+        else if (!generation && resumeLatest) {
           const list = (await api.get("/work-drafts", { params: { scope, recordId } })).data.data;
           if (list[0]) row = (await api.get(`/work-drafts/${list[0]._id}`)).data.data;
         }
         if (row && (row.scope !== scope || row.recordId !== String(recordId))) throw new Error("This draft belongs to a different form.");
-        session.initial = current.current.value;
+        if (blank.current?.recordId !== String(recordId)) blank.current = { recordId: String(recordId), value: current.current.value };
+        session.initial = blank.current.value;
         session.sourceVersion = sourceVersion;
         if (row) {
           session.id = row._id; session.revision = row.revision; session.updatedAt = row.updatedAt;
@@ -68,7 +79,11 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
           session.signature = session.savedSignature = draftFingerprint(session.value);
           session.sourceChanged = sourceVersion && row.sourceVersion && sourceVersion !== row.sourceVersion;
           session.restored = true;
-        } else { session.value = current.current.value; session.signature = draftFingerprint(session.value); session.savedSignature = generation && copiedFrom.current ? "__new_copy" : session.signature; }
+        } else {
+          // Without resumeLatest a new draft starts blank, not from the draft the form showed before.
+          session.value = (generation && copiedFrom.current) || resumeLatest ? current.current.value : session.initial;
+          session.signature = draftFingerprint(session.value); session.savedSignature = generation && copiedFrom.current ? "__new_copy" : session.signature;
+        }
         // restore() may normalize the value (e.g. recalculated item lines); that is not an edit to save.
         session.adoptRestored = session.savedSignature !== "__new_copy";
         session.pending = null; session.loaded = true;

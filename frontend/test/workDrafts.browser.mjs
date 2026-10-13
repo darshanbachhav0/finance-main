@@ -142,7 +142,9 @@ try {
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await page.waitForURL("**/login");
+  // New request opens blank; the unfinished request is listed and reopens from there.
   await page.goto(`${origin}/requests/new`);
+  await page.locator(".continue-work").getByRole("link", { name: "Continue", exact: true }).first().click();
   await page.waitForFunction(() => [...document.querySelectorAll("input")].some(input => input.value === "Saved financial request"));
   assert.equal(await page.getByLabel("Requirement title", { exact: false }).inputValue(), "Saved financial request");
   assert.deepEqual(errors, []);

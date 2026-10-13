@@ -4,6 +4,7 @@ import { validationSummary } from "../utils/validationMessages.js";
 import MotionList from "../components/MotionList.jsx";
 import useWorkDraft from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
+import ContinueWork from "../components/ContinueWork.jsx";
 import UploadedFileList, { openLocalFile } from "../components/UploadedFileList.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import {
@@ -288,17 +289,6 @@ export default function RequestCreate() {
           setForm((current) => ({ ...current, requesterCostCenter: defaultCenter, schoolOrDepartment: user.area || "" }));
           setLines([emptyLine(defaultCenter)]);
         }
-        const createdSupplierId = location.state?.createdSupplierId;
-        if (createdSupplierId) {
-          setForm((current) => ({ ...current, supplier: current.supplier || createdSupplierId }));
-          setQuotations((current) => {
-            const target = current.length ? current : [emptyQuotation()];
-            const emptyIndex = target.findIndex((item) => !item.supplier);
-            return target.map((item, index) => index === (emptyIndex < 0 ? 0 : emptyIndex) ? { ...item, supplier: createdSupplierId } : item);
-          });
-          notify("Supplier proposal linked to the request quotation.", "success");
-          navigate(location.pathname, { replace: true, state: null });
-        }
         setHydratedRecord(id || "new");
         setHydrated(true);
       } catch (err) {
@@ -333,7 +323,8 @@ export default function RequestCreate() {
     return () => { active = false; };
   }, [form.flowType, form.requestType, form.expenseNature, hydrated]);
 
-  const draft = useWorkDraft({ scope: "request", recordId: id || "new", title: "Financial request", enabled: hydrated && !loading && hydratedRecord === (id || "new"), sourceVersion,
+  // "New request" always opens a blank request; unfinished ones are listed above it.
+  const draft = useWorkDraft({ scope: "request", recordId: id || "new", title: String(form.title || "").trim() || "Financial request", resumeLatest: isEditing, enabled: hydrated && !loading && hydratedRecord === (id || "new"), sourceVersion,
     value: { form, capex, opexFrequency, lines, quotations, files, quotationFiles, removedAttachmentIds, stepId, visitedSteps, completedSteps },
     restore: data => {
       if (!data) return;
@@ -345,6 +336,42 @@ export default function RequestCreate() {
     }
   });
   useEffect(() => { if (draft.ready) void draft.flush(); }, [stepId]);
+  // The address names the saved new-request draft, so a reload or a return link reopens it.
+  // history.replaceState keeps the router (and this form) as they are.
+  const draftSearch = draft.session.revision ? `?${new URLSearchParams({ workDraft: draft.session.id, workScope: "request", workRecord: "new" })}` : "";
+  useEffect(() => {
+    if (isEditing || !draft.ready) return;
+    if (window.location.search !== draftSearch) window.history.replaceState(window.history.state, "", `${location.pathname}${draftSearch}`);
+  }, [isEditing, draft.ready, draftSearch]);
+  // "New request" clicked while a request is open: that draft stays in Continue your work and a
+  // blank request starts.
+  const ownNavigation = useRef(false);
+  const navigationKey = useRef(location.key);
+  useEffect(() => {
+    if (navigationKey.current === location.key) return;
+    navigationKey.current = location.key;
+    if (ownNavigation.current) { ownNavigation.current = false; return; }
+    if (isEditing || new URLSearchParams(location.search).get("workDraft")) return;
+    window.scrollTo({ top: 0 });
+    const edited = draft.session.revision || draft.session.signature !== draft.session.savedSignature;
+    if (draft.ready && edited) void draft.startAnother?.();
+  }, [location.key]);
+  // A supplier registered from this form is linked once the draft has been restored.
+  const createdSupplier = useRef(location.state?.createdSupplierId || "");
+  useEffect(() => {
+    const createdSupplierId = createdSupplier.current;
+    if (!draft.ready || !createdSupplierId) return;
+    createdSupplier.current = "";
+    setForm((current) => ({ ...current, supplier: current.supplier || createdSupplierId }));
+    setQuotations((current) => {
+      const target = current.length ? current : [emptyQuotation()];
+      const emptyIndex = target.findIndex((item) => !item.supplier);
+      return target.map((item, index) => index === (emptyIndex < 0 ? 0 : emptyIndex) ? { ...item, supplier: createdSupplierId } : item);
+    });
+    notify("Supplier proposal linked to the request quotation.", "success");
+    ownNavigation.current = true;
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [draft.ready]);
 
   const budgetPayload = useMemo(() => ({
     flowType: form.flowType, requestType: form.requestType, expenseNature: form.expenseNature,
@@ -480,7 +507,11 @@ export default function RequestCreate() {
         if (recommended.length !== 1) next.recommended = "Select exactly one recommended supplier.";
         if (!form.supplierSelectionReason.trim()) next.supplierSelectionReason = "Supplier selection reason is required.";
       }
-      if (!quotationPolicy.enabled && submitting && !form.supplier && form.flowType !== "C") next.supplier = "Select a supplier.";
+      // A saved request always names its supplier, so "Save draft" needs it as well.
+      if (!form.supplier && form.flowType !== "C") {
+        if (!quotationPolicy.enabled) next.supplier = "Select a supplier.";
+        else next.recommended ||= "Select exactly one recommended supplier.";
+      }
     }
     if (id === "documents" && submitting) {
       formPolicy.documentRequirements.forEach((rule) => {
@@ -651,7 +682,8 @@ export default function RequestCreate() {
       description="Describe what you need, where it is charged and who supplies it. Your progress saves automatically."
       actions={null}
     />
-    <DraftPanel busy={saving} draft={draft} onDiscard={() => navigate("/requests")}>
+    {!isEditing && <ContinueWork scope="request" recordId="new" exclude={draft.session.id} />}
+    <DraftPanel busy={saving} draft={draft} onDiscard={() => navigate(isEditing ? `/requests/${id}` : "/requests")}>
     {stepId === "review" && <ReadinessPanel defaultOpen payload={{ ...form, lines, quotations: quotations.map(q => ({ ...q, attachment: quotationFiles[q.clientId] ? "preview-only" : q.attachment })), attachments: [...existingAttachments, ...Object.values(quotationFiles).filter(Boolean).map(file => ({ kind: "QUOTATION", name: file.name, url: "preview-only" })), ...documentDefinitions.flatMap(def => (files[def.key] || []).map(file => ({ kind: def.kind, name: file.name, url: "preview-only" })))] }} />}
 
     <div className="request-wizard official-request-wizard">
@@ -755,7 +787,7 @@ export default function RequestCreate() {
             {quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}
             <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => { setForm((current) => ({ ...current, supplierSelectionReason: event.target.value })); if (event.target.value.trim()) setFieldError("supplierSelectionReason", ""); }} onBlur={() => quotationPolicy.enabled && setFieldError("supplierSelectionReason", requiredError(form.supplierSelectionReason, "Supplier selection reason is required."))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
-          <Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : "/requests/new")}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
+          <Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
         </div>}
 
         {stepId === "documents" && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Supporting documents")}</h3><p>{t("Quotation evidence is attached to each supplier above; other configured evidence is uploaded here.")}</p></div></div><div className="document-requirement required"><FileText size={20} /><div><strong>{t("Mandatory document checklist")}</strong><p>{formPolicy.documentRequirements.length ? formPolicy.documentRequirements.map((rule) => isEitherOf(rule) ? t(rule.labelKey) : `${t(rule.labelKey)} x ${rule.minCount}`).join(" - ") : t("No additional configured evidence for this classification.")}</p></div></div><button type="button" className="text-button" aria-expanded={showOptionalDocuments} onClick={() => setShowOptionalDocuments(value => !value)}>{t(showOptionalDocuments ? "Hide optional documents" : "Additional documents")}</button><div className="document-grid">{documentDefinitions.map((document) => {

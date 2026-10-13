@@ -1044,6 +1044,7 @@ const phase2SupplierSpanish = {
   "Loading SUNAT details in the background": "Cargando datos de SUNAT en segundo plano",
   "You can continue filling the form. Available SUNAT data will fill untouched fields automatically.": "Puede continuar llenando el formulario. Los datos disponibles de SUNAT completarán automáticamente los campos que no haya editado.",
   "Supplier proposal created. No PRV was assigned yet.": "Propuesta de proveedor creada. Aún no se asignó un PRV.",
+  "Supplier proposal linked to the request quotation.": "Propuesta de proveedor vinculada a la cotización de la solicitud.",
   "Supplier corrections saved and returned to the review queue.": "Correcciones guardadas y devueltas a la cola de revisión.",
   "Supplier records could not be loaded.": "No se pudieron cargar los proveedores.",
   "No suppliers match the current search and filters.": "Ningún proveedor coincide con la búsqueda y filtros actuales.",
