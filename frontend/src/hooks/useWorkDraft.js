@@ -68,12 +68,15 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
           session.signature = session.savedSignature = draftFingerprint(session.value);
           session.sourceChanged = sourceVersion && row.sourceVersion && sourceVersion !== row.sourceVersion;
           session.restored = true;
-        } else { session.value = current.current.value; session.signature = draftFingerprint(session.value); session.savedSignature = generation ? "__new_copy" : session.signature; }
+        } else { session.value = current.current.value; session.signature = draftFingerprint(session.value); session.savedSignature = generation && copiedFrom.current ? "__new_copy" : session.signature; }
+        // restore() may normalize the value (e.g. recalculated item lines); that is not an edit to save.
+        session.adoptRestored = session.savedSignature !== "__new_copy";
         session.pending = null; session.loaded = true;
         if (cached) {
           Object.assign(session, cached);
           session.signature = draftFingerprint(session.value);
           session.offlineRestored = true;
+          session.adoptRestored = false;
         }
       }
       if (!isActive()) return;
@@ -99,6 +102,11 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
 
   const signature = draftFingerprint(value);
   useEffect(() => {
+    if (!ready || !session.adoptRestored) return;
+    session.adoptRestored = false;
+    session.value = value; session.signature = session.savedSignature = signature;
+  }, [restoration]);
+  useEffect(() => {
     if (!ready || session.closed) return;
     session.value = value; session.signature = signature;
     if (signature !== session.savedSignature && !["conflict", "load-error"].includes(session.status)) {
@@ -122,7 +130,7 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
     } catch (error) {
       // The business operation already succeeded; never encourage resubmission.
       window.dispatchEvent(new CustomEvent("uma:draft-cleanup-warning", { detail: error.message }));
-    } finally { draftSignal(session, "completed"); }
+    } finally { draftSignal(session, "completed"); startBlank(); }
   }
   async function discard() {
     if (session.inflight) await session.inflight;
@@ -131,7 +139,14 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
     await removeCachedDraft(session);
     draftSignal(session, "discarded");
     window.dispatchEvent(new Event("uma:drafts-changed"));
+    startBlank();
     return true;
+  }
+  // A finished or discarded draft is followed by a blank one, saved only once edited, instead of
+  // reopening the latest saved draft into the form that is closing.
+  function startBlank() {
+    copiedFrom.current = null;
+    setGeneration(n => n + 1);
   }
   function separateCopy() {
     copiedFrom.current = session;
