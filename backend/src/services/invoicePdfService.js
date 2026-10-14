@@ -114,23 +114,19 @@ function issueDate(lines) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function currencyIn(value) {
-  if (/DOLAR|US\$|\bUSD\b/.test(value)) return "USD";
-  if (/\bSOL(?:ES)?\b|\bS\/|\bPEN\b/.test(value)) return "PEN";
+// "Sol" is the singular some invoices print ("Tipo de moneda: Sol", "00/100 SOL").
+function currencyIn(text) {
+  if (/DOLAR|US\$|\bUSD\b/.test(text)) return "USD";
+  if (/\bSOL(?:ES)?\b|\bS\/|\bPEN\b/.test(text)) return "PEN";
   return "";
 }
 
-// The "Moneda" field decides: its value follows the label or, when the labels form a header row
-// ("Fecha de factura: … Tipo de moneda: … Forma de pago:"), sits on the row below. Only when that
-// field names no currency does a currency anywhere else in the text (S/ beside the amounts) decide.
+// The currency is printed beside its "Moneda" label, or under it when the labels form a header row
+// above their values ("Fecha ... Tipo de moneda: ... Forma de pago:" over "10/10/2026 ... Sol ...").
+// Only when neither line names it is the whole text read (its amounts printed as "S/ 441.00").
 function currency(lines, text) {
-  const label = lines.findIndex((line) => /\bMONEDA\b/.test(line));
-  if (label >= 0) {
-    const line = lines[label];
-    const found = currencyIn(line.slice(line.search(/\bMONEDA\b/) + "MONEDA".length)) || currencyIn(lines[label + 1] || "");
-    if (found) return found;
-  }
-  return currencyIn(text);
+  const labelled = lines.findIndex((line) => /\bMONEDA\b/.test(line));
+  return (labelled >= 0 && (currencyIn(lines[labelled]) || currencyIn(lines[labelled + 1] || ""))) || currencyIn(text);
 }
 
 // The totals block sits at the end, so the last labelled line wins (an item table's "Total" column

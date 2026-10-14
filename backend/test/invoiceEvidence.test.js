@@ -50,16 +50,20 @@ test("the factura reader handles the usual printed layouts", () => {
   const fees = invoiceFieldsFromLines(["RECIBO POR HONORARIOS ELECTRONICO", "E001-12", "RUC: 10456789012", "Fecha de emisión: 15 de setiembre del 2026", "Moneda: SOLES", "TOTAL POR HONORARIOS: 2,000.00", "RETENCION (8%) IR: 160.00", "TOTAL NETO RECIBIDO: 1,840.00"]);
   assert.deepEqual([fees.voucherType, fees.invoiceNumber, fees.issueDate, fees.netAmount, fees.igvAmount, fees.totalAmount], ["RXH", "E001-12", "2026-09-15", 2000, 0, 2000]);
 
-  // Labels in a header row with their values ("Sol", singular) on the row below.
+  // Labels in a header row with their values underneath, the currency as the singular "Sol", and
+  // every text fragment drawn twice (as pdf.js reads Total Networks' factura F001-00015597).
   assert.deepEqual(invoiceFieldsFromLines([
-    "SOFTWARE ANDINO S.A.C.", "F001-00000123", "RUC: 20512345678", "Factura electrónica",
-    "Razón social:", "UNIVERSIDAD MARIA AUXILIADORA S.A.C.", "RUC 20100000001",
-    "Fecha de Factura: Fecha de vencimiento: Tipo de moneda: Forma de pago:", "05/10/2026 31/10/2026 Sol Credito",
-    "Cantidad Descripción Precio unitario Impuestos Importe", "1 Licencia anual 1,180.00 IGV S/ 1,000.00",
-    "Subtotal S/ 1,000.00", "IGV S/ 180.00", "Total S/ 1,180.00"
-  ]), { ruc: "20512345678", supplierName: "", invoiceNumber: "F001-00000123", documentTypeCode: "01", voucherType: "FACTURA", issueDate: "2026-10-05", currency: "PEN", netAmount: 1000, igvAmount: 180, totalAmount: 1180 });
-  // A "Moneda" label with no value beside or below it does not hide the S/ printed with the amounts.
-  assert.equal(invoiceFieldsFromLines(["FACTURA F001-1", "Tipo de moneda: Forma de pago:", "Credito", "TOTAL S/ 59.00"]).currency, "PEN");
+    "Total Networks S.A Total Networks S.A", "F001-00015597", "RUC: 20601694680 RUC: 20601694680", "Factura electrónica Factura electrónica",
+    "Razón social: Razón social:", "UNIVERSIDAD MARIA AUXILIADORA S.A.C.", "RUC RUC 20550807123",
+    "Fecha de Factura: Fecha de Factura: Fecha de vencimiento: Fecha de vencimiento: Tipo de moneda: Tipo de moneda: Forma de pago: Forma de pago:",
+    "10/10/2026 31/10/2026 Sol Credito",
+    "Cantidad Descripción Precio unitario Impuestos Importe", "1 Internet Business+ 200Mbps 441.00 IGV S/ 373.73",
+    "Subtotal S/ 373.73", "IGV S/ 67.27", "Número de factura : F001-00015597 F001-00015597", "Total Total S/ S/ 441.00 441.00",
+    "Monto a pagar: S/ 441.00 Cuota: 01 Codigo de cliente: 10135"
+  ], { expectedRuc: "20601694680" }), { ruc: "20601694680", supplierName: "", invoiceNumber: "F001-00015597", documentTypeCode: "01", voucherType: "FACTURA", issueDate: "2026-10-10", currency: "PEN", netAmount: 373.73, igvAmount: 67.27, totalAmount: 441 });
+  // A currency label whose neighbourhood names none still reads the amounts' own symbol.
+  assert.equal(invoiceFieldsFromLines(["RUC 20512345678", "FACTURA F001-5", "Moneda:", "Fecha 01/10/2026", "TOTAL S/ 118.00"]).currency, "PEN");
+  assert.equal(invoiceFieldsFromLines(["RUC 20512345678", "FACTURA F001-6", "Tipo de moneda:", "Dólares americanos", "TOTAL 118.00"]).currency, "USD");
 
   // When the request's supplier RUC is printed as a non-buyer RUC, it is taken as the issuer.
   assert.equal(invoiceFieldsFromLines(["Grupo SAC RUC 20999999991", "Emisor: RUC 20512345678", "FACTURA F001-1"], { expectedRuc: "20512345678" }).ruc, "20512345678");
