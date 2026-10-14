@@ -24,7 +24,7 @@ export default {
   "Pause": "Pausar",
   "Paused": "En pausa",
   "Oldest pending suppliers": "Proveedores pendientes más antiguos",
-  "Ready for Finance review": "Listo para revisión de Finanzas",
+  "Ready for the jefe's approval": "Listo para la aprobación del jefe",
   "Requirements pending": "Requisitos pendientes",
   "Ready for closure review": "Listo para revisión de cierre",
   "Upload CSV columns: date,reference,currency,amount. Dates: YYYY-MM-DD. Amounts: positive debits. Maximum 100 rows.": "Carga un CSV con columnas date,reference,currency,amount. Fechas: AAAA-MM-DD. Importes: débitos positivos. Máximo 100 filas.",

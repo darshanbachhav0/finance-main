@@ -115,18 +115,10 @@ export default function Suppliers() {
   const recordId = /^[a-f0-9]{24}$/i.test(routeId || "") ? routeId : "";
   const [actionError, setActionError] = useState("");
 
-  // Every internal user can propose a supplier; Accounting validates and homologates it. The
-  // read-only Super Admin only looks.
+  // Every internal user can propose a supplier; the proposer's jefe approves it. The read-only
+  // Super Admin only looks.
   const canPropose =
     user.role !== "ManagementViewer" && !readOnly;
-
-  const canFinance =
-    [
-      "Admin",
-      "Accounting"
-    ].includes(
-      user.role
-    );
 
   const suppliers =
     usePaginatedResource(
@@ -425,34 +417,49 @@ export default function Suppliers() {
 
         {
           key:
-            "financeReview",
+            "jefeApproval",
 
           type:
             "status",
 
           label:
-            "Finance Review",
+            "Jefe approval",
 
           width:
-            "140px",
+            "170px",
 
           getValue:
             (row) =>
               row
-                .complianceReview
-                ?.result ||
+                .jefeApproval
+                ?.decision ||
               "PENDING",
 
+          // While it waits, who decides it: the proposer's jefe, whoever covers for them, or the Admin.
           render:
             (row) => (
-              <StatusBadge
-                status={
-                  row
-                    .complianceReview
-                    ?.result ||
-                  "PENDING"
+              <div className="table-primary-cell">
+                <StatusBadge
+                  status={
+                    row
+                      .jefeApproval
+                      ?.decision ||
+                    "PENDING"
+                  }
+                />
+
+                {
+                  row.approval && (
+                    <span>
+                      {
+                        row.approval.approver
+                          ? row.approval.approver.name
+                          : t("Admin (no jefe available)")
+                      }
+                    </span>
+                  )
                 }
-              />
+              </div>
             )
         },
 
@@ -1265,7 +1272,9 @@ export default function Suppliers() {
     });
   }
 
-  async function runConfirmedAction() {
+  async function runConfirmedAction(
+    input
+  ) {
     const action =
       confirmation?.action;
 
@@ -1288,7 +1297,7 @@ export default function Suppliers() {
 
     try {
       const completed =
-        await action();
+        await action(input);
 
       if (
         completed !==
@@ -1323,52 +1332,45 @@ export default function Suppliers() {
     }
   }
 
-  function requestFinanceReview(
-    review, onRecorded
+  // The proposer's jefe (or whoever covers for them) decides; observe and reject need a reason.
+  function requestApprovalDecision(
+    decision
   ) {
-    const descriptions = {
-      APPROVED:
-        "Records Finance approval. It does not assign a PRV until every homologation control passes.",
-
-      OBSERVED:
-        "Marks the supplier as observed and returns permitted proposal fields for correction.",
-
-      REJECTED:
-        "Rejects this onboarding record. No PRV will be assigned and the identifier cannot be recreated to bypass rejection.",
-
-      PENDING:
-        "Returns the Finance review to pending without homologating the supplier."
+    const definitions = {
+      APPROVE: {
+        title: "Approve this supplier?",
+        description: "Approving assigns the PRV code and lets every requester use this supplier on their requests. Accounting still verifies its bank account before Treasury pays it.",
+        confirmLabel: "Approve supplier",
+        tone: "primary",
+        inputLabel: "Approval comments",
+        inputRequired: false,
+        success: "Supplier approved and PRV assigned. It can now be used on requests."
+      },
+      OBSERVE: {
+        title: "Observe this supplier?",
+        description: "The proposer corrects the stated observations and the supplier comes back to you.",
+        confirmLabel: "Observe supplier",
+        tone: "danger",
+        inputLabel: "Observation comments",
+        inputRequired: true,
+        success: "Supplier observed and returned to the proposer."
+      },
+      REJECT: {
+        title: "Reject this supplier?",
+        description: "No PRV is assigned and the RUC/DNI cannot be proposed again to bypass the rejection.",
+        confirmLabel: "Reject supplier",
+        tone: "danger",
+        inputLabel: "Rejection comments",
+        inputRequired: true,
+        success: "Supplier rejected with a preserved decision record."
+      }
     };
+    const definition = definitions[decision];
 
     confirmAction({
-      title:
-        "Confirm Finance review",
-
-      description:
-        descriptions[
-          review.result
-        ],
-
-      confirmLabel:
-        "Record Finance review",
-
-      tone:
-        review.result ===
-          "REJECTED"
-          ? "danger"
-          : "primary",
+      ...definition,
 
       details: [
-        {
-          label:
-            "Result",
-
-          value:
-            t(
-              review.result
-            )
-        },
-
         {
           label:
             "Supplier",
@@ -1378,14 +1380,29 @@ export default function Suppliers() {
               .legalName ||
             detail
               .name
+        },
+
+        {
+          label:
+            "Proposed By",
+
+          value:
+            detail
+              .proposedBy
+              ?.name ||
+            "-"
         }
       ],
 
-      action: async () => {
-        const success = await mutate(() => api.post(`/suppliers/${detail._id}/review`, review), "Finance review recorded.");
-        if (success) await onRecorded?.();
-        return success;
-      }
+      action: (comments) =>
+        mutate(
+          () =>
+            api.post(
+              `/suppliers/${detail._id}/approval`,
+              { decision, comments }
+            ),
+          definition.success
+        )
     });
   }
 
@@ -1428,13 +1445,15 @@ export default function Suppliers() {
 
       {
         label:
-          "Open Finance review",
+          "Review and decide",
 
         icon:
           ShieldCheck,
 
         hidden:
-          !canFinance,
+          !row
+            .permissions
+            ?.canApprove,
 
         onClick:
           () =>
@@ -1864,6 +1883,14 @@ export default function Suppliers() {
           confirmation
             ?.loading
         }
+        inputLabel={
+          confirmation
+            ?.inputLabel
+        }
+        inputRequired={
+          confirmation
+            ?.inputRequired
+        }
         error={actionError}
         onConfirm={
           runConfirmedAction
@@ -2013,55 +2040,8 @@ export default function Suppliers() {
                     "Taxpayer validation source and result recorded."
                   )
               }
-              onFinanceReview={
-                requestFinanceReview
-              }
-              onHomologate={
-                () =>
-                  confirmAction({
-                    title:
-                      "Homologate supplier and assign PRV?",
-
-                    description:
-                      "This assigns one immutable PRV code, activates the supplier, and makes it available to the existing request workflow.",
-
-                    confirmLabel:
-                      "Homologate and assign PRV",
-
-                    details: [
-                      {
-                        label:
-                          "Supplier",
-
-                        value:
-                          detail
-                            .legalName ||
-                          detail
-                            .name
-                      },
-
-                      {
-                        label:
-                          "Result",
-
-                        value:
-                          t(
-                            "Active homologated supplier"
-                          )
-                      }
-                    ],
-
-                    action:
-                      () =>
-                        mutate(
-                          () =>
-                            api.post(
-                              `/suppliers/${detail._id}/homologate`
-                            ),
-
-                          "Supplier homologated and immutable PRV assigned."
-                        )
-                  })
+              onDecision={
+                requestApprovalDecision
               }
               onDeactivateSupplier={
                 () =>
@@ -2126,7 +2106,7 @@ export default function Suppliers() {
     <div className="page-shell supplier-page">
       <PageHeader
         title="Supplier Master & Homologation"
-        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, Finance review, banking history and controlled PRV assignment."
+        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, approval by the proposer's jefe, banking history and controlled PRV assignment."
         actions={
           <>
             <button
@@ -2236,13 +2216,13 @@ export default function Suppliers() {
 
           {
             key:
-              "complianceReviewResult",
+              "jefeApprovalDecision",
 
             label:
-              "Finance Review",
+              "Jefe approval",
 
             allLabel:
-              "All Finance review results",
+              "All jefe approval decisions",
 
             options: [
               "PENDING",

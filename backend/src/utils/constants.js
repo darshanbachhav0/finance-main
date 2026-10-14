@@ -24,6 +24,8 @@ export const PERMISSIONS = Object.freeze({
   REQUEST_APPROVE: "request:approve",
   REQUEST_VOID: "request:void",
   SUPPLIER_PROPOSE: "supplier:propose",
+  // No longer grants anything: the proposer's jefe approves suppliers. Kept so stored permission
+  // lists stay valid.
   SUPPLIER_HOMOLOGATE: "supplier:homologate",
   SUPPLIER_BANK_VIEW: "supplier:bank-view",
   BUDGET_VIEW: "budget:view",
@@ -56,9 +58,10 @@ export const PERMISSIONS = Object.freeze({
 // Permissions Admin can grant to one person on top of their role ("Additional permissions").
 // Each one opens a self-contained feature and is enforced by the server for that user. Job
 // duties of a department (posting accounting, paying, confirming payments, managing periods,
-// users or master data, homologating suppliers, managing budget) are not grantable piecemeal:
+// users or master data, verifying bank accounts, managing budget) are not grantable piecemeal:
 // they come with the role, which keeps separation of duties intact. Approval authority comes
-// from the approval routes (rules and manager chain), not from a checkbox.
+// from the approval routes (rules and manager chain), not from a checkbox; suppliers are approved
+// by the proposer's jefe the same way.
 export const GRANTABLE_PERMISSIONS = Object.freeze([
   PERMISSIONS.REQUEST_CREATE,
   PERMISSIONS.REQUEST_VIEW_ALL,
@@ -88,7 +91,6 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
   [ROLES.ACCOUNTING]: [
     PERMISSIONS.REQUEST_VIEW_ALL,
     PERMISSIONS.REQUEST_VOID,
-    PERMISSIONS.SUPPLIER_HOMOLOGATE,
     PERMISSIONS.SUPPLIER_BANK_VIEW,
     PERMISSIONS.BUDGET_VIEW,
     PERMISSIONS.ACCOUNTING_PROCESS,
@@ -130,7 +132,7 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
   [ROLES.SUPER_ADMIN]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.AUDIT_VIEW, PERMISSIONS.USER_MANAGE]
 });
 
-// Every internal user can propose a supplier (Accounting then validates and homologates it).
+// Every internal user can propose a supplier (the proposer's jefe then approves it).
 // The portal-only ManagementViewer and the read-only Super Admin cannot.
 export const ROLE_PERMISSIONS = Object.freeze(Object.fromEntries(Object.entries(ROLE_BASE_PERMISSIONS).map(([role, permissions]) => [
   role,

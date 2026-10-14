@@ -26,10 +26,7 @@ import {
   requestFormPolicy,
   submitFinancialRequest
 } from "../src/services/requestService.js";
-import {
-  assertSupplierEligibleForRequestReview,
-  assertSupplierUsable
-} from "../src/services/supplierService.js";
+import { assertSupplierUsable } from "../src/services/supplierService.js";
 import { ERROR_CODES, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
@@ -69,8 +66,11 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       { rucDni: "20622222222", legalName: "Pending Phase 3 SAC", name: "Pending Phase 3 SAC", homologationStatus: "PENDING_VALIDATION", status: "PENDING_VALIDATION", active: false },
       { rucDni: "20633333333", legalName: "Observed Phase 3 SAC", name: "Observed Phase 3 SAC", homologationStatus: "OBSERVED", status: "OBSERVED", active: false },
       { rucDni: "20644444444", legalName: "Rejected Phase 3 SAC", name: "Rejected Phase 3 SAC", homologationStatus: "REJECTED", status: "REJECTED", active: false },
-      { rucDni: "20655555555", legalName: "Inactive Phase 3 SAC", name: "Inactive Phase 3 SAC", homologationStatus: "INACTIVE", status: "INACTIVE", active: false }
+      { rucDni: "20655555555", legalName: "Inactive Phase 3 SAC", name: "Inactive Phase 3 SAC", homologationStatus: "INACTIVE", status: "INACTIVE", active: false },
+      { rucDni: "20666666666", legalName: "Recommended Phase 3 SAC", name: "Recommended Phase 3 SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-8106" }
     ]);
+    // The official A1 document recommends an approved supplier; the other quotations may come from any supplier.
+    const quoted = [suppliers[0], suppliers[5], suppliers[1]];
     await DocumentRule.create({
       code: "PH3-OFFICIAL-OPEX",
       requestType: REQUEST_TYPE.OPEX,
@@ -107,7 +107,7 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
         requesterArea: solicitor.area,
         requesterCostCenter: center._id,
         currency: "PEN",
-        supplier: suppliers[1]._id,
+        supplier: suppliers[5]._id,
         title: "Official laboratory maintenance",
         detailedDescription: "Maintain laboratory equipment and deliver the service report.",
         businessJustification: "Protects teaching continuity and equipment availability.",
@@ -117,7 +117,7 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
         opexDetails: { expenseFrequency: "ONE_OFF" },
         lines: [line()],
         attachments: attachmentIds.map((id, index) => ({ _id: id, kind: "QUOTATION", originalName: `quote-${index + 1}.pdf`, filename: `quote-${index + 1}.pdf`, url: `/files/quote-${index + 1}.pdf`, mimetype: "application/pdf", size: 10, uploadedBy: solicitor._id })),
-        quotations: suppliers.slice(0, 3).map((supplier, index) => ({ supplier: supplier._id, amount: 118 + index, currency: "PEN", attachment: attachmentIds[index], recommended: index === 1 })),
+        quotations: quoted.map((supplier, index) => ({ supplier: supplier._id, amount: 118 + index, currency: "PEN", attachment: attachmentIds[index], recommended: index === 1 })),
         ...overrides
       });
     }
@@ -283,21 +283,23 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       assert.equal(submitted.quotations.length, 1);
     });
 
-    await t.test("pending and observed suppliers may be reviewed, while rejected/inactive and commitment use remain blocked", () => {
-      assert.doesNotThrow(() => assertSupplierEligibleForRequestReview(suppliers[1]));
-      assert.doesNotThrow(() => assertSupplierEligibleForRequestReview(suppliers[2]));
-      assert.throws(() => assertSupplierEligibleForRequestReview(suppliers[3]), (error) => error.code === "SUPPLIER_REJECTED");
-      assert.throws(() => assertSupplierEligibleForRequestReview(suppliers[4]), (error) => error.code === "SUPPLIER_INACTIVE");
+    await t.test("an A1 request is sent only with a supplier the proposer's jefe has approved", async () => {
       assert.throws(() => assertSupplierUsable(suppliers[1]), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED");
+      assert.throws(() => assertSupplierUsable(suppliers[2]), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED");
+      assert.throws(() => assertSupplierUsable(suppliers[3]), (error) => error.code === "SUPPLIER_REJECTED");
+      assert.throws(() => assertSupplierUsable(suppliers[4]), (error) => error.code === "SUPPLIER_INACTIVE");
       assert.doesNotThrow(() => assertSupplierUsable(suppliers[0]));
+      const pending = await officialDocument({ supplier: suppliers[1]._id, quotations: quoted.map((supplier, index) => ({ supplier: supplier._id, amount: 118 + index, currency: "PEN", recommended: index === 2 })) });
+      await assert.rejects(() => submitFinancialRequest({ id: pending._id, user: solicitor, req }), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED" && /waiting for the approval/.test(error.message));
     });
 
-    await t.test("a complete pending-supplier request submits for approval and carries server supplier snapshots", async () => {
+    await t.test("a complete request with an approved supplier submits for approval and carries server supplier snapshots", async () => {
       const request = await officialDocument();
       const submitted = await submitFinancialRequest({ id: request._id, user: solicitor, req, comments: "Phase 3 submission" });
       assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
-      assert.equal(submitted.supplier.homologationStatus, "PENDING_VALIDATION");
+      assert.equal(submitted.supplier.homologationStatus, "HOMOLOGATED");
       assert.equal(submitted.quotations[0].supplierSnapshot.legalName, suppliers[0].legalName);
+      assert.equal(submitted.quotations[2].supplierSnapshot.legalName, suppliers[1].legalName, "a pending supplier may still be quoted without being recommended");
     });
 
     await t.test("budget preview uses current Budget dimensions, ignores fake status and never creates a commitment", async () => {

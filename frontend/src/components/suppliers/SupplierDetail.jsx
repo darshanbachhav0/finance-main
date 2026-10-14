@@ -10,6 +10,7 @@ import {
   FileCheck2,
   History,
   Landmark,
+  MessageSquareWarning,
   Plus,
   Power,
   RefreshCw,
@@ -18,7 +19,8 @@ import {
   Star,
   UserCheck,
   Users,
-  X
+  X,
+  XCircle
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api from "../../api/client.js";
@@ -81,8 +83,7 @@ export default function SupplierDetail({
   onPreferred,
   onDeactivateBank,
   onTaxValidation,
-  onFinanceReview,
-  onHomologate,
+  onDecision,
   onDeactivateSupplier
 }) {
   const { t, language } = useLanguage();
@@ -100,7 +101,6 @@ export default function SupplierDetail({
   const [bankForm, setBankForm] = useState({ bank: "BCP", accountType: "CURRENT", accountNumber: "", cci: "", currency: supplier.currency || "PEN", accountHolderName: supplier.legalName || supplier.name || "" });
   const [bankReview, setBankReview] = useState({ verificationStatus: "VERIFIED", ownershipResult: "MATCH", comments: "" });
   const [taxForm, setTaxForm] = useState({ valid: true, returnedIdentifier: supplier.rucDni || "", returnedLegalName: supplier.legalName || supplier.name || "", comments: "" });
-  const [financeReview, setFinanceReview] = useState({ result: supplier.complianceReview?.result || "PENDING", comments: supplier.complianceReview?.comments || "" });
   const permissions = supplier.permissions || {};
   // SPOT: Banco de la Nacion detracciones account, maintained by Accounting/Admin.
   const [detractionAccount, setDetractionAccount] = useState(supplier.detractionAccount?.accountNumber || "");
@@ -121,15 +121,21 @@ export default function SupplierDetail({
   const documents = supplier.documents || [];
   const docKinds = new Set(documents.map((item) => item.kind));
   const provider = supplier.sunatProvider || { state: "NOT_CONFIGURED", configured: false };
-  const homologationDisabledReason = readiness?.issues?.[0]?.message || "";
+  const approvalDisabledReason = readiness?.issues?.[0]?.message || "";
+  // Only the proposer's jefe approves. While the supplier waits, approval names who decides it now.
+  const jefeApproval = supplier.jefeApproval || {};
+  const onBehalfOf = (person) => (person?.name ? ` (${t("on behalf of {name}").replace("{name}", person.name)})` : "");
+  const waitingOn = supplier.approval
+    ? supplier.approval.approver ? `${supplier.approval.approver.name}${onBehalfOf(supplier.approval.coveringFor)}` : t("Admin (no jefe available)")
+    : "";
+  const decidedBy = jefeApproval.decidedBy?.name ? `${jefeApproval.decidedBy.name}${onBehalfOf(jefeApproval.coveringFor)}` : "";
   // Fix 2: homologation is only valid for a configurable period (default 12 months) from when it was granted.
   const homologationExpired = supplier.homologationStatus === "HOMOLOGATED"
     && Boolean(supplier.homologationValidUntil)
     && new Date(supplier.homologationValidUntil).getTime() < Date.now();
 
   const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: setBankForm });
-  const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canReview && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
-  const financeDraft = useWorkDraft({ scope: "supplier-finance-review", recordId: supplier._id, title: "Supplier Finance review", enabled: permissions.canReview, value: financeReview, restore: setFinanceReview, sourceVersion: supplier.updatedAt });
+  const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canValidateTaxpayer && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
   const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canVerifyBanking && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
   useDraftResume("supplier-bank-review", id => { const account = supplier.bankAccounts?.find(row => row._id === id.split("~")[1]); if (account) setReviewAccount(account); });
   useDraftResume("supplier-bank", () => setShowBankForm(true));
@@ -152,12 +158,6 @@ export default function SupplierDetail({
     if (await onTaxValidation(taxForm)) await taxDraft.complete();
   }
 
-  async function submitFinanceReview(event) {
-    event.preventDefault();
-    if (!financeDraft.ready || financeDraft.status === "conflict") return;
-    await onFinanceReview(financeReview, () => financeDraft.complete());
-  }
-
   return (
     <div className="supplier-detail-stack">
       <div className="supplier-summary-strip">
@@ -175,19 +175,20 @@ export default function SupplierDetail({
           )}
         </div>
         <div>
-          <span>{t("Finance Review")}</span>
-          <StatusBadge status={supplier.complianceReview?.result || "PENDING"} />
+          <span>{t("Jefe approval")}</span>
+          <StatusBadge status={jefeApproval.decision || "PENDING"} />
+          {waitingOn && <small>{t("Waiting for")}: {waitingOn}</small>}
         </div>
         <div className="supplier-summary-actions">
           {permissions.canEditProposal && <button type="button" className="secondary-button" onClick={onEdit}><Edit3 size={16} /><span>{t("Edit proposal")}</span></button>}
-          {permissions.canReview && supplier.homologationStatus !== "INACTIVE" && <button type="button" className="danger-button ghost-danger" onClick={onDeactivateSupplier} disabled={loading}><Power size={16} /><span>{t("Deactivate supplier")}</span></button>}
+          {permissions.canDeactivate && <button type="button" className="danger-button ghost-danger" onClick={onDeactivateSupplier} disabled={loading}><Power size={16} /><span>{t("Deactivate supplier")}</span></button>}
         </div>
       </div>
 
       <SectionNavigation className="supplier-section-nav" aria-label={t("Supplier sections")}>
-        {["Legal Identification", "Banking Information", "Mandatory Documents", "Homologation Readiness", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
+        {["Legal Identification", "Banking Information", "Mandatory Documents", "Homologation Readiness", "Jefe Approval", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
       </SectionNavigation>
-      {permissions.canReview && supplier.homologationStatus !== "INACTIVE" && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier checks and homologation readiness." : "Review the outstanding supplier requirements.")}</p></div><a className="secondary-button" href={`#${sectionId("Homologation Readiness")}`}>{t("Review requirements")}</a></div>}
+      {permissions.canApprove && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier and approve, observe or reject it." : "Some requirements are missing. Observe the supplier so the proposer completes them, or reject it.")}</p></div><a className="secondary-button" href={`#${sectionId("Jefe Approval")}`}>{t("Decide")}</a></div>}
 
       <Section icon={Building2} title="Legal Identification" status={supplier.proposalJustification ? "Registration justification recorded" : "Registration justification missing"}>
         {supplier.similarNameWarning?.possibleDuplicateOf && (
@@ -292,7 +293,7 @@ export default function SupplierDetail({
         )}
       </Section>
 
-      <Section icon={ShieldCheck} title="Compliance Declarations" status={riskWarnings.length ? "Risk flags require Finance review" : "Declarations recorded without automatic legal conclusions"}>
+      <Section icon={ShieldCheck} title="Compliance Declarations" status={riskWarnings.length ? "Risk flags to review before approving" : "Declarations recorded without automatic legal conclusions"}>
         <div className="declaration-summary-grid">
           <div><span>{t("State sanctions / proceedings")}</span><StatusBadge status={supplier.declarations?.stateSanctions?.answer || "NOT_DECLARED"} /><small>{supplier.declarations?.stateSanctions?.comments || "-"}</small></div>
           <div><span>{t("Compliance / prevention model")}</span><StatusBadge status={supplier.declarations?.complianceModel?.answer || "NOT_DECLARED"} /><small>{supplier.declarations?.complianceModel?.comments || "-"}</small></div>
@@ -323,14 +324,14 @@ export default function SupplierDetail({
           <Detail label="Validated At" value={displayDate(supplier.taxpayerValidation?.validatedAt, language)} />
           <Detail label="Validated By" value={supplier.taxpayerValidation?.validatedBy?.name} />
         </DetailGrid>
-        {permissions.canReview && provider.variant === "PADRON" && (
+        {permissions.canValidateTaxpayer && provider.variant === "PADRON" && (
           <div className="inline-form-actions">
             <button type="button" className="primary-button" disabled={loading} onClick={() => onTaxValidation({})}>
               <RefreshCw size={15} /><span>{t("Validate automatically with SUNAT")}</span>
             </button>
           </div>
         )}
-        {permissions.canReview && provider.state === "MANUAL" && (
+        {permissions.canValidateTaxpayer && provider.state === "MANUAL" && (
           <DraftPanel busy={loading} draft={taxDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitTax}>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Manual validation result")}</span><select value={String(taxForm.valid)} onChange={(event) => setTaxForm((current) => ({ ...current, valid: event.target.value === "true" }))}><option value="true">{t("Valid")}</option><option value="false">{t("Invalid")}</option></select></label>
@@ -344,24 +345,6 @@ export default function SupplierDetail({
         )}
       </Section>
 
-      <Section icon={UserCheck} title="Finance / Compliance Review" status="Finance decision is separate from supplier declarations">
-        <DetailGrid>
-          <Detail label="Review Result"><StatusBadge status={supplier.complianceReview?.result || "PENDING"} /></Detail>
-          <Detail label="Reviewed By" value={supplier.complianceReview?.reviewedBy?.name} />
-          <Detail label="Reviewed At" value={displayDate(supplier.complianceReview?.reviewedAt, language)} />
-          <Detail label="Review Comments" value={supplier.complianceReview?.comments} />
-        </DetailGrid>
-        {permissions.canReview && (
-          <DraftPanel busy={loading} draft={financeDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitFinanceReview}>
-            <div className="form-grid supplier-form-grid">
-              <label className="field"><span>{t("Finance Review Result")}</span><select value={financeReview.result} onChange={(event) => setFinanceReview((current) => ({ ...current, result: event.target.value }))}>{["PENDING", "APPROVED", "OBSERVED", "REJECTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
-              <label className="field field-span-2"><span>{t("Review Comments")}</span><textarea rows="3" value={financeReview.comments} onChange={(event) => setFinanceReview((current) => ({ ...current, comments: event.target.value }))} /></label>
-            </div>
-            <div className="inline-form-actions"><button type="submit" className={financeReview.result === "REJECTED" ? "danger-button" : "primary-button"} disabled={loading}><Save size={15} /><span>{t("Record Finance review")}</span></button></div>
-          </form></DraftPanel>
-        )}
-      </Section>
-
       <Section icon={CheckCircle2} title="Homologation Readiness" status={readiness?.valid ? "Complete" : "Incomplete"}>
         {readiness?.legacyCompatible && <div className="inline-alert alert-info"><CheckCircle2 size={16} /><span>{t("This already-homologated legacy supplier remains compatible without reinterpreting historical data.")}</span></div>}
         {!readiness?.valid && readiness?.issues?.length > 0 && (
@@ -370,10 +353,23 @@ export default function SupplierDetail({
           </ul>
         )}
         {readiness?.valid && !readiness?.legacyCompatible && <div className="inline-alert alert-success"><CheckCircle2 size={16} /><span>{t("All backend homologation requirements are currently satisfied.")}</span></div>}
-        {permissions.canHomologate && (
+      </Section>
+
+      <Section icon={UserCheck} title="Jefe Approval" status={jefeApproval.decision === "APPROVED" ? "Approved for use on requests" : waitingOn ? "Waiting for the decision of the proposer's jefe" : "Only the proposer's jefe approves a supplier"}>
+        <DetailGrid>
+          <Detail label="Decision"><StatusBadge status={jefeApproval.decision || "PENDING"} /></Detail>
+          <Detail label={waitingOn ? "Waiting for" : "Decided By"} value={waitingOn || decidedBy} />
+          <Detail label="Decided At" value={displayDate(jefeApproval.decidedAt, language)} />
+          <Detail label="Decision comments" value={jefeApproval.comments} />
+        </DetailGrid>
+        {permissions.canApprove && (
           <div className="homologation-action-row">
-            <div><strong>{t("Final homologation")}</strong><span>{t("Assigns one immutable PRV code and makes the supplier available to the existing request workflow.")}</span></div>
-            <button type="button" className="primary-button" disabled={loading || !readiness?.valid} title={!readiness?.valid ? t(homologationDisabledReason || "Complete all required controls first.") : undefined} onClick={onHomologate}><CheckCircle2 size={16} /><span>{t("Homologate and assign PRV")}</span></button>
+            <div><strong>{t("Your decision")}</strong><span>{t("Approving assigns the PRV code and lets every requester use this supplier. Accounting still verifies its bank account before Treasury pays it.")}</span></div>
+            <div className="row-actions decision-actions">
+              <button type="button" className="primary-button" disabled={loading || !readiness?.valid} title={!readiness?.valid ? t(approvalDisabledReason || "Complete all required controls first.") : undefined} onClick={() => onDecision("APPROVE")}><CheckCircle2 size={16} /><span>{t("Approve supplier")}</span></button>
+              <button type="button" className="secondary-button" disabled={loading} onClick={() => onDecision("OBSERVE")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>
+              <button type="button" className="danger-button ghost-danger" disabled={loading} onClick={() => onDecision("REJECT")}><XCircle size={16} /><span>{t("Reject")}</span></button>
+            </div>
           </div>
         )}
       </Section>

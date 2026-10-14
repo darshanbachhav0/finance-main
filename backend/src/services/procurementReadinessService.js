@@ -156,9 +156,9 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
   if (!supplier) {
     issues.push(issue(ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, "The recommended supplier record is missing."));
   } else if (supplier.homologationStatus === "PENDING_VALIDATION") {
-    issues.push(issue(ERROR_CODES.SUPPLIER_HOMOLOGATION_PENDING, "Supplier homologation is pending.", { supplier: supplier._id }));
+    issues.push(issue(ERROR_CODES.SUPPLIER_HOMOLOGATION_PENDING, "The supplier is waiting for the approval of its proposer's jefe.", { supplier: supplier._id }));
   } else if (supplier.homologationStatus === "OBSERVED") {
-    issues.push(issue(ERROR_CODES.SUPPLIER_HOMOLOGATION_OBSERVED, "Supplier homologation is observed and must be corrected in Supplier Master.", { supplier: supplier._id }));
+    issues.push(issue(ERROR_CODES.SUPPLIER_HOMOLOGATION_OBSERVED, "The approving jefe observed the supplier; it must be corrected in Supplier Master.", { supplier: supplier._id }));
   } else if (supplier.homologationStatus === "REJECTED" || supplier.status === "REJECTED") {
     issues.push(issue(ERROR_CODES.SUPPLIER_REJECTED, "The recommended supplier was rejected.", { supplier: supplier._id }));
   } else if (!supplier.active || supplier.homologationStatus === "INACTIVE" || supplier.status === "INACTIVE") {
@@ -166,7 +166,7 @@ export async function evaluateProcurementReadiness(request, { session, commitmen
   } else if (supplier.homologationStatus === "HOMOLOGATED" && supplier.homologationValidUntil && new Date(supplier.homologationValidUntil).getTime() < Date.now()) {
     // Fix 2: homologation carries a configurable validity period (default 12 months); once it lapses the
     // supplier must be re-homologated before it can be used on a new request/PO, same as never-homologated.
-    issues.push(issue(ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, "Supplier homologation has expired and must be renewed.", { supplier: supplier._id, homologationValidUntil: supplier.homologationValidUntil }));
+    issues.push(issue(ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, "The supplier's approval has expired and must be renewed by the proposer's jefe.", { supplier: supplier._id, homologationValidUntil: supplier.homologationValidUntil }));
   } else if (supplier.homologationStatus !== "HOMOLOGATED") {
     issues.push(issue(ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, "The recommended supplier is not homologated.", { supplier: supplier._id }));
   }

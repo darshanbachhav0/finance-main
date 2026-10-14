@@ -1,7 +1,7 @@
 import { dniError, requiredError } from "./fieldValidation.js";
 
 // Supplier proposal form (components/suppliers/SupplierForm.jsx): steps, what each step needs
-// before Continue / Submit, and what Finance still needs before homologation.
+// before Continue / Submit, and what the proposer's jefe still needs before approving it.
 
 export const SUPPLIER_DOCUMENTS = Object.freeze([
   ["rucFile", "RUC_FILE", "Updated RUC document"],
@@ -41,7 +41,7 @@ export function supplierStepProblems(step, form, { includeInitialBank = false } 
   return problems;
 }
 
-// What Finance needs before it can homologate the supplier, as a checklist for the review step.
+// What the proposer's jefe needs before approving the supplier, as a checklist for the review step.
 export function homologationChecklist(form, { documentKinds = new Set(), files = {} } = {}) {
   const declared = (answer) => ["YES", "NO"].includes(answer);
   return [

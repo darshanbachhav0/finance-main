@@ -84,6 +84,20 @@ export default {
   "Bank account needs re-verification": "La cuenta bancaria requiere nueva verificación",
   "{requestNumber}: the bank rejected a payment for incorrect or changed account details. Re-verify the account before it is used again.": "{requestNumber}: el banco rechazó un pago por datos de cuenta incorrectos o modificados. Vuelve a verificar la cuenta antes de usarla otra vez.",
 
+  // Supplier approval (the proposer's jefe)
+  "Supplier awaiting your approval": "Proveedor pendiente de tu aprobación",
+  "{supplier}, proposed by {proposer}, is waiting for your approval.": "{supplier}, propuesto por {proposer}, está pendiente de tu aprobación.",
+  "{supplier}, proposed by {proposer}, is waiting for your approval on behalf of {name}.": "{supplier}, propuesto por {proposer}, está pendiente de tu aprobación en nombre de {name}.",
+  "{supplier} has no available jefe to approve it, so it waits for an Admin.": "{supplier} no tiene un jefe disponible que lo apruebe, así que espera a un Administrador.",
+  "Supplier approved": "Proveedor aprobado",
+  "{supplier} was approved by {name} and can now be used on requests.": "{supplier} fue aprobado por {name} y ya puede usarse en solicitudes.",
+  "Supplier observed": "Proveedor observado",
+  "{supplier} was observed by {name}: {comments}": "{supplier} fue observado por {name}: {comments}",
+  "Supplier rejected": "Proveedor rechazado",
+  "{supplier} was rejected by {name}: {comments}": "{supplier} fue rechazado por {name}: {comments}",
+  "Supplier bank account to verify": "Cuenta bancaria de proveedor por verificar",
+  "{supplier} was approved for use. Verify its bank account so Treasury can pay it.": "{supplier} fue aprobado para su uso. Verifica su cuenta bancaria para que Tesorería pueda pagarle.",
+
   // Renditions
   "Rendition ready for review": "Rendición lista para revisión",
   "{requestNumber} has submitted official rendition details.": "{requestNumber} registró el detalle oficial de su rendición.",

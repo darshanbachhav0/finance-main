@@ -279,7 +279,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
   return (
     <form ref={formRef} className="supplier-official-form" onSubmit={submit} noValidate>
       <WorkflowStepper steps={steps.map((id) => STEP_LABELS[id])} current={stepIndex} completedSteps={completed.map((id) => steps.indexOf(id))} maxAccessible={steps.length - 1} onSelect={(index) => goTo(steps[index])} />
-      <p className="supplier-form-legend">{t("* Required to submit.")} <span className="homologation-tag">{t("Needed for homologation")}</span> {t("Finance cannot approve the supplier without it; you can submit first and complete it later.")}</p>
+      <p className="supplier-form-legend">{t("* Required to submit.")} <span className="homologation-tag">{t("Needed for homologation")}</span> {t("Your jefe cannot approve the supplier without it; you can submit first and complete it later.")}</p>
 
       <div {...pane("identity")}>
         {!supplier && <SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} />}
@@ -343,7 +343,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       </div>
 
       {includeInitialBank && <div {...pane("bank")}>
-        <Section icon={Landmark} title="Initial Banking Information" status="Optional now. New accounts start pending Finance review; you can add the account after saving.">
+        <Section icon={Landmark} title="Initial Banking Information" status="Optional now, but your jefe needs one to approve the supplier. Accounting verifies it before Treasury pays; you can add it after saving.">
           <div className="form-grid supplier-form-grid">
             <label className={fieldClass("bank")}><span>{t("Bank")}</span><select value={form.bank} onChange={(event) => setValue("bank", event.target.value)} aria-invalid={Boolean(fieldErrors.bank)}><option value="">{t("Add after saving")}</option>{["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select>{fieldMessage("bank")}</label>
             {/* "Detraction" is intentionally not selectable here: there is no complete detraccion payment workflow for new accounts. */}
@@ -382,7 +382,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
 
       <div {...pane("review")}>
         <section className="supplier-form-section supplier-review">
-          <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("Finance reviews the proposal; the supplier code (PRV) is assigned only at homologation.")}</small></div></header>
+          <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("Your jefe approves the proposal; the supplier code (PRV) is assigned when they approve it.")}</small></div></header>
           <dl className="supplier-detail-grid">
             <div><dt>{t("RUC / identifier")}</dt><dd>{form.rucDni || "-"}</dd></div>
             <div><dt>{t("Legal Name")}</dt><dd><strong>{form.legalName || "-"}</strong></dd></div>
@@ -394,7 +394,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
           </dl>
           <h4>{t("Needed for homologation")}</h4>
           <ul className="homologation-checklist">
-            {checklist.map((item) => <li key={item.key} className={item.done ? "is-done" : ""}>{item.done ? <CheckCircle2 size={15} aria-hidden="true" /> : <CircleDashed size={15} aria-hidden="true" />}<span>{t(item.label)}</span><small>{t(item.done ? "Done" : "Pending - Finance needs it before homologation")}</small><button type="button" className="text-button" onClick={() => goTo(item.step)}>{t("Edit")}</button></li>)}
+            {checklist.map((item) => <li key={item.key} className={item.done ? "is-done" : ""}>{item.done ? <CheckCircle2 size={15} aria-hidden="true" /> : <CircleDashed size={15} aria-hidden="true" />}<span>{t(item.label)}</span><small>{t(item.done ? "Done" : "Pending - your jefe needs it to approve")}</small><button type="button" className="text-button" onClick={() => goTo(item.step)}>{t("Edit")}</button></li>)}
           </ul>
         </section>
       </div>

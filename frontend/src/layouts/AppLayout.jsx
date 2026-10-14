@@ -49,7 +49,8 @@ export default function AppLayout() {
   const sidebarRef = useRef(null);
   const mobileBackdrop = useAnimatedPresence(mobileOpen, 180);
 
-  const pendingApprovals = Number(tasks.counters?.approval) || 0;
+  // Requests and suppliers waiting for this user's decision both open the Approval Inbox.
+  const pendingApprovals = (Number(tasks.counters?.approval) || 0) + (Number(tasks.counters?.suppliers) || 0);
   // Grouped into fixed sections (Overview, My work, Payables, Treasury, Accounting, Planning and
   // reports, Master Data) so every role reads the menu the same way.
   const visibleGroups = useMemo(() => groupNavigation(navigationForUser(user, { pendingApprovals }).map(([label, path]) => ({ label, path, icon: navigationIcon(path) }))), [user, pendingApprovals > 0]);

@@ -14,14 +14,13 @@ import {
 import {
   addSupplierBankAccount,
   createSupplierProposal,
+  decideSupplierApproval,
   deactivateSupplierBankAccount,
   deactivateSupplier,
   getSupplierDetailPayload,
   getSupplierHomologationReadiness,
-  homologateSupplier,
   listSuppliersPage,
   lookupSupplierByIdentifier,
-  reviewSupplierCompliance,
   setPreferredSupplierBankAccount,
   updateSupplierProposal,
   validateSupplierTaxpayer,
@@ -410,45 +409,20 @@ export const validateTaxpayer =
     }
   );
 
-export const reviewSupplier =
-  asyncHandler(
-    async (
-      req,
-      res
-    ) => {
-      await reviewSupplierCompliance({
-        supplierId:
-          req.params.id,
-
-        payload:
-          req.body,
-
-        user:
-          req.user,
-
-        req
-      });
-
-      res.json({
-        data:
-          await getSupplierDetailPayload(
-            req.params.id,
-            req.user
-          )
-      });
-    }
-  );
-
-export const homologate =
+// The proposer's jefe (or whoever covers for them) approves, observes or rejects the supplier.
+export const decideApproval =
   asyncHandler(
     async (
       req,
       res
     ) => {
       const result =
-        await homologateSupplier({
+        await decideSupplierApproval({
           supplierId:
             req.params.id,
+
+          payload:
+            req.body,
 
           user:
             req.user,
