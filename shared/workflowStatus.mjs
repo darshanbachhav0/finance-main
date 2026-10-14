@@ -20,14 +20,26 @@ export function renditionPending(request) {
     && ["PENDING", "SUBMITTED", "OBSERVED"].includes(request.rendition?.status);
 }
 
+// A REJECTED rendition owes nothing once its advance was fully RECOVERED (reimbursement or payroll
+// deduction), or when the beneficiary had already handed the whole paid advance back with the
+// rendition, so the rejection left nothing to recover (NOT_APPLICABLE with the amounts to prove it).
+// The default NOT_APPLICABLE of a recovery that was never computed carries no advance and is not settled.
+export function rejectedRenditionSettled(rendition) {
+  if (rendition?.status !== "REJECTED") return false;
+  const recovery = rendition.recovery || {};
+  if (recovery.status === "RECOVERED") return true;
+  return recovery.status === "NOT_APPLICABLE" && amount(recovery.advanceAmount) > 0
+    && amount(recovery.returnedAmount) === amount(recovery.advanceAmount) && amount(recovery.outstandingAmount) === 0;
+}
+
 // A Track C advance is settled for closure once its rendition is VALIDATED with nothing left to
-// render/return, or once a REJECTED rendition's advance has been fully RECOVERED (reimbursement
-// or payroll deduction). Requests without a rendition obligation are always settled here.
+// render/return, or once a REJECTED rendition owes nothing (rejectedRenditionSettled). Requests
+// without a rendition obligation are always settled here.
 export function renditionSettledForClosure(request) {
   if (!(request?.flowType === "C" || request?.requestType === "ENTREGA_RENDIR")) return true;
   const rendition = request.rendition || {};
   if (rendition.status === "VALIDATED") return amount(rendition.balanceOutstanding) === 0;
-  return rendition.status === "REJECTED" && rendition.recovery?.status === "RECOVERED";
+  return rejectedRenditionSettled(rendition);
 }
 
 // Derive progress from financial evidence, never from the parent status alone.
@@ -63,7 +75,8 @@ export function deriveFinancialProgress(request, payables = [], reconciliations 
     cents.total += amount(ap.originalAmount); if (paid) cents.paid += amount(ap.originalAmount); cents.paidToDate += confirmedCents; if (reconciled) cents.reconciled += amount(ap.originalAmount);
     return { id: id(ap), accounted, scheduled, fileGenerated, paid, partiallyPaid, reconciled, outstandingAmount: ap.outstandingAmount };
   });
-  const unaccountedVouchers = vouchers.filter(v => !v.accountsPayable && !v.supersededBy).length;
+  // A voucher that never posted and was annulled (its invoice observation dismissed) is not pending accounting.
+  const unaccountedVouchers = vouchers.filter(v => !v.accountsPayable && !v.supersededBy && v.validationStatus !== "ANNULLED").length;
   // Informational only: a Purchase Order may still hold an uninvoiced balance. It no longer
   // blocks closure - closing the request means invoicing is complete, so the remaining order
   // balance is cancelled and its budget commitment released at that point.

@@ -1,6 +1,6 @@
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
-import { Download, RefreshCw, RotateCcw } from "lucide-react";
+import { Ban, Download, RefreshCw, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
@@ -36,11 +36,17 @@ export default function InvoiceObservations() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  // Dismissal closes an observation that will never become a CXP (e.g. the same invoice uploaded
+  // twice) so it stops blocking the request's closure. The reason is required and audited.
+  const [dismissTarget, setDismissTarget] = useState(null);
+  const [dismissError, setDismissError] = useState("");
 
   const draft = useWorkDraft({ scope: "invoice-resolution", recordId: selected?._id || "new", title: "Invoice correction files", enabled: Boolean(selected), value: { xml, pdf }, restore: data => { setXml(data.xml); setPdf(data.pdf); } });
   useDraftResume("invoice-resolution", id => resumeDraftRecord("/batch-invoices/observations", id, row => row._id, open, setError));
 
   function open(row) { setAcceptXmlValues(false); setSelected(row); setXml(null); setPdf(null); setError(""); }
+  function openDismiss(row) { setDismissError(""); setDismissTarget(row); }
+  const isOpen = (row) => (row.resolutionStatus || "OPEN") === "OPEN";
 
   const openedLink = useRef("");
   useEffect(() => {
@@ -118,13 +124,30 @@ export default function InvoiceObservations() {
     finally { setProcessing(false); }
   }
 
+  async function dismiss(reason) {
+    setProcessing(true);
+    setDismissError("");
+    try {
+      await api.post(`/batch-invoices/observations/${dismissTarget._id}/dismiss`, { reason });
+      if (selected?._id === dismissTarget._id) {
+        await draft.complete();
+        setSelected(null);
+      }
+      notify("Invoice observation dismissed.");
+      setDismissTarget(null);
+      setBulkIds((ids) => ids.filter((id) => id !== dismissTarget._id));
+      table.reload();
+    } catch (err) { setDismissError(err.message); }
+    finally { setProcessing(false); }
+  }
+
   return (
     <section>
       <PageHeader title="Invoice observation inbox" description="Accounting reviews only invoices isolated by SUNAT, document, duplicate, or PO-ceiling controls. Valid invoices from the same batch remain provisioned." actions={<button type="button" className="secondary-button" onClick={table.reload} disabled={table.loading}><RefreshCw className={table.loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
       <Message type="error">{(selected ? "" : error) || table.error}</Message>
       {deepLink.active && <DeepLinkNotice title={deepLink.link.record ? "Showing the observed invoice linked from your notification" : "Showing the observed invoices of the linked batch"} missing={!table.loading && !table.rows.length} missingDescription="No open observation remains for this link. The invoices may already have been revalidated." clearLabel="Show all observations" onClear={deepLink.clear} />}
       <div className="workspace-panel">
-        <DataTable selection={readOnly ? undefined : { selected: bulkIds, onChange: setBulkIds }} rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => readOnly ? [] : [{ label: "Revalidate", icon: RotateCcw, primary: true, onClick: () => open(row) }]} columns={[
+        <DataTable selection={readOnly ? undefined : { selected: bulkIds, onChange: setBulkIds }} rows={table.rows} loading={table.loading} remote={table.remote} filters={[{ key: "status", label: "Status", allLabel: "All statuses", options: ["OBSERVED_SUNAT", "OBSERVED_DUPLICATE", "OBSERVED_AMOUNT_EXCEEDED", "OBSERVED_BATCH", "FAILED"] }]} searchPlaceholder="Search RUC, voucher or observation..." emptyTitle="No observed invoices" emptyDescription="Invoices isolated by SUNAT, duplicate, document or PO-ceiling controls appear here." emptyAction={{ label: "A2 Batch Invoices", to: "/batch-invoices" }} rowActions={(row) => readOnly ? [] : [{ label: "Revalidate", icon: RotateCcw, primary: true, onClick: () => open(row) }, { label: "Dismiss observation", icon: Ban, tone: "danger", hidden: !isOpen(row), onClick: () => openDismiss(row) }]} columns={[
           { key: "request", type: "code", label: "Request", sortable: false, render: (row) => row.request?.requestNumber || "-" },
           { key: "purchaseOrder", type: "code", label: "Purchase Order", sortable: false, render: (row) => row.purchaseOrder?.poNumber || "-" },
           { key: "rucIssuer", type: "code", label: "RUC" },
@@ -157,7 +180,7 @@ export default function InvoiceObservations() {
           onConfirm={revalidateSelected}
         />
       </div>
-      <Drawer open={Boolean(selected)} error={error} title="Revalidate observed invoice" description={selected ? `${selected.seriesNumber} · ${selected.purchaseOrder?.poNumber || ""}` : ""} onClose={() => !processing && setSelected(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelected(null)}>{t("Cancel")}</button><button className="primary-button" form="observation-resolution-form" type="submit" disabled={processing || !draft.ready || draft.status === "conflict"}><RotateCcw size={16} /><span>{t(processing ? "Processing..." : "Revalidate")}</span></button></>}>
+      <Drawer open={Boolean(selected)} error={error} title="Revalidate observed invoice" description={selected ? `${selected.seriesNumber} · ${selected.purchaseOrder?.poNumber || ""}` : ""} onClose={() => !processing && setSelected(null)} footer={<>{!readOnly && selected && isOpen(selected) && <button type="button" className="danger-button" disabled={processing} onClick={() => openDismiss(selected)}><Ban size={16} /><span>{t("Dismiss observation")}</span></button>}<button type="button" className="secondary-button" disabled={processing} onClick={() => setSelected(null)}>{t("Cancel")}</button><button className="primary-button" form="observation-resolution-form" type="submit" disabled={processing || !draft.ready || draft.status === "conflict"}><RotateCcw size={16} /><span>{t(processing ? "Processing..." : "Revalidate")}</span></button></>}>
         {selected && <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelected(null)}><form id="observation-resolution-form" className="form-grid" onSubmit={retry}>
           <div className="document-requirement required"><div><strong><StatusBadge status={selected.validationStatus || selected.status} /></strong><p>{selected.observationDetail || selected.errorDetail}</p></div></div>
           <div className="inline-document-actions"><button type="button" className="secondary-button" disabled={processing || !selected.xmlUrl} onClick={() => downloadDocument("xml")}><Download size={15} />{t("Download stored XML")}</button><button type="button" className="secondary-button" disabled={processing || !selected.pdfUrl} onClick={() => downloadDocument("pdf")}><Download size={15} />{t("Download stored PDF")}</button></div>
@@ -167,6 +190,21 @@ export default function InvoiceObservations() {
           <label className="field"><span>{t("Replacement PDF")} {pdf?.name}</span><input type="file" accept=".pdf" onChange={(event) => setPdf(event.target.files?.[0] || null)} /></label>
         </form></DraftPanel>}
       </Drawer>
+      <ConfirmDialog
+        open={Boolean(dismissTarget)}
+        title="Dismiss this invoice observation?"
+        description="Use this only for an invoice that will never be provisioned, such as the same invoice uploaded twice. The observation leaves the inbox and no longer blocks the request's closure, and a stored voucher that was never posted is annulled."
+        details={dismissTarget ? [{ label: "Request", value: dismissTarget.request?.requestNumber || "-" }, { label: "Voucher", value: dismissTarget.seriesNumber || "-" }, { label: "Status", value: <StatusBadge status={dismissTarget.validationStatus || dismissTarget.status} /> }] : []}
+        confirmLabel="Dismiss observation"
+        cancelLabel="Keep observation"
+        tone="danger"
+        inputLabel="Dismissal reason"
+        inputRequired
+        loading={processing}
+        error={dismissError}
+        onClose={() => !processing && setDismissTarget(null)}
+        onConfirm={dismiss}
+      />
     </section>
   );
 }

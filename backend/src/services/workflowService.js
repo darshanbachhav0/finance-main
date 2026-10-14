@@ -1,4 +1,4 @@
-import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { canonicalRequestStatus, isTerminalRequest, rejectedRenditionSettled } from "../../../shared/workflowStatus.mjs";
 import { assertClosureAllowed, getFinancialProgress, assertPostingAllowed } from "./financialProgressService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
@@ -144,8 +144,7 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
   if (targetStatus === REQUEST_STATUS.BANK_FILE_GENERATED && !request.paymentBatch && request.flowType !== FLOW_TYPE.A2) throw new AppError(422, "A persisted payment batch is required before TXT_GENERADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.PAID && (!request.payment?.confirmedAt || !request.payment?.operationNumber) && request.flowType !== FLOW_TYPE.A2) throw new AppError(422, "Actual Treasury payment confirmation is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   if (targetStatus === REQUEST_STATUS.RECONCILED && !request.reconciliation) throw new AppError(422, "A reconciliation record is required before CONCILIADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  const renditionResolved = request.rendition?.status === "VALIDATED"
-    || (request.rendition?.status === "REJECTED" && request.rendition?.recovery?.status === "RECOVERED");
+  const renditionResolved = request.rendition?.status === "VALIDATED" || rejectedRenditionSettled(request.rendition);
   if (targetStatus === REQUEST_STATUS.CLOSED && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && !renditionResolved) throw new AppError(422, "A validated rendition, or full recovery of a rejected rendition's advance, is required before closure.", undefined, ERROR_CODES.RENDITION_REQUIRED);
   if (targetStatus === REQUEST_STATUS.CLOSED && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0) throw new AppError(422, "Non-deductible rendition balances must be reimbursed or assigned to payroll before closure.", { nonDeductibleOutstanding: request.rendition?.nonDeductibleOutstanding }, ERROR_CODES.RENDITION_REQUIRED);
 }

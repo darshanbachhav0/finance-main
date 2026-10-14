@@ -4,6 +4,7 @@ import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import { XMLParser } from "fast-xml-parser";
+import AccountsPayable from "../models/AccountsPayable.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
@@ -26,7 +27,8 @@ import { transitionRequest } from "./workflowService.js";
 import { configureBatchInvoiceRunner, enqueueBatch } from "../queues/batchInvoiceQueue.js";
 import { AppError } from "../utils/AppError.js";
 import { readZipFile } from "../utils/zipReader.js";
-import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { AP_STATUS, DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { hasPermission } from "../utils/permissions.js";
 import { canonicalSeries, canonicalSeriesNumber, canonicalVoucherNumber, canonicalVoucherType, isAdjustmentNote } from "../utils/voucherIdentity.js";
 import { registerAdjustmentNote } from "./adjustmentNoteService.js";
@@ -826,9 +828,11 @@ export async function processMassUploadBatch(batchId) {
     batch.totalVouchers = candidates.length;
     if (!candidates.length) throw new AppError(422, "The batch contains no invoice XML/data rows.", undefined, ERROR_CODES.BATCH_UPLOAD_INVALID);
 
+    // Accounting dismissed these invoices; retrying the batch must not reopen them.
+    const dismissed = new Set((await InvoiceObservation.find({ batch: batch._id, resolutionStatus: "DISMISSED" }).select("batchItemId").lean()).map((row) => String(row.batchItemId)));
     for (const candidate of candidates) {
       const item = itemFor(batch, candidate);
-      if (item.status === "PROVISIONED") continue;
+      if (item.status === "PROVISIONED" || dismissed.has(String(item._id))) continue;
       await batch.save();
       await processCandidate({ batch, request, purchaseOrder, candidate, item, user, invoiceRequirements });
       await batch.save();
@@ -1191,6 +1195,43 @@ export async function retryInvoiceObservation({ observationId, files = {}, accep
     if (persisted && !Object.values(persisted).flat().length) await cleanupUploadedFiles(persisted).catch(() => undefined);
     throw error;
   }
+}
+
+// Accounting closes an observation that will never become a CXP - typically the same invoice
+// uploaded again in a later batch, or one the supplier voided - so it stops blocking the request's
+// closure. The reason is required and audited, and the record stays as DISMISSED. A voucher stored
+// for it that never posted is annulled like a cancelled CXP's voucher: it no longer counts as an
+// invoice pending accounting, and its RUC + type + series-number identity is free again.
+export async function dismissInvoiceObservation({ observationId, reason, user, req }) {
+  const comments = String(reason || "").trim();
+  if (!comments) throw new AppError(422, "A reason is required to dismiss an invoice observation.", { field: "reason" }, ERROR_CODES.VALIDATION_ERROR);
+  const observation = await InvoiceObservation.findById(observationId);
+  if (!observation) throw new AppError(404, "Invoice observation not found.", { observationId }, ERROR_CODES.NOT_FOUND);
+  if (observation.resolutionStatus !== "OPEN") throw new AppError(409, "Only an open invoice observation can be dismissed.", { resolutionStatus: observation.resolutionStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  const voucher = observation.voucher ? await SunatVoucher.findById(observation.voucher) : null;
+  const payableId = observation.accountsPayable || voucher?.accountsPayable;
+  if (payableId && await AccountsPayable.exists({ _id: payableId, status: { $ne: AP_STATUS.CANCELLED } })) {
+    throw new AppError(409, "This invoice is already posted to a CXP. Cancel the CXP instead of dismissing its observation.", { accountsPayableId: payableId }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  const annulVoucher = Boolean(voucher && !voucher.accountsPayable && !voucher.supersededBy && voucher.validationStatus !== "ANNULLED" && String(voucher.request) === String(observation.request));
+  const request = await FinancialRequest.findById(observation.request);
+
+  await runFinancialOperation(async (session) => {
+    if (annulVoucher) {
+      const previousStatus = voucher.validationStatus;
+      voucher.validationStatus = "ANNULLED";
+      voucher.observationDetail = `Invoice observation dismissed: ${comments}`;
+      voucher.annulment = { reason: comments, at: new Date(), by: user._id };
+      await voucher.save({ session });
+      await recordAudit({ entityType: "SunatVoucher", entity: voucher, requestId: observation.request, action: "VOUCHER_ANNULLED", user, req, module: "BATCH_INVOICES", comments, oldValues: { validationStatus: previousStatus }, newValues: { validationStatus: "ANNULLED" }, session });
+    }
+    observation.set({ resolutionStatus: "DISMISSED", resolvedAt: new Date(), resolvedBy: user._id, resolutionComments: comments });
+    await observation.save({ session });
+    await recordAudit({ entityType: "InvoiceObservation", entity: observation, requestId: observation.request, action: "DISMISSED", user, req, module: "BATCH_INVOICES", comments, oldValues: { resolutionStatus: "OPEN" }, newValues: { resolutionStatus: "DISMISSED", status: observation.status, annulledVoucher: annulVoucher ? voucher._id : undefined }, session });
+    // Without the annulled voucher pending accounting, the parent status is re-derived from its payables.
+    if (annulVoucher && request && !isTerminalRequest(request.status)) await syncFinancialProgress({ request, user, req, session, action: "INVOICE_OBSERVATION_DISMISSED" });
+  });
+  return { observation: publicObservation(observation), voucher: annulVoucher ? voucher : undefined, request };
 }
 
 // Backward-compatible name used by existing controller imports.

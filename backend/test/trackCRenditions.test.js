@@ -202,6 +202,38 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
       assert.equal(settlementJournals.reduce((sum, journal) => sum + journal.penEquivalent, 0), 100, "returned + recovered equals the advance, never more");
     });
 
+    await t.test("7. a rejected rendition whose whole advance was already returned closes without a recovery", async () => {
+      let returned = await approve(await createTrackC(REQUEST_TYPE.ENTREGA_RENDIR, 50));
+      const payable = await AccountsPayable.findOne({ request: returned._id });
+      await makeBatch(payable);
+      await confirmTreasuryPayable({ accountsPayableId: payable._id, payload: { operationNumber: "RET-OP-1", paidAt: "2026-09-18", confirmedAmount: 50 }, user: treasury, req });
+      await reconcilePayment({ accountsPayableId: payable._id, payload: { bankReference: "STM-RET-1", statementAmount: 50 }, user: treasury, req });
+      const loaded = await FinancialRequest.findById(returned._id);
+      loaded.attachments.push({ kind: "RENDITION", originalName: "rendition.pdf", filename: "rendition.pdf", url: "/test/rendition.pdf", mimetype: "application/pdf", size: 10, uploadedBy: owner._id });
+      await loaded.save();
+      await submitRendition({ requestId: returned._id, user: owner, req, files: {}, payload: {
+        lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 10, igvAmount: 0, totalAmount: 10 }],
+        mobilityLines: [{ date: "2026-09-18", origin: "UMA", destination: "Hospital", servicePurpose: "Approved activity", amount: 10 }],
+        unsupportedExpenseLines: [], amountReturned: 40, beneficiaryAcknowledged: true
+      } });
+      // The form always renders a positive detail line, so a rendition that hands the whole advance
+      // back is set directly, as a migrated or corrected record would carry it.
+      await FinancialRequest.updateOne({ _id: returned._id }, { $set: { "rendition.amountRendered": 0, "rendition.amountReturned": 50, "rendition.balanceOutstanding": 0 } });
+
+      returned = await reviewRendition({ requestId: returned._id, action: "REJECT", comments: "The advance was not used for the approved activity", user: accounting, req });
+      assert.equal(returned.rendition.status, "REJECTED");
+      assert.equal(returned.rendition.recovery.status, "NOT_APPLICABLE");
+      assert.equal(returned.rendition.recovery.advanceAmount, 50);
+      assert.equal(returned.rendition.recovery.returnedAmount, 50);
+      assert.equal(returned.rendition.recovery.outstandingAmount, 0);
+      assert.equal(returned.observation?.code, undefined, "nothing is left to recover, so no observation stays open");
+      assert.equal((await JournalEntry.findById(returned.rendition.recovery.returnJournal)).penEquivalent, 50, "the returned advance is booked");
+      assert.equal(await Notification.countDocuments({ type: "RENDITION_RECOVERY_REQUIRED", entityId: returned._id }), 0);
+
+      const closed = await closeFinancialRequest({ id: returned._id, user: accounting, req, comments: "Advance fully returned" });
+      assert.equal(closed.status, REQUEST_STATUS.CLOSED);
+    });
+
     await t.test("4. an undocumented reimbursement (REEMBOLSO_SIN_SUSTENTO) walks from the form to closure", async () => {
       let reimbursement = await createTrackC(REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO, 80, nonDeductible);
       assert.equal(reimbursement.flowType, "C");
