@@ -116,8 +116,7 @@ async function validateApprovalControls(request, user) {
       currency: request.currency,
       totalNet: request.totalNet,
       totalIGV: request.totalIGV,
-      totalAmount: request.totalAmount,
-      issueDate: request.issueDate
+      totalAmount: request.totalAmount
     }, { request, requestNumber: request.requestNumber, supplier, user, fileName: xmlAttachment.originalName });
     request.xmlValidationHistory.push(request.xmlValidation);
   }
