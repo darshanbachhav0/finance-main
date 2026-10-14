@@ -114,12 +114,19 @@ function issueDate(lines) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function currency(lines, text) {
-  const labelled = lines.find((line) => /\bMONEDA\b/.test(line)) || "";
-  const source = labelled || text;
-  if (/DOLAR|US\$|\bUSD\b/.test(source)) return "USD";
-  if (/\bSOLES\b|\bS\/|\bPEN\b/.test(source)) return "PEN";
+// "Sol" is the singular some invoices print ("Tipo de moneda: Sol", "00/100 SOL").
+function currencyIn(text) {
+  if (/DOLAR|US\$|\bUSD\b/.test(text)) return "USD";
+  if (/\bSOL(?:ES)?\b|\bS\/|\bPEN\b/.test(text)) return "PEN";
   return "";
+}
+
+// The currency is printed beside its "Moneda" label, or under it when the labels form a header row
+// above their values ("Fecha ... Tipo de moneda: ... Forma de pago:" over "10/10/2026 ... Sol ...").
+// Only when neither line names it is the whole text read (its amounts printed as "S/ 441.00").
+function currency(lines, text) {
+  const labelled = lines.findIndex((line) => /\bMONEDA\b/.test(line));
+  return (labelled >= 0 && (currencyIn(lines[labelled]) || currencyIn(lines[labelled + 1] || ""))) || currencyIn(text);
 }
 
 // The totals block sits at the end, so the last labelled line wins (an item table's "Total" column
