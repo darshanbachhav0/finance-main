@@ -329,13 +329,13 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       request.rendition.financeReview = { result: "REJECTED", reviewer: user._id, reviewedAt: new Date(), comments: reviewComments };
       request.rendition.comments = reviewComments;
       request.rendition.recovery = { status: outstandingAmount > 0 ? "PENDING" : "NOT_APPLICABLE", advanceAmount, returnedAmount, returnJournal: returnJournal?._id, outstandingAmount, settlements: [] };
-      request.observation = {
+      // When the beneficiary already returned the whole advance nothing is left to act on, so no
+      // observation stays open to block closure (the same as a fully RECOVERED advance).
+      request.observation = outstandingAmount <= 0 && advanceAmount > 0 ? {} : {
         code: "RENDITION_REJECTED",
         detail: outstandingAmount > 0
           ? `Rendition rejected. ${outstandingAmount.toFixed(2)} of the advance must be recovered from the beneficiary (reimbursement or payroll deduction) before this request can close.${returnedAmount > 0 ? ` ${returnedAmount.toFixed(2)} already returned by the beneficiary was deducted.` : ""}`
-          : advanceAmount > 0
-            ? "Rendition rejected. The beneficiary already returned the full advance; nothing remains to recover."
-            : "Rendition rejected. No payment has been disbursed for this request yet; it should be voided if the beneficiary cannot correct and resubmit.",
+          : "Rendition rejected. No payment has been disbursed for this request yet; it should be voided if the beneficiary cannot correct and resubmit.",
         observedAt: new Date(),
         observedBy: user._id
       };

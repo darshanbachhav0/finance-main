@@ -2,6 +2,7 @@ import path from "path";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import {
   createMassUploadBatch,
+  dismissInvoiceObservation,
   getMassUploadBatch,
   getObservationDocument,
   listEligiblePurchaseOrders,
@@ -26,6 +27,11 @@ export const observations = asyncHandler(async (req, res) => res.json(await list
 export const resolveObservation = asyncHandler(async (req, res) => {
   const result = await retryInvoiceObservation({ observationId: req.params.id, files: req.files, acceptXmlValues: req.body.acceptXmlValues === "true" || req.body.acceptXmlValues === true, user: req.user, req });
   res.json({ data: result.observation, voucher: result.voucher, accountsPayable: result.accountsPayable, request: result.request });
+});
+
+export const dismissObservation = asyncHandler(async (req, res) => {
+  const result = await dismissInvoiceObservation({ observationId: req.params.id, reason: req.body?.reason, user: req.user, req });
+  res.json({ data: result.observation, voucher: result.voucher, request: result.request });
 });
 
 export const observationDocument = asyncHandler(async (req, res) => {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createBatch,
+  dismissObservation,
   eligiblePurchaseOrders,
   getBatch,
   listBatches,
@@ -19,6 +20,7 @@ router.get("/purchase-orders", authorizePermission(PERMISSIONS.BATCH_INVOICE_UPL
 router.get("/observations", authorizePermission(PERMISSIONS.BATCH_INVOICE_REVIEW), observations);
 router.get("/observations/:id/:kind", authorizePermission(PERMISSIONS.BATCH_INVOICE_REVIEW), observationDocument);
 router.post("/observations/:id/resolve", authorizePermission(PERMISSIONS.BATCH_INVOICE_REVIEW), uploadFields, resolveObservation);
+router.post("/observations/:id/dismiss", authorizePermission(PERMISSIONS.BATCH_INVOICE_REVIEW), dismissObservation);
 // Compatibility aliases for clients deployed before the dedicated observation model.
 router.get("/vouchers/:id/:kind", authorizePermission(PERMISSIONS.BATCH_INVOICE_REVIEW), observationDocument);
 router.post("/vouchers/:id/resolve", authorizePermission(PERMISSIONS.BATCH_INVOICE_REVIEW), uploadFields, resolveObservation);

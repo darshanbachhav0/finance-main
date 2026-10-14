@@ -130,5 +130,11 @@ export default {
   "Only an unpaid CXP that is not in a bank file can be cancelled.": "Solo se puede anular una CXP impaga que no esté en un archivo bancario.",
   "A credit or debit note was applied to this CXP, so it can no longer be cancelled.": "Se aplicó una nota de crédito o débito a esta CXP; ya no se puede anular.",
   "A supplier credit was applied to this CXP, so it can no longer be cancelled.": "Se aplicó un crédito del proveedor a esta CXP; ya no se puede anular.",
-  "The detraction was already deposited, so this CXP can no longer be cancelled.": "La detracción ya fue depositada; esta CXP ya no se puede anular."
+  "The detraction was already deposited, so this CXP can no longer be cancelled.": "La detracción ya fue depositada; esta CXP ya no se puede anular.",
+  "Dismiss observation": "Descartar observación",
+  "Dismiss this invoice observation?": "¿Descartar esta observación de factura?",
+  "Use this only for an invoice that will never be provisioned, such as the same invoice uploaded twice. The observation leaves the inbox and no longer blocks the request's closure, and a stored voucher that was never posted is annulled.": "Úsalo solo para un comprobante que nunca se provisionará, como la misma factura cargada dos veces. La observación sale de la bandeja y ya no bloquea el cierre de la solicitud; el comprobante almacenado que nunca se contabilizó se anula.",
+  "Keep observation": "Mantener observación",
+  "Dismissal reason": "Motivo del descarte",
+  "Invoice observation dismissed.": "Observación de factura descartada."
 };

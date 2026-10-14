@@ -14,7 +14,7 @@ import SunatVoucher from "../src/models/SunatVoucher.js";
 import { closeAccountingPeriod } from "../src/services/periodAdministrationService.js";
 import MassUploadBatch from "../src/models/MassUploadBatch.js";
 import { registerA1Invoice } from "../src/services/invoiceRegistrationService.js";
-import { createMassUploadBatch, processMassUploadBatch, retryInvoiceObservation } from "../src/services/batchInvoiceService.js";
+import { createMassUploadBatch, dismissInvoiceObservation, processMassUploadBatch, retryInvoiceObservation } from "../src/services/batchInvoiceService.js";
 import Notification from "../src/models/Notification.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import AccountsPayable from "../src/models/AccountsPayable.js";
@@ -35,7 +35,7 @@ import { createAccountsPayableFromVoucher } from "../src/services/accountingServ
 import { generatePaymentBatch, confirmTreasuryPayable, reconcilePayment, listReconciliationQueue } from "../src/services/treasuryService.js";
 import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { updateFinancialRequest, submitFinancialRequest, deleteFinancialRequest, voidFinancialRequest, closeFinancialRequest, listRequestsPage } from "../src/services/requestService.js";
-import { deriveFinancialProgress, canonicalRequestStatus } from "../../shared/workflowStatus.mjs";
+import { deriveFinancialProgress, canonicalRequestStatus, renditionSettledForClosure } from "../../shared/workflowStatus.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
@@ -51,6 +51,21 @@ test("canonical status compatibility and partial child evidence", () => {
   assert.equal(result.partialPayment, true);
   assert.deepEqual(result.amounts, { total: 354, paid: 118, paidToDate: 118, reconciled: 0 });
   assert.equal(deriveFinancialProgress({ payment: {} }, [{ ...children[0], status: "PAID" }]).status, "TXT_GENERADO");
+});
+
+test("a rejected rendition is settled for closure only when nothing is owed", () => {
+  const rejected = recovery => ({ flowType: "C", requestType: "ENTREGA_RENDIR", rendition: { status: "REJECTED", recovery } });
+  assert.equal(renditionSettledForClosure(rejected({ status: "RECOVERED", advanceAmount: 100, returnedAmount: 40, outstandingAmount: 0 })), true);
+  assert.equal(renditionSettledForClosure(rejected({ status: "NOT_APPLICABLE", advanceAmount: 100, returnedAmount: 100, outstandingAmount: 0 })), true, "the whole advance came back with the rendition");
+  assert.equal(renditionSettledForClosure(rejected({ status: "PENDING", advanceAmount: 100, returnedAmount: 40, outstandingAmount: 60 })), false);
+  assert.equal(renditionSettledForClosure(rejected({ status: "NOT_APPLICABLE", advanceAmount: 100, returnedAmount: 40, outstandingAmount: 60 })), false, "NOT_APPLICABLE never hides money still owed");
+  assert.equal(renditionSettledForClosure(rejected({ status: "NOT_APPLICABLE", advanceAmount: 0, returnedAmount: 0, outstandingAmount: 0 })), false, "a recovery that was never computed is not settled");
+  assert.equal(renditionSettledForClosure(rejected(undefined)), false);
+});
+
+test("an annulled voucher that never posted is not pending accounting", () => {
+  const vouchers = [{ _id: "v1", validationStatus: "ANNULLED" }, { _id: "v2", validationStatus: "OBSERVED_SUNAT" }, { _id: "v3", validationStatus: "VALID", accountsPayable: "ap1" }];
+  assert.equal(deriveFinancialProgress({ payment: {} }, [], [], null, vouchers).unaccountedVouchers, 1);
 });
 
 test("workflow status actions preserve financial evidence", { timeout: 120000 }, async t => {
@@ -482,6 +497,71 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "RENDITION_REQUIRED");
       await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { "rendition.recovery.status": "RECOVERED", "rendition.recovery.outstandingAmount": 0 } });
       assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+    });
+    await t.test("A2: dismissing a duplicate and a never-posted invoice observation lets the request close", async () => {
+      const InvoiceObservation = mongoose.model("InvoiceObservation");
+      const request = await makeRequest({ flowType: "A2", lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 200, igvAmount: 36, totalAmount: 236 }], attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
+      await reserveBudget(request, admin._id);
+      const order = await PurchaseOrder.create({ poNumber: "DISMISS-PO", request: request._id, supplier: supplier._id, amount: 236, currency: "PEN", generatedBy: admin._id });
+      const directory = path.resolve(uploadRoot, "requests", String(request._id));
+      const voucher = number => ({ ruc: supplier.rucDni, voucherType: "FACTURA", series: "F077", number, issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 });
+      async function runBatch(batchCode, entries) {
+        await fs.mkdir(tempUploadDir, { recursive: true });
+        const filename = `${request._id}-${batchCode}.zip`, filePath = path.join(tempUploadDir, filename), content = invoiceZip(entries);
+        await fs.writeFile(filePath, content); files.push(filePath);
+        const file = { path: filePath, filename, originalname: `${batchCode}.zip`, mimetype: "application/zip", size: content.length };
+        const batch = await MassUploadBatch.create({ batchCode, request: request._id, purchaseOrder: order._id, uploadedBy: admin._id, inputType: "ZIP", inputFile: { ...file, originalName: file.originalname }, status: "QUEUED" });
+        await processMassUploadBatch(batch._id);
+        return MassUploadBatch.findById(batch._id);
+      }
+      try {
+        const first = await runBatch("DISMISS-BATCH-1", { "invoice-001.xml": invoiceXml(voucher("001")), "invoice-001.pdf": "%PDF-1.4 test" });
+        assert.equal(first.processedSuccess, 1, JSON.stringify(first.items));
+        const [ap] = await AccountsPayable.find({ request: request._id });
+        await makeBatch([ap]); await confirm(ap); await reconcile(ap);
+        assert.equal((await FinancialRequest.findById(request._id)).status, "CONCILIADO");
+
+        // The same invoice uploaded again, and an invoice from another issuer whose voucher is stored but never posts.
+        const second = await runBatch("DISMISS-BATCH-2", { "again-001.xml": invoiceXml(voucher("001")), "again-001.pdf": "%PDF-1.4 test", "other.xml": invoiceXml({ ...voucher("002"), ruc: "20111111111" }), "other.pdf": "%PDF-1.4 test" });
+        assert.equal(second.observed, 2, JSON.stringify(second.items));
+        const duplicate = await InvoiceObservation.findOne({ batch: second._id, status: "OBSERVED_DUPLICATE" });
+        const foreign = await InvoiceObservation.findOne({ batch: second._id, status: "OBSERVED_SUNAT" });
+        assert.ok(duplicate && !duplicate.voucher, "a duplicate stores no voucher of its own");
+        assert.ok(foreign?.voucher, "the foreign invoice's voucher is stored without a CXP");
+        const progressOf = async () => getFinancialProgress(await FinancialRequest.findById(request._id));
+        assert.equal((await progressOf()).unaccountedVouchers, 1);
+        await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "INVALID_STATUS_TRANSITION");
+
+        await assert.rejects(() => dismissInvoiceObservation({ observationId: duplicate._id, reason: "  ", user: admin, req }), error => error.code === "VALIDATION_ERROR" && error.details.field === "reason");
+        const dismissed = await dismissInvoiceObservation({ observationId: duplicate._id, reason: "Same invoice as F077-001, already provisioned in DISMISS-BATCH-1", user: admin, req });
+        assert.equal(dismissed.observation.resolutionStatus, "DISMISSED");
+        assert.equal(dismissed.voucher, undefined, "the original provisioned voucher is untouched");
+        const stored = await InvoiceObservation.findById(duplicate._id);
+        assert.equal(String(stored.resolvedBy), String(admin._id));
+        assert.match(stored.resolutionComments, /already provisioned/);
+        assert.ok(await AuditLog.exists({ entityType: "InvoiceObservation", entityId: duplicate._id, action: "DISMISSED" }));
+        await assert.rejects(() => dismissInvoiceObservation({ observationId: duplicate._id, reason: "Again", user: admin, req }), error => error.code === "INVALID_STATUS_TRANSITION");
+        await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "INVALID_STATUS_TRANSITION", "the stored foreign voucher still blocks");
+
+        await dismissInvoiceObservation({ observationId: foreign._id, reason: "Not our supplier's invoice; uploaded by mistake", user: admin, req });
+        const annulled = await SunatVoucher.findById(foreign.voucher);
+        assert.equal(annulled.validationStatus, "ANNULLED");
+        assert.match(annulled.annulment.reason, /uploaded by mistake/);
+        assert.ok(await AuditLog.exists({ entityType: "SunatVoucher", entityId: annulled._id, action: "VOUCHER_ANNULLED" }));
+        const progress = await progressOf();
+        assert.equal(progress.unaccountedVouchers, 0);
+        assert.equal(progress.status, "CONCILIADO");
+
+        // Retrying the batch does not reopen what Accounting dismissed.
+        await MassUploadBatch.updateOne({ _id: second._id }, { $set: { status: "QUEUED" } });
+        await processMassUploadBatch(second._id);
+        assert.equal(await InvoiceObservation.countDocuments({ request: request._id, resolutionStatus: "OPEN" }), 0);
+        assert.equal((await SunatVoucher.findById(foreign.voucher)).validationStatus, "ANNULLED");
+
+        assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+      } finally {
+        await fs.rm(directory, { recursive: true, force: true });
+      }
     });
   } finally {
     await mongoose.connection.dropDatabase(); await mongoose.disconnect();
