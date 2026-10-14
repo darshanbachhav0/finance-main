@@ -526,8 +526,7 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       currency: request.currency,
       totalNet: request.totalNet,
       totalIGV: request.totalIGV,
-      totalAmount: request.totalAmount,
-      issueDate: request.issueDate
+      totalAmount: request.totalAmount
     }, {
       request,
       requestNumber: request.requestNumber,

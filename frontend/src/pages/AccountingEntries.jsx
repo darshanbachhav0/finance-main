@@ -137,7 +137,8 @@ export default function AccountingEntries() {
   // The platform suggests the account (from the request type and expense nature) and the SPOT
   // category (from the expense nature); Accounting confirms or changes both here.
   function openFiscalProcessing(request) {
-    const documentDate = request.issueDate?.slice(0, 10) || "";
+    // The invoice's own date, read from its XML or factura PDF, may differ from the request's date.
+    const documentDate = (request.xmlValidation?.data?.issueDate || request.issueDate)?.slice(0, 10) || "";
     const suggestedAccount = request.lines?.[0]?.expenseType?._id || request.lines?.[0]?.expenseType || "";
     setSelectedRequest(request);
     setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: todayIso(), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountingAccount: String(suggestedAccount), igvDeductible: true, spotCategoryCode: suggestedSpotCategoryCode(request.expenseNature), subaccountNumber: "", comments: "" });

@@ -188,7 +188,10 @@ export async function buildInvoiceValidationResult(filePath, requestData) {
   const { source, data } = await parseInvoiceEvidence(filePath, { expectedRuc: expectedIdentifier });
   const file = source === "PDF" ? "factura PDF" : "XML";
   const expectedDocument = normalizeVoucher(requestData.documentNumber || requestData.fiscalData?.documentNumber || requestData.fiscalData?.number);
-  const expectedDate = requestData.documentDate || requestData.issueDate;
+  // The request's own date is never compared: an invoice is often dated some days before or after
+  // the request, and it is booked with its own date. Only a voucher's document date, which is the
+  // invoice's own date carried on the voucher (SUNAT is consulted with it), must match the file.
+  const expectedDate = requestData.documentDate;
   const comparisons = {
     currencyMatch: Boolean(data.currency && data.currency === requestData.currency),
     supplierMatch: Boolean(expectedIdentifier && data.ruc && expectedIdentifier === data.ruc),

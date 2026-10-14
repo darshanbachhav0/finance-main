@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { invoiceFieldsFromLines, parseInvoicePdf } from "../src/services/invoicePdfService.js";
-import { assertReadableVoucher, buildInvoiceValidationResult, latestInvoiceEvidence, parseInvoiceEvidence, parseInvoiceXml } from "../src/services/xmlValidationService.js";
+import { assertReadableVoucher, assertVoucherEvidenceMatches, buildInvoiceValidationResult, latestInvoiceEvidence, parseInvoiceEvidence, parseInvoiceXml } from "../src/services/xmlValidationService.js";
 import { tempUploadDir } from "../src/services/storageService.js";
 import { invoicePdf, invoiceXml, textPdf } from "./fiscalFixtures.js";
 
@@ -93,11 +93,16 @@ test("the request is verified from the factura PDF exactly as from an XML", asyn
     { field: "totalAmount", expected: 1190, found: 1180 }
   ]);
   assert.deepEqual(valid.mismatches, []);
-  const late = await buildInvoiceValidationResult(filePath, { ...request, issueDate: "2026-10-12", currency: "USD" });
-  assert.deepEqual(late.mismatches, [
-    { field: "currency", expected: "USD", found: "PEN" },
-    { field: "issueDate", expected: "2026-10-12", found: "2026-10-05" }
-  ]);
+  const dollars = await buildInvoiceValidationResult(filePath, { ...request, currency: "USD" });
+  assert.deepEqual(dollars.mismatches, [{ field: "currency", expected: "USD", found: "PEN" }]);
+  // An invoice dated some days before or after its request still verifies.
+  const later = await buildInvoiceValidationResult(filePath, { ...request, issueDate: "2026-10-13" });
+  assert.equal(later.validated, true, JSON.stringify(later.errors));
+  assert.equal(later.dateMatch, null);
+  // A voucher's document date is the invoice's own date, so it must still match the file.
+  await assert.rejects(() => assertVoucherEvidenceMatches(filePath, { ...voucher, issueDate: "2026-10-13" }), (error) =>
+    error.code === "XML_AMOUNT_MISMATCH" && error.details.validation.mismatches.some((item) => item.field === "issueDate" && item.expected === "2026-10-13" && item.found === "2026-10-05"));
+  assert.equal((await assertVoucherEvidenceMatches(filePath, voucher)).validated, true);
 });
 
 test("the XML is preferred when both files are attached", () => {

@@ -742,7 +742,7 @@ export default function RequestDetail() {
               <div>
                 <strong>{t(request.xmlValidation?.validated ? (request.xmlValidation.source === "PDF" ? "Invoice verified from the factura PDF" : "XML validation passed") : "Invoice verification not passed")}</strong>
                 {["Accounting", "Admin"].includes(user.role) && <details><summary>{t("Advanced validation details")}</summary><p>{request.xmlValidation
-                  ? ["supplierMatch", "documentNumberMatch", "dateMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
+                  ? ["supplierMatch", "documentNumberMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
                   : t("No XML validation result is stored.")}</p></details>}
                 {!request.xmlValidation?.validated && invoiceMismatchLines(request.xmlValidation, t).map((line) => <p key={line} className="text-danger">{line}</p>)}
               </div>
