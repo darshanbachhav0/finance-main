@@ -992,6 +992,9 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .homologation-action-row > div { display: grid; gap: 3px; }
 .homologation-action-row strong { font-size: var(--font-xs); }
 .homologation-action-row span { color: var(--gray-600); font-size: var(--font-xs); line-height: 1.4; }
+/* The jefe's approve / observe / reject buttons sit side by side and keep their own label colors. */
+.homologation-action-row > .decision-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.homologation-action-row .decision-actions span { color: inherit; font-size: inherit; line-height: inherit; }
 
 .supplier-audit-list { display: grid; }
 .supplier-audit-list > div { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--gray-100); }
@@ -1023,6 +1026,8 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
   .supplier-document-row { grid-template-columns: minmax(0, 1fr); }
   .homologation-action-row { align-items: stretch; flex-direction: column; }
   .homologation-action-row .primary-button { width: 100%; justify-content: center; }
+  .homologation-action-row > .decision-actions { display: grid; grid-template-columns: 1fr; }
+  .homologation-action-row .decision-actions button { justify-content: center; }
   .supplier-audit-list > div { grid-template-columns: 12px minmax(0, 1fr); }
   .supplier-audit-list time { grid-column: 2; }
 }

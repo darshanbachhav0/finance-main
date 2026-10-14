@@ -6,6 +6,7 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
 import { SUPPLIER_WORK_ROLES, canViewRequest, canViewSuppliers, hasPermission } from "../utils/permissions.js";
 import { generatedRoot, uploadRoot } from "./storageService.js";
+import { isCurrentSupplierApprover } from "./supplierService.js";
 import { assertBankFileReleased } from "../utils/bankFileVerification.js";
 
 // The Super Admin reads what an Admin reads; an unverified bank file stays closed to it (it does
@@ -51,8 +52,10 @@ export async function assertStoredAssetAccess(asset, user) {
   if (asset.kind === "uploads" && asset.segments[0] === "suppliers") {
     if (!canViewSuppliers(user)) throw forbidden();
     if (!SUPPLIER_WORK_ROLES.includes(user.role) && !hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
-      const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy homologationStatus");
-      if (!supplier || String(supplier.proposedBy || "") !== String(user._id) || !["PENDING_VALIDATION", "OBSERVED"].includes(supplier.homologationStatus)) {
+      // The proposer while the proposal is open, and the jefe who decides on it while it waits.
+      const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy homologationStatus homologationValidUntil");
+      const proposerOpen = supplier && String(supplier.proposedBy || "") === String(user._id) && ["PENDING_VALIDATION", "OBSERVED"].includes(supplier.homologationStatus);
+      if (!proposerOpen && !(supplier && await isCurrentSupplierApprover(supplier, user))) {
         throw forbidden();
       }
     }

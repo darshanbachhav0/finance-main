@@ -23,7 +23,7 @@ assert.match(supplierStepProblems("bank", { ...base, bank: "BCP", cci: "123" }, 
 assert.deepEqual(supplierStepProblems("bank", { ...base, bank: "BCP", cci: "002-191-00000000000002" }, { includeInitialBank: true }), {}, "spaces and hyphens are formatting");
 assert.deepEqual(supplierStepProblems("compliance", { ...base, stateSanctionsAnswer: "NOT_DECLARED" }), {});
 
-// Review: what Finance still needs before homologation.
+// Review: what the jefe still needs before approving.
 const checklist = homologationChecklist({ stateSanctionsAnswer: "NO", complianceModelAnswer: "NOT_DECLARED" }, { documentKinds: new Set(["RUC_FILE"]), files: { bankCertificate: { name: "cert.pdf" } } });
 assert.deepEqual(checklist.map((item) => [item.key, item.done]), [["stateSanctions", true], ["complianceModel", false], ["rucFile", true], ["legalRepId", false], ["bankCertificate", true]]);
 

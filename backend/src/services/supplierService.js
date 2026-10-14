@@ -2,7 +2,10 @@ import AuditLog from "../models/AuditLog.js";
 import { resolveSupplierBankReview } from "./bankNotificationService.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
+import User from "../models/User.js";
+import { approverFor } from "./approvalRuleService.js";
 import { recordAudit } from "./auditService.js";
+import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { paginatedPayload, parsePagination, parseSort, escapedRegex } from "./queryService.js";
 import { nextSupplierCode } from "./sequenceService.js";
@@ -31,7 +34,7 @@ const SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS_KEY = "SUPPLIER_HOMOLOGATION_VALIDIT
 const DEFAULT_SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS = 12;
 
 // Material fiscal/legal fields: changing any of these on an already-homologated supplier invalidates the
-// prior Finance review, so homologation is reset back to PENDING_VALIDATION for a fresh pass.
+// jefe's approval, so homologation is reset back to PENDING_VALIDATION for a fresh decision.
 const MATERIAL_SUPPLIER_FIELDS = Object.freeze(["rucDni", "legalName", "personType"]);
 
 // Simple, dependency-free similarity threshold for the advisory duplicate-name warning (Fix 1). This is
@@ -136,7 +139,8 @@ const protectedSupplierFields = Object.freeze([
   "verificationStatus",
   "ownershipResult",
   "similarNameWarning",
-  "homologationValidUntil"
+  "homologationValidUntil",
+  "jefeApproval"
 ]);
 
 const protectedBankReviewFields = Object.freeze([
@@ -304,8 +308,128 @@ function idOf(value) {
   return value?._id || value || "";
 }
 
-function canViewFullBankData(supplier, user) {
+// ---- Jefe approval. Only the proposer's first jefe approves a supplier for use; approving it
+// homologates it (PRV code, active for every requester). The approver is resolved from the current
+// roster whenever it is needed, with the coverage requests use: the jefe while available, otherwise
+// their substitute, otherwise the nearest available jefe above them. A proposal nobody in the roster
+// can take (no proposer, a proposer without a jefe, or everyone above them away) falls to the Admin.
+
+function personSnapshot(user) {
+  return user ? { _id: user._id, name: user.name, jobTitle: user.jobTitle || "" } : null;
+}
+
+const NO_AVAILABLE_JEFE = Object.freeze({ approver: null, coveringFor: null, adminFallback: true });
+
+export async function supplierApproverFor(proposerId) {
+  if (!idOf(proposerId)) return NO_AVAILABLE_JEFE;
+  const proposer = await User.findById(idOf(proposerId)).select("jefe").lean();
+  if (!proposer?.jefe) return NO_AVAILABLE_JEFE;
+  const jefe = await User.findById(proposer.jefe).select("name jobTitle active onLeave jefe substitute role approvalLevel").lean();
+  if (!jefe) return NO_AVAILABLE_JEFE;
+  try {
+    const { approver, coveringFor } = await approverFor(jefe, { exclude: [proposer._id] });
+    if (!approver) return NO_AVAILABLE_JEFE;
+    // Anyone other than the jefe decides on the jefe's behalf.
+    const absent = coveringFor || (String(approver._id) === String(jefe._id) ? null : jefe);
+    return { approver: personSnapshot(approver), coveringFor: personSnapshot(absent), adminFallback: false };
+  } catch {
+    // A cyclical or over-deep roster cannot route the proposal; the Admin takes it.
+    return NO_AVAILABLE_JEFE;
+  }
+}
+
+// Waiting for a decision: a new or corrected proposal, or a homologation whose validity lapsed.
+function awaitsApproval(supplier) {
+  return supplier?.homologationStatus === "PENDING_VALIDATION"
+    || (supplier?.homologationStatus === "HOMOLOGATED" && isHomologationExpired(supplier));
+}
+
+function awaitingApprovalQuery(now = new Date()) {
+  return { $or: [{ homologationStatus: "PENDING_VALIDATION" }, { homologationStatus: "HOMOLOGATED", homologationValidUntil: { $lt: now } }] };
+}
+
+function decidesSupplierApproval(supplier, user, approval) {
+  if (!approval || !user?._id || !awaitsApproval(supplier)) return false;
+  if (String(idOf(supplier.proposedBy)) === String(user._id)) return false;
+  if (approval.approver) return String(approval.approver._id) === String(user._id);
+  return approval.adminFallback && user.role === ROLES.ADMIN;
+}
+
+// One roster lookup per proposer, for a page of suppliers.
+async function approvalContexts(suppliers) {
+  const byProposer = new Map();
+  const contexts = new Map();
+  for (const supplier of suppliers) {
+    if (!awaitsApproval(supplier)) continue;
+    const proposer = String(idOf(supplier.proposedBy) || "");
+    if (!byProposer.has(proposer)) byProposer.set(proposer, await supplierApproverFor(proposer));
+    contexts.set(String(supplier._id), byProposer.get(proposer));
+  }
+  return contexts;
+}
+
+// The suppliers this user decides on right now. Only someone with a team, someone's substitute or
+// an Admin can be an approver, so everyone else is answered without walking the roster.
+export async function suppliersAwaitingApprovalBy(user) {
+  if (!user?._id || [ROLES.SUPER_ADMIN, ROLES.MANAGEMENT_VIEWER].includes(user.role)) return [];
+  if (user.role !== ROLES.ADMIN && !(await User.exists({ $or: [{ jefe: user._id }, { substitute: user._id }] }))) return [];
+  const waiting = await Supplier.find(awaitingApprovalQuery()).select("proposedBy homologationStatus homologationValidUntil").sort({ updatedAt: 1 }).lean();
+  const contexts = await approvalContexts(waiting);
+  return waiting.filter((supplier) => decidesSupplierApproval(supplier, user, contexts.get(String(supplier._id))));
+}
+
+// Whoever decides on this supplier now (used to open its documents to them).
+export async function isCurrentSupplierApprover(supplier, user) {
+  if (!awaitsApproval(supplier)) return false;
+  return decidesSupplierApproval(supplier, user, await supplierApproverFor(supplier.proposedBy));
+}
+
+function supplierName(supplier) {
+  return supplier.legalName || supplier.name || supplier.rucDni;
+}
+
+async function notifySupplierApprover(supplier, { once = false } = {}) {
+  const approval = await supplierApproverFor(supplier.proposedBy);
+  const proposer = supplier.proposedBy?.name !== undefined ? supplier.proposedBy : await User.findById(idOf(supplier.proposedBy)).select("name").lean();
+  const message = {
+    once,
+    eventKey: `supplier:${supplier._id}:approval`,
+    type: "SUPPLIER_APPROVAL_PENDING",
+    title: notificationText("Supplier awaiting your approval"),
+    path: `/suppliers/${supplier._id}`,
+    entityType: "Supplier",
+    entityId: supplier._id
+  };
+  if (approval.approver) {
+    return notifyUser({
+      ...message,
+      userId: approval.approver._id,
+      message: approval.coveringFor
+        ? notificationText("{supplier}, proposed by {proposer}, is waiting for your approval on behalf of {name}.", { supplier: supplierName(supplier), proposer: proposer?.name || "", name: approval.coveringFor.name })
+        : notificationText("{supplier}, proposed by {proposer}, is waiting for your approval.", { supplier: supplierName(supplier), proposer: proposer?.name || "" })
+    });
+  }
+  return notifyRoles({
+    ...message,
+    roles: [ROLES.ADMIN],
+    message: notificationText("{supplier} has no available jefe to approve it, so it waits for an Admin.", { supplier: supplierName(supplier) })
+  });
+}
+
+// Reminds whoever holds each waiting proposal now: a proposal made before an approver went on leave
+// (or before this approval step existed) reaches the person who can decide it. Sent once per person.
+export async function remindSupplierApprovers() {
+  let reminded = 0;
+  for await (const supplier of Supplier.find({ homologationStatus: "PENDING_VALIDATION" }).populate("proposedBy", "name").cursor()) {
+    await notifySupplierApprover(supplier, { once: true });
+    reminded += 1;
+  }
+  return { reminded };
+}
+
+function canViewFullBankData(supplier, user, approval = null) {
   if (hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) return true;
+  if (decidesSupplierApproval(supplier, user, approval)) return true;
   return actsAsSupplierProposer(user)
     && String(idOf(supplier.proposedBy)) === String(user._id)
     && EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus);
@@ -323,9 +447,9 @@ function serializeBankAccount(account, reveal) {
   };
 }
 
-function serializeSupplierBase(supplier, user) {
+function serializeSupplierBase(supplier, user, approval = null) {
   const value = supplier.toObject ? supplier.toObject() : { ...supplier };
-  if (canViewFullBankData(supplier, user)) return value;
+  if (canViewFullBankData(supplier, user, approval)) return value;
   return {
     ...value,
     bankAccount: maskBankValue(value.bankAccount),
@@ -341,7 +465,7 @@ function serializeSupplierBase(supplier, user) {
   };
 }
 
-function supplierPermissions(supplier, user) {
+function supplierPermissions(supplier, user, approval = null) {
   const finance = FINANCE_ROLES.includes(user?.role);
   const editable = EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus);
   // Finance may correct a homologated supplier's data; the correction resets it to PENDING_VALIDATION.
@@ -351,12 +475,14 @@ function supplierPermissions(supplier, user) {
     canEditProposal: (editable || financeMayCorrectHomologated) && (finance || (actsAsSupplierProposer(user) && proposerOwns)),
     canUploadDocuments: editable && (finance || (actsAsSupplierProposer(user) && proposerOwns)),
     canAddBankAccount: finance || (editable && actsAsSupplierProposer(user) && proposerOwns),
-    canReview: finance && supplier.homologationStatus !== "HOMOLOGATED",
+    // Accounting/Admin keep the SUNAT check, the bank verification Treasury pays against and the
+    // power to deactivate; approving, observing or rejecting belongs to the proposer's jefe.
+    canValidateTaxpayer: finance && editable,
     canVerifyBanking: finance,
-    // Fix 2: an expired homologation must be renewable again even though homologationStatus is still
-    // literally "HOMOLOGATED" until someone acts on it.
-    canHomologate: finance && (supplier.homologationStatus !== "HOMOLOGATED" || isHomologationExpired(supplier)),
-    canViewFullBankData: canViewFullBankData(supplier, user)
+    canDeactivate: finance && supplier.homologationStatus !== "INACTIVE",
+    // An expired homologation is decided again even though its status still reads HOMOLOGATED.
+    canApprove: decidesSupplierApproval(supplier, user, approval),
+    canViewFullBankData: canViewFullBankData(supplier, user, approval)
   };
 }
 
@@ -497,6 +623,7 @@ export async function lookupSupplierByIdentifier(identifier, user) {
     .populate("proposedBy", "name email role");
   if (!supplier) return { found: false, normalizedIdentifier: normalized };
   const value = supplier.toObject();
+  const approval = awaitsApproval(supplier) ? await supplierApproverFor(supplier.proposedBy) : null;
   return {
     found: true,
     normalizedIdentifier: normalized,
@@ -510,7 +637,7 @@ export async function lookupSupplierByIdentifier(identifier, user) {
       status: value.status,
       active: value.active,
       proposedBy: value.proposedBy,
-      permissions: supplierPermissions(supplier, user)
+      permissions: supplierPermissions(supplier, user, approval)
     }
   };
 }
@@ -521,10 +648,13 @@ export async function getSupplierDetailPayload(supplierId, user) {
     .populate("compliance.validatedBy", "name email role")
     .populate("taxpayerValidation.validatedBy", "name email role")
     .populate("complianceReview.reviewedBy", "name email role")
+    .populate("jefeApproval.decidedBy", "name jobTitle role")
+    .populate("jefeApproval.coveringFor", "name jobTitle role")
     .populate("reviewedBy", "name email role")
     .populate("documents.uploadedBy", "name email role")
     .populate("similarNameWarning.possibleDuplicateOf", "legalName name rucDni supplierCode");
   if (!supplier) throw new AppError(404, "Supplier not found.", { supplierId }, ERROR_CODES.NOT_FOUND);
+  const approval = awaitsApproval(supplier) ? await supplierApproverFor(supplier.proposedBy) : null;
   const [accounts, audit] = await Promise.all([
     SupplierBankAccount.find({ supplier: supplier._id })
       .populate("verifiedBy", "name email role")
@@ -533,7 +663,7 @@ export async function getSupplierDetailPayload(supplierId, user) {
       .sort({ active: -1, preferred: -1, validFrom: -1 }),
     AuditLog.find({ entityType: "Supplier", entityId: supplier._id }).sort({ createdAt: -1 }).limit(100).lean()
   ]);
-  const reveal = canViewFullBankData(supplier, user);
+  const reveal = canViewFullBankData(supplier, user, approval);
   const auditHistory = audit.map((item) => FINANCE_ROLES.includes(user.role)
     ? item
     : {
@@ -545,10 +675,12 @@ export async function getSupplierDetailPayload(supplierId, user) {
         createdAt: item.createdAt
       });
   return {
-    ...serializeSupplierBase(supplier, user),
+    ...serializeSupplierBase(supplier, user, approval),
     bankAccounts: accounts.map((account) => serializeBankAccount(account, reveal)),
     auditHistory,
-    permissions: supplierPermissions(supplier, user),
+    // Who decides now, while the supplier waits for approval.
+    approval,
+    permissions: supplierPermissions(supplier, user, approval),
     riskyDeclarations: supplierDeclarationWarnings(supplier),
     sunatProvider: sunatService.status()
   };
@@ -557,8 +689,9 @@ export async function getSupplierDetailPayload(supplierId, user) {
 export async function listSuppliersPage(queryParams, user) {
   const query = {};
   if (queryParams.homologationStatus) query.homologationStatus = queryParams.homologationStatus;
-  if (queryParams.complianceReviewResult) query["complianceReview.result"] = queryParams.complianceReviewResult;
+  if (queryParams.jefeApprovalDecision) query["jefeApproval.decision"] = queryParams.jefeApprovalDecision;
   if (queryParams.active !== undefined) query.active = queryParams.active === "true";
+  if (queryParams.awaitingMyApproval === "true") query._id = { $in: (await suppliersAwaitingApprovalBy(user)).map((supplier) => supplier._id) };
   if (queryParams.search) {
     const search = new RegExp(escapedRegex(queryParams.search), "i");
     query.$or = [{ supplierCode: search }, { rucDni: search }, { normalizedIdentifier: search }, { name: search }, { commercialName: search }, { legalName: search }];
@@ -568,11 +701,12 @@ export async function listSuppliersPage(queryParams, user) {
   const [data, total] = await Promise.all([
     Supplier.find(query)
       .populate("proposedBy", "name email role")
-      .populate("complianceReview.reviewedBy", "name email role")
+      .populate("jefeApproval.decidedBy", "name jobTitle role")
       .populate("similarNameWarning.possibleDuplicateOf", "legalName name rucDni supplierCode")
       .sort(sort).skip(skip).limit(pageSize),
     Supplier.countDocuments(query)
   ]);
+  const approvals = await approvalContexts(data);
   const supplierIds = data.map((supplier) => supplier._id);
   const bankAccounts = await SupplierBankAccount.find({ supplier: { $in: supplierIds }, active: true })
     .sort({ preferred: -1, validFrom: -1 });
@@ -584,13 +718,15 @@ export async function listSuppliersPage(queryParams, user) {
   }, new Map());
   return paginatedPayload(data.map((supplier) => {
     const accounts = bySupplier.get(String(supplier._id)) || [];
-    const reveal = canViewFullBankData(supplier, user);
+    const approval = approvals.get(String(supplier._id)) || null;
+    const reveal = canViewFullBankData(supplier, user, approval);
     return {
-      ...serializeSupplierBase(supplier, user),
+      ...serializeSupplierBase(supplier, user, approval),
       bankAccounts: accounts.map((account) => serializeBankAccount(account, reveal)),
       activeBankAccountCount: accounts.length,
       verifiedBankAccountCount: accounts.filter((account) => account.verificationStatus === "VERIFIED").length,
-      permissions: supplierPermissions(supplier, user),
+      approval,
+      permissions: supplierPermissions(supplier, user, approval),
       riskyDeclarations: supplierDeclarationWarnings(supplier)
     };
   }), total, page, pageSize);
@@ -685,6 +821,9 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
         console.warn("[SUPPLIER] Automatic taxpayer review pending:", error.code || error.name);
       }
     }
+    // The saved proposal never depends on the notification; the approver also sees it in their tasks.
+    try { await notifySupplierApprover(supplier); }
+    catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
     return { supplier, warnings };
   } catch (error) {
     await cleanupUploadedFiles(persistedFiles);
@@ -706,7 +845,7 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
     legalName: supplier.legalName,
     personType: supplier.personType,
     homologationStatus: supplier.homologationStatus,
-    complianceReview: supplier.complianceReview?.toObject?.() || supplier.complianceReview
+    jefeApproval: supplier.jefeApproval?.toObject?.() || supplier.jefeApproval
   };
   if (payload.rucDni && normalizeSupplierIdentifier(payload.rucDni) !== supplier.normalizedIdentifier) {
     const identifier = assertSupplierIdentifier(payload.rucDni);
@@ -719,28 +858,23 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
   }
   applyProposalFields(supplier, payload);
   // Fix 2: a material fiscal/legal change (RUC/DNI, legal name, person type) on an already-homologated
-  // supplier invalidates the prior Finance review and homologation, so it must be re-reviewed from scratch.
+  // supplier invalidates the jefe's approval and the homologation, so it must be approved again.
   const materialFieldsChanged = MATERIAL_SUPPLIER_FIELDS.some((field) => (supplier[field] || "") !== (oldValues[field] || ""));
   const homologationResetForMaterialChange = oldValues.homologationStatus === "HOMOLOGATED" && materialFieldsChanged;
+  const backToApproval = oldValues.homologationStatus === "OBSERVED" || homologationResetForMaterialChange;
   let persistedFiles = {};
   try {
     persistedFiles = await persistUploadedFiles(files, { domain: "suppliers", entityId: supplier._id });
     const uploadedDocuments = mapUploadedDocuments(persistedFiles, user._id);
     supplier.documents.push(...uploadedDocuments);
-    if (oldValues.homologationStatus === "OBSERVED") {
+    if (backToApproval) {
       supplier.homologationStatus = "PENDING_VALIDATION";
       supplier.status = "PENDING_VALIDATION";
-      supplier.complianceReview.result = "PENDING";
-      supplier.complianceReview.reviewedBy = undefined;
-      supplier.complianceReview.reviewedAt = undefined;
-    } else if (homologationResetForMaterialChange) {
-      supplier.homologationStatus = "PENDING_VALIDATION";
-      supplier.status = "PENDING_VALIDATION";
+      supplier.jefeApproval = { decision: "PENDING" };
+    }
+    if (homologationResetForMaterialChange) {
       supplier.active = false;
       supplier.homologationValidUntil = undefined;
-      supplier.complianceReview.result = "PENDING";
-      supplier.complianceReview.reviewedBy = undefined;
-      supplier.complianceReview.reviewedAt = undefined;
     }
     await supplier.save();
     await recordAudit({
@@ -768,11 +902,15 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
         newValues: { documentKinds: uploadedDocuments.map((item) => item.kind) }
       });
     }
-    return { supplier, warnings: [] };
   } catch (error) {
     await cleanupUploadedFiles(persistedFiles);
     throw error;
   }
+  if (backToApproval) {
+    try { await notifySupplierApprover(supplier); }
+    catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
+  }
+  return { supplier, warnings: [] };
 }
 
 export async function addSupplierBankAccount({ supplierId, payload, user, req }) {
@@ -845,6 +983,9 @@ export async function verifySupplierBankAccount({ supplierId, accountId, payload
     }
   });
   await resolveSupplierBankReview(account);
+  if (!(await SupplierBankAccount.exists({ supplier: supplier._id, active: true, verificationStatus: "PENDING" }))) {
+    await resolveNotification(`supplier:${supplier._id}:bank-review`);
+  }
   return account;
 }
 
@@ -1030,70 +1171,6 @@ export function automaticTaxpayerResult(lookup) {
   };
 }
 
-export async function reviewSupplierCompliance({ supplierId, payload, user, req }) {
-  assertFinanceUser(user);
-  const supplier = await loadSupplier(supplierId);
-  if (["HOMOLOGATED", "REJECTED", "INACTIVE"].includes(supplier.homologationStatus)) {
-    throw new AppError(409, "The current supplier status cannot be reopened through the review action.", { homologationStatus: supplier.homologationStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  }
-  const result = payload.result;
-  if (!["PENDING", "APPROVED", "OBSERVED", "REJECTED"].includes(result)) {
-    throw new AppError(422, "A valid Finance compliance-review result is required.", { result }, ERROR_CODES.VALIDATION_ERROR);
-  }
-  const comments = String(payload.comments || "").trim();
-  if (["OBSERVED", "REJECTED"].includes(result) && !comments) {
-    throw new AppError(422, "Comments are required when a supplier is observed or rejected.", { field: "comments" }, ERROR_CODES.VALIDATION_ERROR);
-  }
-  const oldValues = {
-    homologationStatus: supplier.homologationStatus,
-    complianceReview: supplier.complianceReview?.toObject?.() || supplier.complianceReview
-  };
-  supplier.complianceReview.result = result;
-  supplier.complianceReview.comments = comments;
-  supplier.complianceReview.reviewedBy = user._id;
-  supplier.complianceReview.reviewedAt = new Date();
-  supplier.reviewedBy = user._id;
-  supplier.reviewedAt = new Date();
-  supplier.reviewComments = comments;
-  if (result === "APPROVED") {
-    supplier.complianceStatus = "COMPLIANT";
-    supplier.compliance.compliant = true;
-    supplier.homologationStatus = "PENDING_VALIDATION";
-    supplier.status = "PENDING_VALIDATION";
-  } else if (result === "OBSERVED") {
-    supplier.complianceStatus = "OBSERVED";
-    supplier.compliance.compliant = false;
-    supplier.homologationStatus = "OBSERVED";
-    supplier.status = "OBSERVED";
-    supplier.active = false;
-  } else if (result === "REJECTED") {
-    supplier.complianceStatus = "NON_COMPLIANT";
-    supplier.compliance.compliant = false;
-    supplier.homologationStatus = "REJECTED";
-    supplier.status = "REJECTED";
-    supplier.active = false;
-  } else {
-    supplier.complianceStatus = "PENDING";
-    supplier.compliance.compliant = false;
-    supplier.homologationStatus = "PENDING_VALIDATION";
-    supplier.status = "PENDING_VALIDATION";
-    supplier.active = false;
-  }
-  await supplier.save();
-  await recordAudit({
-    entityType: "Supplier",
-    entity: supplier,
-    action: result === "OBSERVED" ? "OBSERVED" : result === "REJECTED" ? "REJECTED" : "COMPLIANCE_REVIEW_RECORDED",
-    user,
-    req,
-    module: "SUPPLIERS",
-    comments,
-    oldValues,
-    newValues: { result, homologationStatus: supplier.homologationStatus }
-  });
-  return supplier;
-}
-
 export function supplierDeclarationWarnings(supplier) {
   const warnings = [];
   if (supplier?.declarations?.stateSanctions?.answer === "YES") {
@@ -1101,7 +1178,7 @@ export function supplierDeclarationWarnings(supplier) {
       code: "STATE_SANCTIONS_DECLARED",
       field: "declarations.stateSanctions",
       source: "RCO-FOR-002 A34:G34",
-      message: "The supplier declared sanctions or relevant State proceedings. Finance review is required."
+      message: "The supplier declared sanctions or relevant State proceedings. Review this before approving the supplier."
     });
   }
   if (supplier?.declarations?.complianceModel?.answer === "NO") {
@@ -1109,7 +1186,7 @@ export function supplierDeclarationWarnings(supplier) {
       code: "COMPLIANCE_MODEL_NOT_AVAILABLE",
       field: "declarations.complianceModel",
       source: "RCO-FOR-002 A35:G35",
-      message: "The supplier declared that no compliance/prevention model is available. Finance review is required."
+      message: "The supplier declared that no compliance/prevention model is available. Review this before approving the supplier."
     });
   }
   if (supplier?.similarNameWarning?.possibleDuplicateOf) {
@@ -1117,7 +1194,7 @@ export function supplierDeclarationWarnings(supplier) {
       code: "POSSIBLE_DUPLICATE_SUPPLIER_NAME",
       field: "legalName",
       source: "Fix 1 - advisory name-similarity check (RUC/DNI is the hard duplicate key)",
-      message: `This legal name closely matches an existing supplier (${supplier.similarNameWarning.matchedLegalName}) with a different RUC/DNI. Confirm these are not the same entity before homologating.`
+      message: `This legal name closely matches an existing supplier (${supplier.similarNameWarning.matchedLegalName}) with a different RUC/DNI. Confirm these are not the same entity before approving.`
     });
   }
   return warnings;
@@ -1149,20 +1226,27 @@ export async function evaluateSupplierHomologation(supplierOrId) {
   if (supplier.declarations?.complianceModel?.answer === "NOT_DECLARED" || !supplier.declarations?.complianceModel?.answer) {
     add("COMPLIANCE_MODEL_DECLARATION_INCOMPLETE", "declarations.complianceModel", "RCO-FOR-002 A35:G35", "The compliance/prevention-model declaration must be completed.");
   }
-  const taxpayerValid = ["ACTIVE", "MANUALLY_VALIDATED"].includes(supplier.taxpayerStatus) || supplier.compliance?.taxpayerActive;
-  if (!taxpayerValid) add("TAXPAYER_VALIDATION_REQUIRED", "taxpayerValidation", "Existing supplier taxpayer-validation rule", "Authorized taxpayer validation is required.");
-  if (supplier.taxpayerValidation?.identifierMatch === "MISMATCH") add("TAXPAYER_IDENTIFIER_MISMATCH", "taxpayerValidation.identifierMatch", "RCO-FOR-002 B9:G13; PDF p.2", "The validated taxpayer identifier does not match the supplier record.");
-  if (supplier.taxpayerValidation?.legalNameMatch === "MISMATCH") add("TAXPAYER_LEGAL_NAME_MISMATCH", "taxpayerValidation.legalNameMatch", "RCO-FOR-002 B9:G13; PDF p.2", "The validated legal name does not match the supplier record.");
-  if (supplier.complianceReview?.result !== "APPROVED") add("FINANCE_REVIEW_NOT_APPROVED", "complianceReview.result", "RCO-FOR-002 A37:G43; approved Phase 2 responsibility mapping", "Finance compliance review must be approved.");
+  // The jefe's approval needs no Accounting review. A SUNAT check that already ran still counts: an
+  // identity that does not match, or a taxpayer SUNAT reports as not active or not habido, blocks it.
+  const identifierMismatch = supplier.taxpayerValidation?.identifierMatch === "MISMATCH";
+  const legalNameMismatch = supplier.taxpayerValidation?.legalNameMatch === "MISMATCH";
+  if (identifierMismatch) add("TAXPAYER_IDENTIFIER_MISMATCH", "taxpayerValidation.identifierMatch", "RCO-FOR-002 B9:G13; PDF p.2", "The validated taxpayer identifier does not match the supplier record.");
+  if (legalNameMismatch) add("TAXPAYER_LEGAL_NAME_MISMATCH", "taxpayerValidation.legalNameMatch", "RCO-FOR-002 B9:G13; PDF p.2", "The validated legal name does not match the supplier record.");
+  if (supplier.taxpayerStatus === "INACTIVE" && !identifierMismatch && !legalNameMismatch) {
+    add("TAXPAYER_NOT_ACTIVE", "taxpayerStatus", "SUNAT taxpayer check", "SUNAT reports this taxpayer as not active or not habido.");
+  }
   if (["OBSERVED", "REJECTED", "INACTIVE"].includes(supplier.homologationStatus)) add("SUPPLIER_STATUS_BLOCKS_HOMOLOGATION", "homologationStatus", "Approved Phase 2 status policy", "The current supplier status must be resolved before homologation.");
 
+  // Accounting's verification is what Treasury pays against (paymentDestinationService); approval
+  // only needs an account that has not been rejected or found to belong to someone else.
   const acceptableAccounts = accounts.filter((account) => {
     const ownershipAccepted = account.ownershipResult === "MATCH"
       || (account.ownershipResult === "MANUAL_ACCEPTED" && String(account.verificationComments || "").trim());
     return account.verificationStatus === "VERIFIED" && ownershipAccepted && /^\d{20}$/.test(account.cci || "");
   });
+  const usableAccounts = accounts.filter((account) => account.verificationStatus !== "REJECTED" && account.ownershipResult !== "MISMATCH");
   if (!accounts.length) add("ACTIVE_BANK_ACCOUNT_MISSING", "bankAccounts", "RCO-FOR-002 A26:G31", "At least one active supplier payment account is required.");
-  else if (!acceptableAccounts.length) add("BANK_ACCOUNT_FINANCE_VERIFICATION_REQUIRED", "bankAccounts", "RCO-FOR-002 A26:G31; approved Phase 2 bank policy", "At least one active account needs acceptable Finance verification and ownership review.");
+  else if (!usableAccounts.length) add("BANK_ACCOUNT_REJECTED", "bankAccounts", "RCO-FOR-002 A26:G31", "Every active bank account was rejected or does not belong to the supplier. Add a correct account first.");
 
   return {
     valid: issues.length === 0,
@@ -1172,7 +1256,7 @@ export async function evaluateSupplierHomologation(supplierOrId) {
       requiredDocumentsPresent: REQUIRED_DOCUMENT_KINDS.every((kind) => documentKinds.has(kind)),
       activeBankAccountCount: accounts.length,
       acceptableBankAccountCount: acceptableAccounts.length,
-      financeReview: supplier.complianceReview?.result || "PENDING"
+      jefeApproval: supplier.jefeApproval?.decision || "PENDING"
     }
   };
 }
@@ -1202,20 +1286,70 @@ function isHomologationExpired(supplier) {
   return Boolean(supplier?.homologationValidUntil) && new Date(supplier.homologationValidUntil).getTime() < Date.now();
 }
 
-export async function homologateSupplier({ supplierId, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can homologate suppliers.");
-  let supplier = await loadSupplier(supplierId);
-  if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active && !isHomologationExpired(supplier)) {
-    return { supplier, assignedCode: false, readiness: { valid: true, issues: [], warnings: supplierDeclarationWarnings(supplier) } };
+const JEFE_DECISIONS = Object.freeze({ APPROVE: "APPROVED", OBSERVE: "OBSERVED", REJECT: "REJECTED" });
+
+// The proposer's jefe (or whoever covers for them) approves, observes or rejects a waiting supplier.
+// Approving homologates it: an immutable PRV code, active and usable on any requester's request.
+export async function decideSupplierApproval({ supplierId, payload = {}, user, req }) {
+  const action = String(payload.decision || "").trim().toUpperCase();
+  const decision = JEFE_DECISIONS[action];
+  if (!decision) throw new AppError(422, "Choose to approve, observe or reject the supplier.", { decision: payload.decision }, ERROR_CODES.VALIDATION_ERROR);
+  const comments = String(payload.comments || "").trim();
+  if (decision !== "APPROVED" && !comments) {
+    throw new AppError(422, "Comments are required when a supplier is observed or rejected.", { field: "comments" }, ERROR_CODES.VALIDATION_ERROR);
   }
+  const supplier = await loadSupplier(supplierId);
+  if (!awaitsApproval(supplier)) {
+    throw new AppError(409, "This supplier is not waiting for approval.", { homologationStatus: supplier.homologationStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  if (String(idOf(supplier.proposedBy)) === String(user._id)) {
+    throw new AppError(403, "You proposed this supplier, so your jefe approves it.", undefined, ERROR_CODES.FORBIDDEN);
+  }
+  const approval = await supplierApproverFor(supplier.proposedBy);
+  if (!decidesSupplierApproval(supplier, user, approval)) {
+    throw new AppError(
+      403,
+      approval.approver ? "Only the proposer's jefe, or whoever covers for them, can decide on this supplier." : "The proposer has no available jefe, so an Admin decides on this supplier.",
+      { approver: approval.approver },
+      ERROR_CODES.FORBIDDEN
+    );
+  }
+  const result = decision === "APPROVED"
+    ? await approveSupplier({ supplier, user, req, approval, comments })
+    : { supplier: await observeOrRejectSupplier({ supplier, decision, user, req, approval, comments }), assignedCode: false };
+  await resolveNotification(`supplier:${supplier._id}:approval`);
+  // Accounting's earlier "evidence ready for Finance review" alert no longer applies.
+  await resolveNotification(`supplier:${supplier._id}:finance-ready`);
+  try { await notifySupplierDecision(result.supplier, { decision, user, comments }); }
+  catch (error) { console.warn("[SUPPLIER] Decision notification failed:", error.message); }
+  return result;
+}
+
+function jefeDecisionRecord(decision, user, approval, comments) {
+  return { decision, decidedBy: user._id, coveringFor: approval.coveringFor?._id, decidedAt: new Date(), comments };
+}
+
+async function approveSupplier({ supplier, user, req, approval, comments }) {
   if (sunatService.status().variant === "PADRON") {
-    supplier = await validateAutomaticSupplierTaxpayer(supplier, user, req);
+    // A fresh official check when SUNAT answers; its being unreachable never blocks the jefe.
+    try { supplier = await validateAutomaticSupplierTaxpayer(supplier, user, req); }
+    catch (error) { console.warn("[SUPPLIER] Automatic taxpayer check skipped at approval:", error.code || error.name); }
   }
   const readiness = await assertSupplierCanBeHomologated(supplier);
   const oldValues = { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil };
   // Fix 2: homologation is only valid for a configurable period (default 12 months) from the date it is
   // granted or renewed - see computeHomologationValidUntil()/SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS_KEY.
   const homologationValidUntil = await computeHomologationValidUntil();
+  const granted = {
+    homologationStatus: "HOMOLOGATED",
+    status: "ACTIVE",
+    active: true,
+    homologationValidUntil,
+    jefeApproval: jefeDecisionRecord("APPROVED", user, approval, comments),
+    reviewedBy: user._id,
+    reviewedAt: new Date(),
+    reviewComments: comments
+  };
   let assignedCode = false;
   if (!supplier.supplierCode) {
     const candidate = await nextSupplierCode();
@@ -1225,35 +1359,16 @@ export async function homologateSupplier({ supplierId, user, req }) {
         homologationStatus: { $ne: "HOMOLOGATED" },
         $or: [{ supplierCode: { $exists: false } }, { supplierCode: null }, { supplierCode: "" }]
       },
-      {
-        $set: {
-          supplierCode: candidate,
-          homologationStatus: "HOMOLOGATED",
-          status: "ACTIVE",
-          active: true,
-          homologationValidUntil,
-          reviewedBy: user._id,
-          reviewedAt: new Date()
-        }
-      },
+      { $set: { supplierCode: candidate, ...granted } },
       { new: true, runValidators: true }
     );
-    if (updated) {
-      supplier = updated;
-      assignedCode = true;
-    } else {
-      supplier = await loadSupplier(supplierId);
-      if (supplier.homologationStatus !== "HOMOLOGATED" || !supplier.supplierCode) {
-        throw new AppError(409, "Supplier homologation changed concurrently. Refresh and try again.", undefined, ERROR_CODES.CONFLICT);
-      }
+    if (!updated) {
+      throw new AppError(409, "Supplier approval changed concurrently. Refresh and try again.", undefined, ERROR_CODES.CONFLICT);
     }
+    supplier = updated;
+    assignedCode = true;
   } else {
-    supplier.homologationStatus = "HOMOLOGATED";
-    supplier.status = "ACTIVE";
-    supplier.active = true;
-    supplier.homologationValidUntil = homologationValidUntil;
-    supplier.reviewedBy = user._id;
-    supplier.reviewedAt = new Date();
+    supplier.set(granted);
     await supplier.save();
   }
   if (assignedCode) {
@@ -1270,56 +1385,102 @@ export async function homologateSupplier({ supplierId, user, req }) {
   await recordAudit({
     entityType: "Supplier",
     entity: supplier,
-    action: "HOMOLOGATED",
+    action: "APPROVED_BY_JEFE",
     user,
     req,
     module: "SUPPLIERS",
+    comments,
     oldValues,
-    newValues: { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil }
+    newValues: { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil, coveringFor: approval.coveringFor?._id || null }
   });
   return { supplier, assignedCode, readiness };
+}
+
+async function observeOrRejectSupplier({ supplier, decision, user, req, approval, comments }) {
+  const oldValues = { homologationStatus: supplier.homologationStatus, active: supplier.active };
+  supplier.homologationStatus = decision;
+  supplier.status = decision;
+  supplier.active = false;
+  supplier.homologationValidUntil = undefined;
+  supplier.jefeApproval = jefeDecisionRecord(decision, user, approval, comments);
+  supplier.reviewedBy = user._id;
+  supplier.reviewedAt = new Date();
+  supplier.reviewComments = comments;
+  await supplier.save();
+  await recordAudit({
+    entityType: "Supplier",
+    entity: supplier,
+    action: decision === "OBSERVED" ? "OBSERVED_BY_JEFE" : "REJECTED_BY_JEFE",
+    user,
+    req,
+    module: "SUPPLIERS",
+    comments,
+    oldValues,
+    newValues: { homologationStatus: supplier.homologationStatus, coveringFor: approval.coveringFor?._id || null }
+  });
+  return supplier;
+}
+
+async function notifySupplierDecision(supplier, { decision, user, comments }) {
+  const reference = { path: `/suppliers/${supplier._id}`, entityType: "Supplier", entityId: supplier._id };
+  const name = supplierName(supplier);
+  if (supplier.proposedBy) {
+    const copy = {
+      APPROVED: [notificationText("Supplier approved"), notificationText("{supplier} was approved by {name} and can now be used on requests.", { supplier: name, name: user.name })],
+      OBSERVED: [notificationText("Supplier observed"), notificationText("{supplier} was observed by {name}: {comments}", { supplier: name, name: user.name, comments })],
+      REJECTED: [notificationText("Supplier rejected"), notificationText("{supplier} was rejected by {name}: {comments}", { supplier: name, name: user.name, comments })]
+    }[decision];
+    await notifyUser({
+      userId: idOf(supplier.proposedBy),
+      eventKey: `supplier:${supplier._id}:decision:${Date.now()}`,
+      type: "SUPPLIER_APPROVAL_DECISION",
+      title: copy[0],
+      message: copy[1],
+      ...reference
+    });
+  }
+  // Treasury pays only to an account Accounting verified, so an approved supplier's pending
+  // account goes to Accounting now.
+  if (decision === "APPROVED" && await SupplierBankAccount.exists({ supplier: supplier._id, active: true, verificationStatus: "PENDING" })) {
+    await notifyRoles({
+      roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
+      eventKey: `supplier:${supplier._id}:bank-review`,
+      type: "SUPPLIER_BANK_REVIEW",
+      title: notificationText("Supplier bank account to verify"),
+      message: notificationText("{supplier} was approved for use. Verify its bank account so Treasury can pay it.", { supplier: name }),
+      ...reference
+    });
+  }
 }
 
 export function isSupplierUsable(supplier) {
   return Boolean(supplier && supplier.active && supplier.homologationStatus === "HOMOLOGATED" && !isHomologationExpired(supplier));
 }
 
+// A supplier is used on a request (every track, from submission on) only once the proposer's jefe
+// has approved it. Pending and observed suppliers keep the SUPPLIER_NOT_HOMOLOGATED code the budget
+// commitment already handles.
 export function assertSupplierUsable(supplier) {
+  if (isSupplierUsable(supplier)) return;
+  const details = { supplier: supplier?._id, homologationStatus: supplier?.homologationStatus };
   if (supplier?.active && supplier.homologationStatus === "HOMOLOGATED" && isHomologationExpired(supplier)) {
     throw new AppError(
       422,
-      "Supplier homologation has expired and must be renewed before this supplier can be used.",
-      { supplier: supplier._id, homologationValidUntil: supplier.homologationValidUntil, reason: "HOMOLOGATION_EXPIRED" },
+      "The supplier's approval has expired. The proposer's jefe must approve it again before it can be used.",
+      { ...details, homologationValidUntil: supplier.homologationValidUntil, reason: "HOMOLOGATION_EXPIRED" },
       ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED
     );
   }
-  if (!isSupplierUsable(supplier)) {
-    throw new AppError(422, "An active homologated supplier is required.", { supplier: supplier?._id }, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
+  const status = supplier?.homologationStatus || supplier?.status;
+  if (status === "REJECTED") throw new AppError(422, "This supplier was rejected and cannot be used. Select another supplier.", details, ERROR_CODES.SUPPLIER_REJECTED);
+  if (status === "INACTIVE") throw new AppError(422, "This supplier is inactive and cannot be used. Select another supplier.", details, ERROR_CODES.SUPPLIER_INACTIVE);
+  if (status === "PENDING_VALIDATION") {
+    throw new AppError(422, "This supplier is waiting for the approval of its proposer's jefe. Send the request once the supplier is approved.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
   }
-}
-
-export function assertSupplierEligibleForRequestReview(supplier) {
-  if (!supplier) {
-    throw new AppError(404, "Supplier not found.", undefined, ERROR_CODES.NOT_FOUND);
+  if (status === "OBSERVED") {
+    throw new AppError(422, "This supplier was observed by the approving jefe and must be corrected before it can be used.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
   }
-  const status = supplier.homologationStatus || supplier.status || "PENDING_VALIDATION";
-  if (status === "REJECTED") {
-    throw new AppError(
-      422,
-      "The recommended supplier is rejected. Select another eligible supplier before submission.",
-      { supplier: supplier._id, homologationStatus: status },
-      ERROR_CODES.SUPPLIER_REJECTED
-    );
-  }
-  if (status === "INACTIVE" || (supplier.active === false && status === "HOMOLOGATED")) {
-    throw new AppError(
-      422,
-      "The recommended supplier is inactive. Select another eligible supplier before submission.",
-      { supplier: supplier._id, homologationStatus: status },
-      ERROR_CODES.SUPPLIER_INACTIVE
-    );
-  }
-  return supplier;
+  throw new AppError(422, "An active approved supplier is required.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
 }
 
 export async function getActiveBankAccount(supplierId, { bank, currency } = {}) {
@@ -1385,8 +1546,14 @@ export async function replaceActiveBankAccount(supplier, payload, userId) {
   return { account, warnings: await reusedBankWarnings({ supplierId: supplier._id, accountNumber, cci }) };
 }
 
+// Accounting/Admin correct supplier data, add accounts, record the SUNAT check, deactivate or reopen.
+// Approving, observing or rejecting is the proposer's jefe's decision (decideSupplierApproval).
 export async function updateAndReviewSupplier({ supplierId, payload, files = {}, user, req }) {
   assertFinanceUser(user);
+  const requestedStatus = payload.homologationStatus || payload.status;
+  if (["HOMOLOGATED", "ACTIVE", "OBSERVED", "REJECTED"].includes(requestedStatus) || payload.complianceReviewResult || payload.complianceReview) {
+    throw new AppError(403, "Only the proposer's jefe approves, observes or rejects a supplier.", { requestedStatus }, ERROR_CODES.FORBIDDEN);
+  }
   let warnings = [];
   const proposalKeys = [...proposalScalarFields, ...structuredProposalFields, "declarations", "rucDni"];
   const hasProposalUpdate = proposalKeys.some((field) => payload[field] !== undefined) || Object.keys(files || {}).length > 0;
@@ -1408,21 +1575,7 @@ export async function updateAndReviewSupplier({ supplierId, payload, files = {},
       req
     });
   }
-  const requestedStatus = payload.homologationStatus || payload.status;
-  const explicitReview = parseStructuredValue(payload.complianceReview, "complianceReview") || {};
-  if (payload.complianceReviewResult || explicitReview.result) {
-    await reviewSupplierCompliance({
-      supplierId,
-      payload: { result: payload.complianceReviewResult || explicitReview.result, comments: explicitReview.comments || payload.complianceComments || payload.reviewComments },
-      user,
-      req
-    });
-  } else if (requestedStatus === "OBSERVED" || requestedStatus === "REJECTED") {
-    await reviewSupplierCompliance({ supplierId, payload: { result: requestedStatus, comments: payload.reviewComments || payload.complianceComments }, user, req });
-  }
-  if (requestedStatus === "HOMOLOGATED" || requestedStatus === "ACTIVE") {
-    await homologateSupplier({ supplierId, user, req });
-  } else if (requestedStatus === "INACTIVE") {
+  if (requestedStatus === "INACTIVE") {
     await deactivateSupplier({ supplierId, user, req });
   } else if (requestedStatus === "PENDING_VALIDATION") {
     // Fix 2: the only supported transition out of INACTIVE is a full re-homologation pass. Requesting
@@ -1462,12 +1615,13 @@ export async function deactivateSupplier({ supplierId, user, req }) {
   }
   await supplier.save();
   await recordAudit({ entityType: "Supplier", entity: supplier, action: "DEACTIVATED", user, req, module: "SUPPLIERS" });
+  await resolveNotification(`supplier:${supplier._id}:approval`);
   return supplier;
 }
 
-// Fix 2: reactivating a previously inactive supplier requires a full re-homologation pass, the same as a
-// material fiscal/legal data change - it does not restore HOMOLOGATED status directly. Bank accounts stay
-// deactivated (unrelated to homologation) and must be reverified/re-added as needed.
+// Fix 2: reactivating a previously inactive supplier requires a fresh approval by the proposer's jefe,
+// the same as a material fiscal/legal data change - it does not restore HOMOLOGATED status directly. Bank
+// accounts stay deactivated (unrelated to homologation) and must be reverified/re-added as needed.
 export async function reactivateSupplier({ supplierId, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can reactivate suppliers.");
   const supplier = await loadSupplier(supplierId);
@@ -1484,6 +1638,7 @@ export async function reactivateSupplier({ supplierId, user, req }) {
   supplier.status = "PENDING_VALIDATION";
   supplier.active = false;
   supplier.homologationValidUntil = undefined;
+  supplier.jefeApproval = { decision: "PENDING" };
   supplier.reviewedBy = user._id;
   supplier.reviewedAt = new Date();
   await supplier.save();
@@ -1497,5 +1652,7 @@ export async function reactivateSupplier({ supplierId, user, req }) {
     oldValues,
     newValues: { homologationStatus: supplier.homologationStatus, active: supplier.active }
   });
+  try { await notifySupplierApprover(supplier); }
+  catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
   return supplier;
 }

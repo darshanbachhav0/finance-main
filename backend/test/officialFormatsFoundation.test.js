@@ -20,6 +20,7 @@ import {
 import { nextRenditionNumber, nextSupplierCode } from "../src/services/sequenceService.js";
 import {
   addSupplierBankAccount,
+  decideSupplierApproval,
   setPreferredSupplierBankAccount,
   updateAndReviewSupplier,
   verifySupplierBankAccount
@@ -262,13 +263,10 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
         verifier: accountant,
         req
       });
-      const result = await updateAndReviewSupplier({
-        supplierId: supplier._id,
-        payload: { homologationStatus: "HOMOLOGATED", reviewComments: "Approved in test" },
-        files: {},
-        user: admin,
-        req
-      });
+      // Accounting/Admin can no longer homologate through an edit; this proposal has no proposer and
+      // so no jefe, which leaves the decision to the Admin.
+      await assert.rejects(() => updateAndReviewSupplier({ supplierId: supplier._id, payload: { homologationStatus: "HOMOLOGATED" }, files: {}, user: admin, req }), (error) => error.code === "FORBIDDEN");
+      const result = await decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE", comments: "Approved in test" }, user: admin, req });
       assert.match(result.supplier.supplierCode, /^PRV-\d{4,}$/);
       const originalCode = result.supplier.supplierCode;
       await addVerifiedSupplierBankAccount({
@@ -293,13 +291,7 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
       await assert.rejects(() => codeProtected.save(), /immutable after assignment/);
 
       const rejected = await Supplier.create({ rucDni: "20600000034", name: "Rejected Foundation Supplier" });
-      const rejectedResult = await updateAndReviewSupplier({
-        supplierId: rejected._id,
-        payload: { homologationStatus: "REJECTED", reviewComments: "Rejected in test" },
-        files: {},
-        user: admin,
-        req
-      });
+      const rejectedResult = await decideSupplierApproval({ supplierId: rejected._id, payload: { decision: "REJECT", comments: "Rejected in test" }, user: admin, req });
       assert.equal(rejectedResult.supplier.homologationStatus, "REJECTED");
       assert.equal(rejectedResult.supplier.supplierCode, undefined);
 

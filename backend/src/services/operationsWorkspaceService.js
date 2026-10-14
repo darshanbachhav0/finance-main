@@ -43,7 +43,8 @@ export async function supplierReviewQueue(user) {
   const data = [];
   for (const supplier of suppliers) {
     const readiness = await evaluateSupplierHomologation(supplier);
-    data.push({ id: supplier._id, name: supplier.legalName || supplier.name, status: supplier.homologationStatus, issues: readiness.issues, ready: readiness.valid, owner: "Accounting", path: "/suppliers" });
+    // A pending supplier waits for the proposer's jefe; an observed one for the proposer's correction.
+    data.push({ id: supplier._id, name: supplier.legalName || supplier.name, status: supplier.homologationStatus, issues: readiness.issues, ready: readiness.valid, owner: supplier.homologationStatus === "OBSERVED" ? "Proposer" : "Proposer's jefe", path: `/suppliers/${supplier._id}` });
   }
   return { data, total: await Supplier.countDocuments(query) };
 }

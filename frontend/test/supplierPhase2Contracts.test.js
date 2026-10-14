@@ -23,7 +23,7 @@ test("RCO-FOR-002 supplier workspace uses the existing shared UI and all officia
     "Compliance Declarations",
     "Mandatory Documents"
   ]) assert.ok(form.includes(section), `Missing form section ${section}`);
-  for (const section of ["Banking Information", "Finance / Compliance Review", "ERP Supplier Code", "Audit / History", "Homologation Readiness"]) {
+  for (const section of ["Banking Information", "Jefe Approval", "ERP Supplier Code", "Audit / History", "Homologation Readiness"]) {
     assert.ok(detail.includes(section), `Missing detail section ${section}`);
   }
 });
@@ -36,13 +36,27 @@ test("supplier UI calls the staged backend actions and never posts Finance-owned
     "/proposal",
     "/bank-accounts",
     "/taxpayer-validation",
-    "/review",
-    "/homologate",
+    "/approval",
     "/homologation-readiness"
   ]) assert.ok(page.includes(contract), `Missing API contract ${contract}`);
+  // Accounting no longer reviews or homologates: only the proposer's jefe decides.
+  for (const retired of ["/review`", "/homologate`"]) assert.ok(!page.includes(retired), `Retired API contract ${retired}`);
   for (const protectedField of ["supplierCode", "complianceReview", "homologationStatus", "verificationStatus", "ownershipResult", "verifiedBy", "verifiedAt"]) {
     assert.doesNotMatch(form, new RegExp(`append\\(\\"${protectedField}\\"`), `Proposal form must not submit ${protectedField}`);
   }
+});
+
+test("the proposer's jefe decides suppliers from the record and from the Approval Inbox", () => {
+  const detail = source("../src/components/suppliers/SupplierDetail.jsx");
+  const inbox = source("../src/pages/ApprovalInbox.jsx");
+  const queue = source("../src/components/SupplierApprovalDecisions.jsx");
+  assert.ok(detail.includes("permissions.canApprove"));
+  assert.doesNotMatch(detail, /canReview|canHomologate/);
+  for (const decision of ["APPROVE", "OBSERVE", "REJECT"]) assert.ok(detail.includes(`onDecision("${decision}")`), `Missing ${decision} decision`);
+  assert.ok(inbox.includes("<SupplierApprovalDecisions queue={supplierDecisions} />"));
+  assert.ok(queue.includes("awaitingMyApproval: \"true\""));
+  assert.ok(queue.includes("/approval`, { decision: confirm.decision, comments }"));
+  assert.ok(queue.includes("id=\"supplier-approvals\""), "task links land on the section");
 });
 
 test("all Phase 2 Supplier labels have one synchronized Spanish dictionary", () => {
@@ -54,9 +68,9 @@ test("all Phase 2 Supplier labels have one synchronized Spanish dictionary", () 
     "Legal Identification",
     "Banking Information",
     "Compliance Declarations",
-    "Finance / Compliance Review",
+    "Jefe Approval",
     "Homologation Readiness",
-    "Homologate and assign PRV",
+    "Approve supplier",
     "LEGACY_ACCEPTED",
     "MANUAL_ACCEPTED"
   ]) assert.ok(language.includes(`\"${label}\"`) || language.includes(`${label}:`), `Missing Spanish key ${label}`);

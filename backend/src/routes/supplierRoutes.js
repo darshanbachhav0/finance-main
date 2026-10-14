@@ -5,16 +5,15 @@ import {
 import {
   addBankAccount,
   createSupplier,
+  decideApproval,
   deleteSupplier,
   getHomologationReadiness,
   getSupplier,
-  homologate,
   listSuppliers,
   lookupSupplier,
   lookupSupplierPadron,
   lookupSupplierLegalRepresentatives,
   removeBankAccount,
-  reviewSupplier,
   selectPreferredBankAccount,
   updateSupplier,
   updateSupplierProposalFields,
@@ -34,7 +33,7 @@ import {
 } from "../utils/constants.js";
 
 // Proposing a supplier: Accounting/Admin by role, every Solicitor and anyone granted
-// "Propose suppliers" by permission.
+// "Propose suppliers" by permission. The proposer's jefe then approves it.
 const proposeSupplier = authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] });
 
 import {
@@ -147,22 +146,11 @@ router.post(
   validateTaxpayer
 );
 
+// Only the proposer's jefe (or whoever covers for them; the Admin when nobody can) decides. The
+// service resolves who that is from the roster, so the route is open to every supplier user.
 router.post(
-  "/:id/review",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
-  reviewSupplier
-);
-
-router.post(
-  "/:id/homologate",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
-  homologate
+  "/:id/approval",
+  decideApproval
 );
 
 router.put(

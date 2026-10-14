@@ -161,6 +161,16 @@ const supplierSchema = new mongoose.Schema(
       validatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       comments: String
     },
+    // The proposer's first jefe approves the supplier for use (this replaced Accounting's review and
+    // homologation). Approval homologates it; observe sends it back to the proposer; reject ends it.
+    // coveringFor is the absent jefe when a substitute or a higher jefe decided instead.
+    jefeApproval: {
+      decision: { type: String, enum: ["PENDING", "APPROVED", "OBSERVED", "REJECTED"], default: "PENDING" },
+      decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      coveringFor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      decidedAt: Date,
+      comments: { type: String, trim: true, default: "" }
+    },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     reviewedAt: Date,
     reviewComments: String,

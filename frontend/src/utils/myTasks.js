@@ -21,7 +21,7 @@ export const TASK_SENTENCES = {
   employeeBankReviews: ["{count} reimbursement bank profile to verify", "{count} reimbursement bank profiles to verify"],
   supplierBankReviews: ["{count} supplier bank account to verify", "{count} supplier bank accounts to verify"],
   accounting: ["{count} request awaiting fiscal processing", "{count} requests awaiting fiscal processing"],
-  suppliers: ["{count} supplier to homologate", "{count} suppliers to homologate"],
+  suppliers: ["{count} supplier to approve", "{count} suppliers to approve"],
   missingExchangeRate: ["{count} date without an exchange rate", "{count} dates without an exchange rate"],
   period: ["The current accounting period is not open", "The current accounting period is not open"],
   "budgetExceptions:decide": ["{count} budget exception awaiting your decision", "{count} budget exceptions awaiting your decision"],

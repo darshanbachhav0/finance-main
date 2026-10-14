@@ -297,13 +297,14 @@ export function pageTrail(pathname, user) {
 // Pending-task counters next to menu entries. Each path adds up the /dashboard/tasks counters
 // of the work people act on from that page; a key the role does not receive counts as 0.
 export const navigationCounterKeys = Object.freeze({
-  "/approvals": ["approval"],
+  "/approvals": ["approval", "suppliers"],
   "/treasury": ["payable", "paymentConfirmation"],
   "/accounting": ["accounting"],
   "/accounting/invoice-observations": ["invoiceObservations"],
   "/budget": ["budgetExceptions", "budgetPlanChanges"],
   "/requests": ["corrections", "rendition"],
-  "/suppliers": ["suppliers"]
+  // Accounting verifies supplier bank accounts (what Treasury pays to) from the supplier record.
+  "/suppliers": ["supplierBankReviews"]
 });
 
 export function navigationCount(path, counters) {

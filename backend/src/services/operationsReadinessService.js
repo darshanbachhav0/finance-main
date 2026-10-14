@@ -2,7 +2,7 @@ import Supplier from "../models/Supplier.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import { parseRequestLines, getRequestDetail, previewFinancialRequestBudget } from "./requestService.js";
 import { documentStatusByPhase, configuredQuotationPolicy, validateStructuredQuotationComparison } from "./documentRuleService.js";
-import { assertSupplierEligibleForRequestReview } from "./supplierService.js";
+import { assertSupplierUsable } from "./supplierService.js";
 import { activeApprovalStep } from "./approvalRuleService.js";
 import { assertClosureAllowed } from "./financialProgressService.js";
 import { AppError } from "../utils/AppError.js";
@@ -24,7 +24,7 @@ export async function submissionReadiness(payload, user) {
   if (request.flowType !== "C") {
     const supplier = request.supplier ? await Supplier.findById(request.supplier) : null;
     if (!supplier) add("SUPPLIER_REQUIRED", "Select a supplier.");
-    else try { assertSupplierEligibleForRequestReview(supplier); } catch (error) { add(error.code, error.message, "Accounting / Requester", "/suppliers"); }
+    else try { assertSupplierUsable(supplier); } catch (error) { add(error.code, error.message, "Proposer's jefe", "/suppliers"); }
   }
   const documents = await documentStatusByPhase(request);
   for (const missing of documents.phases.SUBMISSION.missing) add("MISSING_DOCUMENT", `Upload ${missing.label || missing.kind}: ${missing.present}/${missing.required}.`);
