@@ -13,6 +13,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
+import { todayIso } from "../utils/dateInput.js";
 
 const EMPTY_SUMMARY = { reviewed: 0, eligible: 0, excluded: 0, blockingErrors: 0, cancelledExcluded: 0, warningCount: 0, configurationErrors: [], readyToExport: false, fileName: null, directSubmission: false, providerMode: "EXPORT_ONLY" };
 const TXT_PREVIEW_LINES = 20;
@@ -31,7 +32,7 @@ export default function SireExport() {
   const { t, language } = useLanguage();
   const { readOnly } = useAuth();
   const { notify } = useToast();
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [period, setPeriod] = useState(todayIso().slice(0, 7));
   const [records, setRecords] = useState([]);
   const [issues, setIssues] = useState([]);
   const [txtLines, setTxtLines] = useState([]);

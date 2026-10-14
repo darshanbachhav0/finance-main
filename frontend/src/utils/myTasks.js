@@ -1,5 +1,6 @@
 import { localeFor } from "./formatters.js";
 import { toneOf } from "./tones.js";
+import { LIMA_TIME_ZONE, limaDateKey } from "../../../shared/businessCalendar.mjs";
 
 // "My tasks" on the dashboard: the /dashboard/tasks items (also shown in the top-bar task panel)
 // turned into one clear sentence each, most urgent first. English strings are the t() keys;
@@ -47,11 +48,8 @@ export function taskSentence(item, t = (text) => text) {
   return fill(t(pair[item.count === 1 ? 0 : 1]), { count: item.count });
 }
 
-function startOfDay(value) {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
+// Days are Lima calendar days, whatever the device's time zone.
+const limaDay = (value) => Date.parse(`${limaDateKey(value)}T00:00:00Z`);
 
 // "Due tomorrow", "Due on Thursday", "Next due on 12 October", "Was due yesterday", "2 past due".
 export function taskDueLabel(item, { now = new Date(), language, t = (text) => text } = {}) {
@@ -59,11 +57,11 @@ export function taskDueLabel(item, { now = new Date(), language, t = (text) => t
   if (!item.dueAt) return "";
   const due = new Date(item.dueAt);
   if (Number.isNaN(due.getTime())) return "";
-  const days = Math.round((startOfDay(due) - startOfDay(now)) / 86400000);
+  const days = Math.round((limaDay(due) - limaDay(now)) / 86400000);
   const locale = localeFor(language);
   const day = Math.abs(days) <= 6
-    ? new Intl.DateTimeFormat(locale, { weekday: "long" }).format(due)
-    : new Intl.DateTimeFormat(locale, { day: "numeric", month: "long" }).format(due);
+    ? new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: LIMA_TIME_ZONE }).format(due)
+    : new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", timeZone: LIMA_TIME_ZONE }).format(due);
   if (due < now) return days === -1 ? t("Was due yesterday") : days === 0 ? t("Was due today") : fill(t("Was due on {day}"), { day });
   const next = item.count > 1 ? "Next due" : "Due";
   if (days === 0) return t(`${next} today`);

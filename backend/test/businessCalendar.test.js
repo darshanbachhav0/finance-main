@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addBusinessDays, businessDaysBetween, isBusinessDay, isPaymentCycleDate, limaDateKey, nextBusinessDay, nextPaymentCycleDate, peruHolidays } from "../../shared/businessCalendar.mjs";
+import "../src/config/timeZone.js";
+import { addBusinessDays, businessDaysBetween, calendarDateKey, isBusinessDay, isPaymentCycleDate, limaDateKey, limaToday, nextBusinessDay, nextPaymentCycleDate, peruHolidays } from "../../shared/businessCalendar.mjs";
 
 const lima = (date, time = "09:00") => new Date(`${date}T${time}:00-05:00`);
+
+test("Lima time: today and the calendar day of stored dates", () => {
+  assert.equal(process.env.TZ, "America/Lima", "the server process runs on Lima time");
+  assert.equal(limaToday(new Date("2026-11-01T03:00:00Z")), "2026-10-31", "22:00 in Lima is still 31 October (UTC is already November)");
+  assert.equal(calendarDateKey("2026-10-13"), "2026-10-13");
+  assert.equal(calendarDateKey(new Date("2026-10-13T00:00:00.000Z")), "2026-10-13", "date-only values keep their day");
+  assert.equal(calendarDateKey("2026-10-14T03:30:00.000Z"), "2026-10-13", "instants are read in Lima");
+  assert.equal(calendarDateKey("not a date"), "");
+});
 
 test("business calendar: Peruvian holidays, weekends, Lima time and the 15th/30th payment cycle", () => {
   const holidays2026 = peruHolidays(2026).map((item) => item.date);

@@ -16,6 +16,7 @@ import { persistReportFile, toCsv } from "../services/exportService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { requestVisibilityFilter } from "../utils/permissions.js";
+import { LIMA_TIME_ZONE, limaToday } from "../../../shared/businessCalendar.mjs";
 
 // Drafts, rejected and voided requests never count (shared with the dashboards).
 const excludedStatuses = [...REPORTING_EXCLUDED_REQUEST_STATUSES];
@@ -28,8 +29,14 @@ function safePeriodSegment(value) {
   return /^\d{4}-\d{2}$/.test(String(value || "")) ? value : "all";
 }
 
+// Day of a stored date in a Mongo pipeline, like calendarDateKey: dates stored at 00:00 UTC are
+// calendar dates and keep their own day; other instants are read in Lima.
+function calendarTimeZone(date) {
+  return { $cond: [{ $eq: [{ $mod: [{ $toLong: date }, 86400000] }, 0] }, "UTC", LIMA_TIME_ZONE] };
+}
+
 function previousPeriod(period) {
-  const date = /^\d{4}-\d{2}$/.test(period || "") ? new Date(`${period}-01T00:00:00.000Z`) : new Date();
+  const date = new Date(`${/^\d{4}-\d{2}$/.test(period || "") ? period : limaToday().slice(0, 7)}-01T00:00:00.000Z`);
   date.setUTCMonth(date.getUTCMonth() - 1);
   return date.toISOString().slice(0, 7);
 }
@@ -91,7 +98,7 @@ function linkedRequestPipeline(match, initialMatch = {}) {
 export const managementSummary = asyncHandler(async (req, res) => {
   const match = requestMatch(req.query, req.user);
   const workflowMatch = requestMatch(req.query, req.user, { includeInactiveWorkflow: true });
-  const selectedPeriod = req.query.period || new Date().toISOString().slice(0, 7);
+  const selectedPeriod = req.query.period || limaToday().slice(0, 7);
   const period = req.query.period;
   const now = new Date();
   const previousQuery = { ...req.query };
@@ -187,7 +194,7 @@ export const managementSummary = asyncHandler(async (req, res) => {
     AccountsPayable.aggregate([
       ...payableRequestPipeline(match, openPayables),
       { $match: { $expr: { $not: [pendingAgreedDate] } } },
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$dueDate", "$createdAt"] } } }, total: { $sum: openPayableAmountPENExpression }, count: { $sum: 1 } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$dueDate", "$createdAt"] }, timezone: calendarTimeZone({ $ifNull: ["$dueDate", "$createdAt"] }) } }, total: { $sum: openPayableAmountPENExpression }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
       { $limit: 14 }
     ]),

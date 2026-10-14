@@ -1,6 +1,7 @@
 // Date helpers for DateInput / MonthInput. The UI always shows day-first Peruvian dates
 // (dd/mm/aaaa, mm/aaaa) while forms keep the ISO values the API already uses
 // ("YYYY-MM-DD" and "YYYY-MM"). Everything here is pure so it can be tested in node.
+import { limaToday } from "../../../shared/businessCalendar.mjs";
 
 const pad = (value) => String(value).padStart(2, "0");
 const MIN_YEAR = 1900;
@@ -37,9 +38,9 @@ export function daysInMonth(year, month) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-/** Local calendar date as ISO (not UTC: late evening in Lima is still "today"). */
+/** Today in Lima as ISO, on any device (not UTC: late evening in Lima is still "today"). */
 export function todayIso(now = new Date()) {
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return limaToday(now);
 }
 
 function validParts(year, month, day) {

@@ -7,13 +7,14 @@ import PageHeader from "../components/PageHeader.jsx";
 import Tabs from "../components/Tabs.jsx";
 import MonthInput from "../components/MonthInput.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import { todayIso } from "../utils/dateInput.js";
 export default function Operations() {
   const loadingSequence = useRef(0);
   const [params] = useSearchParams();
   const [confirmation, setConfirmation] = useState(null);
   const { user } = useAuth(), { t } = useLanguage();
   const [tab, setTab] = useState(params.get("source") ? "Recurring drafts" : "Reviews"), [data, setData] = useState(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [page, setPage] = useState(1);
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7)), [source, setSource] = useState(params.get("source") || ""), [statement, setStatement] = useState(null);
+  const [period, setPeriod] = useState(todayIso().slice(0, 7)), [source, setSource] = useState(params.get("source") || ""), [statement, setStatement] = useState(null);
   const accounting = ["Admin", "Accounting"].includes(user.role), treasury = ["Admin", "Treasury"].includes(user.role), requester = ["Admin", "Solicitor"].includes(user.role);
   const tabs = ["Reviews", ...(["Admin", "Accounting", "Solicitor", "Procurement", "Treasury"].includes(user.role) ? ["Suppliers"] : []), ...(accounting ? ["Closure", "Month end"] : []), ...(treasury ? ["Statement matching"] : []), ...(requester ? ["Recurring drafts"] : []), ...(user.role === "Admin" ? ["Configuration health"] : [])];
   async function load() {

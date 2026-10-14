@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { formatCurrency, formatDate, formatNumber } from "../src/utils/formatters.js";
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../src/utils/formatters.js";
 
 const source = (relativePath) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 const tests = [];
@@ -16,6 +16,10 @@ test("shared financial formatters produce localized, fixed-precision values", ()
   assert.equal(formatNumber(0, "en"), "0");
   assert.equal(formatDate("not-a-date", "en"), "-");
   assert.match(formatDate("2026-09-07", "en"), /Sep 07, 2026/);
+  // Lima time on every device: a date-only value stored at 00:00 UTC keeps its day, an instant is read in Lima.
+  assert.match(formatDate("2026-10-13T00:00:00.000Z", "en"), /Oct 13, 2026/);
+  assert.match(formatDate("2026-10-14T03:30:00.000Z", "en"), /Oct 13, 2026/);
+  assert.match(formatDateTime("2026-10-14T03:30:00.000Z", "en"), /Oct 13, 2026.*10:30\sPM/);
 });
 
 test("DataTable exposes saved views, density, export, and collapsible mobile filters", () => {

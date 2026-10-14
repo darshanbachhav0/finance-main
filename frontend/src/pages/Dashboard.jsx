@@ -17,6 +17,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { navigationForUser } from "../utils/navigationAccess.js";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
 import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
+import { todayIso } from "../utils/dateInput.js";
 
 const descriptions = {
   Admin: "System activity, workflow health, users, and master-data readiness.",
@@ -145,7 +146,7 @@ export default function Dashboard() {
               <AnalyticsChart
                 title="Budget execution"
                 description="Assigned, committed, executed, paid, and available for the current period."
-                data={[{ name: new Date().toISOString().slice(0, 7), ...summary.budget.totals }]}
+                data={[{ name: todayIso().slice(0, 7), ...summary.budget.totals }]}
                 height={245}
                 series={[{ key: "assigned", label: "Assigned", color: "#17344c" }, { key: "committed", label: "Committed", color: "#d18a00" }, { key: "executed", label: "Executed", color: "#087c75" }, { key: "paid", label: "Paid", color: "#2463a6" }, { key: "available", label: "Available", color: "#19733d" }]}
                 valueFormatter={(value) => formatCurrency(value, "PEN", language)}
