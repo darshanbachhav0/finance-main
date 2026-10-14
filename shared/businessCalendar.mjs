@@ -3,6 +3,8 @@
 // so a deadline never shifts because the server runs in another timezone.
 const LIMA_OFFSET_MS = -5 * 3600000;
 const DAY_MS = 86400000;
+// The platform's time zone: dates and times are shown and decided in Lima on every device.
+export const LIMA_TIME_ZONE = "America/Lima";
 
 // National holidays with a fixed date (Ley 27403 and later additions:
 // 7 Jun and 6 Aug and 9 Dec since 2022, 23 Jul since 2023).
@@ -29,6 +31,21 @@ const pad = (value) => String(value).padStart(2, "0");
 export function limaDateKey(value) {
   const shifted = new Date(new Date(value).getTime() + LIMA_OFFSET_MS);
   return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
+}
+
+// Today in Lima, as "YYYY-MM-DD" (its first 7 characters are the current period).
+export function limaToday(now = new Date()) {
+  return limaDateKey(now);
+}
+
+// Calendar day of a stored value, as "YYYY-MM-DD". Date-only values ("YYYY-MM-DD" strings and
+// dates stored at 00:00 UTC, such as issue, invoice and accounting dates) keep their own day;
+// any other instant is read in Lima.
+export function calendarDateKey(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return "";
+  return time % DAY_MS === 0 ? new Date(time).toISOString().slice(0, 10) : limaDateKey(time);
 }
 
 // Anonymous Gregorian algorithm (Meeus/Jones/Butcher).

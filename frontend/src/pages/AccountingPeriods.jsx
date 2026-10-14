@@ -15,13 +15,14 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatDateTime } from "../utils/formatters.js";
+import { todayIso } from "../utils/dateInput.js";
 
 export default function AccountingPeriods() {
   const { t } = useLanguage();
   const { readOnly } = useAuth();
   const { notify } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ period: new Date().toISOString().slice(0, 7), comments: "" });
+  const [form, setForm] = useState({ period: todayIso().slice(0, 7), comments: "" });
   const [confirm, setConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [actionError, setActionError] = useState("");

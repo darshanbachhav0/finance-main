@@ -9,6 +9,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
+import { todayIso } from "../utils/dateInput.js";
 
 // Supplier credits (receivables) created by credit notes on already-paid invoices. Accounting
 // applies them to a future unpaid invoice of the same supplier or records the supplier's refund.
@@ -25,7 +26,7 @@ export default function SupplierCreditsPanel({ table, onChanged }) {
   async function open(kind, credit) {
     setError("");
     setAction({ kind, credit });
-    setForm({ amount: String(credit.remainingAmount), accountsPayableId: "", bank: "", reference: "", date: new Date().toISOString().slice(0, 10) });
+    setForm({ amount: String(credit.remainingAmount), accountsPayableId: "", bank: "", reference: "", date: todayIso() });
     if (kind === "apply") {
       try {
         const response = await api.get("/accounting/accounts-payable", { params: { supplier: credit.supplier?._id || credit.supplier, currency: credit.currency, pageSize: 100 } });

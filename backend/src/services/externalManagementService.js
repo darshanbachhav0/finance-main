@@ -6,6 +6,7 @@ import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES, REQUEST_STATUS } from "../utils/constants.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import { openPayableAmountPENExpression, openPayableMatch } from "../../../shared/openPayables.mjs";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.REJECTED, REQUEST_STATUS.VOIDED, "PAGADO_CERRADO", "LIQUIDADO_CERRADO"];
 const approvalStatuses = [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED];
@@ -87,7 +88,7 @@ function grouped(rows, canonical = false) {
 
 async function overview(filters) {
   const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthStart = new Date(`${limaDateKey(now).slice(0, 7)}-01T00:00:00-05:00`);
   const match = requestMatch(filters);
   const [requestRows, openPayableRows, overdueApprovals, observedRequests, paidThisMonth, budgetRows] = await Promise.all([
     FinancialRequest.aggregate([{ $match: match }, { $group: { _id: "$status", count: { $sum: 1 }, amountPEN: { $sum: "$totalPENEquivalent" } } }]),

@@ -2,6 +2,7 @@ import AccountingPeriod from "../models/AccountingPeriod.js";
 import { recordAudit } from "./auditService.js";
 import { AppError } from "../utils/AppError.js";
 import { CLOSED_PERIOD_MESSAGE, ERROR_CODES } from "../utils/constants.js";
+import { calendarDateKey } from "../../../shared/businessCalendar.mjs";
 
 const policyFieldByAction = Object.freeze({
   CREATE: "blockCreate",
@@ -91,8 +92,7 @@ export function ensurePeriodOpen(period, context = {}) {
   return guardAccountingPeriod({ period, ...context });
 }
 
+// Period of a date-only value (its own month) or of an instant (its Lima month).
 export function periodFromDate(dateValue) {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  return calendarDateKey(dateValue).slice(0, 7);
 }

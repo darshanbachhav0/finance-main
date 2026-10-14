@@ -19,6 +19,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { columnLayout, isPrimaryColumn } from "../utils/tableColumns.js";
+import { todayIso } from "../utils/dateInput.js";
 
 function rawValue(column, row) {
   if (column.getValue) return column.getValue(row);
@@ -227,7 +228,7 @@ export default function DataTable({
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}-${todayIso()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }

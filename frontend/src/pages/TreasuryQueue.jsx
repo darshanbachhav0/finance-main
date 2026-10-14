@@ -47,6 +47,7 @@ import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 import "../styles/treasury.css";
+import { todayIso } from "../utils/dateInput.js";
 const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 
 const amountOf = (row) => Number(row.accountsPayable?.outstandingAmount ?? row.outstandingAmount ?? row.totalAmount ?? 0);
@@ -104,7 +105,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const [processing, setProcessing] = useState(false);
   const [actionError, setActionError] = useState("");
   const [paymentRow, setPaymentRow] = useState(null);
-  const [paymentForm, setPaymentForm] = useState({ operationNumber: "", paidAt: new Date().toISOString().slice(0, 10), confirmedAmount: "", comments: "" });
+  const [paymentForm, setPaymentForm] = useState({ operationNumber: "", paidAt: todayIso(), confirmedAmount: "", comments: "" });
   const [bounceRow, setBounceRow] = useState(null);
   const [bounceForm, setBounceForm] = useState({ reason: "", reasonCategory: "", bankReference: "" });
   const [reprogramRow, setReprogramRow] = useState(null);
@@ -297,7 +298,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     setPaymentRow(row);
     setPaymentForm({
       operationNumber: "",
-      paidAt: new Date().toISOString().slice(0, 10),
+      paidAt: todayIso(),
       confirmedAmount: String(netAmountOf(row)),
       comments: ""
     });

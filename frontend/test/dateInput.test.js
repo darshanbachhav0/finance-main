@@ -75,6 +75,6 @@ assert.equal(weeks[0][0].iso, "2026-08-31", "September 2026 starts on Tuesday, t
 assert.equal(weeks[0][1].iso, "2026-09-01");
 assert.equal(weeks.at(-1).at(-1).iso, "2026-10-04");
 assert.equal(addMonths("2026-01-31", 1), "2026-02-28");
-assert.equal(todayIso(new Date(2026, 8, 29, 23, 30)), "2026-09-29", "today uses the local day, not UTC");
+assert.equal(todayIso(new Date("2026-09-30T04:30:00Z")), "2026-09-29", "today is the Lima day (23:30 in Lima), not UTC");
 
 console.log("PASS DateInput: dd/mm/aaaa and mm/aaaa to ISO and back, invalid dates, typing mask, min/max, Monday-first Spanish calendar");

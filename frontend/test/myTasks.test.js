@@ -25,14 +25,16 @@ for (const text of [...Object.values(TASK_DETAILS), "{count} past due", "Due tod
 }
 
 // 2. Deadlines read as "due Thursday"; overdue work says so.
-const monday = new Date(2026, 8, 28, 10, 0);
-const thursday = new Date(2026, 9, 1, 17, 0);
+// Times are Lima wall-clock times, so the labels do not depend on the machine time zone.
+const lima = (local) => new Date(`${local}:00-05:00`);
+const monday = lima("2026-09-28T10:00");
+const thursday = lima("2026-10-01T17:00");
 assert.equal(taskDueLabel({ count: 1, dueAt: thursday }, { now: monday, language: "es", t: es }), "Vence el jueves");
 assert.equal(taskDueLabel({ count: 3, dueAt: thursday }, { now: monday, language: "en" }), "Next due on Thursday");
-assert.equal(taskDueLabel({ count: 1, dueAt: new Date(2026, 8, 29, 9, 0) }, { now: monday, language: "es", t: es }), "Vence mañana");
-assert.equal(taskDueLabel({ count: 1, overdue: 1, dueAt: new Date(2026, 8, 27, 9, 0) }, { now: monday, language: "es", t: es }), "Venció ayer");
-assert.equal(taskDueLabel({ count: 4, overdue: 2, dueAt: new Date(2026, 8, 20) }, { now: monday, language: "es", t: es }), "2 vencidas");
-assert.match(taskDueLabel({ count: 1, dueAt: new Date(2026, 10, 15) }, { now: monday, language: "es", t: es }), /^Vence el 15 de noviembre$/);
+assert.equal(taskDueLabel({ count: 1, dueAt: lima("2026-09-29T09:00") }, { now: monday, language: "es", t: es }), "Vence mañana");
+assert.equal(taskDueLabel({ count: 1, overdue: 1, dueAt: lima("2026-09-27T09:00") }, { now: monday, language: "es", t: es }), "Venció ayer");
+assert.equal(taskDueLabel({ count: 4, overdue: 2, dueAt: lima("2026-09-20T00:00") }, { now: monday, language: "es", t: es }), "2 vencidas");
+assert.match(taskDueLabel({ count: 1, dueAt: lima("2026-11-15T00:00") }, { now: monday, language: "es", t: es }), /^Vence el 15 de noviembre$/);
 assert.equal(taskDueLabel({ count: 2 }, { now: monday }), "", "no deadline, no label");
 
 // 3. The list keeps only work to do, nests SLA details and puts the most urgent first.
@@ -41,7 +43,7 @@ const rows = buildTaskList([
   { key: "approval", label: "Requests awaiting approval", count: 3, path: "/approvals", tone: "amber", dueAt: thursday, overdue: 0 },
   { key: "approvalOverdue", count: 0, partOf: "approval", tone: "red" },
   { key: "approvalDueSoon", count: 1, partOf: "approval", tone: "amber" },
-  { key: "rendition", kind: "submit", label: "Renditions to submit", count: 1, path: "/requests/abc", tone: "red", dueAt: new Date(2026, 8, 27), overdue: 1 },
+  { key: "rendition", kind: "submit", label: "Renditions to submit", count: 1, path: "/requests/abc", tone: "red", dueAt: lima("2026-09-27T00:00"), overdue: 1 },
   { key: "corrections", label: "Requests to correct", count: 0, path: "/requests", tone: "red" }
 ], { now: monday, language: "es", t: es });
 assert.deepEqual(rows.map((row) => row.key), ["rendition", "approval", "drafts"], "urgent first; nothing with a zero count; nested details are not rows");

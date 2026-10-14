@@ -1,4 +1,5 @@
 import { AP_STATUS } from "../utils/constants.js";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 
 // Accounts Payable work views (the tabs of the Accounts Payable page). "open" is everything
 // still to be paid except bounced payments, which have their own view because they need a new
@@ -7,11 +8,10 @@ export const DUE_SOON_DAYS = 7;
 export const OPEN_PAYABLE_STATUSES = Object.freeze([AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID]);
 export const PAYABLE_VIEWS = Object.freeze(["open", "due", "bounced", "paid", "all"]);
 
+// End of the Lima day DUE_SOON_DAYS from today.
 export function dueSoonLimit(now = new Date()) {
-  const limit = new Date(now);
-  limit.setHours(23, 59, 59, 999);
-  limit.setDate(limit.getDate() + DUE_SOON_DAYS);
-  return limit;
+  const lastDay = new Date(Date.parse(`${limaDateKey(now)}T00:00:00Z`) + DUE_SOON_DAYS * 86400000).toISOString().slice(0, 10);
+  return new Date(`${lastDay}T23:59:59.999-05:00`);
 }
 
 // Mongo filter for a view; an unknown or empty view adds nothing.

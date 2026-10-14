@@ -23,9 +23,10 @@ import { countPendingBudgetPlanChanges } from "../services/budgetPlanChangeServi
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
+import { limaToday } from "../../../shared/businessCalendar.mjs";
 
 function currentPeriod() {
-  return new Date().toISOString().slice(0, 7);
+  return limaToday().slice(0, 7);
 }
 
 function ownerScope(user) {

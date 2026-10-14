@@ -21,6 +21,7 @@ import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 import { SPOT_CATEGORY_OPTIONS, suggestedSpotCategoryCode } from "../../../shared/spotCategories.mjs";
+import { todayIso } from "../utils/dateInput.js";
 
 const NON_CREDITABLE_DOCUMENTS = ["BOLETA"];
 // The account category a request type books to (mirrors accountingDimensionService).
@@ -35,7 +36,7 @@ export default function AccountingEntries() {
   // The read-only Super Admin reviews entries and queues without posting or exporting.
   const { readOnly } = useAuth();
   const { notify } = useToast();
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [period, setPeriod] = useState(todayIso().slice(0, 7));
   const [preview, setPreview] = useState([]);
   const [previewSummary, setPreviewSummary] = useState({ transactionSourceTotal: 0, centralizationTotal: 0, difference: 0, balanced: true });
   const [actionError, setActionError] = useState("");
@@ -43,7 +44,7 @@ export default function AccountingEntries() {
   const [exporting, setExporting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [fiscalForm, setFiscalForm] = useState({ documentType: "FACTURA", series: "", number: "", documentDate: "", accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: new Date().toISOString().slice(0, 7), dueDate: "", accountingAccount: "", igvDeductible: true, spotCategoryCode: "", subaccountNumber: "", comments: "" });
+  const [fiscalForm, setFiscalForm] = useState({ documentType: "FACTURA", series: "", number: "", documentDate: "", accountingDate: todayIso(), fiscalPeriod: todayIso().slice(0, 7), dueDate: "", accountingAccount: "", igvDeductible: true, spotCategoryCode: "", subaccountNumber: "", comments: "" });
   const [accountingAccounts, setAccountingAccounts] = useState([]);
   const entriesTable = usePaginatedResource("/accounting/entries", { fixedParams: { period } });
   const pendingTable = usePaginatedResource("/accounting/pending", { fixedParams: { period } });
@@ -139,7 +140,7 @@ export default function AccountingEntries() {
     const documentDate = request.issueDate?.slice(0, 10) || "";
     const suggestedAccount = request.lines?.[0]?.expenseType?._id || request.lines?.[0]?.expenseType || "";
     setSelectedRequest(request);
-    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: new Date().toISOString().slice(0, 10), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountingAccount: String(suggestedAccount), igvDeductible: true, spotCategoryCode: suggestedSpotCategoryCode(request.expenseNature), subaccountNumber: "", comments: "" });
+    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: todayIso(), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountingAccount: String(suggestedAccount), igvDeductible: true, spotCategoryCode: suggestedSpotCategoryCode(request.expenseNature), subaccountNumber: "", comments: "" });
   }
 
   const creditableDocument = !NON_CREDITABLE_DOCUMENTS.includes(fiscalForm.documentType);

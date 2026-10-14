@@ -506,7 +506,7 @@ export async function createPaymentJournal(request, accountsPayable, userId, { b
     request,
     accountsPayable,
     entryType: "PAYMENT",
-    period: paymentDate ? new Date(paymentDate).toISOString().slice(0, 7) : undefined,
+    period: paymentDate ? periodFromDate(paymentDate) : undefined,
     sourceTransaction: `${detraction ? "DETRACTION" : "PAYMENT"}:${accountsPayable?._id || request.requestNumber}:${reference}`,
     lines,
     userId,

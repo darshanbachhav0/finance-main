@@ -1,3 +1,4 @@
+import "./src/config/timeZone.js";
 import "dotenv/config";
 
 import mongoose from "mongoose";

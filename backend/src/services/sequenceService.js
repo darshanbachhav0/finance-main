@@ -1,6 +1,7 @@
 import Counter from "../models/Counter.js";
+import { calendarDateKey, limaToday } from "../../../shared/businessCalendar.mjs";
 
-export async function nextSequence(key, year = new Date().getUTCFullYear(), { session } = {}) {
+export async function nextSequence(key, year = Number(limaToday().slice(0, 4)), { session } = {}) {
   const counter = await Counter.findOneAndUpdate(
     { key, year },
     { $inc: { sequence: 1 }, $setOnInsert: { key, year } },
@@ -10,8 +11,7 @@ export async function nextSequence(key, year = new Date().getUTCFullYear(), { se
 }
 
 export async function nextReference(prefix, key, date = new Date(), options = {}) {
-  const normalizedDate = new Date(date);
-  const year = Number.isNaN(normalizedDate.getTime()) ? new Date().getUTCFullYear() : normalizedDate.getUTCFullYear();
+  const year = Number((calendarDateKey(date) || limaToday()).slice(0, 4));
   const sequence = await nextSequence(key, year, options);
   return `${prefix}-${year}-${String(sequence).padStart(5, "0")}`;
 }

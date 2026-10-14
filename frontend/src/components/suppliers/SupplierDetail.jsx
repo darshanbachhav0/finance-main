@@ -23,6 +23,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import api from "../../api/client.js";
 import { useLanguage } from "../../context/LanguageContext.jsx";
+import { LIMA_TIME_ZONE } from "../../../../shared/businessCalendar.mjs";
 import EmptyState from "../EmptyState.jsx";
 import ProtectedAssetButton from "../ProtectedAssetButton.jsx";
 import StatusBadge from "../StatusBadge.jsx";
@@ -30,7 +31,7 @@ import StatusBadge from "../StatusBadge.jsx";
 function displayDate(value, language) {
   if (!value) return "-";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "-" : new Intl.DateTimeFormat(language === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return Number.isNaN(date.getTime()) ? "-" : new Intl.DateTimeFormat(language === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short", timeZone: LIMA_TIME_ZONE }).format(date);
 }
 
 function sectionId(title) { return `supplier-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`; }

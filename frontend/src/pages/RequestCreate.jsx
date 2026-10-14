@@ -29,7 +29,7 @@ import DateInput from "../components/DateInput.jsx";
 import RequestFormBlock from "../components/RequestFormBlock.jsx";
 import { OPTIONAL_REQUEST_FIELDS, REQUEST_FORM_BLOCKS, isRequestFormField, requestBlockStatuses } from "../utils/requestFormBlocks.js";
 import { openPeriodError, positiveAmountError, requiredError } from "../utils/fieldValidation.js";
-import { formatIsoMonth } from "../utils/dateInput.js";
+import { formatIsoMonth, todayIso } from "../utils/dateInput.js";
 import { restoreEditorLine, editRequestLine, requestLinePayload } from "../utils/requestLineEditor.js";
 import PageHeader from "../components/PageHeader.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
@@ -108,7 +108,7 @@ const quotationHasData = (quotation) => Boolean(
 );
 
 function initialForm() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   return {
     flowType: "A1",
     requestType: "OPEX",

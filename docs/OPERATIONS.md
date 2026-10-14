@@ -226,6 +226,21 @@ The four SUNAT padrón CLI scripts under `backend/scripts/` (`syncSunatPadron.js
 daemon, rebuild the search index only, or print status) — each has a short comment at its top saying
 which of the other three to reach for instead.
 
+### Time zone (Lima)
+
+The platform works on **Lima time (UTC-5, no daylight saving)** everywhere, whatever the zone of the
+server (Render runs in UTC) or of the user's device:
+- Moments (created, approved, paid, audit) are stored as UTC instants and **shown in Lima** on every
+  screen (`frontend/src/utils/formatters.js`); notification emails use Lima too.
+- Date-only values (issue, invoice, accounting dates) are stored at 00:00 UTC of their day and shown on
+  that same day (`calendarDateKey` in `shared/businessCalendar.mjs`).
+- "Today" and the current period (new request, payment confirmation, accounting date, period pickers,
+  dashboards, reports, sequence years) are the Lima date (`limaToday`), so work after 19:00 is not
+  dated the next day.
+- The backend process sets `TZ=America/Lima` at startup (`backend/src/config/timeZone.js`); business
+  rules (SLA deadlines, working days, payment cycle 15/30, rendition deadlines) compute Lima dates
+  explicitly.
+
 ### Notification emails
 
 Every bell notification (approval pending, request observed, payment bounced, SLA overdue…) can also

@@ -20,6 +20,7 @@ import BudgetPlanWorkspace, { changeDescription } from "../components/BudgetPlan
 import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
+import { todayIso } from "../utils/dateInput.js";
 
 const TAB_VIEWS = { budget: "Budget", exceptions: "Exceptions", commitments: "Commitments", changes: "Budget changes" };
 
@@ -40,7 +41,7 @@ export default function BudgetControl() {
   const { t, language } = useLanguage();
   const money = (value) => value === null || value === undefined ? "—" : formatCurrency(value, "PEN", language);
   const { notify } = useToast();
-  const initialPeriod = new Date().toISOString().slice(0, 4);
+  const initialPeriod = todayIso().slice(0, 4);
   const [view, setView] = useState("ANNUAL");
   const [workspace, setWorkspace] = useState(null);
   const [periodInput, setPeriodInput] = useState(initialPeriod);
@@ -106,7 +107,7 @@ export default function BudgetControl() {
   function changeView(nextView) {
     setView(nextView);
     const year = validBudgetYear(periodInput.slice(0, 4)) ? periodInput.slice(0, 4) : initialPeriod;
-    const nextPeriod = nextView === "ANNUAL" ? year : year + "-" + new Date().toISOString().slice(5, 7);
+    const nextPeriod = nextView === "ANNUAL" ? year : year + "-" + todayIso().slice(5, 7);
     setPeriodInput(nextPeriod); setPeriod(nextPeriod);
   }
 

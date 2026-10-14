@@ -28,8 +28,9 @@ import EmptyState from "../EmptyState.jsx";
 import { useToast } from "../../context/ToastContext.jsx";
 import { canonicalRequestStatus } from "../../../../shared/workflowStatus.mjs";
 import { formatCurrency, formatDate, formatDateTime } from "../../utils/formatters.js";
+import { todayIso } from "../../utils/dateInput.js";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayIso();
 const key = () => `${Date.now()}-${Math.random()}`;
 const emptyMobility = () => ({ clientId: key(), date: today(), origin: "", destination: "", servicePurpose: "", amount: "" });
 const emptyRecovery = () => ({ method: "REIMBURSEMENT", amount: "", operationNumber: "", operationDate: today(), reference: "" });
