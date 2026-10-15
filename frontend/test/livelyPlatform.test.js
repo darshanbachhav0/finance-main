@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { invoiceMatchRows, lineFromInvoice } from "../src/utils/invoiceAutofill.js";
-import { firstName, greetingTemplate, pendingTaskCount } from "../src/utils/greeting.js";
+import { greetingName, greetingTemplate, pendingTaskCount } from "../src/utils/greeting.js";
 import { expectedPayment, journeyMilestones, journeySummary, renditionCountdown } from "../src/utils/requestJourney.js";
 import { parseServerEvent } from "../src/utils/serverEvents.js";
 import { recommendTrack } from "../src/utils/trackRecommendation.js";
@@ -41,7 +41,20 @@ assert.ok(countdown.progress > 0.6 && countdown.progress < 0.8);
 assert.equal(renditionCountdown({ dueAt: "2026-10-30T04:59:59.999Z" }, { now: new Date("2026-11-03T15:00:00Z") }).overdue, true);
 
 // 3. Greeting, payment day, track recommendation, live event parsing.
-assert.equal(firstName("MARÍA ELENA QUISPE"), "María");
+// Names are stored first surname, second surname, first name, second name; greetings use
+// first name and first surname.
+for (const [stored, greeted] of [
+  ["QUISPE MAMANI MARÍA ELENA", "María Quispe"],
+  ["QUISPE MAMANI, MARÍA ELENA", "María Quispe"],
+  ["TORRES DIAZ ANA", "Ana Torres"],
+  ["DE LA CRUZ PEREZ JUAN CARLOS", "Juan de la Cruz"],
+  ["QUISPE MAMANI MARÍA DE LOS ÁNGELES", "María Quispe"],
+  ["TORRES ANA", "Ana Torres"],
+  ["  quispe   mamani   maría  ", "María Quispe"],
+  ["O'BRIEN SMITH JOHN", "John O'Brien"],
+  ["Contabilidad UMA (Demo)", "Contabilidad"],
+  ["", ""]
+]) assert.equal(greetingName(stored), greeted, stored);
 assert.equal(greetingTemplate(new Date("2026-10-14T13:00:00Z")), "Good morning, {name}", "08:00 in Lima");
 assert.equal(greetingTemplate(new Date("2026-10-14T20:00:00Z")), "Good afternoon, {name}", "15:00 in Lima");
 assert.equal(greetingTemplate(new Date("2026-10-15T02:00:00Z")), "Good evening, {name}", "21:00 in Lima the day before");

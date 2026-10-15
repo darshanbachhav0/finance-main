@@ -40,7 +40,7 @@ test("notification emails are personal, in Spanish, escaped and link only into t
     notifications: [{ titleKey: "Approval pending", title: "Approval pending", messageKey: "{requestNumber} is waiting for {approvalLevel} approval.", params: { requestNumber: "SOL-<b>9</b>", approvalLevel: "GENERAL_MANAGEMENT" }, path: "/approvals?request=abc" }]
   });
   assert.equal(single.subject, "Aprobación pendiente · UMA · Gestión Financiera");
-  assert.match(single.text, /^Hola, Moran Paredes Gladys:/);
+  assert.match(single.text, /^Hola, Gladys Moran:/, "greeted by first name and first surname");
   assert.match(single.text, /SOL-<b>9<\/b> está pendiente de aprobación por Gerencia General\./);
   assert.match(single.text, /https:\/\/finanzas\.uma\.test\/approvals\?request=abc/);
   assert.ok(single.html.includes("SOL-&lt;b&gt;9&lt;/b&gt;"), "params are HTML-escaped");
@@ -91,7 +91,7 @@ test("bell notifications are emailed once per person, after the delay, unless re
       assert.equal(sent.length, 1);
       assert.equal(sent[0].to, "ana.torres@uma.edu.pe");
       assert.equal(sent[0].subject, "Tienes 2 novedades · UMA · Gestión Financiera");
-      assert.match(sent[0].text, /Hola, Torres Diaz Ana:/);
+      assert.match(sent[0].text, /Hola, Ana Torres:/);
       assert.match(sent[0].text, /SOL-1 está pendiente de aprobación por Director de área\./);
       assert.match(sent[0].text, /SOL-2/);
       assert.deepEqual({ sent: summary.sent, skipped: summary.skipped }, { sent: 2, skipped: 2 });
