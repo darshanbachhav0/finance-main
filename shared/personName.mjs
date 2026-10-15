@@ -1,7 +1,7 @@
 // People's names are stored as the UMA roster writes them: first surname, second surname, first
 // name, second name ("QUISPE MAMANI MARÍA ELENA"), sometimes with a comma between the surnames and
-// the names ("QUISPE MAMANI, MARÍA ELENA"). Greetings address a person by first name and first
-// surname: "María Quispe". Shared by the dashboard greeting and the notification emails.
+// the names ("QUISPE MAMANI, MARÍA ELENA"). Greetings address a person by their first name:
+// "María". Shared by the dashboard greeting and the notification emails.
 
 // Particles belong to the word after them, so "DE LA CRUZ" is one surname and
 // "MARÍA DE LOS ÁNGELES" keeps "María" as the first name.
@@ -32,25 +32,22 @@ function capitalize(text) {
 
 const sentenceStart = (text) => text.charAt(0).toLocaleUpperCase(LOCALE) + text.slice(1);
 
-// First name and first surname: "QUISPE MAMANI MARÍA ELENA" -> "María Quispe". With two words the
-// roster order is surname then name ("TORRES ANA" -> "Ana Torres"); one word is used as it is.
-// Account labels with a note in brackets ("Contabilidad UMA (Demo)") are not roster names: they
-// are greeted by their first word.
+// The first name: "QUISPE MAMANI MARÍA ELENA" -> "María" (the third part, after both surnames;
+// "DE LA CRUZ" counts as one surname). After a comma it is the first part ("QUISPE MAMANI, MARÍA
+// ELENA"); with two words the roster order is surname then name ("TORRES ANA" -> "Ana"); one word
+// is used as it is. Account labels with a note in brackets ("Contabilidad UMA (Demo)") are not
+// roster names: they are greeted by their first word.
 export function greetingName(name = "") {
   const value = String(name || "").trim().replace(/\s+/g, " ");
   if (!value) return "";
   if (/[()]/.test(value)) return sentenceStart(capitalize(value.split(" ")[0]));
-  const [surnameText, givenText] = value.includes(",") ? value.split(",", 2) : [null, null];
+  const [, givenText] = value.includes(",") ? value.split(",", 2) : [];
   let firstName;
-  let firstSurname;
-  if (surnameText !== null && givenText?.trim()) {
-    firstSurname = parts(surnameText)[0];
+  if (givenText?.trim()) {
     firstName = parts(givenText)[0];
   } else {
     const words = parts(value.replace(/,/g, " "));
-    if (words.length === 1) return sentenceStart(capitalize(words[0]));
-    firstSurname = words[0];
-    firstName = words.length === 2 ? words[1] : words[2];
+    firstName = words.length === 1 ? words[0] : words.length === 2 ? words[1] : words[2];
   }
-  return sentenceStart([firstName, firstSurname].filter(Boolean).map(capitalize).join(" "));
+  return sentenceStart(capitalize(firstName));
 }

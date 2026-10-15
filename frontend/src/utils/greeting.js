@@ -1,6 +1,6 @@
 import { LIMA_TIME_ZONE } from "../../../shared/businessCalendar.mjs";
 
-// Names are stored surnames first ("QUISPE MAMANI MARÍA ELENA"); greetings say "María Quispe".
+// Names are stored surnames first ("QUISPE MAMANI MARÍA ELENA"); greetings say "María".
 export { greetingName } from "../../../shared/personName.mjs";
 
 // Hour of the day in Lima (0-23), whatever the device's own time zone.
