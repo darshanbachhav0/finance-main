@@ -1,4 +1,9 @@
 import ContinueWork from "../components/ContinueWork.jsx";
+import BudgetGauge from "../components/BudgetGauge.jsx";
+import PersonalStats from "../components/PersonalStats.jsx";
+import { firstName, greetingTemplate, pendingTaskCount } from "../utils/greeting.js";
+import { startTour, tourDone } from "../utils/tour.js";
+import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import MyTasks from "../components/MyTasks.jsx";
 import { CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -44,8 +49,9 @@ const metricIcons = {
 
 export default function Dashboard() {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
+  const { user, readOnly } = useAuth();
   const navigate = useNavigate();
+  const [personal, setPersonal] = useState(null);
   // Work review gets a header button only when the menu does not already list it.
   const workReviewInMenu = navigationForUser(user).some(([, path]) => path === "/operations");
   const [summary, setSummary] = useState(null);
@@ -56,8 +62,12 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const response = await api.get("/dashboard/summary");
+      const [response, mine] = await Promise.all([
+        api.get("/dashboard/summary"),
+        api.get("/dashboard/me").catch(() => null)
+      ]);
       setSummary(response.data);
+      setPersonal(mine?.data?.data || null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -66,6 +76,27 @@ export default function Dashboard() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Live updates: something about one of this person's records changed; refresh the numbers.
+  useEffect(() => {
+    let timer;
+    const refresh = () => { window.clearTimeout(timer); timer = window.setTimeout(load, 1200); };
+    window.addEventListener(RECORD_CHANGED_EVENT, refresh);
+    return () => { window.clearTimeout(timer); window.removeEventListener(RECORD_CHANGED_EVENT, refresh); };
+  }, []);
+
+  // The first visit offers the short tour once the greeting and tasks it points at are on screen.
+  useEffect(() => {
+    if (summary && !readOnly && !tourDone(user._id)) startTour();
+  }, [Boolean(summary)]);
+
+  const taskCount = pendingTaskCount(summary?.tasks?.items);
+  const greeting = t(greetingTemplate()).replace("{name}", firstName(user.name));
+  const nextPayment = personal?.payments?.next;
+  const daySummary = !summary ? t(descriptions[user.role] || descriptions.Admin) : [
+    taskCount === 0 ? t("You are all caught up.") : t(taskCount === 1 ? "1 thing needs your attention today." : "{count} things need your attention today.").replace("{count}", formatNumber(taskCount, language)),
+    nextPayment ? t(nextPayment.estimated ? "Your next payment is expected on {date}." : "Your next payment is on {date}.").replace("{date}", formatDate(`${nextPayment.date}T12:00:00Z`, language)) : ""
+  ].filter(Boolean).join(" ");
 
   function metricValue(metric) {
     if (metric.format === "text") return t(metric.value);
@@ -98,7 +129,7 @@ export default function Dashboard() {
 
   return (
     <section>
-      <PageHeader title={`${summary?.role || ""} Dashboard`.trim()} description={descriptions[summary?.role] || descriptions.Admin} actions={<>{!workReviewInMenu && <Link className="secondary-button" to="/operations">{t("Work review")}</Link>}<span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
+      <PageHeader title={greeting} description={daySummary} actions={<>{!workReviewInMenu && <Link className="secondary-button" to="/operations">{t("Work review")}</Link>}<span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
 
       {loading && !summary && (
@@ -112,6 +143,7 @@ export default function Dashboard() {
         <>
           {/* The role's to-do list replaces the generic welcome banner; its tasks also cover the
               former "Items need attention" warnings (missing exchange-rate dates). */}
+          <PersonalStats personal={personal} role={summary.role} />
           <MyTasks items={summary.tasks?.items} action={primaryAction && { to: primaryAction[0], label: primaryAction[1] }} />
           <ContinueWork />
           <div className="stats-grid">
@@ -142,6 +174,7 @@ export default function Dashboard() {
               onDrillDown={(row) => navigate(`/requests?status=${row._id}`)}
             />
 
+            {summary.budget && <BudgetGauge totals={summary.budget.totals} />}
             {summary.budget ? (
               <AnalyticsChart
                 title="Budget execution"

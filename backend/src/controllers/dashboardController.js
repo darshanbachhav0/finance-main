@@ -21,6 +21,7 @@ import { isEligibleSupplierPaymentAccount, usesEmployeeReimbursementDestination 
 import { budgetExceptionPath, countPendingBudgetExceptions } from "../services/budgetExceptionService.js";
 import { countPendingBudgetPlanChanges } from "../services/budgetPlanChangeService.js";
 import { suppliersAwaitingApprovalBy } from "../services/supplierService.js";
+import { personalDashboard } from "../services/personalDashboardService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
@@ -404,6 +405,9 @@ async function roleDetails(user, common) {
 }
 
 export const getTaskSummary = asyncHandler(async (req, res) => res.json(await buildTasks(req.user)));
+
+// The greeting card: the signed-in person's own requests, payments and approval decisions.
+export const getPersonalDashboard = asyncHandler(async (req, res) => res.json({ data: await personalDashboard(req.user) }));
 
 // Pending work across every department, as the Admin's queues count it, for the Super Admin's
 // monitoring view. Counts only: nothing here is the Super Admin's to act on.

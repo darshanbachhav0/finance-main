@@ -1,4 +1,5 @@
 import ReadinessPanel from "../components/ReadinessPanel.jsx";
+import { celebrate } from "../utils/celebrate.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import DateInput from "../components/DateInput.jsx";
 import WorkspaceTools from "../components/WorkspaceTools.jsx";
@@ -313,6 +314,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       await api.post(`/treasury/payables/${payableIdOf(paymentRow)}/confirm-payment`, paymentForm);
       await paymentDraft.complete();
       notify("Actual bank payment confirmed; CXP was settled and the payment journal was posted.");
+      celebrate("Payment sent");
       setPaymentRow(null);
       setActionError("");
       reloadAll();

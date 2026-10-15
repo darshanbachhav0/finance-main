@@ -1,4 +1,9 @@
+import fs from "fs/promises";
 import { asyncHandler } from "../middleware/asyncHandler.js";
+import { previewInvoiceForRequest } from "../services/invoicePreviewService.js";
+import { addRequestComment, listRequestComments, mentionableUsers } from "../services/requestCommentService.js";
+import { AppError } from "../utils/AppError.js";
+import { ERROR_CODES } from "../utils/constants.js";
 import {
   closeFinancialRequest,
   createFinancialRequest,
@@ -65,6 +70,30 @@ export const getRequestDocumentStatus = asyncHandler(async (req, res) => {
 
 export const getRequestFormPolicy = asyncHandler(async (req, res) => {
   res.json({ data: await requestFormPolicy(req.query) });
+});
+
+export const getRequestComments = asyncHandler(async (req, res) => {
+  res.json({ data: await listRequestComments(req.params.id, req.user) });
+});
+
+export const postRequestComment = asyncHandler(async (req, res) => {
+  res.status(201).json({ data: await addRequestComment(req.params.id, req.user, req.body, req) });
+});
+
+export const getMentionableUsers = asyncHandler(async (req, res) => {
+  res.json({ data: await mentionableUsers(req.params.id, req.user, req.query.q) });
+});
+
+// Reads a factura dropped on the new-request form (it is never kept: the temporary upload is
+// removed here; the request stores its own copy when it is saved).
+export const previewRequestInvoice = asyncHandler(async (req, res) => {
+  try {
+    const file = req.files?.xml?.[0] || req.files?.pdf?.[0];
+    if (!file) throw new AppError(422, "Upload the invoice XML or its factura PDF.", { missing: ["XML", "PDF"] }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
+    res.json({ data: await previewInvoiceForRequest(file.path) });
+  } finally {
+    await Promise.all(Object.values(req.files || {}).flat().map((file) => fs.rm(file.path, { force: true })));
+  }
 });
 
 export const getAuthorizedCostCenters = asyncHandler(async (req, res) => {

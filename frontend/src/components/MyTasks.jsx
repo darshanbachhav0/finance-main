@@ -1,4 +1,5 @@
-import { ArrowRight, CheckCircle2, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
+import Illustration from "./Illustration.jsx";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { buildTaskList } from "../utils/myTasks.js";
@@ -9,10 +10,10 @@ import { buildTaskList } from "../utils/myTasks.js";
 export default function MyTasks({ items = [], action }) {
   const { t, language } = useLanguage();
   const rows = buildTaskList(items, { language, t });
-  const actionLink = action && <Link className="primary-button" to={action.to}>{t(action.label)}<ArrowRight size={17} aria-hidden="true" /></Link>;
+  const actionLink = action && <Link className="primary-button" to={action.to} data-tour={action.to === "/requests/new" ? "new-request" : undefined}>{t(action.label)}<ArrowRight size={17} aria-hidden="true" /></Link>;
 
   return (
-    <section className="workspace-panel my-tasks" aria-labelledby="my-tasks-title">
+    <section className="workspace-panel my-tasks" aria-labelledby="my-tasks-title" data-tour="tasks">
       <div className="my-tasks-heading">
         <div>
           <h2 id="my-tasks-title">{t("My tasks")}</h2>
@@ -41,7 +42,7 @@ export default function MyTasks({ items = [], action }) {
         </ul>
       ) : (
         <div className="my-tasks-empty" role="status">
-          <CheckCircle2 size={28} aria-hidden="true" />
+          <Illustration name="done" size={84} />
           <div>
             <strong>{t("All caught up")}</strong>
             <p>{t("Nothing needs your attention right now.")}</p>

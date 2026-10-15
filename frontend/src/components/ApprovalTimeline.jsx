@@ -1,5 +1,6 @@
 import { useLanguage } from "../context/LanguageContext.jsx";
 import EmptyState from "./EmptyState.jsx";
+import Avatar from "./Avatar.jsx";
 import { formatDateTime } from "../utils/formatters.js";
 
 export default function ApprovalTimeline({ history = [] }) {
@@ -20,8 +21,9 @@ export default function ApprovalTimeline({ history = [] }) {
               {t(item.statusFrom || "START")} → {t(item.statusTo)}
             </span>
             <p>{item.comments}</p>
-            <small>
-              {item.actor?.name || t("System")} · {formatDateTime(item.createdAt)}
+            <small className="timeline-actor">
+              {item.actor?.name && <Avatar name={item.actor.name} id={item.actor._id} size="sm" />}
+              <span>{item.actor?.name || t("System")} · {formatDateTime(item.createdAt)}</span>
             </small>
             {(item.stage || item.signature || item.ip) && <small className="timeline-evidence">{[item.stage && t(item.stage), item.signature, item.ip].filter(Boolean).join(" · ")}</small>}
           </div>

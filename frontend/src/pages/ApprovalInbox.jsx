@@ -1,6 +1,9 @@
-import { CheckCircle2, CornerUpLeft, Eye, Forward, MessageSquareWarning, RefreshCw, X, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { CheckCircle2, CornerUpLeft, Eye, Forward, MessageSquareWarning, MoveHorizontal, RefreshCw, X, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import useMediaQuery from "../hooks/useMediaQuery.js";
+import { PHONE_QUERY } from "../utils/breakpoints.js";
+import { celebrate } from "../utils/celebrate.js";
 import api from "../api/client.js";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
@@ -37,8 +40,14 @@ export default function ApprovalInbox() {
   // quick view opens, so the approver lands on the decision row.
   const deepLink = useDeepLink(["request"]);
   const linkedRequest = deepLink.link.request || "";
+  // The approval email's "Approve now" button adds decide=approve: the approve confirmation opens
+  // directly (after signing in), so approving from the email is a single confirmation.
+  const location = useLocation();
+  const decideFromLink = new URLSearchParams(location.search).get("decide") === "approve";
+  const decisionOpened = useRef(false);
+  const phone = useMediaQuery(PHONE_QUERY);
   const approvalTable = usePaginatedResource("/approvals/inbox", { fixedParams: deepLink.link, deepLink: deepLink.active });
-  useEffect(() => { if (linkedRequest) setQuickViewId(linkedRequest); }, [linkedRequest]);
+  useEffect(() => { if (linkedRequest && !decideFromLink) setQuickViewId(linkedRequest); }, [linkedRequest]);
   const { rows, loading } = approvalTable;
   // Management/Admin: reviewed budget exceptions awaiting Management's decision (own section below).
   const exceptionDecisions = useBudgetExceptionDecisions();
@@ -77,6 +86,8 @@ export default function ApprovalInbox() {
         reject: "Request rejected with a preserved decision record."
       };
       notify(response.data.warning?.message || messages[confirm.type]);
+      // The approval route is complete (not just one more level): a small celebration.
+      if (confirm.type === "approve" && response.data.data?.status && response.data.data.status !== "PENDIENTE_APROBACION") celebrate("Request approved");
       setConfirm(null);
       setActionError("");
       approvalTable.reload();
@@ -153,6 +164,20 @@ export default function ApprovalInbox() {
 
   const hasAction = (row, action) => (row.allowedActions || []).includes(action);
   const canDecide = row => ["APPROVE", "OBSERVE", "RETURN", "REJECT"].some(action => hasAction(row, action));
+
+  useEffect(() => {
+    if (!decideFromLink || decisionOpened.current || loading || !linkedRequest) return;
+    decisionOpened.current = true;
+    const row = rows.find((item) => String(item._id) === String(linkedRequest));
+    if (row && hasAction(row, "APPROVE")) openDecision(row, "approve", isChainRow(row) ? false : undefined);
+    else setQuickViewId(linkedRequest);
+  }, [decideFromLink, loading, rows, linkedRequest]);
+
+  // Phones: swipe a request right to approve it, left to observe it (each opens its usual dialog).
+  const rowSwipe = {
+    right: { label: "Approve", enabled: (row) => hasAction(row, "APPROVE"), onSwipe: (row) => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
+    left: { label: "Observe", enabled: (row) => hasAction(row, "OBSERVE"), onSwipe: (row) => openDecision(row, "observe") }
+  };
 
   // ---- Bulk approve. Approve only: observe, return and reject stay individual decisions.
   // Only rows the server lets this user APPROVE are selectable; the chain decision
@@ -248,10 +273,12 @@ export default function ApprovalInbox() {
         </div>
       )}
       <div className="workspace-panel">
+        {phone && rows.some((row) => hasAction(row, "APPROVE")) && <p className="swipe-hint"><MoveHorizontal size={16} aria-hidden="true" />{t("Swipe a request right to approve it, or left to observe it.")}</p>}
         <DataTable
           rows={rows}
           loading={loading}
           remote={approvalTable.remote}
+          rowSwipe={rowSwipe}
           selection={{ selected: selectedIds, onChange: setSelectedIds, isRowSelectable: (row) => hasAction(row, "APPROVE") }}
           filters={[
             { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes.filter((item) => item !== "A2") },

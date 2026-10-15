@@ -2,6 +2,7 @@ import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import { activeApprovalStep } from "./approvalRuleService.js";
 import { queueNotificationEmail } from "./notificationEmailService.js";
+import { notificationEvent, publishToUser } from "./liveEventsService.js";
 
 // Notification copy is a template with named placeholders plus its params, e.g.
 // notificationText("{requestNumber} is waiting for {approvalLevel} approval.", { requestNumber, approvalLevel }).
@@ -68,7 +69,10 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
     const result = await Notification.findOneAndUpdate({ user: userId, eventKey }, {
       $setOnInsert: { user: userId, eventKey, type, ...copy, path, entityType, entityId }
     }, { upsert: true, new: true, setDefaultsOnInsert: true, includeResultMetadata: true });
-    if (!result.lastErrorObject?.updatedExisting) await queueNotificationEmail(result.value);
+    if (!result.lastErrorObject?.updatedExisting) {
+      await queueNotificationEmail(result.value);
+      publishToUser(userId, notificationEvent(result.value));
+    }
     return result.value;
   }
   // Re-sent plain-string copy must not keep a previous template (it would render stale text).
@@ -91,7 +95,11 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
   const notification = await Notification.findOne({ user: userId, eventKey });
   // Emailed when it is new or comes back after being read or closed - not when an alert that is
   // still unread only has its wording refreshed.
-  if (!before || before.readAt || before.resolvedAt) await queueNotificationEmail(notification);
+  if (!before || before.readAt || before.resolvedAt) {
+    await queueNotificationEmail(notification);
+    // Open tabs hear it at once (GET /api/events); the same rule as the email: new or back again.
+    publishToUser(userId, notificationEvent(notification));
+  }
   return notification;
 }
 

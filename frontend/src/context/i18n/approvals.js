@@ -76,4 +76,10 @@ export default {
 
   // Notifications raised by the approval workflow
 
+  // Approval Inbox decision toasts
+  "Approval electronic sign-off recorded.": "Aprobación electrónica registrada.",
+  "Director electronic sign-off recorded.": "Aprobación electrónica de la Dirección registrada.",
+  "Request observed and returned for correction.": "Solicitud observada y devuelta para corrección.",
+  "Request returned to the requester with comments.": "Solicitud devuelta al solicitante con comentarios.",
+  "Request rejected with a preserved decision record.": "Solicitud rechazada; la decisión queda registrada."
 };

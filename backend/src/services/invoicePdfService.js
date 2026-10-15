@@ -148,11 +148,14 @@ const TOTAL_LABEL = /IMPORTE TOTAL|TOTAL A PAGAR|PRECIO (?:DE )?VENTA|TOTAL (?:D
 
 const round2 = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 
-export function invoiceFieldsFromLines(rawLines, { expectedRuc } = {}) {
+// buyerRuc: the RUC of the party being invoiced (UMA). When the request's supplier is not known
+// yet (reading a factura to fill a new request), it is never taken as the issuer even where the
+// factura prints it without a "Cliente / Señor(es)" label.
+export function invoiceFieldsFromLines(rawLines, { expectedRuc, buyerRuc } = {}) {
   const lines = rawLines.map(plain);
   const text = lines.join("\n");
   const documentTypeCode = documentType(text);
-  const candidates = rucs(lines);
+  const candidates = rucs(lines).filter((candidate) => !buyerRuc || candidate.ruc !== buyerRuc);
   const issuer = candidates.find((candidate) => !candidate.buyer);
   // When the expected supplier's RUC is printed as a non-buyer RUC, it is the issuer.
   const ruc = (expectedRuc && candidates.find((candidate) => candidate.ruc === expectedRuc && !candidate.buyer)?.ruc) || issuer?.ruc || "";

@@ -5,6 +5,7 @@ import { connectDB } from "../config/db.js";
 import Notification from "../models/Notification.js";
 import AuditLog from "../models/AuditLog.js";
 import { checkApprovalSlas } from "../services/slaMonitoringService.js";
+import { remindRenditionDeadlines } from "../services/renditionReminderService.js";
 import { endExpiredLeaves } from "../services/userLeaveService.js";
 import { slaConfiguration } from "../services/slaPolicy.js";
 
@@ -31,6 +32,8 @@ export function startSlaWorker({ once = false } = {}) {
       catch (error) { console.error("Leave expiry failed", error); }
       try { console.log("SLA scan", await checkApprovalSlas({ config })); }
       catch (error) { console.error("SLA scan failed", error); if (once) throw error; }
+      try { console.log("Rendition reminders", await remindRenditionDeadlines()); }
+      catch (error) { console.error("Rendition reminders failed", error); }
       if (once || stopping) break;
       await new Promise(resolve => { wake = resolve; timer = setTimeout(resolve, config.pollMs); });
     } while (!stopping);

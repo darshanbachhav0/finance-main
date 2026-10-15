@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { Inbox, SearchX, X } from "lucide-react";
+import { Inbox, X } from "lucide-react";
+import Illustration from "./Illustration.jsx";
 
 // The empty result of a list. It suggests the next step: "Clear filters" when filters hide the
 // rows, otherwise the page's own `action` ({ label, to | onClick, icon }) when one exists.
@@ -12,8 +13,8 @@ export default function EmptyState({ title = "No records yet", description, filt
   if (compact) return <p className="empty-state-compact"><Inbox size={16} aria-hidden="true" /><span>{t(title)}</span></p>;
 
   return (
-    <div className="empty-state" role="status">
-      {filtered ? <SearchX size={28} aria-hidden="true" /> : <Inbox size={28} aria-hidden="true" />}
+    <div className="empty-state has-illustration" role="status">
+      <Illustration name={filtered ? "search" : "empty"} size={104} />
       <strong>{t(title)}</strong>
       {description && <span>{t(description)}</span>}
       {(onClear || action) && <div className="empty-state-actions">

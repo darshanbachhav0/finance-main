@@ -147,5 +147,19 @@ export default {
   "{actor} changed a bank file format.": "{actor} cambió un formato de archivo bancario.",
   "{actor} changed the additional permissions of {name}.": "{actor} cambió los permisos adicionales de {name}.",
   "{actor} gave {name} the {role} role.": "{actor} asignó a {name} el rol {role}.",
-  "The administrator account of {name} was locked after repeated failed sign-ins.": "La cuenta de administrador de {name} se bloqueó tras varios intentos fallidos de inicio de sesión."
+  "The administrator account of {name} was locked after repeated failed sign-ins.": "La cuenta de administrador de {name} se bloqueó tras varios intentos fallidos de inicio de sesión.",
+
+  // Rendition deadline reminders
+  "Rendition due soon": "Rendición por vencer",
+  "Rendition deadline passed": "Plazo de rendición vencido",
+  "{requestNumber}: {days} working days left to submit your rendition (deadline {date}).": "{requestNumber}: quedan {days} días hábiles para enviar tu rendición (plazo {date}).",
+  "{requestNumber}: 1 working day left to submit your rendition (deadline {date}).": "{requestNumber}: queda 1 día hábil para enviar tu rendición (plazo {date}).",
+  "{requestNumber}: your rendition is due today ({date}).": "{requestNumber}: tu rendición vence hoy ({date}).",
+  "{requestNumber}: the rendition deadline ({date}) has passed. Submit it as soon as possible.": "{requestNumber}: el plazo de rendición ({date}) ya venció. Envíala lo antes posible.",
+
+  // Request comments
+  "You were mentioned": "Te mencionaron",
+  "{author} mentioned you on {requestNumber}: {excerpt}": "{author} te mencionó en {requestNumber}: {excerpt}",
+  "New comment": "Nuevo comentario",
+  "{author} commented on {requestNumber}: {excerpt}": "{author} comentó en {requestNumber}: {excerpt}"
 };
