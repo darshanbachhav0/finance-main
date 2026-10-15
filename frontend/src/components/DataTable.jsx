@@ -17,6 +17,7 @@ import TableTools from "./TableTools.jsx";
 import { TableSkeletonRows } from "./WorkspaceSkeleton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
+import useRowSwipe from "../hooks/useRowSwipe.js";
 import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { columnLayout, isPrimaryColumn } from "../utils/tableColumns.js";
 import { todayIso } from "../utils/dateInput.js";
@@ -74,9 +75,12 @@ export default function DataTable({
   emptyDescription = "Adjust filters or create a new record.",
   emptyAction,
   caption,
-  remote
+  remote,
+  // Touch swipe actions per row: { right: { label, enabled(row), onSwipe(row) }, left: {...} }.
+  rowSwipe
 }) {
   const { t } = useLanguage();
+  const swipe = useRowSwipe(rowSwipe, t);
   const [search, setSearch] = useState("");
   const [filterValues, setFilterValues] = useState(initialFilters);
   const [sort, setSort] = useState(null);
@@ -257,6 +261,7 @@ export default function DataTable({
   function clickRow(event, row) {
     // React bubbles clicks from portals (row menu, its overlay) through the row: ignore them.
     if (!event.currentTarget.contains(event.target)) return;
+    if (swipe.consumeClick()) return;
     if (event.target.closest(INTERACTIVE_TARGET)) return;
     if (String(window.getSelection?.() || "").trim()) return;
     openRow(row);
@@ -364,10 +369,11 @@ export default function DataTable({
               ...primaryColumns.map((column) => column.type === "checkbox" ? "check" : "line"),
               ...(secondaryColumns.length ? ["line"] : []),
               ...(rowActions ? ["check"] : [])
-            ]} /> : visibleRows.map((row) => (
+            ]} /> : visibleRows.map((row) => { const swipeProps = swipe.rowProps(row, row[rowKey]); return (
               <tr
                 key={row[rowKey]}
-                className={`${openRow ? "clickable-row" : ""}${selection && selectedIds.includes(row[rowKey]) ? " is-selected" : ""}`.trim() || undefined}
+                {...swipeProps}
+                className={[openRow ? "clickable-row" : "", selection && selectedIds.includes(row[rowKey]) ? "is-selected" : "", swipeProps.className || ""].filter(Boolean).join(" ") || undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={onRowClick ? (event) => { if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); onRowClick(row); } } : undefined}
                 onClick={openRow ? (event) => clickRow(event, row) : undefined}
@@ -393,7 +399,7 @@ export default function DataTable({
                 </td>}
                 {rowActions && <td className="actions-column" data-label={t("More actions")}><RowActionMenu row={row} actions={menuActions} /></td>}
               </tr>
-            ))}
+            ); })}
           </tbody>
         </table>
         {!loading && !visibleRows.length && <EmptyState title={hasFilters ? "No matching results" : emptyTitle} filtered={hasFilters} onClear={hasFilters ? clearFilters : undefined} description={hasFilters ? "Try a different search or clear your filters." : emptyDescription} action={emptyAction} />}

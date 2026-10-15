@@ -159,9 +159,9 @@ export function latestInvoiceEvidence(attachments = []) {
   return latest("XML") || latest("PDF") || latest("FEE_RECEIPT") || null;
 }
 
-export async function parseInvoiceEvidence(filePath, { expectedRuc } = {}) {
+export async function parseInvoiceEvidence(filePath, { expectedRuc, buyerRuc } = {}) {
   const content = await readStoredFile(filePath);
-  if (isPdfBuffer(content)) return { source: "PDF", data: await parseInvoicePdf(content, { expectedRuc }) };
+  if (isPdfBuffer(content)) return { source: "PDF", data: await parseInvoicePdf(content, { expectedRuc, buyerRuc }) };
   return { source: "XML", data: parseInvoiceXmlText(content.toString("utf8")) };
 }
 

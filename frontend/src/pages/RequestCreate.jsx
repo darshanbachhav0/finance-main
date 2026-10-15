@@ -46,6 +46,11 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
 import { coversKind, isAnyDocument, isEitherOf, presentCount, ruleForKind } from "../utils/documentRequirements.js";
+import InvoiceDropZone from "../components/InvoiceDropZone.jsx";
+import InvoiceMatchStrip from "../components/InvoiceMatchStrip.jsx";
+import TrackPicker from "../components/TrackPicker.jsx";
+import { invoiceFileKey, lineFromInvoice } from "../utils/invoiceAutofill.js";
+import { celebrate } from "../utils/celebrate.js";
 import {
   currencies,
   expenditureClassificationLabels,
@@ -141,6 +146,62 @@ const initialCapex = {
   paybackUnit: "MONTHS"
 };
 
+// "Repeat this request" copies the need, supplier, cost centers and amounts into a new draft dated
+// today. Documents, quotations and their evidence stay with the original: each request has its own.
+function copiedRequestForm(request) {
+  const today = todayIso();
+  const flowType = request.flowType || (trackCRequestTypes.includes(request.requestType) ? "C" : "A1");
+  const capexDetails = request.capexDetails || {};
+  return {
+    form: {
+      ...initialForm(),
+      flowType,
+      requestType: requestTypeForFlow(flowType, request.requestType),
+      expenseNature: request.expenseNature || "SERVICES",
+      priority: request.priority || "MEDIA",
+      requesterCostCenter: supplierId(request.requesterCostCenter),
+      schoolOrDepartment: request.schoolOrDepartment || "",
+      areaCorrelative: "",
+      issueDate: today,
+      accountingPeriod: today.slice(0, 7),
+      currency: request.currency || "PEN",
+      supplier: flowType === "C" ? "" : supplierId(request.supplier),
+      title: request.title || "",
+      detailedDescription: request.detailedDescription || request.description || "",
+      businessJustification: request.businessJustification || "",
+      nonApprovalRisk: request.nonApprovalRisk || "",
+      description: request.description || "",
+      supplierSelectionReason: request.supplierSelectionReason || ""
+    },
+    capex: {
+      ...initialCapex,
+      projectPep: capexDetails.projectPep || "",
+      projectId: supplierId(capexDetails.projectSnapshot?.id),
+      assetCategory: capexDetails.assetCategory || "",
+      usefulLifeYears: capexDetails.usefulLifeYears ?? "",
+      npvAmount: capexDetails.npv?.amount ?? "",
+      npvCurrency: capexDetails.npv?.currency || request.currency || "PEN",
+      paybackValue: capexDetails.payback?.value ?? "",
+      paybackUnit: capexDetails.payback?.unit || "MONTHS"
+    },
+    opexFrequency: request.opexDetails?.expenseFrequency || "ONE_OFF",
+    lines: (request.lines || []).map((line) => ({
+      clientId: `${Date.now()}-${Math.random()}`,
+      itemDescription: line.itemDescription || "",
+      quantity: line.quantity ?? "",
+      unitOfMeasure: line.unitOfMeasure || "",
+      unitPrice: line.unitPrice ?? "",
+      priceIncludesIGV: line.priceIncludesIGV,
+      costCenter: supplierId(line.costCenter),
+      budgetItem: line.budgetItem || "",
+      projectId: line.projectId || "",
+      netAmount: line.netAmount,
+      igvAmount: line.igvAmount,
+      totalAmount: line.totalAmount
+    }))
+  };
+}
+
 const documentDefinitions = [
   { key: "xml", kind: "XML", label: "Invoice XML", accept: ".xml" },
   { key: "pdf", kind: "PDF", label: "Invoice / receipt PDF", accept: ".pdf" },
@@ -188,6 +249,10 @@ export default function RequestCreate() {
   const [hydrated, setHydrated] = useState(false);
   const [hydratedRecord, setHydratedRecord] = useState(null);
   const [sourceVersion, setSourceVersion] = useState("");
+  // The supplier's factura read on this form (dropped in step 1 or attached in Documents):
+  // { status: "reading" | "done" | "error", fileName, file, invoice, supplier, source, error }.
+  const [invoiceCheck, setInvoiceCheck] = useState(null);
+  const repeatFrom = !isEditing ? new URLSearchParams(location.search).get("from") : null;
   const validationFocusRef = useRef(null);
   useEffect(() => () => window.cancelAnimationFrame(validationFocusRef.current), []);
 
@@ -203,6 +268,7 @@ export default function RequestCreate() {
           api.get("/accounting-periods", { params: { pageSize: 100 } })
         ];
         if (isEditing) calls.push(api.get(`/requests/${id}`));
+        else if (repeatFrom) calls.push(api.get(`/requests/${repeatFrom}`).catch(() => null));
         const [suppliersResponse, centersResponse, projectsResponse, periodsResponse, requestResponse] = await Promise.all(calls);
         if (!active) return;
         const nextMasters = {
@@ -213,7 +279,7 @@ export default function RequestCreate() {
         };
         setMasters(nextMasters);
 
-        if (requestResponse) {
+        if (requestResponse && isEditing) {
           const request = requestResponse.data.data;
           setSourceVersion(request.updatedAt || "");
           const owner = request.requester?._id || request.solicitor?._id;
@@ -284,6 +350,14 @@ export default function RequestCreate() {
           setLines(serverLines.map(restoreEditorLine));
           setQuotations(serverQuotations);
           setStoredAttachments(request.attachments || []);
+        } else if (requestResponse?.data?.data) {
+          const source = requestResponse.data.data;
+          const copy = copiedRequestForm(source);
+          setForm(copy.form);
+          setCapex(copy.capex);
+          setOpexFrequency(copy.opexFrequency);
+          setLines(copy.lines.map(restoreEditorLine));
+          notify(t("Copied from {request}. Check the amounts and attach this request's documents.").replace("{request}", source.requestNumber), "info");
         } else {
           const defaultCenter = supplierId(user.costCenter) || nextMasters.costCenters[0]?._id || "";
           setForm((current) => ({ ...current, requesterCostCenter: defaultCenter, schoolOrDepartment: user.area || "" }));
@@ -416,6 +490,48 @@ export default function RequestCreate() {
     const cents = lines.reduce((result, line) => ({ net: result.net + Math.round(Number(line.netAmount || 0) * 100), igv: result.igv + Math.round(Number(line.igvAmount || 0) * 100), total: result.total + Math.round(Number(line.totalAmount || 0) * 100) }), { net: 0, igv: 0, total: 0 });
     return { net: cents.net / 100, igv: cents.igv / 100, total: cents.total / 100 };
   }, [lines]);
+
+  const linesAreEmpty = lines.every((line) => !(Number(line.totalAmount) > 0) && !String(line.itemDescription || "").trim());
+
+  // Reads a factura with the platform's own reader (nothing is stored until the request is saved).
+  // `fill`: the factura was dropped to start the request, so an empty form takes its supplier,
+  // currency and amounts; otherwise it is only compared with what was typed.
+  async function readInvoice(file, { fill = false } = {}) {
+    if (!file) return;
+    setInvoiceCheck({ status: "reading", fileName: file.name, file });
+    try {
+      const data = new FormData();
+      data.append(invoiceFileKey(file), file);
+      const response = await api.post("/requests/invoice-preview", data, { headers: { "Content-Type": "multipart/form-data" } });
+      const result = { status: "done", fileName: file.name, file, ...response.data.data };
+      setInvoiceCheck(result);
+      if (fill) applyInvoice(result);
+    } catch (err) {
+      setInvoiceCheck({ status: "error", fileName: file.name, file, error: err.message });
+    }
+  }
+
+  // Track B carries its invoice, so the dropped file becomes the request's XML / factura PDF.
+  function attachInvoiceFile(file) {
+    if (!file) return;
+    setFiles((current) => ({ ...current, [invoiceFileKey(file)]: [file] }));
+  }
+
+  function applyInvoice({ invoice, supplier, file }) {
+    if (supplier?._id) setMasters((current) => current.suppliers.some((item) => item._id === supplier._id) ? current : { ...current, suppliers: [...current.suppliers, supplier] });
+    const label = t("Invoice {number} from {supplier}").replace("{number}", invoice.invoiceNumber || "").replace("{supplier}", supplier?.legalName || supplier?.name || `RUC ${invoice.ruc || "-"}`);
+    setForm((current) => ({
+      ...current,
+      currency: invoice.currency || current.currency,
+      supplier: current.flowType !== "C" && supplier?._id ? supplier._id : current.supplier,
+      title: current.title || label,
+      detailedDescription: current.detailedDescription || label,
+      description: current.description || label
+    }));
+    if (linesAreEmpty && Number(invoice.totalAmount) > 0) setLines([lineFromInvoice(invoice, { costCenter: form.requesterCostCenter, description: label })]);
+    if (form.flowType === "B") attachInvoiceFile(file);
+    notify(linesAreEmpty ? "Filled from the invoice: check the supplier, currency and amounts." : "Invoice read. Your amounts were kept; compare them with the invoice in the next step.", "info");
+  }
 
   function setHeaderCostCenter(value) {
     setForm((current) => {
@@ -661,6 +777,7 @@ export default function RequestCreate() {
         : await api.post("/requests", data, { headers: { "Content-Type": "multipart/form-data" } });
       await draft.complete();
       notify(sendForApproval ? "Request submitted for approval." : isEditing ? "Draft request updated." : "Draft request created.");
+      if (sendForApproval) celebrate("Sent for approval");
       navigate(`/requests/${response.data.data._id}`);
     } catch (err) {
       setError(err.message);
@@ -692,8 +809,11 @@ export default function RequestCreate() {
       <div className="wizard-workspace">
         <MotionSurface changeKey={step} directional>
         {stepId === "need" && <div className="wizard-step request-form-blocks">
+          {form.flowType !== "C" && <InvoiceDropZone check={invoiceCheck} onFile={(file) => readInvoice(file, { fill: true })} supplierProposalPath={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`} />}
+          {form.flowType === "A1" && invoiceCheck?.status === "done" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("You already have the invoice")}</strong><span>{t("If no quotation or purchase order is needed, Track B (direct payment) is faster: the invoice is checked now and the request goes to payment once approved.")}</span></div><button type="button" className="secondary-button" onClick={() => { setForm((current) => ({ ...current, flowType: "B" })); attachInvoiceFile(invoiceCheck.file); }}>{t("Switch to Track B")}</button></div>}
 
           <RequestFormBlock {...blockInfo.need} status={blockStatuses.need}>
+          <TrackPicker onChoose={(choice) => setForm((current) => ({ ...current, flowType: choice.flowType, requestType: choice.flowType === "C" ? choice.requestType : requestTypeForFlow(choice.flowType, current.requestType), supplier: choice.flowType === "C" ? "" : current.supplier }))} />
           <div className="form-grid two-column-form">
             <label className="field"><span>{t("Operational track")} *</span><select value={form.flowType} onChange={(event) => { const flowType = event.target.value; setForm((current) => ({ ...current, flowType, requestType: requestTypeForFlow(flowType, current.requestType), supplier: flowType === "C" ? "" : current.supplier })); }}>{flowTypes.filter((type) => type !== "A2").map((type) => <option key={type} value={type}>{t(optionLabel(type, flowTypeLabels))}</option>)}</select><small>{t(form.flowType === "A1" ? "Formal purchase with quotations and PO." : form.flowType === "B" ? "Direct invoice / advance payment with its invoice XML or factura PDF." : "Advance to render / petty cash; expense budget is executed at rendition validation.")}</small></label>
             {form.flowType !== "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>CAPEX / OPEX *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))} onBlur={() => validateField("requestType")} aria-invalid={Boolean(errors.requestType)}>{requestCreationClassifications.map((type) => <option key={type} value={type}>{t(optionLabel(type, expenditureClassificationLabels))}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t("The operational track defines how the transaction is processed; CAPEX / OPEX defines the economic classification of the spend.")}</small></label>}
@@ -752,6 +872,7 @@ export default function RequestCreate() {
           {errors.lines && <small className="field-error-text">{t(errors.lines)}</small>}
           <MotionList className="official-line-list">{lines.map((line, index) => <RequestItemLine key={line.clientId} line={line} index={index} currency={form.currency} errors={errors} onChange={patch => updateLine(index, patch)} onFieldBlur={field => validateField(`lines.${index}.${field}`)} canRemove={lines.length > 1} onRemove={() => setLines(current => current.filter((_, currentIndex) => currentIndex !== index))} />)}</MotionList>
           <div className="request-items-total"><span>{t("Request total")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div>
+          {form.flowType !== "C" && invoiceCheck?.invoice && <InvoiceMatchStrip invoice={invoiceCheck.invoice} form={form} totals={totals} supplier={selectedSupplier} flowType={form.flowType} />}
           <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.costCenter/.test(key)) ? true : undefined}>
             <summary>{t("Adjust budget allocation")}</summary>
             <p className="section-note">{t("Items inherit the request's cost center. Adjust only when an item uses a different cost center budget.")}</p>
@@ -801,7 +922,7 @@ export default function RequestCreate() {
           const metByAlternative = alternatives.some((item) => existingAttachments.some((file) => file.kind === item.kind) || files[item.key]?.length);
           const required = rule && !metByAlternative;
           const state = attached ? t("Files attached") : metByAlternative ? t("Optional document") : isAnyDocument(rule) ? t("Any one document is enough") : alternatives.length ? t("Required: this or {other}").replace("{other}", alternatives.map((item) => t(item.label)).join(" / ")) : t(rule ? "Required document" : "Optional document");
-          return <label hidden={!showOptionalDocuments && !rule && !attached && !removed.length && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => { const chosen = Array.from(event.target.files || []); setFiles((current) => ({ ...current, [document.key]: chosen })); event.target.value = ""; }} /><UploadedFileList
+          return <label hidden={!showOptionalDocuments && !rule && !attached && !removed.length && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => { const chosen = Array.from(event.target.files || []); setFiles((current) => ({ ...current, [document.key]: chosen })); if (["xml", "pdf"].includes(document.key) && form.flowType === "B" && chosen[0]) readInvoice(chosen[0]); event.target.value = ""; }} /><UploadedFileList
             stored={existing}
             removed={removed}
             chosen={files[document.key]}
@@ -812,6 +933,7 @@ export default function RequestCreate() {
         })}</div></div>}
 
         {stepId === "review" && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Review and submit")}</h3><p>{t("Confirm the official request and financial-control information before submission.")}</p></div></div>
+          {form.flowType !== "C" && invoiceCheck?.invoice && <InvoiceMatchStrip invoice={invoiceCheck.invoice} form={form} totals={totals} supplier={selectedSupplier} flowType={form.flowType} />}
           {form.flowType === "A1" && quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}
           <RequestReview form={form} capex={capex} opexFrequency={opexFrequency} lines={lines} quotations={quotations.filter(quotationHasData)} quotationFiles={quotationFiles} files={files} existingAttachments={existingAttachments} masters={masters} totals={totals} budgetPreview={budgetPreview} selectedSupplier={selectedSupplier} onEdit={goToStep} />
         </div>}

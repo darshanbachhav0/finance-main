@@ -12,6 +12,7 @@ import {
   BookOpenCheck,
   Check,
   CheckCircle2,
+  Copy,
   CornerUpLeft,
   Download,
   Eye,
@@ -20,6 +21,7 @@ import {
   Forward,
   History as HistoryIcon,
   Landmark,
+  MessageSquare,
   MessageSquareWarning,
   Pencil,
   Printer,
@@ -63,6 +65,11 @@ import {
 
 import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
 import { invoiceMismatchLines } from "../utils/validationMessages.js";
+import RequestJourney from "../components/RequestJourney.jsx";
+import RenditionCountdown from "../components/RenditionCountdown.jsx";
+import RequestComments from "../components/RequestComments.jsx";
+import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
+import { celebrate } from "../utils/celebrate.js";
 
 const workflow = REQUEST_LIFECYCLE;
 const documentPhaseOrder = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
@@ -155,7 +162,7 @@ function Definition({ label, children }) {
 }
 
 const DetailTab = createContext("General");
-const tabIcons = { General: FileText, Documents: FileCheck2, Approvals: CheckCircle2, Budget: WalletCards, Accounting: BookOpenCheck, Payment: Landmark, History: HistoryIcon };
+const tabIcons = { General: FileText, Documents: FileCheck2, Approvals: CheckCircle2, Comments: MessageSquare, Budget: WalletCards, Accounting: BookOpenCheck, Payment: Landmark, History: HistoryIcon };
 const sectionTabs = { "Budget preview": "Budget", "Budget commitment": "Budget", "Procurement Readiness": "Budget", "Documents and fiscal validation": "Documents", "Register A1 invoice and conformity": "Documents", "Invoice control register": "Accounting", "Financial control records": "Payment" };
 function Section({ title, description, children, className = "" }) {
   const { t } = useLanguage();
@@ -171,11 +178,12 @@ function Section({ title, description, children, className = "" }) {
 }
 
 export default function RequestDetail() {
-  const [activeTab, setActiveTab] = useState("General");
+  // A comment notification links to #comments, which opens the conversation tab.
+  const [activeTab, setActiveTab] = useState(() => (window.location.hash === "#comments" ? "Comments" : "General"));
   const [showAllPhases, setShowAllPhases] = useState(false);
   const [replacingInvoice, setReplacingInvoice] = useState(false);
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, readOnly } = useAuth();
   const { language, t } = useLanguage();
   const { notify } = useToast();
   const navigate = useNavigate();
@@ -218,6 +226,13 @@ export default function RequestDetail() {
 
   useEffect(() => {
     load();
+  }, [id]);
+
+  // Live updates: a notification about this request (approved, paid, commented...) reloads it.
+  useEffect(() => {
+    const refresh = (event) => { if (String(event.detail?.entityId) === String(id)) load(); };
+    window.addEventListener(RECORD_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(RECORD_CHANGED_EVENT, refresh);
   }, [id]);
 
   const permissions = useMemo(() => {
@@ -289,8 +304,9 @@ export default function RequestDetail() {
     setProcessing(true);
     setError("");
     try {
+      let decided;
       if (["approve", "observe", "return", "reject"].includes(type)) {
-        await api.post(`/approvals/${id}/${type}`, type === "approve" && typeof forward === "boolean" ? { comments, forward } : { comments });
+        decided = await api.post(`/approvals/${id}/${type}`, type === "approve" && typeof forward === "boolean" ? { comments, forward } : { comments });
       }
       if (type === "budget") await api.post(`/budget/requests/${id}/commit`);
       if (type === "order") await api.post(`/requests/${id}/procurement-order`);
@@ -314,6 +330,9 @@ export default function RequestDetail() {
         close: "Request closed.",
         void: "Request annulled and any reservation was released."
       }[type]);
+      // The approval route is complete (not just one more level): a small celebration.
+      if (type === "approve" && decided?.data?.data?.status && decided.data.data.status !== "PENDIENTE_APROBACION") celebrate("Request approved");
+      if (type === "close") celebrate("Request closed");
       setConfirm(null);
       await load();
     } catch (err) {
@@ -330,6 +349,7 @@ export default function RequestDetail() {
     try {
       await api.post(`/requests/${id}/submit`);
       notify("Request submitted for approval.");
+      celebrate("Sent for approval");
       await load();
     } catch (err) {
       setError(err.message);
@@ -503,6 +523,9 @@ export default function RequestDetail() {
   const StickyIcon = stickyAction?.icon;
   // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
   const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
+  const isOwner = String(request.requester?._id || request.requester) === String(user._id);
+  // "Repeat this request": a new draft with the same need, supplier and amounts (RequestCreate ?from=).
+  const canRepeat = ["Admin", "Solicitor"].includes(user.role) && isOwner && request.status !== "BORRADOR";
   const requestDescription = request.flowType === "C"
     ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
     : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
@@ -528,6 +551,8 @@ export default function RequestDetail() {
         <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
       </dl>
+      <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} />
+      <RenditionCountdown request={request} mine={isOwner} onOpen={() => { setActiveTab("Documents"); window.requestAnimationFrame(() => document.getElementById("official-rendition")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1] === "Documents" ? "Open documents" : "View actions")}</a></div>}
       {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
         ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
@@ -538,7 +563,7 @@ export default function RequestDetail() {
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
       </div>
-      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={["General", "Documents", "Approvals", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
+      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={["General", "Documents", "Approvals", "Comments", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
 
       <div className="request-detail-layout">
         <div className="request-detail-main">
@@ -546,6 +571,8 @@ export default function RequestDetail() {
             <div className="section-heading"><div><h3>{t("Approval timeline")}</h3><p>{t("Electronic sign-offs, SLA dates, and workflow decisions.")}</p></div></div>
             <ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
           </div>
+
+          <div hidden={activeTab !== "Comments"}><RequestComments requestId={id} canWrite={!readOnly} /></div>
 
           <div hidden={activeTab !== "History"} className="workspace-panel timeline-panel">
             <div className="section-heading"><div><h3>{t("Immutable audit")}</h3><p>{t("Application audit records are append-only.")}</p></div></div>
@@ -939,12 +966,12 @@ export default function RequestDetail() {
             )}
 </div>
           {["ENTREGA_RENDIR", "REEMBOLSO_SIN_SUSTENTO"].includes(request.requestType) && (
-            <div hidden={!["Documents", "Payment"].includes(activeTab)}><OfficialRenditionWorkspace request={request} masters={masters} user={user} onReload={load} /></div>
+            <div id="official-rendition" hidden={!["Documents", "Payment"].includes(activeTab)}><OfficialRenditionWorkspace request={request} masters={masters} user={user} onReload={load} /></div>
           )}
         </div>
 
         <aside className="request-detail-side" id="request-actions">
-          {(canPrepareRecurring || permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
+          {(canRepeat || canPrepareRecurring || permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
               <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
               {permissions.canWithdraw && (
@@ -984,6 +1011,12 @@ export default function RequestDetail() {
               )}
               {permissions.canClose && (
                 <button type="button" className="primary-button" onClick={confirmClose}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
+              )}
+              {canRepeat && (
+                <div className="action-item">
+                  <div><strong>{t("Repeat this request")}</strong><span>{t("Starts a new draft with the same need, supplier and amounts. Attach this time's documents.")}</span></div>
+                  <div className="action-item-buttons"><Link className="secondary-button" to={`/requests/new?from=${id}`}><Copy size={16} /><span>{t("Repeat")}</span></Link></div>
+                </div>
               )}
               {canPrepareRecurring && (
                 <div className="action-item">

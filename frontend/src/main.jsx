@@ -7,6 +7,7 @@ import { AuthProvider } from "./context/AuthContext.jsx";
 import { LanguageProvider } from "./context/LanguageContext.jsx";
 import { ToastProvider } from "./context/ToastContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
+import CelebrationLayer from "./components/CelebrationLayer.jsx";
 import "./styles/global.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -16,7 +17,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <ThemeProvider>
         <ToastProvider>
           <AuthProvider>
-            <InteractionMotion /><App />
+            <InteractionMotion /><App /><CelebrationLayer />
           </AuthProvider>
         </ToastProvider>
         </ThemeProvider>

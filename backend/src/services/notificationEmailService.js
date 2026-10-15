@@ -184,7 +184,10 @@ export function composeNotificationEmail({ user, notifications, appUrl }) {
   const items = [...notifications].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)).map((item) => ({
     title: spanishNotificationCopy(item.titleKey, item.params, item.title),
     message: spanishNotificationCopy(item.messageKey, item.params, item.message),
-    url: linkFor(appUrl, item.path)
+    url: linkFor(appUrl, item.path),
+    // A pending approval also gets "Aprobar ahora": the inbox opens the approve confirmation for
+    // that request after sign-in, so the decision is still the signed-in approver's.
+    approveUrl: item.type === "APPROVAL_PENDING" && /^\/approvals\?request=[a-f\d]{24}$/i.test(String(item.path || "")) ? `${linkFor(appUrl, item.path)}&decide=approve` : null
   }));
   const listed = items.slice(0, MAX_LISTED);
   const more = items.length - listed.length;
@@ -197,7 +200,7 @@ export function composeNotificationEmail({ user, notifications, appUrl }) {
 
   const text = [
     greeting, "", intro, "",
-    ...listed.flatMap((item) => [`• ${item.title}`, `  ${item.message}`, `  Abrir: ${item.url}`, ""]),
+    ...listed.flatMap((item) => [`• ${item.title}`, `  ${item.message}`, `  Abrir: ${item.url}`, ...(item.approveUrl ? [`  Aprobar ahora: ${item.approveUrl}`] : []), ""]),
     ...(more > 0 ? [`… y ${more} más. Revísalas en ${appUrl}/`, ""] : []),
     security, "", "—", PRODUCT_NAME, footer
   ].join("\n");
@@ -214,7 +217,7 @@ export function composeNotificationEmail({ user, notifications, appUrl }) {
 ${listed.map((item) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;border:1px solid #e4e7eb;border-radius:6px;"><tr><td style="padding:14px 16px;">
 <p style="margin:0 0 4px;font-size:15px;font-weight:600;">${escapeHtml(item.title)}</p>
 <p style="margin:0 0 10px;font-size:14px;color:#3e4c59;">${escapeHtml(item.message)}</p>
-<a href="${escapeHtml(item.url)}" style="display:inline-block;background:#0b3d6e;color:#ffffff;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;">Abrir en el sistema</a>
+<a href="${escapeHtml(item.url)}" style="display:inline-block;background:#0b3d6e;color:#ffffff;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;">Abrir en el sistema</a>${item.approveUrl ? ` <a href="${escapeHtml(item.approveUrl)}" style="display:inline-block;background:#19733d;color:#ffffff;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;margin-left:6px;">Aprobar ahora</a>` : ""}
 </td></tr></table>`).join("\n")}
 ${more > 0 ? `<p style="margin:0 0 12px;font-size:14px;">… y ${more} más. <a href="${escapeHtml(`${appUrl}/`)}">Revísalas en el sistema</a>.</p>` : ""}
 <p style="margin:20px 0 0;font-size:12px;color:#7b8794;">${escapeHtml(security)}</p>

@@ -27,6 +27,7 @@ import { useLanguage } from "../../context/LanguageContext.jsx";
 import EmptyState from "../EmptyState.jsx";
 import { useToast } from "../../context/ToastContext.jsx";
 import { canonicalRequestStatus } from "../../../../shared/workflowStatus.mjs";
+import { celebrate } from "../../utils/celebrate.js";
 import { formatCurrency, formatDate, formatDateTime } from "../../utils/formatters.js";
 import { todayIso } from "../../utils/dateInput.js";
 
@@ -198,6 +199,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     try {
       await api.post(`/requests/${request._id}/rendition/${action}`, { comments: reviewComments });
       notify(action === "approve" ? "Finance approved the rendition." : action === "observe" ? "Rendition observed and returned for correction." : "Finance rejected the rendition.");
+      if (action === "approve") celebrate("Rendition validated");
       setConfirm(null);
       await onReload();
     } catch (err) { setError(err.message); setConfirm(null); }

@@ -14,8 +14,12 @@ import {
   getRenditionFormPolicy,
   getRenditionPaymentDestination,
   getRequest,
+  getMentionableUsers,
+  getRequestComments,
   listRequests,
+  postRequestComment,
   observeRendition,
+  previewRequestInvoice,
   recoverRendition,
   rejectRendition,
   registerInvoice,
@@ -40,10 +44,14 @@ router.get("/form-policy", getRequestFormPolicy);
 // "Create requests" (every Solicitor and Admin by role, anyone else by grant).
 router.get("/authorized-cost-centers", authorizePermission(PERMISSIONS.REQUEST_CREATE), getAuthorizedCostCenters);
 router.post("/budget-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), getBudgetPreview);
+router.post("/invoice-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, previewRequestInvoice);
 router.route("/").get(listRequests).post(authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, createRequest);
 router.get("/:id/document-requirements", getRequestDocumentStatus);
 router.route("/:id").get(getRequest).put(uploadFields, updateRequest).delete(deleteRequest);
 router.get("/:id/procurement-readiness", getProcurementReadiness);
+// The request's conversation (requestCommentService): anyone who can view the request.
+router.get("/:id/comments/mentionable", getMentionableUsers);
+router.route("/:id/comments").get(getRequestComments).post(postRequestComment);
 router.post("/:id/procurement-order", authorizePermission(PERMISSIONS.PROCUREMENT_ORDER_CREATE), createProcurementOrder);
 router.post("/:id/submit", submitRequest);
 router.post("/:id/withdraw", withdrawRequest);
