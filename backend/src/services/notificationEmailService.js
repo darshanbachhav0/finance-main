@@ -4,6 +4,7 @@ import Notification from "../models/Notification.js";
 import NotificationDelivery from "../models/NotificationDelivery.js";
 import User from "../models/User.js";
 import notificationsSpanish from "../../../shared/notificationTranslations.mjs";
+import { greetingName } from "../../../shared/personName.mjs";
 
 // Emailed copies of bell notifications.
 //
@@ -191,7 +192,8 @@ export function composeNotificationEmail({ user, notifications, appUrl }) {
   }));
   const listed = items.slice(0, MAX_LISTED);
   const more = items.length - listed.length;
-  const name = displayName(user.name);
+  // Stored surnames first ("MORAN PAREDES GLADYS"); the greeting says "Hola, Gladys Moran:".
+  const name = greetingName(user.name);
   const greeting = name ? `Hola, ${name}:` : "Hola:";
   const intro = items.length === 1 ? "Tienes una novedad en el sistema de gestión financiera de la UMA." : `Tienes ${items.length} novedades en el sistema de gestión financiera de la UMA.`;
   const subject = items.length === 1 ? `${items[0].title} · ${PRODUCT_NAME}` : `Tienes ${items.length} novedades · ${PRODUCT_NAME}`;

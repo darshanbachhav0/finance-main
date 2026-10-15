@@ -1,7 +1,7 @@
 import ContinueWork from "../components/ContinueWork.jsx";
 import BudgetGauge from "../components/BudgetGauge.jsx";
 import PersonalStats from "../components/PersonalStats.jsx";
-import { firstName, greetingTemplate, pendingTaskCount } from "../utils/greeting.js";
+import { greetingName, greetingTemplate, pendingTaskCount } from "../utils/greeting.js";
 import { startTour, tourDone } from "../utils/tour.js";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import MyTasks from "../components/MyTasks.jsx";
@@ -91,7 +91,7 @@ export default function Dashboard() {
   }, [Boolean(summary)]);
 
   const taskCount = pendingTaskCount(summary?.tasks?.items);
-  const greeting = t(greetingTemplate()).replace("{name}", firstName(user.name));
+  const greeting = t(greetingTemplate()).replace("{name}", greetingName(user.name));
   const nextPayment = personal?.payments?.next;
   const daySummary = !summary ? t(descriptions[user.role] || descriptions.Admin) : [
     taskCount === 0 ? t("You are all caught up.") : t(taskCount === 1 ? "1 thing needs your attention today." : "{count} things need your attention today.").replace("{count}", formatNumber(taskCount, language)),
