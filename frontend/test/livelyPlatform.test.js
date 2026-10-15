@@ -42,16 +42,16 @@ assert.equal(renditionCountdown({ dueAt: "2026-10-30T04:59:59.999Z" }, { now: ne
 
 // 3. Greeting, payment day, track recommendation, live event parsing.
 // Names are stored first surname, second surname, first name, second name; greetings use
-// first name and first surname.
+// their first name.
 for (const [stored, greeted] of [
-  ["QUISPE MAMANI MARÍA ELENA", "María Quispe"],
-  ["QUISPE MAMANI, MARÍA ELENA", "María Quispe"],
-  ["TORRES DIAZ ANA", "Ana Torres"],
-  ["DE LA CRUZ PEREZ JUAN CARLOS", "Juan de la Cruz"],
-  ["QUISPE MAMANI MARÍA DE LOS ÁNGELES", "María Quispe"],
-  ["TORRES ANA", "Ana Torres"],
-  ["  quispe   mamani   maría  ", "María Quispe"],
-  ["O'BRIEN SMITH JOHN", "John O'Brien"],
+  ["QUISPE MAMANI MARÍA ELENA", "María"],
+  ["QUISPE MAMANI, MARÍA ELENA", "María"],
+  ["TORRES DIAZ ANA", "Ana"],
+  ["DE LA CRUZ PEREZ JUAN CARLOS", "Juan"],
+  ["QUISPE MAMANI MARÍA DE LOS ÁNGELES", "María"],
+  ["TORRES ANA", "Ana"],
+  ["  quispe   mamani   maría  ", "María"],
+  ["O'BRIEN SMITH JOHN", "John"],
   ["Contabilidad UMA (Demo)", "Contabilidad"],
   ["", ""]
 ]) assert.equal(greetingName(stored), greeted, stored);

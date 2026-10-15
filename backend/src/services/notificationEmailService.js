@@ -192,7 +192,7 @@ export function composeNotificationEmail({ user, notifications, appUrl }) {
   }));
   const listed = items.slice(0, MAX_LISTED);
   const more = items.length - listed.length;
-  // Stored surnames first ("MORAN PAREDES GLADYS"); the greeting says "Hola, Gladys Moran:".
+  // Stored surnames first ("MORAN PAREDES GLADYS"); the greeting says "Hola, Gladys:".
   const name = greetingName(user.name);
   const greeting = name ? `Hola, ${name}:` : "Hola:";
   const intro = items.length === 1 ? "Tienes una novedad en el sistema de gestión financiera de la UMA." : `Tienes ${items.length} novedades en el sistema de gestión financiera de la UMA.`;
