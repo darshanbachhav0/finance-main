@@ -11,6 +11,8 @@ import RequestQuickView from "../components/RequestQuickView.jsx";
 import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx";
 import RequestStageIndicator from "../components/RequestStageIndicator.jsx";
 import WorkflowStatusLegend from "../components/WorkflowStatusLegend.jsx";
+import PlainStatus from "../components/PlainStatus.jsx";
+import { plainStatusFilterOptions, plainStatusKey, PLAIN_STATUSES, usesPlainStatuses } from "../utils/plainStatus.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
@@ -56,6 +58,25 @@ export default function RequestsList() {
   const costCenters = useMemo(() => costCentersResource.rows.map((row) => ({ value: row._id, label: `${row.code} - ${row.name}` })), [costCentersResource.rows]);
   const projects = useMemo(() => projectsResource.rows.map((row) => ({ value: row.code || row.name, label: `${row.code || ""} ${row.name || ""}`.trim() })), [projectsResource.rows]);
   const canCreate = ["Admin", "Solicitor"].includes(user.role);
+  // Requesters get a short list: what, how much, its plain status and what is needed from them.
+  const plain = usesPlainStatuses(user);
+  const allColumns = [
+    { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
+    ...(plain ? [{ key: "title", type: "name", label: "What", sortable: false, getValue: (row) => row.title || row.description, render: (row) => <div className="primary-cell"><strong>{row.title || row.description || "-"}</strong><span>{row.supplier?.name || ""}</span></div> }] : []),
+    { key: "flowType", type: "code", label: "Track", plainHidden: true, render: (row) => <span className="flow-chip">{row.flowType || "A1"}</span> },
+    { key: "requestType", label: "Type", plainHidden: true },
+    { key: "expenseNature", label: "Expense nature", plainHidden: true, render: (row) => t(expenseNatureLabels[row.expenseNature] || row.expenseNature) },
+    { key: "priority", label: "Priority", plainHidden: true, render: (row) => <span className={`priority priority-${String(row.priority || "MEDIA").toLowerCase()}`}>{t(row.priority || "MEDIA")}</span> },
+    { key: "supplier", type: "name", label: "Supplier", plainHidden: true, sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
+    { key: "solicitor", label: "Solicitor", plainHidden: true, sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
+    { key: "accountingPeriod", type: "code", label: "Period", plainHidden: true },
+    { key: "totalAmount", type: "money", label: "Amount", exportValue: (row) => Number(row.totalAmount || 0), render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
+    plain
+      ? { key: "status", type: "status", minWidth: "220px", label: "Status", exportValue: (row) => t(PLAIN_STATUSES[plainStatusKey(row)].label), render: (row) => <PlainStatus request={row} /> }
+      : { key: "status", type: "status", minWidth: "180px", label: "Status", render: (row) => <div className="status-cell"><FinancialProgressSummary request={row} compact /><RequestStageIndicator request={row} compact /></div> },
+    { key: "updatedAt", type: "date", label: "Updated", render: (row) => formatDate(row.updatedAt) }
+  ];
+  const columns = allColumns.filter((column) => !(plain && column.plainHidden)).map(({ plainHidden, ...column }) => column);
 
   function isOwner(row) {
     return user.role === "Admin" || (row.requester?._id || row.solicitor?._id) === user._id;
@@ -107,10 +128,10 @@ export default function RequestsList() {
       <PageHeader
         title={ownScope ? "My Requests" : "Requests"}
         description="Create, track, submit, and review financial requests by status and accounting period."
-        help={<WorkflowStatusLegend align="start" />}
+        help={plain ? undefined : <WorkflowStatusLegend align="start" />}
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}
       />
-      <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />
+      {!plain && <WorkspaceTools links={[["Suppliers", "/suppliers"], ["Reimbursement Banking", "/reimbursement-bank"], ["A2 Batch Invoices", "/batch-invoices"]]} />}
       <Message type="error">{(deleteRow || withdrawRow ? "" : actionError) || requestsTable.error}</Message>
       <div className="workspace-panel">
         <DataTable
@@ -119,7 +140,10 @@ export default function RequestsList() {
           rows={rows}
           loading={loading}
           remote={requestsTable.remote}
-          filters={[
+          filters={plain ? [
+            { key: "status", label: "Status", allLabel: "All statuses", options: plainStatusFilterOptions },
+            { key: "period", getValue: (row) => row.accountingPeriod, label: "periods", allLabel: "All periods", options: periods }
+          ] : [
             { key: "status", label: "Status", allLabel: "All statuses", options: requestStatuses },
             { key: "renditionStatus", label: "rendition statuses", allLabel: "All rendition statuses", options: [
               { value: "PENDING,SUBMITTED,OBSERVED", label: "Pending / submitted / observed" },
@@ -155,19 +179,7 @@ export default function RequestsList() {
             },
             { label: "Delete permanently", icon: Trash2, tone: "danger", hidden: !canDelete(row), onClick: () => setDeleteRow(row) }
           ]}
-          columns={[
-            { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-            { key: "flowType", type: "code", label: "Track", render: (row) => <span className="flow-chip">{row.flowType || "A1"}</span> },
-            { key: "requestType", label: "Type" },
-            { key: "expenseNature", label: "Expense nature", render: (row) => t(expenseNatureLabels[row.expenseNature] || row.expenseNature) },
-            { key: "priority", label: "Priority", render: (row) => <span className={`priority priority-${String(row.priority || "MEDIA").toLowerCase()}`}>{t(row.priority || "MEDIA")}</span> },
-            { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
-            { key: "solicitor", label: "Solicitor", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
-            { key: "accountingPeriod", type: "code", label: "Period" },
-            { key: "totalAmount", type: "money", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
-            { key: "status", type: "status", minWidth: "180px", label: "Status", render: (row) => <div className="status-cell"><FinancialProgressSummary request={row} compact /><RequestStageIndicator request={row} compact /></div> },
-            { key: "updatedAt", type: "date", label: "Updated", render: (row) => formatDate(row.updatedAt) }
-          ]}
+          columns={columns}
         />
       </div>
 

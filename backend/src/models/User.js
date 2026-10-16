@@ -67,6 +67,9 @@ const userSchema = new mongoose.Schema(
     // New bell notifications are also emailed to the user's address unless they turn it off
     // (services/notificationEmailService.js).
     emailNotifications: { type: Boolean, default: true },
+    // DAILY: one summary email a day; IMMEDIATE: an email right away. Unset: the platform default
+    // (NOTIFICATION_EMAIL_FREQUENCY, DAILY when not set).
+    emailFrequency: { type: String, enum: ["DAILY", "IMMEDIATE"] },
     // Where the address came from when it was set by the contracts-master import.
     emailImport: {
       source: { type: String, trim: true },

@@ -196,7 +196,8 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
   if (recommended.length > 1) errors.push({ code: "MULTIPLE_RECOMMENDED_QUOTATIONS", present: recommended.length });
   const selectedSupplier = String(request.supplier?._id || request.supplier || "");
   if (recommended.length === 1 && String(recommended[0].supplier?._id || recommended[0].supplier || "") !== selectedSupplier) errors.push({ code: "RECOMMENDED_SUPPLIER_MISMATCH" });
-  if (!String(request.supplierSelectionReason || "").trim()) errors.push({ code: "SUPPLIER_SELECTION_REASON_REQUIRED" });
+  // A reason is needed only when there was a choice: one quotation has nothing to compare.
+  if (supplierIds.size > 1 && !String(request.supplierSelectionReason || "").trim()) errors.push({ code: "SUPPLIER_SELECTION_REASON_REQUIRED" });
   return { valid: errors.length === 0, applicable: true, policy: { ...policy, minimumCount: QUOTATION_MINIMUM_COUNT }, errors };
 }
 

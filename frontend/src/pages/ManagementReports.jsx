@@ -1,5 +1,5 @@
 import { REQUEST_LIFECYCLE } from "../../../shared/workflowStatus.mjs";
-import { Download, Printer, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
+import { Download, FileSpreadsheet, Printer, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client.js";
@@ -89,6 +89,24 @@ export default function ManagementReports() {
     load(cleared);
   }
 
+  // The workbook emailed to Finance and Management every Monday, for this moment.
+  async function downloadWeeklyReport() {
+    setExporting(true);
+    try {
+      const response = await api.get("/reports/weekly.xlsx", { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `reporte-semanal-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function exportReport() {
     setExporting(true);
     try {
@@ -125,6 +143,7 @@ export default function ManagementReports() {
           <span className="last-updated">{t("Last updated")}: {data.lastUpdated ? formatDateTime(data.lastUpdated, language) : "-"}</span>
           <button type="button" className="secondary-button" onClick={() => window.print()} disabled={loading}><Printer size={16} />{t("Print report")}</button>
           <button type="button" className="secondary-button" onClick={() => load()} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>
+          <button type="button" className="secondary-button" onClick={downloadWeeklyReport} disabled={exporting} title={t("The Excel report emailed every Monday to Finance and Management")}><FileSpreadsheet size={16} /><span>{t("Weekly report (Excel)")}</span></button>
           <button type="button" className="primary-button" onClick={exportReport} disabled={loading || exporting}><Download size={16} /><span>{t(exporting ? "Exporting..." : "Export management CSV")}</span></button>
         </>}
       />

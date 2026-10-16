@@ -72,7 +72,15 @@ Background workers (see §4 — in production they run inside the web service pr
   `NOTIFICATION_EMAIL_REPLY_TO`, `APP_PUBLIC_URL`, `NOTIFICATION_EMAIL_ALLOWED_DOMAINS`,
   `NOTIFICATION_EMAIL_DELAY_MINUTES`, `NOTIFICATION_EMAIL_POLL_MS`,
   `NOTIFICATION_EMAIL_MAX_ATTEMPTS`, `NOTIFICATION_EMAIL_WORKER_ENABLED` — notification emails
-  (see §4 "Notification emails").
+  (see §4 "Notification emails"). `NOTIFICATION_EMAIL_FREQUENCY` (`DAILY` default | `IMMEDIATE`) and
+  `NOTIFICATION_EMAIL_DIGEST_HOUR` (Lima, default 8) — one summary email a day per person (each
+  person can choose "right away" in their account menu).
+- `FOLLOW_UP_RETURNED_WORKING_DAYS` (default 2), `DRAFT_AUTO_CLOSE_DAYS` (default 30, `0` = never),
+  `DRAFT_CLOSE_WARNING_DAYS` (default 5), `PAYMENT_RUN_NOTICE_WORKING_DAYS` (default 2) — automatic
+  follow-ups run by the operations worker (see §4 "Automatic follow-ups and the weekly report").
+- `WEEKLY_REPORT_ENABLED` (default on while emails are on), `WEEKLY_REPORT_DAY` (1 = Monday),
+  `WEEKLY_REPORT_HOUR` (Lima, default 8), `WEEKLY_REPORT_ROLES` (default
+  `Accounting,Treasury,Budget,Management`) — the weekly Excel report.
 
 Authentication:
 - `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 15) — per-account
@@ -240,6 +248,37 @@ server (Render runs in UTC) or of the user's device:
 - The backend process sets `TZ=America/Lima` at startup (`backend/src/config/timeZone.js`); business
   rules (SLA deadlines, working days, payment cycle 15/30, rendition deadlines) compute Lima dates
   explicitly.
+
+### Automatic follow-ups and the weekly report
+
+The operations worker (`OPERATIONS_WORKER_ENABLED`, on in production) runs every hour:
+
+- **Requests sent back** (`OBSERVADO`, `DEVUELTO`, `OBSERVADO_MONTO_EXCEDIDO`) and not corrected: the
+  requester is reminded after `FOLLOW_UP_RETURNED_WORKING_DAYS` working days and again after twice
+  that (one notification per stage, never repeated).
+- **Stale drafts**: a draft request not changed for `DRAFT_AUTO_CLOSE_DAYS` days is annulled
+  (`DRAFT_AUTO_CLOSED` in its history and audit; nothing was committed yet, and "Repeat this request"
+  starts it again); an unsaved form draft leaves "Continue your work". The owner is warned
+  `DRAFT_CLOSE_WARNING_DAYS` days before. A draft whose accounting month is closed is left alone.
+- **Next payment run**: `PAYMENT_RUN_NOTICE_WORKING_DAYS` working days before each 15th / 30th run,
+  Treasury is told what falls into it, with a link (`/treasury?run=next`) that lists only that run
+  and ticks every payable that can be paid. A payable joins the run its due date (payment terms)
+  gives, or the date Treasury planned for it in its Excel payment schedule
+  (`AccountsPayable.plannedPaymentDate`, from Payments > Import from Excel).
+- **Weekly report**: on `WEEKLY_REPORT_DAY` from `WEEKLY_REPORT_HOUR` (Lima) one Excel workbook (summary,
+  new requests, waiting for approval, paid this week, still to pay) is emailed once to the active users
+  of `WEEKLY_REPORT_ROLES` (Bcc). Reports > "Weekly report (Excel)" downloads the same workbook at any
+  time (`GET /api/reports/weekly.xlsx`).
+
+Bank statement matching (Work review > Statement matching) reconciles **exact** matches straight
+away - one paid payable with the same currency, amount, operation number and a payment date within
+3 days - through the same claim and reconciliation controls as a manual confirmation. Partial,
+ambiguous and unmatched rows are left for a person.
+
+Excel imports (`POST /api/imports/:kind`, checked first with nothing saved, then imported):
+`budget-plans` (Budget / Admin: new annual plans per Cost Center), `suppliers` (Admin / Accounting /
+Procurement: supplier proposals, pending approval as usual) and `payment-schedule` (Treasury / Admin:
+planned payment date and priority of open payables). Each screen offers the template.
 
 ### Notification emails
 

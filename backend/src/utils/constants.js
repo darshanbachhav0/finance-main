@@ -346,9 +346,13 @@ export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS: "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS",
   // PEN. A budget plan change that moves more than this needs Management approval. Not set or
   // 0: every change applies immediately.
-  BUDGET_CHANGE_APPROVAL_THRESHOLD: "BUDGET_CHANGE_APPROVAL_THRESHOLD"
+  BUDGET_CHANGE_APPROVAL_THRESHOLD: "BUDGET_CHANGE_APPROVAL_THRESHOLD",
+  // PEN. The CAPEX planning fields (project, asset category, useful life, NPV, payback) are shown
+  // to the requester only from this request total; below it Budget/Accounting complete them.
+  CAPEX_DETAILS_THRESHOLD: "CAPEX_DETAILS_THRESHOLD"
 });
 export const DEFAULT_RENDITION_OVERDUE_DAYS = 10;
+export const DEFAULT_CAPEX_DETAILS_THRESHOLD = 50000;
 export const FINANCE_CONFIGURATION_BEHAVIORS = Object.freeze(["INFORMATION", "WARNING", "FLAG", "BLOCK"]);
 
 export const BUDGET_MODES = Object.freeze(["TRANSITIONAL", "ACTIVE"]);

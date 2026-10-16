@@ -624,7 +624,7 @@ Seed examples include area Director rules, Vice Rector, and a CAPEX Rectorate th
 
 ### Decisions that stop or defer progress
 
-Observe, Return and Reject require comments. Approval requires the current pending step and validated controls. Self-approval is blocked except for Admin with an explicit override reason. A missing supplier homologation or insufficient budget can leave approval completed but financial handoff unresolved.
+Send back (Observe / Return) and Reject require comments; the screens show three decisions: Approve, Send back and Reject. Approval requires the current pending step and validated controls. Self-approval is blocked except for Admin with an explicit override reason. A missing supplier homologation or insufficient budget can leave approval completed but financial handoff unresolved.
 
 Management completion has a separate Budget handoff. The existence of an approval permission does not give Management manual budget or order permission. Likewise, automated provisioning by a valid invoice or batch is not an Accounting menu permission for the uploader.
 

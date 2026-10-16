@@ -8,7 +8,10 @@ const labels = {
   quantity: "Quantity", unitPrice: "Unit price", unitOfMeasure: "Unit of measure", totalAmount: "Total",
   amount: "Amount", attachment: "Quotation evidence", rucDni: "RUC / identifier", personType: "Person type",
   accountType: "Account type", accountNumber: "Account number", cci: "CCI", dni: "DNI", email: "Email",
-  name: "Name", bank: "Bank", lines: "Items", quotations: "Quotations"
+  name: "Name", bank: "Bank", lines: "Items", quotations: "Quotations", quote: "Quote", invoice: "Invoice",
+  // The request form's document uploads.
+  xml: "Invoice XML", pdf: "Invoice / receipt PDF", feeReceipt: "Recibo por Honorarios", purchaseOrder: "Purchase order", contract: "Signed contract",
+  conformity: "Conformity report", activityReport: "Activity report", supporting: "Supporting documents"
 };
 export function validationFieldLabel(path, t = value => value) {
   const parts = String(path || "").split(".");

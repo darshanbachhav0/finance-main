@@ -222,15 +222,24 @@ const grantedNavigation = [
   ["/accounting/invoice-observations", ["batch-invoice:review"]]
 ];
 
+// Pages a requester opens from the account menu instead of the sidebar: their own reimbursement
+// bank account is a profile setting, not daily work.
+export const accountMenuLabels = Object.freeze({ "/reimbursement-bank": "My bank account" });
+export function accountMenuPaths(user) {
+  if (user?.role !== "Solicitor") return [];
+  return Object.keys(accountMenuLabels).filter((path) => canAccessNavigation(user.role, path, user));
+}
+
 // Primary navigation as [label, path] pairs.
 export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
   const role = user?.role;
   const paths = (roleMenus[role] || []).filter((path) => path !== "/approvals" || approvesRequests(user, pendingApprovals));
   const add = (path) => { if (!paths.includes(path)) paths.push(path); };
   if (user?.hasTeam === true) add("/my-team");
-  // Proposing suppliers is open to every internal user, so the menu always offers it.
-  if (internalRoles.includes(role)) add("/suppliers");
-  for (const [path, permissions] of grantedNavigation) if (hasGrant(user, ...permissions)) add(path);
+  // Proposing suppliers is open to every internal user, so the menu offers it - except to
+  // requesters, whose menu stays at their requests: they propose a supplier from the request form.
+  if (internalRoles.includes(role) && role !== "Solicitor") add("/suppliers");
+  for (const [path, permissions] of grantedNavigation) if (hasGrant(user, ...permissions) && !accountMenuPaths(user).includes(path)) add(path);
   // Settings is one entry. Someone with a single settings page (Treasury: bank formats) goes
   // straight to it instead of a page with one link.
   const settings = settingsPagesFor(user);
@@ -285,6 +294,8 @@ export function pageTrail(pathname, user) {
       ? [home, requests, { label: "Request details", path: `/requests/${request[1]}` }, { label: "Edit request" }]
       : [home, requests, { label: "Request details" }];
   }
+  // The one-page approval the approval email opens.
+  if (/^\/approvals\/[^/]+$/.test(path)) return [home, { label: pageLabel("/approvals", role), path: "/approvals" }, { label: "Your decision" }];
   const supplier = path.match(/^\/suppliers\/([^/]+)$/);
   if (supplier) return [home, { label: pageLabel("/suppliers", role), path: "/suppliers" }, { label: "Supplier record" }];
   const ancestors = [];

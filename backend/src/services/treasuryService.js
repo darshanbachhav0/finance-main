@@ -194,8 +194,36 @@ export function resolvePaymentSchedule({ paymentDate, reason, now = new Date() }
 function paymentCycleOf(accountsPayable, now = new Date()) {
   // scheduledFor is stored as the UTC midnight of the chosen calendar date.
   if (accountsPayable.scheduledFor) return new Date(accountsPayable.scheduledFor).toISOString().slice(0, 10);
+  // Treasury's planned date (Excel payment schedule) wins over the due date of the payment terms.
+  const planned = accountsPayable.plannedPaymentDate ? new Date(accountsPayable.plannedPaymentDate) : null;
+  if (planned) return nextPaymentCycleDate(planned > now ? planned : now);
   const due = accountsPayable.dueDate ? new Date(accountsPayable.dueDate) : null;
   return nextPaymentCycleDate(due && due > now ? due : now);
+}
+
+// Payables whose payment run (paymentCycleOf) is on or before `cycleDate`: scheduled for it, planned
+// for it, or due by then (or with no due date, so payable now).
+export function paymentRunFilter(cycleDate) {
+  const end = new Date(`${cycleDate}T23:59:59.999Z`);
+  return { $or: [
+    { scheduledFor: { $lte: end } },
+    { scheduledFor: null, plannedPaymentDate: { $lte: end } },
+    { scheduledFor: null, plannedPaymentDate: null, $or: [{ dueDate: null }, { dueDate: { $lte: end } }] }
+  ] };
+}
+
+const PAYMENT_RUN_STATUSES = [AP_STATUS.OPEN, AP_STATUS.PARTIALLY_PAID];
+
+// The next payment run (15th / 30th) and what falls into it: the payables the payment terms (or
+// Treasury's plan) put there, by currency. Treasury prepares it in one click and only confirms.
+export async function nextPaymentRunSummary(now = new Date()) {
+  const date = nextPaymentCycleDate(now);
+  const groups = await AccountsPayable.aggregate([
+    { $match: { status: { $in: PAYMENT_RUN_STATUSES }, ...paymentRunFilter(date) } },
+    { $group: { _id: "$currency", total: { $sum: "$outstandingAmount" }, count: { $sum: 1 } } }
+  ]);
+  const totalsByCurrency = Object.fromEntries(groups.map((item) => [item._id, { total: roundMoney(item.total), count: item.count }]));
+  return { date, count: groups.reduce((sum, item) => sum + item.count, 0), totalsByCurrency };
 }
 
 function selectedAccountId(accountSelections, requestId, payableId) {
@@ -393,6 +421,11 @@ export async function listTreasuryQueue(queryParams) {
     const requestIds = await FinancialRequest.distinct("_id", { requestType: queryParams.requestType });
     const currentIds = query.request?.$in;
     query.request = { $in: currentIds ? requestIds.filter((id) => currentIds.some((current) => String(current) === String(id))) : requestIds };
+  }
+  // "Prepare the next payment run": only what falls into the run of that cycle date.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(queryParams.paymentCycle || ""))) {
+    query.status = { $in: PAYMENT_RUN_STATUSES };
+    query.$and = [...(query.$and || []), paymentRunFilter(queryParams.paymentCycle)];
   }
   if (queryParams.paymentDate) {
     const start = new Date(`${queryParams.paymentDate}T00:00:00.000Z`);

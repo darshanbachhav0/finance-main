@@ -476,9 +476,11 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       await makeFile([ap]);
       assert.equal((await importStatement(csv, treasury, req)).rows[0].candidates.length, 0, "TXT generation is not payment");
       await confirm(ap, "OP-AUTO-1", 118);
+      // The one exact match is reconciled on import; nobody has to confirm it.
       const imported = await importStatement(csv, treasury, req);
       assert.equal(imported.rows[0].candidates.length, 1);
-      await confirmStatementMatch({ id: imported.id, rowIndex: 0, payableId: String(ap._id), user: treasury, req });
+      assert.equal(imported.rows[0].autoReconciled, true);
+      assert.deepEqual([imported.autoReconciled, imported.needsReview], [1, 0]);
       assert.ok((await reload(ap)).reconciliation);
       assert.equal((await FinancialRequest.findById(request._id)).status, REQUEST_STATUS.RECONCILED);
       assert.equal((await importStatement(csv, treasury, req)).rows[0].candidates.length, 0);

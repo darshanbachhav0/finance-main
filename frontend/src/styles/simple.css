@@ -1,0 +1,106 @@
+/* Simpler, faster layer: the three-question request form, plain request statuses, the one-page
+   approval, spreadsheet-style list tools and Excel imports. Uses the global tokens (global.css), so
+   light and dark mode both follow. */
+
+/* ---- New request: three questions ---- */
+.quick-request { display: grid; gap: var(--space-4); max-width: 820px; }
+.quick-request-intro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); color: var(--gray-700); }
+.quick-request-intro p { margin: 0; }
+.quick-question { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-panel); box-shadow: var(--shadow-sm); }
+.quick-question h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--gray-950); font-size: var(--font-lg); }
+.quick-number { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--surface-panel); background: var(--uma-primary); font-size: var(--font-sm); font-weight: 800; }
+.quick-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; border: 0; }
+.quick-legend { grid-column: 1 / -1; margin-bottom: var(--space-1); padding: 0; color: var(--gray-800); font-weight: 700; }
+.quick-choice { position: relative; display: flex; align-items: flex-start; gap: var(--space-2); min-height: var(--touch-target); padding: var(--space-3); border: 1px solid var(--gray-300); border-radius: var(--radius-md); background: var(--surface-panel); cursor: pointer; }
+.quick-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.quick-choice svg { flex: 0 0 auto; margin-top: 2px; color: var(--gray-600); }
+.quick-choice span { display: grid; gap: 2px; }
+.quick-choice small { color: var(--gray-600); font-size: var(--font-xs); }
+.quick-choice.is-selected { border-color: var(--uma-primary); background: var(--accent-soft); }
+.quick-choice.is-selected svg, .quick-choice.is-selected strong { color: var(--uma-primary); }
+.quick-choice:focus-within { outline: 2px solid var(--uma-primary); outline-offset: 2px; }
+.quick-check { display: flex; align-items: center; gap: var(--space-2); align-self: end; min-height: var(--touch-target); color: var(--gray-800); }
+.quick-total { display: flex; align-items: baseline; justify-content: space-between; margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--gray-200); }
+.quick-total strong { color: var(--gray-950); font-size: var(--font-xl); }
+.quick-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); color: var(--gray-700); font-size: var(--font-sm); }
+.quick-facts select { max-width: 100%; margin-left: var(--space-1); }
+.quick-lines p { margin: 0 0 var(--space-2); color: var(--gray-700); }
+.quick-lines ul { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); padding: 0; list-style: none; }
+.quick-lines li { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--gray-50); }
+.quick-file { position: relative; display: flex; align-items: center; gap: var(--space-3); min-height: 56px; padding: var(--space-3); border: 2px dashed var(--gray-300); border-radius: var(--radius-md); cursor: pointer; }
+.quick-file span { display: grid; gap: 2px; min-width: 0; }
+.quick-file small { color: var(--gray-600); font-size: var(--font-xs); overflow-wrap: anywhere; }
+.quick-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.quick-file.is-attached { border-style: solid; border-color: var(--green-700); background: var(--green-100); }
+.quick-file .field-error-text { position: absolute; left: var(--space-3); bottom: -20px; }
+.quick-supplier { display: grid; gap: var(--space-2); }
+.quick-note { margin: 0; color: var(--gray-700); }
+.quick-track { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--gray-800); background: var(--blue-100); }
+.capex-details > summary { display: grid; gap: 2px; min-height: var(--touch-target); padding: var(--space-2) 0; cursor: pointer; }
+.capex-details > summary small { color: var(--gray-600); font-size: var(--font-xs); }
+.capex-details > .form-grid { margin-top: var(--space-3); }
+
+@media (max-width: 640px) {
+  .quick-question { padding: var(--space-3); }
+  .quick-choices { grid-template-columns: 1fr; }
+}
+
+/* ---- Plain request status (requesters) ---- */
+.plain-status { display: grid; gap: var(--space-1); justify-items: start; }
+.plain-next { display: inline-flex; align-items: center; gap: 4px; color: var(--gray-600); font-size: var(--font-xs); }
+.plain-next.is-yours { color: var(--amber-700); font-weight: 700; }
+.plain-steps { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin: var(--space-1) 0 0; padding: 0; list-style: none; color: var(--gray-500); font-size: var(--font-sm); }
+.plain-steps li::before { content: "\25CB"; margin-right: 4px; }
+.plain-steps li.is-done { color: var(--green-700); }
+.plain-steps li.is-done::before { content: "\2713"; }
+.plain-steps li.is-current { color: var(--gray-950); font-weight: 700; }
+.plain-steps li.is-current::before { content: "\25CF"; color: var(--uma-primary); }
+
+/* ---- One-page approval (from the email) ---- */
+.approval-decision { display: grid; gap: var(--space-4); max-width: 720px; }
+.approval-summary { padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-panel); box-shadow: var(--shadow-sm); }
+.approval-summary h2 { margin: var(--space-1) 0 var(--space-2); font-size: var(--font-lg); }
+.approval-summary p { margin: 0 0 var(--space-2); color: var(--gray-700); }
+.approval-amount { margin: 0; color: var(--gray-950); font-size: var(--font-3xl); font-weight: 800; }
+.approval-summary dl { display: grid; gap: var(--space-2); margin: var(--space-3) 0 0; }
+.approval-summary dl > div { display: grid; grid-template-columns: minmax(120px, 30%) 1fr; gap: var(--space-2); }
+.approval-summary dt { color: var(--gray-600); }
+.approval-summary dd { margin: 0; color: var(--gray-900); }
+.approval-documents h3 { margin: 0 0 var(--space-2); font-size: var(--font-md); }
+.approval-documents ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.approval-documents li { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.approval-documents li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.approval-actions { display: grid; gap: var(--space-3); }
+.approval-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.approval-choice > button { justify-content: center; min-height: 48px; }
+.approval-choice > button.is-chosen { outline: 3px solid var(--uma-primary); outline-offset: 2px; }
+.approval-confirm { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-panel); }
+.approval-done { display: grid; justify-items: start; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-panel); }
+.approval-done > svg { color: var(--green-700); }
+.approval-done-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ---- Excel import ---- */
+.excel-import { display: grid; gap: var(--space-4); }
+.excel-import-steps { display: grid; gap: var(--space-3); margin: 0; padding-left: var(--space-4); }
+.excel-import-steps li > span { display: block; margin-bottom: var(--space-1); color: var(--gray-700); }
+.excel-import-result ul { display: grid; gap: var(--space-1); max-height: 360px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.excel-import-result li { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--font-sm); }
+.excel-import-result li.is-ok { color: var(--green-700); background: var(--green-100); }
+.excel-import-result li.is-error { color: var(--red-700); background: var(--red-100); }
+.excel-import-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+
+/* ---- Payments: the next payment run ---- */
+.payment-run-banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--blue-100); }
+.payment-run-banner > div { display: grid; flex: 1 1 240px; gap: 2px; }
+.payment-run-banner span { color: var(--gray-700); font-size: var(--font-sm); }
+.payment-run-banner.is-active { border-color: var(--uma-primary); background: var(--accent-soft); }
+
+/* ---- Account menu ---- */
+.user-popover > a { display: flex; align-items: center; gap: 9px; margin-top: 5px; padding: 9px 10px; color: var(--red-700); border-radius: var(--radius-xs); font-size: var(--font-sm); font-weight: 700; text-decoration: none; }
+.user-popover > a:hover { background: var(--red-100); }
+.email-frequency-control select { max-width: 150px; }
+
+@media (max-width: 640px) {
+  .approval-choice { grid-template-columns: 1fr; }
+  .approval-summary dl > div { grid-template-columns: 1fr; gap: 0; }
+}

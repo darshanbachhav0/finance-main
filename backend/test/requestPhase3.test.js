@@ -24,7 +24,8 @@ import {
   previewFinancialRequestBudget,
   requestAuthorizedCostCenters,
   requestFormPolicy,
-  submitFinancialRequest
+  submitFinancialRequest,
+  titleFromDescription
 } from "../src/services/requestService.js";
 import { assertSupplierUsable } from "../src/services/supplierService.js";
 import { ERROR_CODES, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
@@ -256,10 +257,21 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
     });
 
     await t.test("each missing official narrative field blocks submission with a precise code", async () => {
-      for (const [field, code] of [["title", "TITLE_REQUIRED"], ["detailedDescription", "DETAILED_DESCRIPTION_REQUIRED"], ["businessJustification", "BUSINESS_JUSTIFICATION_REQUIRED"], ["nonApprovalRisk", "NON_APPROVAL_RISK_REQUIRED"]]) {
+      for (const [field, code] of [["detailedDescription", "DETAILED_DESCRIPTION_REQUIRED"], ["businessJustification", "BUSINESS_JUSTIFICATION_REQUIRED"]]) {
         const request = await officialDocument({ [field]: "" });
         await assert.rejects(() => submitFinancialRequest({ id: request._id, user: solicitor, req }), (error) => error.code === code);
       }
+    });
+
+    await t.test("the simple form's request: no title, risk or selection reason for one quotation", async () => {
+      const request = await officialDocument({ title: "", nonApprovalRisk: "", supplierSelectionReason: "" });
+      request.quotations = [request.quotations.find((quotation) => quotation.recommended).toObject()];
+      await request.save();
+      const submitted = await submitFinancialRequest({ id: request._id, user: solicitor, req });
+      assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(submitted.title, titleFromDescription(request.detailedDescription));
+      assert.equal(titleFromDescription("  \nFirst line\nSecond"), "First line");
+      assert.equal(titleFromDescription("x".repeat(200)).length, 120);
     });
 
     await t.test("quotation evidence, minimum, recommendation and supplier consistency are enforced", async () => {

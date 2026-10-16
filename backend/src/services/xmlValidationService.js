@@ -149,6 +149,41 @@ function parseInvoiceXmlText(xml) {
   };
 }
 
+const round2 = (value) => Math.round(Number(value) * 100) / 100;
+
+// The item lines of a UBL invoice (InvoiceLine / CreditNoteLine / DebitNoteLine), so a request can
+// be filled line by line from the factura: description, quantity, unit and the line's net, IGV and
+// total. A line without a readable net amount is skipped; nothing is invented.
+export function invoiceXmlLines(xml) {
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) return [];
+  let parsed;
+  try { parsed = parser.parse(xml); } catch { return []; }
+  const root = parsed.Invoice || parsed.CreditNote || parsed.DebitNote;
+  if (!root) return [];
+  const rows = asArray(root.InvoiceLine || root.CreditNoteLine || root.DebitNoteLine);
+  return rows.map((row) => {
+    const quantityNode = row.InvoicedQuantity ?? row.CreditedQuantity ?? row.DebitedQuantity;
+    const quantity = toNumber(localValue(quantityNode)) ?? 1;
+    const netAmount = toNumber(localValue(row.LineExtensionAmount));
+    const igvAmount = toNumber(findFirstValue(row.TaxTotal || {}, ["TaxAmount"])) ?? 0;
+    const description = String(findFirstValue(row.Item || {}, ["Description", "Name"]) || "").trim();
+    if (netAmount === undefined || !(quantity > 0)) return null;
+    return {
+      description,
+      quantity,
+      unitCode: typeof quantityNode === "object" ? String(quantityNode.unitCode || "").trim() : "",
+      netAmount: round2(netAmount),
+      igvAmount: round2(igvAmount),
+      totalAmount: round2(netAmount + igvAmount)
+    };
+  }).filter(Boolean);
+}
+
+export async function readInvoiceXmlLines(filePath) {
+  const content = await readStoredFile(filePath);
+  return isPdfBuffer(content) ? [] : invoiceXmlLines(content.toString("utf8"));
+}
+
 // An invoice is evidenced by its XML or by its factura PDF (the printed representation): an XML is
 // read as UBL, a PDF through its text (invoicePdfService). The file's own bytes decide, not its
 // name, so a mislabelled upload is still read correctly.

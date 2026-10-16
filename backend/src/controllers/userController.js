@@ -10,6 +10,8 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../s
 import { AppError } from "../utils/AppError.js";
 import { assertPasswordPolicy, getPlatformSettings } from "../services/platformSettingsService.js";
 import { ADMINISTRATOR_ROLES, APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
+import { EMAIL_FREQUENCIES } from "../services/notificationEmailService.js";
+import NotificationDelivery from "../models/NotificationDelivery.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
@@ -253,15 +255,23 @@ export const updateMyLeave = asyncHandler(async (req, res) => {
   res.json({ data: user, approvalReassignment, leave: await leaveSummary(user._id) });
 });
 
-// Self-service: the signed-in user turns the emailed copy of their notifications on or off.
+// Self-service: the signed-in user turns the emailed copy of their notifications on or off, and
+// chooses one summary a day (DAILY) or an email right away (IMMEDIATE).
 export const updateMyNotificationPreferences = asyncHandler(async (req, res) => {
-  if (typeof req.body.emailNotifications !== "boolean") throw new AppError(422, "emailNotifications must be true or false.", { field: "emailNotifications" }, ERROR_CODES.VALIDATION_ERROR);
+  const hasSwitch = req.body.emailNotifications !== undefined;
+  const hasFrequency = req.body.emailFrequency !== undefined;
+  if (!hasSwitch && !hasFrequency) throw new AppError(422, "emailNotifications must be true or false.", { field: "emailNotifications" }, ERROR_CODES.VALIDATION_ERROR);
+  if (hasSwitch && typeof req.body.emailNotifications !== "boolean") throw new AppError(422, "emailNotifications must be true or false.", { field: "emailNotifications" }, ERROR_CODES.VALIDATION_ERROR);
+  if (hasFrequency && !EMAIL_FREQUENCIES.includes(req.body.emailFrequency)) throw new AppError(422, "emailFrequency must be DAILY or IMMEDIATE.", { field: "emailFrequency" }, ERROR_CODES.VALIDATION_ERROR);
   const user = await User.findById(req.user._id);
   if (!user) throw new AppError(404, "User not found.", undefined, ERROR_CODES.NOT_FOUND);
-  const oldValues = { emailNotifications: user.emailNotifications !== false };
-  user.emailNotifications = req.body.emailNotifications;
+  const oldValues = { emailNotifications: user.emailNotifications !== false, emailFrequency: user.emailFrequency || null };
+  if (hasSwitch) user.emailNotifications = req.body.emailNotifications;
+  if (hasFrequency) user.emailFrequency = req.body.emailFrequency;
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "NOTIFICATION_PREFERENCES_UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { emailNotifications: user.emailNotifications } });
+  // "Right away" also sends what was waiting for the daily summary.
+  if (hasFrequency && user.emailFrequency === "IMMEDIATE") await NotificationDelivery.updateMany({ user: user._id, channel: "EMAIL", status: "PENDING", sendAfter: { $gt: new Date() } }, { $set: { sendAfter: new Date() } });
+  await recordAudit({ entityType: "User", entity: user, action: "NOTIFICATION_PREFERENCES_UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { emailNotifications: user.emailNotifications, emailFrequency: user.emailFrequency || null } });
   res.json({ data: user });
 });
 

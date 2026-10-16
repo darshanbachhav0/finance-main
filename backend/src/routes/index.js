@@ -1,4 +1,5 @@
 import operationsRoutes from "./operationsRoutes.js";
+import importRoutes from "./importRoutes.js";
 import padronRoutes from "./padronRoutes.js";
 import { Router } from "express";
 import workDraftRoutes from "./workDraftRoutes.js";
@@ -50,6 +51,7 @@ router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR,
 router.use("/superadmin", superAdminRoutes);
 
 router.use("/operations", operationsRoutes);
+router.use("/imports", importRoutes);
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);
 router.use("/dashboard", dashboardRoutes);
