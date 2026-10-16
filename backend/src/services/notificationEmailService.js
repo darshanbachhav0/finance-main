@@ -3,10 +3,16 @@ import { EventEmitter } from "node:events";
 import Notification from "../models/Notification.js";
 import NotificationDelivery from "../models/NotificationDelivery.js";
 import User from "../models/User.js";
+import FinancialRequest from "../models/FinancialRequest.js";
 import notificationsSpanish from "../../../shared/notificationTranslations.mjs";
 import { greetingName } from "../../../shared/personName.mjs";
 
 // Emailed copies of bell notifications.
+//
+// Once a day by default: each person gets one summary email at NOTIFICATION_EMAIL_DIGEST_HOUR
+// (Lima time, working days) with what is still unread, instead of one email per event. A person
+// can choose "right away" in their account menu (User.emailFrequency), and
+// NOTIFICATION_EMAIL_FREQUENCY=IMMEDIATE makes that the platform default.
 //
 // notifyUser() queues a NotificationDelivery when a notification is new or comes back unread. The
 // notification-email worker (workers/notificationEmailWorker.js) is woken straight away and sends
@@ -16,6 +22,8 @@ import { greetingName } from "../../../shared/personName.mjs";
 // with backoff and never affects the business action.
 
 const MODES = ["OFF", "LOG", "SMTP"];
+export const EMAIL_FREQUENCIES = Object.freeze(["DAILY", "IMMEDIATE"]);
+const LIMA_OFFSET_HOURS = 5;
 
 // "queued" fires when a notification email is queued, so the in-process worker sends it right away
 // instead of waiting for its next poll.
@@ -75,8 +83,11 @@ export function notificationEmailConfiguration(env = process.env) {
     replyTo: String(env.NOTIFICATION_EMAIL_REPLY_TO || "").trim() || undefined,
     // Links in the email open the record in the web app (BrowserRouter paths).
     appUrl: String(env.APP_PUBLIC_URL || String(env.CLIENT_URLS || "").split(",")[0] || "").trim().replace(/\/+$/, ""),
-    // 0 = send as soon as the notification exists (default).
+    // 0 = send as soon as the notification exists (default for IMMEDIATE).
     delayMs: numberFromEnv(env.NOTIFICATION_EMAIL_DELAY_MINUTES, 0, 0) * 60 * 1000,
+    // DAILY (one summary a day) unless the platform or the person chose IMMEDIATE.
+    frequency: EMAIL_FREQUENCIES.includes(String(env.NOTIFICATION_EMAIL_FREQUENCY || "").trim().toUpperCase()) ? String(env.NOTIFICATION_EMAIL_FREQUENCY).trim().toUpperCase() : "DAILY",
+    digestHour: Math.min(23, numberFromEnv(env.NOTIFICATION_EMAIL_DIGEST_HOUR, 8, 0)),
     pollMs: numberFromEnv(env.NOTIFICATION_EMAIL_POLL_MS, 30000, 1000),
     maxAttempts: numberFromEnv(env.NOTIFICATION_EMAIL_MAX_ATTEMPTS, 5, 1),
     usersPerPass: numberFromEnv(env.NOTIFICATION_EMAIL_USERS_PER_PASS, 50, 1),
@@ -108,6 +119,21 @@ export function notificationEmailConfiguration(env = process.env) {
   return { ...config, problems, warnings, enabled: mode !== "OFF" && !problems.length };
 }
 
+// The person's choice, else the platform default.
+export function effectiveEmailFrequency(user, config) {
+  return EMAIL_FREQUENCIES.includes(user?.emailFrequency) ? user.emailFrequency : config.frequency;
+}
+
+// The next daily summary: today at the digest hour (Lima) if it is still ahead, else the next
+// working day (Monday to Friday) at that hour.
+export function nextDigestAt(now = new Date(), hour = 8) {
+  const lima = new Date(now.getTime() - LIMA_OFFSET_HOURS * 3600000);
+  const at = new Date(Date.UTC(lima.getUTCFullYear(), lima.getUTCMonth(), lima.getUTCDate(), hour + LIMA_OFFSET_HOURS, 0, 0));
+  if (at <= now) at.setUTCDate(at.getUTCDate() + 1);
+  while ([0, 6].includes(new Date(at.getTime() - LIMA_OFFSET_HOURS * 3600000).getUTCDay())) at.setUTCDate(at.getUTCDate() + 1);
+  return at;
+}
+
 // Called by notifyUser() for a new or re-armed notification. Never throws: an email problem must
 // not undo or block the approval, payment or review that raised the notification.
 export async function queueNotificationEmail(notification, { env = process.env, now = new Date() } = {}) {
@@ -115,9 +141,11 @@ export async function queueNotificationEmail(notification, { env = process.env, 
   const config = notificationEmailConfiguration(env);
   if (!config.enabled) return null;
   try {
+    const recipient = await User.findById(notification.user).select("emailFrequency").lean();
+    const sendAfter = effectiveEmailFrequency(recipient, config) === "DAILY" ? nextDigestAt(now, config.digestHour) : new Date(now.getTime() + config.delayMs);
     const delivery = await NotificationDelivery.findOneAndUpdate(
       { notification: notification._id, channel: "EMAIL", status: "PENDING" },
-      { $setOnInsert: { notification: notification._id, user: notification.user, channel: "EMAIL", status: "PENDING", sendAfter: new Date(now.getTime() + config.delayMs) } },
+      { $setOnInsert: { notification: notification._id, user: notification.user, channel: "EMAIL", status: "PENDING", sendAfter } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     notificationEmailEvents.emit("queued", delivery);
@@ -181,28 +209,69 @@ function linkFor(appUrl, path) {
   return `${appUrl}${target.startsWith("/") && !target.startsWith("//") ? target : "/"}`;
 }
 
-export function composeNotificationEmail({ user, notifications, appUrl }) {
-  const items = [...notifications].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)).map((item) => ({
-    title: spanishNotificationCopy(item.titleKey, item.params, item.title),
-    message: spanishNotificationCopy(item.messageKey, item.params, item.message),
-    url: linkFor(appUrl, item.path),
-    // A pending approval also gets "Aprobar ahora": the inbox opens the approve confirmation for
-    // that request after sign-in, so the decision is still the signed-in approver's.
-    approveUrl: item.type === "APPROVAL_PENDING" && /^\/approvals\?request=[a-f\d]{24}$/i.test(String(item.path || "")) ? `${linkFor(appUrl, item.path)}&decide=approve` : null
-  }));
+// "S/ 1,250.00 · Ana Torres · Compra de tóner": what an approver needs to decide from the email.
+// Never bank data.
+const moneyFormat = (currency) => new Intl.NumberFormat("es-PE", { style: "currency", currency: currency === "USD" ? "USD" : "PEN" });
+export function approvalSummaryLine(request) {
+  if (!request) return "";
+  const amount = Number.isFinite(Number(request.totalAmount)) ? moneyFormat(request.currency).format(Number(request.totalAmount)) : "";
+  const supplier = request.supplierSnapshot?.legalName || request.supplierSnapshot?.name || "";
+  return [amount, displayName(request.requester?.name || request.solicitor?.name), supplier, String(request.title || request.description || "").trim().slice(0, 120)].filter(Boolean).join(" · ");
+}
+
+const approvalId = (item) => {
+  const match = String(item.path || "").match(/^\/approvals\?request=([a-f\d]{24})$/i);
+  return item.type === "APPROVAL_PENDING" && match ? match[1] : null;
+};
+
+// Counts for the daily summary's first line: "3 aprobaciones esperando tu decisión · ...".
+const DIGEST_GROUPS = [
+  [/^APPROVAL_PENDING$/, (n) => `${n} ${n === 1 ? "aprobación espera" : "aprobaciones esperan"} tu decisión`],
+  [/^REQUEST_(OBSERVE|RETURN)$|^REQUEST_FOLLOW_UP/, (n) => `${n} ${n === 1 ? "solicitud necesita" : "solicitudes necesitan"} tus cambios`],
+  [/^RENDITION_/, (n) => `${n} ${n === 1 ? "rendición pendiente" : "rendiciones pendientes"}`],
+  [/./, (n) => `${n} ${n === 1 ? "novedad más" : "novedades más"}`]
+];
+export function digestHeadline(notifications) {
+  const counts = new Map();
+  for (const item of notifications) {
+    const index = DIGEST_GROUPS.findIndex(([pattern]) => pattern.test(String(item.type || "")));
+    counts.set(index, (counts.get(index) || 0) + 1);
+  }
+  return [...counts.entries()].sort(([a], [b]) => a - b).map(([index, count]) => DIGEST_GROUPS[index][1](count)).join(" · ");
+}
+
+export function composeNotificationEmail({ user, notifications, appUrl, summaries = {}, digest = false }) {
+  const items = [...notifications].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)).map((item) => {
+    const requestId = approvalId(item);
+    return {
+      title: spanishNotificationCopy(item.titleKey, item.params, item.title),
+      message: spanishNotificationCopy(item.messageKey, item.params, item.message),
+      url: linkFor(appUrl, item.path),
+      // A pending approval also gets "Aprobar ahora": it opens the one-page approval of that
+      // request after sign-in, so the decision is still the signed-in approver's.
+      approveUrl: requestId ? linkFor(appUrl, `/approvals/${requestId}`) : null,
+      summary: requestId ? summaries[requestId] || "" : ""
+    };
+  });
   const listed = items.slice(0, MAX_LISTED);
   const more = items.length - listed.length;
   // Stored surnames first ("MORAN PAREDES GLADYS"); the greeting says "Hola, Gladys:".
   const name = greetingName(user.name);
   const greeting = name ? `Hola, ${name}:` : "Hola:";
-  const intro = items.length === 1 ? "Tienes una novedad en el sistema de gestión financiera de la UMA." : `Tienes ${items.length} novedades en el sistema de gestión financiera de la UMA.`;
-  const subject = items.length === 1 ? `${items[0].title} · ${PRODUCT_NAME}` : `Tienes ${items.length} novedades · ${PRODUCT_NAME}`;
-  const footer = "Recibes este correo porque tienes activadas las notificaciones por correo. Puedes desactivarlas desde el menú de tu cuenta, en el sistema.";
+  const intro = digest
+    ? `Tu resumen del día en el sistema de gestión financiera de la UMA: ${digestHeadline(notifications)}.`
+    : items.length === 1 ? "Tienes una novedad en el sistema de gestión financiera de la UMA." : `Tienes ${items.length} novedades en el sistema de gestión financiera de la UMA.`;
+  const subject = digest
+    ? `Tu resumen del día: ${items.length} ${items.length === 1 ? "novedad" : "novedades"} · ${PRODUCT_NAME}`
+    : items.length === 1 ? `${items[0].title} · ${PRODUCT_NAME}` : `Tienes ${items.length} novedades · ${PRODUCT_NAME}`;
+  const footer = digest
+    ? "Recibes un resumen al día porque tienes activadas las notificaciones por correo. Desde el menú de tu cuenta puedes recibirlas al momento o desactivarlas."
+    : "Recibes este correo porque tienes activadas las notificaciones por correo. Puedes desactivarlas desde el menú de tu cuenta, en el sistema.";
   const security = "Por seguridad, este correo no incluye datos bancarios. Ingresa al sistema con tu usuario para ver el detalle.";
 
   const text = [
     greeting, "", intro, "",
-    ...listed.flatMap((item) => [`• ${item.title}`, `  ${item.message}`, `  Abrir: ${item.url}`, ...(item.approveUrl ? [`  Aprobar ahora: ${item.approveUrl}`] : []), ""]),
+    ...listed.flatMap((item) => [`• ${item.title}`, `  ${item.message}`, ...(item.summary ? [`  ${item.summary}`] : []), `  Abrir: ${item.url}`, ...(item.approveUrl ? [`  Aprobar ahora: ${item.approveUrl}`] : []), ""]),
     ...(more > 0 ? [`… y ${more} más. Revísalas en ${appUrl}/`, ""] : []),
     security, "", "—", PRODUCT_NAME, footer
   ].join("\n");
@@ -218,7 +287,8 @@ export function composeNotificationEmail({ user, notifications, appUrl }) {
 <p style="margin:0 0 20px;font-size:14px;color:#52606d;">${escapeHtml(intro)}</p>
 ${listed.map((item) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;border:1px solid #e4e7eb;border-radius:6px;"><tr><td style="padding:14px 16px;">
 <p style="margin:0 0 4px;font-size:15px;font-weight:600;">${escapeHtml(item.title)}</p>
-<p style="margin:0 0 10px;font-size:14px;color:#3e4c59;">${escapeHtml(item.message)}</p>
+<p style="margin:0 0 10px;font-size:14px;color:#3e4c59;">${escapeHtml(item.message)}</p>${item.summary ? `
+<p style="margin:0 0 10px;font-size:14px;color:#1f2933;font-weight:600;">${escapeHtml(item.summary)}</p>` : ""}
 <a href="${escapeHtml(item.url)}" style="display:inline-block;background:#0b3d6e;color:#ffffff;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;">Abrir en el sistema</a>${item.approveUrl ? ` <a href="${escapeHtml(item.approveUrl)}" style="display:inline-block;background:#19733d;color:#ffffff;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;margin-left:6px;">Aprobar ahora</a>` : ""}
 </td></tr></table>`).join("\n")}
 ${more > 0 ? `<p style="margin:0 0 12px;font-size:14px;">… y ${more} más. <a href="${escapeHtml(`${appUrl}/`)}">Revísalas en el sistema</a>.</p>` : ""}
@@ -299,7 +369,7 @@ async function deliverToUser(userId, { config, transport, now }) {
   const result = { sent: 0, skipped: 0, failed: 0, retried: 0, emails: 0, skipReasons: {} };
   if (!deliveries.length) return result;
   const [user, notifications] = await Promise.all([
-    User.findById(userId).select("name email active emailNotifications").lean(),
+    User.findById(userId).select("name email active emailNotifications emailFrequency").lean(),
     Notification.find({ _id: { $in: deliveries.map((item) => item.notification) } }).lean()
   ]);
   const byId = new Map(notifications.map((item) => [String(item._id), item]));
@@ -320,7 +390,8 @@ async function deliverToUser(userId, { config, transport, now }) {
   }
   if (!sendable.length) return result;
 
-  const email = composeNotificationEmail({ user, notifications: sendable.map((item) => item.notification), appUrl: config.appUrl });
+  const listed = sendable.map((item) => item.notification);
+  const email = composeNotificationEmail({ user, notifications: listed, appUrl: config.appUrl, summaries: await approvalSummaries(listed), digest: effectiveEmailFrequency(user, config) === "DAILY" });
   const to = String(user.email).trim().toLowerCase();
   try {
     await transport.send({ from: config.from || `${PRODUCT_NAME} <no-reply@localhost>`, replyTo: config.replyTo, to, ...email });
@@ -341,6 +412,14 @@ ${emailErrorHint(error, config)}` : ""}`);
   result.sent += sendable.length;
   result.emails += 1;
   return result;
+}
+
+// The one-line summary of each request waiting for this person's approval, by request id.
+async function approvalSummaries(notifications) {
+  const ids = [...new Set(notifications.map(approvalId).filter(Boolean))];
+  if (!ids.length) return {};
+  const requests = await FinancialRequest.find({ _id: { $in: ids } }).select("totalAmount currency title description supplierSnapshot requester solicitor").populate("requester", "name").populate("solicitor", "name").lean();
+  return Object.fromEntries(requests.map((request) => [String(request._id), approvalSummaryLine(request)]));
 }
 
 // One worker pass: every person with deliveries due gets one email listing them.

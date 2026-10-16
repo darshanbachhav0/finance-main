@@ -161,5 +161,17 @@ export default {
   "You were mentioned": "Te mencionaron",
   "{author} mentioned you on {requestNumber}: {excerpt}": "{author} te mencionó en {requestNumber}: {excerpt}",
   "New comment": "Nuevo comentario",
-  "{author} commented on {requestNumber}: {excerpt}": "{author} comentó en {requestNumber}: {excerpt}"
+  "{author} commented on {requestNumber}: {excerpt}": "{author} comentó en {requestNumber}: {excerpt}",
+
+  // Automatic follow-ups (followUpService)
+  "Your request is waiting for your changes": "Tu solicitud espera tus cambios",
+  "{requestNumber} was sent back to you {days} working days ago. Make the changes and send it again.": "{requestNumber} te fue devuelta hace {days} días hábiles. Haz los cambios y vuelve a enviarla.",
+  "Unfinished request": "Solicitud sin terminar",
+  "{requestNumber} has not changed in a while. Send it or it will be closed on {date}.": "{requestNumber} no tiene cambios desde hace tiempo. Envíala o se cerrará el {date}.",
+  "Draft request closed": "Borrador cerrado",
+  "{requestNumber} was closed after {days} days without changes. Use \"Repeat this request\" to start it again.": "{requestNumber} se cerró tras {days} días sin cambios. Usa \"Repetir esta solicitud\" para empezarla de nuevo.",
+  "Unfinished work": "Trabajo sin terminar",
+  "\"{title}\" has not changed in a while. Finish it or it will be closed on {date}.": "\"{title}\" no tiene cambios desde hace tiempo. Termínalo o se cerrará el {date}.",
+  "Next payment run": "Próxima corrida de pagos",
+  "Payment run of {date}: {count} payments ({total}) are due. Prepare it in one click.": "Corrida de pagos del {date}: vencen {count} pagos ({total}). Prepárala con un clic."
 };

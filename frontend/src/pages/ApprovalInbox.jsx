@@ -1,6 +1,6 @@
-import { CheckCircle2, CornerUpLeft, Eye, Forward, MessageSquareWarning, MoveHorizontal, RefreshCw, X, XCircle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { CheckCircle2, Eye, Forward, MessageSquareWarning, MoveHorizontal, PanelTop, RefreshCw, X, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { celebrate } from "../utils/celebrate.js";
@@ -40,11 +40,11 @@ export default function ApprovalInbox() {
   // quick view opens, so the approver lands on the decision row.
   const deepLink = useDeepLink(["request"]);
   const linkedRequest = deepLink.link.request || "";
-  // The approval email's "Approve now" button adds decide=approve: the approve confirmation opens
-  // directly (after signing in), so approving from the email is a single confirmation.
+  // Approval emails sent before the one-page approval link here with decide=approve: they open
+  // that page (/approvals/:id) instead, the same one today's "Aprobar ahora" button opens.
   const location = useLocation();
+  const navigate = useNavigate();
   const decideFromLink = new URLSearchParams(location.search).get("decide") === "approve";
-  const decisionOpened = useRef(false);
   const phone = useMediaQuery(PHONE_QUERY);
   const approvalTable = usePaginatedResource("/approvals/inbox", { fixedParams: deepLink.link, deepLink: deepLink.active });
   useEffect(() => { if (linkedRequest && !decideFromLink) setQuickViewId(linkedRequest); }, [linkedRequest]);
@@ -81,8 +81,8 @@ export default function ApprovalInbox() {
       const messages = {
         approve: confirm.forward === true ? "Approval recorded and sent to your jefe."
           : confirm.row.approvalStage === "AREA_DIRECTOR" ? "Director electronic sign-off recorded." : "Approval electronic sign-off recorded.",
-        observe: "Request observed and returned for correction.",
-        return: "Request returned to the requester with comments.",
+        observe: "Request sent back to the requester.",
+        return: "Request sent back to the requester.",
         reject: "Request rejected with a preserved decision record."
       };
       notify(response.data.warning?.message || messages[confirm.type]);
@@ -130,11 +130,11 @@ export default function ApprovalInbox() {
         inputLabel: "Approval comments",
         result: "The configured approval route advances. Budget is committed only after all required approvals pass."
       },
-      observe: {
-        title: "Observe this request?", description: "The requester must correct the stated observations before resubmission.", confirmLabel: "Observe request", tone: "danger", inputLabel: "Observation comments", result: "Status changes to OBSERVADO and the requester receives a task."
-      },
       return: {
-        title: "Return this request?", description: "Return the request to its owner without erasing the approval history.", confirmLabel: "Return request", tone: "danger", inputLabel: "Return comments", result: "Status changes to DEVUELTO and correction is required."
+        title: "Send this request back?", description: "The requester makes the changes you ask for and sends it again. Nothing is lost.", confirmLabel: "Send back", tone: "danger", inputLabel: "What should be changed?", result: "It goes back to the requester with your comments."
+      },
+      observe: {
+        title: "Send this request back?", description: "The requester makes the changes you ask for and sends it again. Nothing is lost.", confirmLabel: "Send back", tone: "danger", inputLabel: "What should be changed?", result: "It goes back to the requester with your comments."
       },
       reject: {
         title: "Reject this request?", description: "Reject the request and preserve the full decision trail. A reason is mandatory.", confirmLabel: "Reject request", tone: "danger", inputLabel: "Rejection comments", result: "Status changes to RECHAZADO and the requester is notified."
@@ -164,19 +164,18 @@ export default function ApprovalInbox() {
 
   const hasAction = (row, action) => (row.allowedActions || []).includes(action);
   const canDecide = row => ["APPROVE", "OBSERVE", "RETURN", "REJECT"].some(action => hasAction(row, action));
+  // Three decisions: Approve, Send back (to the requester, for changes) and Reject.
+  const canSendBack = (row) => hasAction(row, "OBSERVE") || hasAction(row, "RETURN");
+  const sendBack = (row) => openDecision(row, hasAction(row, "OBSERVE") ? "observe" : "return");
 
   useEffect(() => {
-    if (!decideFromLink || decisionOpened.current || loading || !linkedRequest) return;
-    decisionOpened.current = true;
-    const row = rows.find((item) => String(item._id) === String(linkedRequest));
-    if (row && hasAction(row, "APPROVE")) openDecision(row, "approve", isChainRow(row) ? false : undefined);
-    else setQuickViewId(linkedRequest);
-  }, [decideFromLink, loading, rows, linkedRequest]);
+    if (decideFromLink && linkedRequest) navigate(`/approvals/${linkedRequest}`, { replace: true });
+  }, [decideFromLink, linkedRequest]);
 
-  // Phones: swipe a request right to approve it, left to observe it (each opens its usual dialog).
+  // Phones: swipe a request right to approve it, left to send it back (each opens its usual dialog).
   const rowSwipe = {
     right: { label: "Approve", enabled: (row) => hasAction(row, "APPROVE"), onSwipe: (row) => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
-    left: { label: "Observe", enabled: (row) => hasAction(row, "OBSERVE"), onSwipe: (row) => openDecision(row, "observe") }
+    left: { label: "Send back", enabled: canSendBack, onSwipe: sendBack }
   };
 
   // ---- Bulk approve. Approve only: observe, return and reject stay individual decisions.
@@ -273,7 +272,7 @@ export default function ApprovalInbox() {
         </div>
       )}
       <div className="workspace-panel">
-        {phone && rows.some((row) => hasAction(row, "APPROVE")) && <p className="swipe-hint"><MoveHorizontal size={16} aria-hidden="true" />{t("Swipe a request right to approve it, or left to observe it.")}</p>}
+        {phone && rows.some((row) => hasAction(row, "APPROVE")) && <p className="swipe-hint"><MoveHorizontal size={16} aria-hidden="true" />{t("Swipe a request right to approve it, or left to send it back.")}</p>}
         <DataTable
           rows={rows}
           loading={loading}
@@ -288,10 +287,10 @@ export default function ApprovalInbox() {
           onRowClick={(row) => setQuickViewId(row._id)}
           rowActions={(row) => [
             { label: "Quick view", icon: Eye, onClick: () => setQuickViewId(row._id) },
-
-            // Approve, send to my jefe, observe and reject are buttons in the Decision column; the
-            // menu keeps only what isn't shown there.
-            { label: "Return", icon: CornerUpLeft, hidden: !hasAction(row, "RETURN"), onClick: () => openDecision(row, "return") }
+            { label: "Open decision page", icon: PanelTop, hidden: !canDecide(row), onClick: () => navigate(`/approvals/${row._id}`) },
+            // Approve, send back and reject are the Decision column's buttons; a manager-chain
+            // approval can also go up to the approver's own jefe from here.
+            { label: "Send to my jefe", icon: Forward, hidden: !(hasAction(row, "APPROVE") && isChainRow(row) && canForward(row)), onClick: () => openDecision(row, "approve", true) }
           ]}
           columns={[
             { key: "requestNumber", type: "name", primary: true, label: "Request", render: (row) => <div className="primary-cell"><Link to={`/requests/${row._id}`}>{row.requestNumber}</Link><span>{row.title || row.description || ""}</span></div> },
@@ -301,7 +300,7 @@ export default function ApprovalInbox() {
             { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
             { key: "approvalDueAt", type: "date", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? formatDateTime(row.approvalDueAt) : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", type: "money", sortKey: "totalPENEquivalent", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
-            { key: "decision", primary: true, label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions decision-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t(isChainRow(row) ? "Approve and finalize" : "Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t(isChainRow(row) ? "Approve and finalize" : "Approve")}</span></button>}{hasAction(row, "APPROVE") && isChainRow(row) && canForward(row) && <button type="button" className="secondary-button decision-button" title={forwardName(row) ? `${t("Send to my jefe")}: ${forwardName(row)}` : t("Send to my jefe")} onClick={() => openDecision(row, "approve", true)}><Forward size={17} /><span>{t("Send to my jefe")}</span></button>}{hasAction(row, "OBSERVE") && <button type="button" className="icon-button" title={t("Observe")} aria-label={t("Observe")} onClick={() => openDecision(row, "observe")}><MessageSquareWarning size={17} /></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} aria-label={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
+            { key: "decision", primary: true, label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions decision-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{canSendBack(row) && <button type="button" className="secondary-button decision-button" title={t("Send back")} onClick={() => sendBack(row)}><MessageSquareWarning size={17} /><span>{t("Send back")}</span></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} aria-label={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />
         {selectedRows.length > 0 && (

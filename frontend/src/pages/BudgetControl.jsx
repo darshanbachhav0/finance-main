@@ -9,6 +9,7 @@ import DeepLinkNotice from "../components/DeepLinkNotice.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import ExcelImport from "../components/ExcelImport.jsx";
 import Tabs, { tabPanelProps } from "../components/Tabs.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
@@ -180,7 +181,7 @@ export default function BudgetControl() {
       : [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }];
 
   return <section>
-      <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
+      <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><ExcelImport kind="budget-plans" onImported={() => { load(); allocationTable.reload(); }} /><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
       <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
     <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error || changeTable.error}</Message>
     <div className="period-toolbar budget-period-toolbar">

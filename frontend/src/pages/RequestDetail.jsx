@@ -13,7 +13,6 @@ import {
   Check,
   CheckCircle2,
   Copy,
-  CornerUpLeft,
   Download,
   Eye,
   FileCheck2,
@@ -66,6 +65,8 @@ import {
 import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
 import { invoiceMismatchLines } from "../utils/validationMessages.js";
 import RequestJourney from "../components/RequestJourney.jsx";
+import PlainStatus from "../components/PlainStatus.jsx";
+import { usesPlainStatuses } from "../utils/plainStatus.js";
 import RenditionCountdown from "../components/RenditionCountdown.jsx";
 import RequestComments from "../components/RequestComments.jsx";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
@@ -417,22 +418,13 @@ export default function RequestDetail() {
         details: [details, { label: "Result", value: "The configured route advances; budget remains a separate controlled stage." }]
       },
       observe: {
-        title: "Observe this request?",
-        description: "Return it for documented corrections without erasing history.",
-        confirmLabel: "Observe request",
+        title: "Send this request back?",
+        description: "The requester makes the changes you ask for and sends it again. Nothing is lost.",
+        confirmLabel: "Send back",
         tone: "danger",
-        inputLabel: "Observation comments",
+        inputLabel: "What should be changed?",
         inputRequired: true,
-        details: [details, { label: "Result", value: "Status changes to OBSERVADO." }]
-      },
-      return: {
-        title: "Return this request?",
-        description: "Return it to its owner with a mandatory explanation.",
-        confirmLabel: "Return request",
-        tone: "danger",
-        inputLabel: "Return comments",
-        inputRequired: true,
-        details: [details, { label: "Result", value: "Status changes to DEVUELTO." }]
+        details: [details, { label: "Result", value: "It goes back to the requester with your comments." }]
       },
       withdraw: {
         title: "Withdraw this request?",
@@ -511,7 +503,7 @@ export default function RequestDetail() {
   // navigation. It reuses the action panel's handlers; the full panel stays at #request-actions.
   const stickyAction = permissions.canApprove
     ? (isChainApprovalStep
-      ? { label: "Approve and finalize", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button" }
+      ? { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button" }
       : { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve") })
     : permissions.canCommitBudget ? { label: "Commit budget", icon: CheckCircle2, onClick: confirmCommitBudget }
     : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
@@ -519,7 +511,7 @@ export default function RequestDetail() {
     : permissions.canClose ? { label: "Close request", icon: CheckCircle2, onClick: confirmClose }
     : nextAction?.[1] === "Documents" ? { label: "Open documents", icon: FileText, href: nextAction[2], onClick: () => setActiveTab("Documents") }
     : null;
-  const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && permissions.canObserve, permissions.canApprove && permissions.canReturn, permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
+  const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && (permissions.canObserve || permissions.canReturn), permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
   const StickyIcon = stickyAction?.icon;
   // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
   const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
@@ -557,13 +549,13 @@ export default function RequestDetail() {
       {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
         ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
         : request.observation.detail)}</Message>}
-      <div className="stage-row" role="group" aria-label={t("Current status")}>
+      {usesPlainStatuses(user) ? <div className="stage-row" role="group" aria-label={t("Current status")}><PlainStatus request={request} steps /></div> : <div className="stage-row" role="group" aria-label={t("Current status")}>
         <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
-      </div>
-      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={["General", "Documents", "Approvals", "Comments", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"].map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
+      </div>}
+      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={(usesPlainStatuses(user) ? ["General", "Documents", "Approvals", "Comments", "Payment"] : ["General", "Documents", "Approvals", "Comments", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"]).map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
 
       <div className="request-detail-layout">
         <div className="request-detail-main">
@@ -989,18 +981,14 @@ export default function RequestDetail() {
                   </div>
                 </div>
               )}
+              {/* Three decisions: Approve, Send back, Reject. In a manager chain, "send it to my jefe"
+                  stays available as a link under them. */}
               {permissions.canApprove && (
                 <div className="action-buttons">
-                  {permissions.canApprove && isChainApprovalStep && (
-                    <>
-                      <button type="button" className="primary-button approve-button" onClick={() => decision("approve", false)}><CheckCircle2 size={16} /><span>{t("Approve and finalize")}</span></button>
-                      {canForwardChain && <button type="button" className="secondary-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Send to my jefe")}</span></button>}
-                    </>
-                  )}
-                  {permissions.canApprove && !isChainApprovalStep && <button type="button" className="primary-button" onClick={() => decision("approve")}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>}
-                  {permissions.canObserve && <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>}
-                  {permissions.canReturn && <button type="button" className="secondary-button" onClick={() => decision("return")}><CornerUpLeft size={16} /><span>{t("Return")}</span></button>}
+                  <button type="button" className="primary-button approve-button" onClick={() => decision("approve", isChainApprovalStep ? false : undefined)}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>
+                  {(permissions.canObserve || permissions.canReturn) && <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Send back")}</span></button>}
                   {permissions.canReject && <button type="button" className="danger-button subtle" onClick={() => decision("reject")}><XCircle size={16} /><span>{t("Reject")}</span></button>}
+                  {isChainApprovalStep && canForwardChain && <button type="button" className="text-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Approve and send it to my jefe")}</span></button>}
                 </div>
               )}
               {permissions.canCommitBudget && (

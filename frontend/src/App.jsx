@@ -14,6 +14,7 @@ const BankFileVerification = lazy(() => import("./pages/BankFileVerification.jsx
 const AccountingPeriods = lazy(() => import("./pages/AccountingPeriods.jsx"));
 const AdminUsers = lazy(() => import("./pages/AdminUsers.jsx"));
 const ApprovalInbox = lazy(() => import("./pages/ApprovalInbox.jsx"));
+const ApprovalDecision = lazy(() => import("./pages/ApprovalDecision.jsx"));
 const CostCenters = lazy(() => import("./pages/CostCenters.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const ExchangeRates = lazy(() => import("./pages/ExchangeRates.jsx"));
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="requests/:id" element={<ProtectedRoute roles={readers} />}><Route index element={<RequestDetail />} /></Route>
           <Route path="approvals" element={<ProtectedRoute roles={internalRoles} />}>
             <Route index element={<ApprovalInbox />} />
+            <Route path=":id" element={<ApprovalDecision />} />
           </Route>
           <Route path="batch-invoices" element={<ProtectedRoute roles={["Admin", "Solicitor", "Accounting"]} permissions={["batch-invoice:upload", "batch-invoice:review"]} />}>
             <Route index element={<BulkInvoiceUpload />} />

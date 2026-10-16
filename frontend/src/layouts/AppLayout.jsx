@@ -1,10 +1,11 @@
 import { Suspense } from "react";
 import MotionSurface from "../components/MotionSurface.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
-import { Bell, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, Compass, Eye, LogOut, Megaphone, Menu, Search, Sparkles, Wrench, X } from "lucide-react";
+import { Bell, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, Compass, Eye, Landmark, LogOut, Megaphone, Menu, Search, Sparkles, Wrench, X } from "lucide-react";
 import api from "../api/client.js";
 import "../styles/superAdmin.css";
 import "../styles/lively.css";
+import "../styles/simple.css";
 import { PLATFORM_STATUS_CHANGED_EVENT } from "../utils/superAdmin.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -32,7 +33,7 @@ import PaymentDayBanner from "../components/PaymentDayBanner.jsx";
 import WhatsNewPanel from "../components/WhatsNewPanel.jsx";
 import { startTour } from "../utils/tour.js";
 import { hasUnseenRelease, markReleasesSeen } from "../utils/whatsNew.js";
-import { bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
+import { accountMenuLabels, accountMenuPaths, bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
 import { navigationIcon } from "../utils/navigationIcons.js";
 
 // Announcement banner and maintenance state, re-read now and then while signed in, and at once
@@ -297,6 +298,7 @@ export default function AppLayout() {
                     <span>{user.email}</span>
                     <small>{t(user.role)} · {user.area}</small>
                   </div>
+                  {accountMenuPaths(user).map((path) => <Link key={path} to={path} onClick={() => setUserOpen(false)}><Landmark size={16} /><span>{t(accountMenuLabels[path])}</span></Link>)}
                   {!managementViewer && !readOnly && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
                   {!managementViewer && <button type="button" onClick={() => { setUserOpen(false); setWhatsNewOpen(true); markReleasesSeen(); setWhatsNewUnseen(false); }}><Sparkles size={16} /><span>{t("What's new")}</span>{whatsNewUnseen && <span className="menu-new-pill">{t("New")}</span>}</button>}
                   {!managementViewer && !readOnly && <button type="button" onClick={() => { setUserOpen(false); startTour(); }}><Compass size={16} /><span>{t("Take the tour")}</span></button>}

@@ -93,6 +93,18 @@ the actual child records before allowing it).
 
 ### 3.2 Tracks A1 / A2 / B / C
 
+Requesters do not choose a track: a new request opens a three-question form (what is needed and
+why, how much, the quote or invoice they have) and the answers decide it — a supplier's invoice →
+B, a supplier's quote → A1, money for the employee → C (advance, or undocumented reimbursement).
+The cost center, unit, an open month, currency and priority are filled in from the profile; a
+dropped invoice XML fills the supplier and its item lines. The title defaults to the description's
+first line, the "risk if not approved" is optional, a supplier selection reason is asked only when
+two or more quotations are compared, and the CAPEX planning fields are collapsed below the
+`CAPEX_DETAILS_THRESHOLD` finance configuration (default PEN 50,000). Anything the short form does
+not ask opens the full form, which keeps every answer. Requesters see four plain statuses (Draft,
+Waiting for approval, In process, Paid, plus "Needs your changes" / Rejected / Cancelled) with one
+line saying what is needed from them; Finance roles keep the detailed statuses.
+
 - **A1 — standard procurement** (default track). Full path: submission → approval → budget
   commitment → Procurement issues a Purchase Order → invoice registered against the order (with
   SUNAT/XML validation) → accounting → treasury → payment → reconciliation → close. Wherever quotations apply (`DocumentRule`), **at
@@ -159,7 +171,11 @@ One engine, two identity sources, resolved in `backend/src/services/approvalRule
 
 Approval actions: `APPROVE` (advances the route), `OBSERVE` (non-terminal — the requester supplies
 clarification and resubmits), `RETURN` (sends it back to the requester for correction), `REJECT`
-(terminal — no further processing; any unexecuted budget/commitments are released). Submission
+(terminal — no further processing; any unexecuted budget/commitments are released). The screens
+offer three decisions: **Approve**, **Send back** (`OBSERVE`, or `RETURN` where only that is
+allowed) and **Reject**; a manager-chain approver can also approve and send it to their own jefe.
+The approval email's "Aprobar ahora" opens a one-page approval (`/approvals/:id`) with the request
+summary, its documents and those three decisions. Submission
 controls (documents, dimensions, XML, period) gate `APPROVE` only; an approver can always observe,
 return or reject.
 

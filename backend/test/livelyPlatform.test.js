@@ -11,8 +11,9 @@ import Supplier from "../src/models/Supplier.js";
 import User from "../src/models/User.js";
 import { invoiceFieldsFromLines } from "../src/services/invoicePdfService.js";
 import { previewInvoiceForRequest } from "../src/services/invoicePreviewService.js";
+import { invoiceXmlLines } from "../src/services/xmlValidationService.js";
 import { liveListenerCount, publishToUser, streamUserEvents, subscribeUser } from "../src/services/liveEventsService.js";
-import { composeNotificationEmail } from "../src/services/notificationEmailService.js";
+import { approvalSummaryLine, composeNotificationEmail } from "../src/services/notificationEmailService.js";
 import { notifyUser } from "../src/services/notificationService.js";
 import { expectedPaymentDate, personalDashboard } from "../src/services/personalDashboardService.js";
 import { remindRenditionDeadlines, renditionReminderStage } from "../src/services/renditionReminderService.js";
@@ -45,21 +46,23 @@ test("rendition reminders fire at 3 working days, at 1 and once overdue", () => 
   assert.deepEqual(renditionReminderStage(due, new Date("2026-10-30T15:00:00Z")), { stage: "overdue", daysLeft: 0 });
 });
 
-test("approval emails carry an 'Aprobar ahora' link that opens the approve confirmation", () => {
+test("approval emails carry an 'Aprobar ahora' link to the one-page approval, with the request summary", () => {
   const id = "0123456789abcdef01234567";
   const email = composeNotificationEmail({
     user: { name: "ANA QUISPE" },
     appUrl: "https://uma.test",
+    summaries: { [id]: approvalSummaryLine({ totalAmount: 1250, currency: "PEN", requester: { name: "TORRES DIAZ ANA" }, supplierSnapshot: { legalName: "Software Andino S.A.C." }, title: "Licencias" }) },
     notifications: [
       { type: "APPROVAL_PENDING", title: "Approval pending", message: "SOL-1 is waiting", path: `/approvals?request=${id}`, createdAt: new Date() },
       { type: "TREASURY_PAYMENT", title: "Paid", message: "SOL-2 paid", path: "/treasury?record=1", createdAt: new Date() }
     ]
   });
-  assert.match(email.html, new RegExp(`https://uma\\.test/approvals\\?request=${id}&amp;decide=approve`));
+  assert.match(email.html, new RegExp(`https://uma\\.test/approvals/${id}"`));
   assert.equal((email.html.match(/Aprobar ahora/g) || []).length, 1, "only the approval gets the button");
-  assert.match(email.text, new RegExp(`Aprobar ahora: https://uma\\.test/approvals\\?request=${id}&decide=approve`));
+  assert.match(email.text, new RegExp(`Aprobar ahora: https://uma\\.test/approvals/${id}`));
+  assert.match(email.text, /1,250\.00 · Torres Diaz Ana · Software Andino S\.A\.C\. · Licencias/);
   const odd = composeNotificationEmail({ user: { name: "Ana" }, appUrl: "https://uma.test", notifications: [{ type: "APPROVAL_PENDING", title: "x", message: "y", path: "/approvals?request=abc&next=//evil" }] });
-  assert.doesNotMatch(odd.html, /decide=approve/, "only a plain request link gets the approve button");
+  assert.doesNotMatch(odd.html, /Aprobar ahora/, "only a plain request link gets the approve button");
 });
 
 test("server-sent events stream a person's notifications and stop when the tab closes", () => {
@@ -170,6 +173,16 @@ test("lively platform services against the database", { timeout: 60000 }, async 
       assert.equal(preview.source, "XML");
       assert.equal(preview.invoice.totalAmount, 441);
       assert.equal(preview.supplier.legalName, "Software Andino S.A.C.");
+      assert.deepEqual(preview.invoice.lines, [], "a factura without item lines gives none");
+    });
+
+    await t.test("a factura's item lines are read to fill the request line by line", () => {
+      const xml = `<Invoice><ID>F001-9</ID><InvoiceLine><ID>1</ID><InvoicedQuantity unitCode="NIU">2</InvoicedQuantity><LineExtensionAmount currencyID="PEN">200.00</LineExtensionAmount><TaxTotal><TaxAmount currencyID="PEN">36.00</TaxAmount></TaxTotal><Item><Description>Toner HP 85A</Description></Item><Price><PriceAmount currencyID="PEN">100.00</PriceAmount></Price></InvoiceLine><InvoiceLine><ID>2</ID><InvoicedQuantity unitCode="ZZ">1</InvoicedQuantity><LineExtensionAmount currencyID="PEN">50</LineExtensionAmount><TaxTotal><TaxAmount currencyID="PEN">9</TaxAmount></TaxTotal><Item><Description>Delivery</Description></Item></InvoiceLine></Invoice>`;
+      assert.deepEqual(invoiceXmlLines(xml), [
+        { description: "Toner HP 85A", quantity: 2, unitCode: "NIU", netAmount: 200, igvAmount: 36, totalAmount: 236 },
+        { description: "Delivery", quantity: 1, unitCode: "ZZ", netAmount: 50, igvAmount: 9, totalAmount: 59 }
+      ]);
+      assert.deepEqual(invoiceXmlLines("<!DOCTYPE x><Invoice/>"), []);
     });
   } finally {
     await Promise.all(files.map((file) => fs.rm(file, { force: true })));

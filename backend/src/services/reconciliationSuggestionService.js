@@ -58,11 +58,33 @@ async function candidates(rows) {
   for (const row of rows) if (historical.some(r => r.bankReference === row.reference && (!r.currency || r.currency === row.currency) && Math.round(r.statementAmount * 100) === Math.round(row.amount * 100))) used.add(statementRowKey(row));
   return rows.map(row => ({ ...row, claimed: used.has(statementRowKey(row)), candidates: used.has(statementRowKey(row)) ? [] : matchingPayables(row, payables) }));
 }
-export async function importStatement(text, user, req) {
+// Exact matches - one paid payable with the same currency, amount to the cent, operation number
+// and a payment date within 3 days - are reconciled straight away (autoReconcile, the default),
+// through the same claim and reconciliation controls as a manual confirmation. Partial, ambiguous
+// and unmatched rows are left for a person.
+export async function importStatement(text, user, req, { autoReconcile = true } = {}) {
   const rows = parseStatementCsv(text);
   const record = await StatementImport.create({ owner: user._id, checksum: crypto.createHash("sha256").update(text).digest("hex"), rows });
   await recordAudit({ entityType: "StatementImport", entity: record, action: "STATEMENT_IMPORTED", user, req, module: "TREASURY", newValues: { checksum: record.checksum, rows: rows.length } });
-  return { id: record._id, rows: await candidates(rows), note: "Suggestions only. Partial and ambiguous matches require manual review." };
+  const suggestions = await candidates(rows);
+  const results = [];
+  for (const [rowIndex, row] of suggestions.entries()) {
+    if (!autoReconcile || row.claimed || row.candidates.length !== 1) { results.push({ ...row, autoReconciled: false }); continue; }
+    try {
+      await confirmStatementMatch({ id: record._id, rowIndex, payableId: row.candidates[0].payableId, user, req });
+      results.push({ ...row, autoReconciled: true });
+    } catch (error) {
+      results.push({ ...row, autoReconciled: false, autoError: error.message });
+    }
+  }
+  const reconciled = results.filter((row) => row.autoReconciled).length;
+  return {
+    id: record._id,
+    rows: results,
+    autoReconciled: reconciled,
+    needsReview: results.length - reconciled,
+    note: autoReconcile ? "Exact matches were reconciled automatically. Partial and ambiguous matches require manual review." : "Suggestions only. Partial and ambiguous matches require manual review."
+  };
 }
 export async function confirmStatementMatch({ id, rowIndex, payableId, user, req }) {
   const statement = await StatementImport.findOne({ _id: id, owner: user._id });

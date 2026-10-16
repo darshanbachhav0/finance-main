@@ -49,7 +49,9 @@ import { coversKind, isAnyDocument, isEitherOf, presentCount, ruleForKind } from
 import InvoiceDropZone from "../components/InvoiceDropZone.jsx";
 import InvoiceMatchStrip from "../components/InvoiceMatchStrip.jsx";
 import TrackPicker from "../components/TrackPicker.jsx";
-import { invoiceFileKey, lineFromInvoice } from "../utils/invoiceAutofill.js";
+import QuickRequestForm, { quickExtraDocuments } from "../components/QuickRequestForm.jsx";
+import { invoiceFileKey, linesFromInvoice } from "../utils/invoiceAutofill.js";
+import { defaultOpenPeriod, quickTrack, showCapexDetails, titleFromDescription } from "../utils/quickRequest.js";
 import { celebrate } from "../utils/celebrate.js";
 import {
   currencies,
@@ -77,6 +79,10 @@ const blockInfo = Object.fromEntries(REQUEST_FORM_BLOCKS.map(({ id, title, descr
 const supplierStatus = (supplier) => supplier?.homologationStatus || supplier?.status || "PENDING_VALIDATION";
 const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierId = (value) => value?._id || value || "";
+// The simple form's answers (see QuickRequestForm): who gets the money, what the requester has
+// from the supplier, what an employee needs, whether it is CAPEX, and the amount as typed.
+const initialQuick = { payee: "supplier", evidence: "quote", employeeNeed: "advance", capex: false, amount: "" };
+const quickFromForm = (form = {}, amount = "") => ({ payee: form.flowType === "C" ? "employee" : "supplier", evidence: form.flowType === "B" ? "invoice" : "quote", employeeNeed: form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "reimbursement" : "advance", capex: form.requestType === "CAPEX", amount });
 const attachmentId = (value) => value?._id || value || "";
 
 const emptyLine = (costCenter = "") => ({
@@ -239,6 +245,10 @@ export default function RequestCreate() {
   const [budgetRefresh, setBudgetRefresh] = useState(0);
   const [budgetLoading, setBudgetLoading] = useState(false);
   const [stepId, setStepId] = useState("need");
+  // New requests open the simple three-question form; editing, a copied request or a draft saved
+  // from the full form open the full form. Either one can switch to the other at any time.
+  const [mode, setMode] = useState(() => (id || new URLSearchParams(location.search).get("from") ? "full" : "quick"));
+  const [quick, setQuick] = useState(initialQuick);
   const [visitedSteps, setVisitedSteps] = useState(["need"]);
   const [completedSteps, setCompletedSteps] = useState([]);
   const [errors, setErrors] = useState({});
@@ -359,8 +369,10 @@ export default function RequestCreate() {
           setLines(copy.lines.map(restoreEditorLine));
           notify(t("Copied from {request}. Check the amounts and attach this request's documents.").replace("{request}", source.requestNumber), "info");
         } else {
+          // Filled in from what the platform already knows: the requester's cost center (or the only
+          // one they may use), their unit, and an open month.
           const defaultCenter = supplierId(user.costCenter) || nextMasters.costCenters[0]?._id || "";
-          setForm((current) => ({ ...current, requesterCostCenter: defaultCenter, schoolOrDepartment: user.area || "" }));
+          setForm((current) => ({ ...current, requesterCostCenter: defaultCenter, schoolOrDepartment: user.organizationalUnit || user.area || "", accountingPeriod: defaultOpenPeriod(nextMasters.periods, current.accountingPeriod) || current.accountingPeriod }));
           setLines([emptyLine(defaultCenter)]);
         }
         setHydratedRecord(id || "new");
@@ -399,7 +411,7 @@ export default function RequestCreate() {
 
   // "New request" always opens a blank request; unfinished ones are listed above it.
   const draft = useWorkDraft({ scope: "request", recordId: id || "new", title: String(form.title || "").trim() || "Financial request", resumeLatest: isEditing, enabled: hydrated && !loading && hydratedRecord === (id || "new"), sourceVersion,
-    value: { form, capex, opexFrequency, lines, quotations, files, quotationFiles, removedAttachmentIds, stepId, visitedSteps, completedSteps },
+    value: { form, capex, opexFrequency, lines, quotations, files, quotationFiles, removedAttachmentIds, stepId, visitedSteps, completedSteps, mode, quick },
     restore: data => {
       if (!data) return;
       setForm(data.form); setCapex(data.capex); setOpexFrequency(data.opexFrequency); setLines(data.lines.map(restoreEditorLine)); setQuotations(data.quotations); setFiles(data.files || Object.fromEntries(documentDefinitions.map(item => [item.key, []]))); setQuotationFiles(data.quotationFiles || {}); setRemovedAttachmentIds(data.removedAttachmentIds || []);
@@ -407,6 +419,9 @@ export default function RequestCreate() {
       setStepId(data.stepId || legacy(data.step || 0));
       setVisitedSteps(data.visitedSteps || LEGACY_STEPS.slice(0, (data.maxStep || 0) + 1));
       setCompletedSteps((data.completedSteps || []).map((item) => typeof item === "number" ? legacy(item) : item));
+      // Drafts from before the simple form were made with the full form.
+      setMode(data.mode || "full");
+      setQuick({ ...initialQuick, ...(data.quick || quickFromForm(data.form)) });
     }
   });
   useEffect(() => { if (draft.ready) void draft.flush(); }, [stepId]);
@@ -528,9 +543,15 @@ export default function RequestCreate() {
       detailedDescription: current.detailedDescription || label,
       description: current.description || label
     }));
-    if (linesAreEmpty && Number(invoice.totalAmount) > 0) setLines([lineFromInvoice(invoice, { costCenter: form.requesterCostCenter, description: label })]);
-    if (form.flowType === "B") attachInvoiceFile(file);
-    notify(linesAreEmpty ? "Filled from the invoice: check the supplier, currency and amounts." : "Invoice read. Your amounts were kept; compare them with the invoice in the next step.", "info");
+    // The simple form always takes the invoice's items: its amount was only typed to start with.
+    const fill = linesAreEmpty || mode === "quick";
+    if (fill && Number(invoice.totalAmount) > 0) {
+      const invoiceLines = linesFromInvoice(invoice, { costCenter: form.requesterCostCenter, description: label });
+      setLines(invoiceLines);
+      setQuick((current) => ({ ...current, amount: String(invoice.totalAmount) }));
+    }
+    if (form.flowType === "B" || mode === "quick") attachInvoiceFile(file);
+    notify(fill ? "Filled from the invoice: check the supplier, currency and amounts." : "Invoice read. Your amounts were kept; compare them with the invoice in the next step.", "info");
   }
 
   function setHeaderCostCenter(value) {
@@ -581,8 +602,9 @@ export default function RequestCreate() {
       if (form.flowType === "C" && !trackCRequestTypes.includes(form.requestType)) {
         next.requestType = "Select an advance to render or an undocumented reimbursement.";
       }
+      // The title defaults to the description's first line and the risk is optional (one "why").
       if (officialRequest && submitting) {
-        [["title", "Requirement title is required."], ["detailedDescription", "Detailed description is required."], ["businessJustification", "Business justification is required."], ["nonApprovalRisk", "Risk if not approved is required."]].forEach(([field, message]) => {
+        [["detailedDescription", "Detailed description is required."], ["businessJustification", "Business justification is required."]].forEach(([field, message]) => {
           if (!String(form[field] || "").trim()) next[field] = message;
         });
       }
@@ -621,7 +643,8 @@ export default function RequestCreate() {
         });
         const recommended = quotations.filter((item) => item.recommended);
         if (recommended.length !== 1) next.recommended = "Select exactly one recommended supplier.";
-        if (!form.supplierSelectionReason.trim()) next.supplierSelectionReason = "Supplier selection reason is required.";
+        // A reason is asked only when there was a choice between suppliers.
+        if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size > 1 && !form.supplierSelectionReason.trim()) next.supplierSelectionReason = "Supplier selection reason is required.";
       }
       // A saved request always names its supplier, so "Save draft" needs it as well.
       if (!form.supplier && form.flowType !== "C") {
@@ -736,6 +759,11 @@ export default function RequestCreate() {
     const validations = checkedSteps.map((item) => validationForStep(item, sendForApproval));
     const firstInvalid = validations.findIndex((item) => Object.keys(item).length);
     if (firstInvalid >= 0) {
+      // Something the simple form does not ask: the full form opens where it goes.
+      if (mode === "quick") {
+        setMode("full");
+        notify("A few details are missing. The full form opened where they go.", "info");
+      }
       goToStep(checkedSteps[firstInvalid]);
       showProblems(validations[firstInvalid]);
       return;
@@ -746,6 +774,7 @@ export default function RequestCreate() {
     const payloadForm = {
       ...form,
       requestType: requestTypeForFlow(form.flowType, form.requestType),
+      title: String(form.title || "").trim() || titleFromDescription(form.detailedDescription || form.description),
       description: form.description || form.detailedDescription
     };
     Object.entries(payloadForm).forEach(([key, value]) => data.append(key, value ?? ""));
@@ -786,24 +815,163 @@ export default function RequestCreate() {
     }
   }
 
+  // ---- The simple form (QuickRequestForm). Its answers choose the track, its amount is the one
+  // request line and its quote the one recommended quotation; the full form shows the same data.
+  function clearErrors(keys) {
+    setErrors((current) => {
+      const next = { ...current };
+      keys.forEach((key) => delete next[key]);
+      return next;
+    });
+    setError("");
+  }
+
+  function changeQuick(patch) {
+    clearErrors(["quote", "invoice", "supplier"]);
+    const next = { ...quick, ...patch };
+    setQuick(next);
+    if (!["payee", "evidence", "employeeNeed", "capex"].some((key) => Object.hasOwn(patch, key))) return;
+    const track = quickTrack(next);
+    setForm((current) => ({ ...current, ...track, supplier: track.flowType === "C" ? "" : current.supplier }));
+    // Back to "a quote": the invoice read before is no longer this request's evidence.
+    if (patch.evidence === "quote" || patch.payee === "employee") {
+      setFiles((current) => ({ ...current, xml: [], pdf: [] }));
+      setInvoiceCheck(null);
+    }
+  }
+
+  function changeQuickForm(patch) {
+    clearErrors(Object.keys(patch));
+    setForm((current) => ({ ...current, ...patch }));
+    if (Object.hasOwn(patch, "detailedDescription") && !invoiceCheck?.invoice) {
+      setLines((current) => current.length === 1 ? [{ ...current[0], itemDescription: titleFromDescription(patch.detailedDescription) }] : current);
+    }
+  }
+
+  // One line, one unit, IGV included: what the requester types is the total.
+  const simpleAmount = lines.length <= 1 && !lines[0]?.legacyAmounts && Number(lines[0]?.quantity || 1) === 1;
+  function changeQuickAmount(value) {
+    clearErrors(["lines", "lines.0.totalAmount", "lines.0.unitPrice", "lines.0.quantity"]);
+    setQuick((current) => ({ ...current, amount: value }));
+    setLines((current) => {
+      const base = current[0] || emptyLine(form.requesterCostCenter);
+      return [editRequestLine(base, { quantity: "1", unitOfMeasure: base.unitOfMeasure || "UNIT", unitPrice: value, priceIncludesIGV: true, itemDescription: base.itemDescription || titleFromDescription(form.detailedDescription) })];
+    });
+  }
+
+  // Where quotations are required the quote is the recommended quotation; elsewhere it is the
+  // request's supporting document (which is what the document rules then ask for).
+  const quickQuotation = quotations[0];
+  const quoteFile = quotationPolicy.enabled ? (quickQuotation ? quotationFiles[quickQuotation.clientId] : null) : files.supporting?.[0] || null;
+  function changeQuoteFile(file) {
+    clearErrors(["quote", "supporting"]);
+    if (!quotationPolicy.enabled) {
+      setFiles((current) => ({ ...current, supporting: file ? [file] : [] }));
+      return;
+    }
+    const quotation = quotations[0] || emptyQuotation();
+    if (!quotations[0]) setQuotations([quotation]);
+    setQuotationFiles((current) => ({ ...current, [quotation.clientId]: file || undefined }));
+  }
+
+  // The quote is the recommended quotation of the chosen supplier, for the request total.
+  useEffect(() => {
+    if (mode !== "quick" || form.flowType !== "A1" || quick.evidence !== "quote") return;
+    // Quotations not required here: drop the one this form made (the quote is a document).
+    if (!quotationPolicy.enabled) {
+      setQuotations((current) => current.length === 1 && !current[0].attachment && !quotationFiles[current[0].clientId] && !current[0].deliveryPeriod && !current[0].commercialConditions ? [] : current);
+      return;
+    }
+    setQuotations((current) => {
+      if (current.length > 1) return current;
+      const base = current[0] || emptyQuotation();
+      return [{ ...base, supplier: form.supplier, amount: totals.total > 0 ? String(totals.total) : "", currency: form.currency, recommended: Boolean(form.supplier) }];
+    });
+  }, [mode, form.flowType, quick.evidence, form.supplier, form.currency, totals.total, quotationPolicy.enabled]);
+
+  const quickDocuments = quickExtraDocuments(formPolicy.documentRequirements, documentDefinitions, { evidence: quick.evidence, flowType: form.flowType, quoteIsDocument: form.flowType === "A1" && !quotationPolicy.enabled });
+
+  function submitQuick() {
+    const problems = {};
+    if (!String(form.detailedDescription || "").trim()) problems.detailedDescription = "Tell us what you need.";
+    if (!(totals.total > 0)) problems["lines.0.totalAmount"] = "Enter the total amount.";
+    if (form.flowType === "A1" && !String(form.businessJustification || "").trim()) problems.businessJustification = "Tell us why it is needed.";
+    if (form.flowType !== "C" && !form.supplier) problems.supplier = "Select the supplier.";
+    if (form.flowType === "A1" && !quoteFile && !quickQuotation?.attachment) problems.quote = "Attach the quote.";
+    if (form.flowType === "B" && !files.xml?.length && !files.pdf?.length && !existingAttachments.some((item) => ["XML", "PDF"].includes(item.kind))) problems.invoice = "Attach the invoice XML or PDF.";
+    quickDocuments.forEach(({ definition }) => { if (!files[definition.key]?.length && !existingAttachments.some((item) => item.kind === definition.kind)) problems[definition.key] = "Attach this document."; });
+    if (Object.keys(problems).length) {
+      showProblems(problems);
+      return;
+    }
+    void save(true);
+  }
+
+  function openFullForm() {
+    setErrors({});
+    setError("");
+    setMode("full");
+    window.scrollTo({ top: 0 });
+  }
+
+  function openQuickForm() {
+    setErrors({});
+    setError("");
+    setQuick(quickFromForm(form, totals.total > 0 ? String(totals.total) : ""));
+    setMode("quick");
+    window.scrollTo({ top: 0 });
+  }
+
+  const quickCostCenter = masters.costCenters.find((item) => item._id === form.requesterCostCenter);
+  const capexOpen = showCapexDetails({ total: totals.total, threshold: formPolicy.capexDetailsThreshold ?? 50000, capex });
+
   const blockStatuses = requestBlockStatuses(hydrated ? liveProblems() : {}, {
     optional: officialRequest ? [] : ["why"],
-    filled: { why: Boolean(String(form.businessJustification || "").trim() && String(form.nonApprovalRisk || "").trim()) }
+    filled: { why: Boolean(String(form.businessJustification || "").trim()) }
   });
 
   if (loading) return <WorkspaceSkeleton label={isEditing ? "Loading request..." : "Loading form data..."} />;
 
   return <section>
     <PageHeader
-      title={isEditing ? "Edit request" : "Create request"}
-      description="Describe what you need, where it is charged and who supplies it. Your progress saves automatically."
-      actions={null}
+      title={isEditing ? "Edit request" : mode === "quick" ? "New request" : "Create request"}
+      description={mode === "quick" ? "Three quick questions. Your progress saves automatically." : "Describe what you need, where it is charged and who supplies it. Your progress saves automatically."}
+      actions={!isEditing && mode === "full" ? <button type="button" className="secondary-button" onClick={openQuickForm}>{t("Back to the simple form")}</button> : null}
     />
     {!isEditing && <ContinueWork scope="request" recordId="new" exclude={draft.session.id} />}
     <DraftPanel busy={saving} draft={draft} onDiscard={() => navigate(isEditing ? `/requests/${id}` : "/requests")}>
     {stepId === "review" && <ReadinessPanel defaultOpen payload={{ ...form, lines, quotations: quotations.map(q => ({ ...q, attachment: quotationFiles[q.clientId] ? "preview-only" : q.attachment })), attachments: [...existingAttachments, ...Object.values(quotationFiles).filter(Boolean).map(file => ({ kind: "QUOTATION", name: file.name, url: "preview-only" })), ...documentDefinitions.flatMap(def => (files[def.key] || []).map(file => ({ kind: def.kind, name: file.name, url: "preview-only" })))] }} />}
 
-    <div className="request-wizard official-request-wizard">
+    {mode === "quick" ? <QuickRequestForm
+      form={form}
+      onFormChange={changeQuickForm}
+      quick={quick}
+      onQuickChange={changeQuick}
+      totals={totals}
+      lines={lines}
+      simpleAmount={simpleAmount}
+      onAmountChange={changeQuickAmount}
+      masters={masters}
+      suppliers={eligibleSuppliers}
+      supplierProposalPath={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`}
+      invoiceCheck={invoiceCheck}
+      onInvoiceFile={(file) => { clearErrors(["invoice"]); readInvoice(file, { fill: true }); }}
+      quoteFile={quoteFile}
+      onQuoteFile={changeQuoteFile}
+      extraDocuments={quickDocuments}
+      files={files}
+      onDocumentFiles={(key, chosen) => { clearErrors([key]); setFiles((current) => ({ ...current, [key]: chosen })); }}
+      costCenterLabel={quickCostCenter ? `${quickCostCenter.code} - ${quickCostCenter.name}` : ""}
+      onCostCenterChange={setHeaderCostCenter}
+      period={form.accountingPeriod}
+      errors={errors}
+      error={error}
+      saving={saving}
+      disabled={!draft.ready || draft.status === "conflict"}
+      onSaveDraft={() => save(false)}
+      onSubmit={submitQuick}
+      onFullForm={openFullForm}
+    /> : <div className="request-wizard official-request-wizard">
       <WorkflowStepper steps={stepIds.map((item) => STEP_LABELS[item])} current={step} completedSteps={completedSteps.map((item) => stepIds.indexOf(item)).filter((index) => index >= 0)} maxAccessible={maxStep} onSelect={(next) => next <= maxStep && goToStep(stepIds[next])} />
       <div className="wizard-financial-context"><span>{t("Step {step} of {total}").replace("{step}", step + 1).replace("{total}", stepIds.length)} · {t(STEP_LABELS[stepId])}</span><span>{t("Total amount")}<strong>{formatCurrency(totals.total, form.currency, language)}</strong></span><small>{t("Fields marked * are required.")}</small></div>
       <div className="wizard-workspace">
@@ -819,7 +987,7 @@ export default function RequestCreate() {
             {form.flowType !== "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>CAPEX / OPEX *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))} onBlur={() => validateField("requestType")} aria-invalid={Boolean(errors.requestType)}>{requestCreationClassifications.map((type) => <option key={type} value={type}>{t(optionLabel(type, expenditureClassificationLabels))}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t("The operational track defines how the transaction is processed; CAPEX / OPEX defines the economic classification of the spend.")}</small></label>}
             {form.flowType === "C" && <label className={`field${errors.requestType ? " field-error" : ""}`}><span>{t("Track C request type")} *</span><select value={form.requestType} onChange={(event) => setForm((current) => ({ ...current, requestType: event.target.value }))} onBlur={() => validateField("requestType")} aria-invalid={Boolean(errors.requestType)}>{trackCRequestTypes.map((type) => <option key={type} value={type}>{t(trackCRequestTypeLabels[type])}</option>)}</select>{errors.requestType && <small className="field-error-text">{t(errors.requestType)}</small>}<small>{t(form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "Reimburses an expense you already paid and could not support with a fiscal receipt. After approval you sign the declaration, Accounting reviews it and Treasury pays your verified account." : "UMA pays you first; you then render the advance with receipts within the configured working-day deadline.")}</small></label>}
             <label className={`field${errors.expenseNature ? " field-error" : ""}`}><span>{t("Expense nature")} *</span><select value={form.expenseNature} onChange={(event) => setForm((current) => ({ ...current, expenseNature: event.target.value }))} onBlur={() => validateField("expenseNature")} aria-invalid={Boolean(errors.expenseNature)}>{expenseNatures.map((item) => <option key={item} value={item}>{t(optionLabel(item, expenseNatureLabels))}</option>)}</select>{errors.expenseNature && <small className="field-error-text">{t(errors.expenseNature)}</small>}</label>
-            <label className={`field${errors.title ? " field-error" : ""}`}><span>{t("Requirement title")}{officialRequest ? " *" : ""}</span><input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} onBlur={() => validateField("title")} aria-invalid={Boolean(errors.title)} />{errors.title && <small className="field-error-text">{t(errors.title)}</small>}</label>
+            <label className={`field${errors.title ? " field-error" : ""}`}><span>{t("Requirement title")}</span><input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} onBlur={() => validateField("title")} aria-invalid={Boolean(errors.title)} />{errors.title ? <small className="field-error-text">{t(errors.title)}</small> : <small className="field-hint">{t("If left empty, the first line of the description is used.")}</small>}</label>
             <label className={`field form-span-two${errors.detailedDescription || errors.description ? " field-error" : ""}`}><span>{t("Detailed description")} *</span><textarea rows="4" value={form.detailedDescription} onChange={(event) => setForm((current) => ({ ...current, detailedDescription: event.target.value, description: event.target.value }))} onBlur={() => validateField("detailedDescription", "description")} aria-invalid={Boolean(errors.detailedDescription || errors.description)} />{(errors.detailedDescription || errors.description) && <small className="field-error-text">{t(errors.detailedDescription || errors.description)}</small>}</label>
           </div>
 
@@ -841,7 +1009,7 @@ export default function RequestCreate() {
           <RequestFormBlock {...blockInfo.why} status={blockStatuses.why}>
           <div className="form-grid two-column-form">
             <label className={`field form-span-two${errors.businessJustification ? " field-error" : ""}`}><span>{t("Business justification")}{officialRequest ? " *" : ""}</span><textarea rows="3" value={form.businessJustification} onChange={(event) => setForm((current) => ({ ...current, businessJustification: event.target.value }))} onBlur={() => validateField("businessJustification")} aria-invalid={Boolean(errors.businessJustification)} />{errors.businessJustification && <small className="field-error-text">{t(errors.businessJustification)}</small>}</label>
-            <label className={`field form-span-two${errors.nonApprovalRisk ? " field-error" : ""}`}><span>{t("Risk if not approved")}{officialRequest ? " *" : ""}</span><textarea rows="3" value={form.nonApprovalRisk} onChange={(event) => setForm((current) => ({ ...current, nonApprovalRisk: event.target.value }))} onBlur={() => validateField("nonApprovalRisk")} aria-invalid={Boolean(errors.nonApprovalRisk)} />{errors.nonApprovalRisk && <small className="field-error-text">{t(errors.nonApprovalRisk)}</small>}</label>
+            <label className={`field form-span-two${errors.nonApprovalRisk ? " field-error" : ""}`}><span>{t("Risk if not approved")}</span><textarea rows="3" value={form.nonApprovalRisk} onChange={(event) => setForm((current) => ({ ...current, nonApprovalRisk: event.target.value }))} onBlur={() => validateField("nonApprovalRisk")} aria-invalid={Boolean(errors.nonApprovalRisk)} />{errors.nonApprovalRisk && <small className="field-error-text">{t(errors.nonApprovalRisk)}</small>}</label>
           </div>
           </RequestFormBlock>
         </div>}
@@ -856,14 +1024,14 @@ export default function RequestCreate() {
             <label className={`field${errors.currency ? " field-error" : ""}`}><span>{t("Currency")} *</span><select value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))} onBlur={() => validateField("currency")}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select>{errors.currency && <small className="field-error-text">{t(errors.currency)}</small>}</label>
           </div>
 
-          {form.requestType === "CAPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("CAPEX financial information")}</h3><p>{t("Planning information is recorded only; no depreciation or NPV calculation is generated.")}</p></div></div><div className="form-grid three-column-form">
+          {form.requestType === "CAPEX" && <details className="official-subsection capex-details" open={capexOpen || undefined}><summary><strong>{t("CAPEX financial information")}</strong><small>{t(capexOpen ? "Planning information is recorded only; no depreciation or NPV calculation is generated." : "Optional for this amount: Budget or Accounting can complete it.")}</small></summary><div className="form-grid three-column-form">
             <label className="field"><span>{t("Project / PEP")}</span><select value={capex.projectId} onChange={(event) => { const project = masters.projects.find((item) => item._id === event.target.value); setCapex((current) => ({ ...current, projectId: event.target.value, projectPep: project?.code || current.projectPep })); }}><option value="">{t("No project")}</option>{masters.projects.map((project) => <option key={project._id} value={project._id}>{project.code} - {project.name}</option>)}</select></label>
             <label className="field"><span>{t("Fixed asset category")}</span><select value={capex.assetCategory} onChange={(event) => setCapex((current) => ({ ...current, assetCategory: event.target.value }))}><option value="">{t("Select")}</option>{["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"].map((value) => <option key={value} value={value}>{t(value)}</option>)}</select></label>
             <label className="field"><span>{t("Useful life (years)")}</span><input type="number" min="0" step="1" value={capex.usefulLifeYears} onChange={(event) => setCapex((current) => ({ ...current, usefulLifeYears: event.target.value }))} /></label>
             <label className="field"><span>{t("NPV / VAN amount")}</span><input type="number" step="0.01" value={capex.npvAmount} onChange={(event) => setCapex((current) => ({ ...current, npvAmount: event.target.value }))} /></label>
             <label className="field"><span>{t("NPV currency")}</span><select value={capex.npvCurrency} onChange={(event) => setCapex((current) => ({ ...current, npvCurrency: event.target.value }))}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
             <div className="field"><span>{t("Payback")}</span><div className="compound-field"><input aria-label={t("Payback value")} type="number" min="0" step="0.01" value={capex.paybackValue} onChange={(event) => setCapex((current) => ({ ...current, paybackValue: event.target.value }))} /><select aria-label={t("Payback unit")} value={capex.paybackUnit} onChange={(event) => setCapex((current) => ({ ...current, paybackUnit: event.target.value }))}><option value="MONTHS">{t("Months")}</option><option value="YEARS">{t("Years")}</option></select></div></div>
-          </div></div>}
+          </div></details>}
 
           {form.requestType === "OPEX" && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("OPEX financial information")}</h3><p>{t("Accounting assigns the accounting account when it processes the invoice.")}</p></div></div><label className="field field-narrow"><span>{t("Expense frequency")}</span><select value={opexFrequency} onChange={(event) => setOpexFrequency(event.target.value)}><option value="ONE_OFF">{t("One-off")}</option><option value="MONTHLY_RECURRING">{t("Monthly recurring")}</option><option value="EVERY_3_MONTHS">{t("Every 3 months")}</option><option value="ANNUAL_RENEWAL">{t("Annual renewal")}</option></select></label></div>}
           </RequestFormBlock>
@@ -906,7 +1074,7 @@ export default function RequestCreate() {
               </article>;
             })}</MotionList>
             {quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}
-            <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Supplier selection reason")} {quotationPolicy.enabled ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => { setForm((current) => ({ ...current, supplierSelectionReason: event.target.value })); if (event.target.value.trim()) setFieldError("supplierSelectionReason", ""); }} onBlur={() => quotationPolicy.enabled && setFieldError("supplierSelectionReason", requiredError(form.supplierSelectionReason, "Supplier selection reason is required."))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
+            <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Supplier selection reason")} {quotationPolicy.enabled && new Set(quotations.map((item) => item.supplier).filter(Boolean)).size > 1 ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => { setForm((current) => ({ ...current, supplierSelectionReason: event.target.value })); if (event.target.value.trim()) setFieldError("supplierSelectionReason", ""); }} onBlur={() => quotationPolicy.enabled && new Set(quotations.map((item) => item.supplier).filter(Boolean)).size > 1 && setFieldError("supplierSelectionReason", requiredError(form.supplierSelectionReason, "Supplier selection reason is required."))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
           <Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
         </div>}
@@ -942,7 +1110,7 @@ export default function RequestCreate() {
       <div className="wizard-error"><Message type="error">{error}</Message></div>
       <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => goToStep(stepIds[Math.max(0, step - 1)])}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{stepId !== "review" ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit for approval")}</span></button>}</div></footer>
       </div>
-    </div>
+    </div>}
     </DraftPanel>
   </section>;
 }

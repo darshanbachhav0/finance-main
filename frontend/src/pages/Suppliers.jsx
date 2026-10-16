@@ -33,6 +33,7 @@ import Message from "../components/Message.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Drawer from "../components/Drawer.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import ExcelImport from "../components/ExcelImport.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 import SupplierDetail from "../components/suppliers/SupplierDetail.jsx";
@@ -2109,6 +2110,7 @@ export default function Suppliers() {
         description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, approval by the proposer's jefe, banking history and controlled PRV assignment."
         actions={
           <>
+            {!readOnly && ["Admin", "Accounting", "Procurement"].includes(user.role) && <ExcelImport kind="suppliers" onImported={() => suppliers.reload()} />}
             <button
               type="button"
               className="secondary-button"

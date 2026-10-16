@@ -87,7 +87,19 @@ export default function usePaginatedResource(endpoint, {
   }, [endpoint, requestParams, revision, enabled, debounceMs]);
 
   const reload = useCallback(() => setRevision((current) => current + 1), []);
-  const remote = useMemo(() => ({ query, pagination, onQueryChange: setQuery }), [query, pagination]);
+  // Every row of the current search and filters (not only this page), for "Export to Excel":
+  // page by page, up to `limit` rows.
+  const fetchAll = useCallback(async (limit = 5000) => {
+    const all = [];
+    for (let page = 1; all.length < limit; page += 1) {
+      const response = await api.get(endpoint, { params: buildRemoteTableParams({ ...query, page, pageSize: 100 }, fixedParams) });
+      const data = response.data.data || [];
+      all.push(...data);
+      if (!data.length || page >= (response.data.pagination?.totalPages || 1)) break;
+    }
+    return all.slice(0, limit);
+  }, [endpoint, query, fixedParamsKey]);
+  const remote = useMemo(() => ({ query, pagination, onQueryChange: setQuery, fetchAll }), [query, pagination, fetchAll]);
 
   return { rows, pagination, payload, query, setQuery, remote, loading, error, reload };
 }

@@ -8,7 +8,7 @@ import {
   ListFilter,
   Search
 } from "lucide-react";
-import { LayoutList, PanelRightOpen, Table2, X } from "lucide-react";
+import { FileSpreadsheet, LayoutList, PanelRightOpen, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Drawer from "./Drawer.jsx";
 import EmptyState from "./EmptyState.jsx";
@@ -21,6 +21,7 @@ import useRowSwipe from "../hooks/useRowSwipe.js";
 import { PHONE_QUERY } from "../utils/breakpoints.js";
 import { columnLayout, isPrimaryColumn } from "../utils/tableColumns.js";
 import { todayIso } from "../utils/dateInput.js";
+import { downloadXlsx, exportCellValue } from "../utils/xlsx.js";
 
 function rawValue(column, row) {
   if (column.getValue) return column.getValue(row);
@@ -69,7 +70,8 @@ export default function DataTable({
   onRowClick,
   toolbarActions,
   tableId,
-  exportable = false,
+  // Every list exports to Excel like a spreadsheet (pass exportable={false} to turn it off).
+  exportable = true,
   onExport,
   emptyTitle = "No records yet",
   emptyDescription = "Adjust filters or create a new record.",
@@ -90,6 +92,7 @@ export default function DataTable({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileCards, setMobileCards] = useState(true);
   const [detailRow, setDetailRow] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const scrollRef = useRef(null);
   const primaryColumns = columns.filter(isPrimaryColumn);
   const secondaryColumns = columns.filter(column => !primaryColumns.includes(column));
@@ -218,23 +221,22 @@ export default function DataTable({
     }
   }
 
-  function exportCurrentResults() {
-    const exportColumns = columns.filter((column) => column.key !== "actions" && column.exportable !== false);
-    const exportRows = isRemote ? rows : processed;
-    const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const csv = [
-      exportColumns.map((column) => escape(t(column.label))).join(","),
-      ...exportRows.map((row) => exportColumns.map((column) => {
-        const value = column.exportValue ? column.exportValue(row) : rawValue(column, row);
-        return escape(typeof value === "object" ? JSON.stringify(value) : value);
-      }).join(","))
-    ].join("\r\n");
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}-${todayIso()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  // "Excel": the selected rows when some are ticked, otherwise every row of the current search
+  // and filters (all pages of a server list), as a real .xlsx with numbers kept as numbers.
+  const selectedCount = selection?.selected?.length || 0;
+  async function exportCurrentResults() {
+    const exportColumns = columns.filter((column) => column.key !== "actions" && column.exportable !== false && column.type !== "checkbox" && column.label);
+    setExporting(true);
+    try {
+      const source = selectedCount ? rows.filter((row) => selection.selected.includes(row[rowKey])) : isRemote && remote.fetchAll ? await remote.fetchAll() : processed;
+      const sheet = [
+        exportColumns.map((column) => t(column.label)),
+        ...source.map((row) => exportColumns.map((column) => exportCellValue(column.exportValue ? column.exportValue(row) : rawValue(column, row))))
+      ];
+      downloadXlsx(sheet, `${String(tableIdentity).replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}-${todayIso()}`, { sheetName: t(caption || "Data") });
+    } finally {
+      setExporting(false);
+    }
   }
 
   // Long search hints ("Search request, supplier, voucher...") are cut off on phones; there the
@@ -301,6 +303,7 @@ export default function DataTable({
           <div className="table-toolbar-actions">
             <button type="button" className="secondary-button mobile-table-toggle" aria-pressed={mobileCards} onClick={() => setMobileCards((value) => !value)}>{mobileCards ? <Table2 size={16} /> : <LayoutList size={16} />}{t(mobileCards ? "Table view" : "Card view")}</button>
             {toolbarActions}
+            {!onExport && exportable && <button type="button" className="secondary-button table-export-button" disabled={exporting || loading} onClick={exportCurrentResults} title={t("Export to Excel")}><FileSpreadsheet size={16} aria-hidden="true" /><span>{t(selectedCount ? "Excel (selected)" : "Excel")}</span></button>}
             <details className="compact-options"><summary>{t("Table options")}</summary><div className="compact-options-body">
             <div className="field"><span>{t("Sort by")}</span><select aria-label={t("Sort by")} value={activeSort?.key || ""} onChange={event => { const column = columns.find(item => (item.sortKey || item.key) === event.target.value); const next = column ? { key: column.sortKey || column.key, direction: "asc" } : null; if (isRemote) updateRemote({ sort: next, page: 1 }); else setSort(next); }}><option value="">{t("Sort by")}</option>{columns.filter(column => column.sortable !== false && column.key !== "actions").map(column => <option key={column.key} value={column.sortKey || column.key}>{t(column.label)}</option>)}</select></div>{activeSort && <button type="button" className="secondary-button" onClick={() => toggleSort(columns.find(column => (column.sortKey || column.key) === activeSort.key))}>{t(activeSort.direction === "asc" ? "Sort descending" : "Sort ascending")}</button>}
             <TableTools

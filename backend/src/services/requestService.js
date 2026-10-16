@@ -41,13 +41,16 @@ import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
 import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
 import { AppError } from "../utils/AppError.js";
 import {
+  DEFAULT_CAPEX_DETAILS_THRESHOLD,
   DOCUMENT_PHASE,
   ERROR_CODES,
+  FINANCE_CONFIGURATION_KEYS,
   FLOW_TYPE,
   REQUEST_STATUS,
   REQUEST_TYPE,
   ROLES
 } from "../utils/constants.js";
+import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { actsAsRequester, canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
 import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
@@ -372,12 +375,19 @@ async function validateHeaderCostCenter(request, user, { required = false } = {}
   return center;
 }
 
+// The title is the first line of the description when the requester left it empty (the simple
+// form asks only "what do you need?"). The risk if not approved is optional: one "why" is enough.
+export function titleFromDescription(description) {
+  const line = String(description || "").split(/\r?\n/).map((item) => item.trim()).find(Boolean) || "";
+  return line.length > 120 ? `${line.slice(0, 117).trimEnd()}...` : line;
+}
+
 function assertOfficialRequestFields(request) {
+  if (!String(request.title || "").trim()) request.title = titleFromDescription(request.detailedDescription || request.description);
   const required = [
     ["title", "TITLE_REQUIRED", "Requirement title is required."],
     ["detailedDescription", "DETAILED_DESCRIPTION_REQUIRED", "Detailed description is required."],
-    ["businessJustification", "BUSINESS_JUSTIFICATION_REQUIRED", "Business justification is required."],
-    ["nonApprovalRisk", "NON_APPROVAL_RISK_REQUIRED", "Risk if not approved is required."]
+    ["businessJustification", "BUSINESS_JUSTIFICATION_REQUIRED", "Business justification is required."]
   ];
   for (const [field, code, message] of required) {
     if (!String(request[field] || "").trim()) throw new AppError(422, message, { field }, ERROR_CODES[code]);
@@ -1022,11 +1032,13 @@ export async function requestFormPolicy(query) {
   const flowType = query.flowType || FLOW_TYPE.A1;
   const requestType = normalizeRequestTypeForTrack(flowType, query.requestType);
   const request = { flowType, requestType, expenseNature: query.expenseNature, attachments: [] };
-  const [documentRequirements, quotationPolicy] = await Promise.all([
+  const [documentRequirements, quotationPolicy, capexThreshold] = await Promise.all([
     configuredDocumentRequirements(request, DOCUMENT_PHASE.SUBMISSION),
-    configuredQuotationPolicy(request)
+    configuredQuotationPolicy(request),
+    getEffectiveFinanceConfiguration(FINANCE_CONFIGURATION_KEYS.CAPEX_DETAILS_THRESHOLD)
   ]);
-  return { documentRequirements, quotationPolicy };
+  const threshold = Number(capexThreshold?.numericValue);
+  return { documentRequirements, quotationPolicy, capexDetailsThreshold: Number.isFinite(threshold) && threshold >= 0 ? threshold : DEFAULT_CAPEX_DETAILS_THRESHOLD };
 }
 
 export async function requestAuthorizedCostCenters(user) {

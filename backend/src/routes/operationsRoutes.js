@@ -27,7 +27,7 @@ router.post("/xml-preview", authorizeAccess({ roles: ["Admin", "Accounting"], pe
     res.json({ data: await parseInvoiceXml(file.path), verified: false });
   } finally { await Promise.all(Object.values(req.files || {}).flat().map(file => fs.rm(file.path, { force: true }))); }
 }));
-router.post("/statements", authorize("Admin", "Treasury"), asyncHandler(async (req, res) => res.json({ data: await importStatement(req.body.csv, req.user, req) })));
+router.post("/statements", authorize("Admin", "Treasury"), asyncHandler(async (req, res) => res.json({ data: await importStatement(req.body.csv, req.user, req, { autoReconcile: req.body.autoReconcile !== false }) })));
 router.post("/statements/:id/confirm", authorize("Admin", "Treasury"), asyncHandler(async (req, res) => res.json({ data: await confirmStatementMatch({ ...req.body, id: req.params.id, user: req.user, req }) })));
 router.get("/templates", authorizePermission(PERMISSIONS.REQUEST_CREATE), asyncHandler(async (req, res) => res.json({ data: await RecurringTemplate.find({ owner: req.user._id }).sort({ createdAt: -1 }).limit(100) })));
 router.post("/templates", authorizePermission(PERMISSIONS.REQUEST_CREATE), asyncHandler(async (req, res) => res.status(201).json({ data: await createRecurringTemplate(req.body, req.user, req) })));

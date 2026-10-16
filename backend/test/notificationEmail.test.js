@@ -6,9 +6,10 @@ import NotificationDelivery from "../src/models/NotificationDelivery.js";
 import User from "../src/models/User.js";
 import { markNotificationRead, notificationText, notifyUser, resolveNotification } from "../src/services/notificationService.js";
 import { createEmailTransport } from "../src/integrations/email/index.js";
-import { composeNotificationEmail, displayName, emailErrorHint, maskedEmail, notificationEmailConfiguration, processNotificationEmails, skipExplanation, spanishNotificationCopy } from "../src/services/notificationEmailService.js";
+import { composeNotificationEmail, digestHeadline, displayName, emailErrorHint, maskedEmail, nextDigestAt, notificationEmailConfiguration, processNotificationEmails, skipExplanation, spanishNotificationCopy } from "../src/services/notificationEmailService.js";
 
-const EMAIL_ENV = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test/", NOTIFICATION_EMAIL_DELAY_MINUTES: "5" };
+// These tests send each notification on its own (IMMEDIATE); the daily summary has its own test.
+const EMAIL_ENV = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test/", NOTIFICATION_EMAIL_DELAY_MINUTES: "5", NOTIFICATION_EMAIL_FREQUENCY: "IMMEDIATE" };
 
 test("notification email configuration is off by default and refuses an incomplete SMTP setup", () => {
   assert.equal(notificationEmailConfiguration({}).enabled, false);
@@ -221,7 +222,7 @@ test("emails go out about a second after the notification, without waiting for t
   const database = `erp_notification_email_now_${process.pid}_${Date.now()}`;
   await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`, { serverSelectionTimeoutMS: 5000 });
   // A 60 s poll: only the "queued" wake-up can explain a send within a few seconds.
-  const env = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test", NOTIFICATION_EMAIL_POLL_MS: "60000" };
+  const env = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test", NOTIFICATION_EMAIL_POLL_MS: "60000", NOTIFICATION_EMAIL_FREQUENCY: "IMMEDIATE" };
   const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   delete process.env.NOTIFICATION_EMAIL_DELAY_MINUTES;
   Object.assign(process.env, env);
@@ -252,6 +253,48 @@ test("emails go out about a second after the notification, without waiting for t
   } finally {
     await worker?.stop();
     console.log = log;
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    if (mongoose.connection.name === database) await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});
+
+test("by default each person gets one summary email a day, unless they chose right away", { timeout: 60000 }, async () => {
+  assert.equal(notificationEmailConfiguration({ NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://x.test" }).frequency, "DAILY");
+  assert.equal(notificationEmailConfiguration({ NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://x.test", NOTIFICATION_EMAIL_FREQUENCY: "immediate" }).frequency, "IMMEDIATE");
+  // Friday 16 Oct 2026, 15:00 in Lima -> Monday 19 Oct at 08:00 Lima (13:00 UTC); a weekday
+  // morning before 08:00 -> the same day.
+  assert.equal(nextDigestAt(new Date("2026-10-16T20:00:00Z"), 8).toISOString(), "2026-10-19T13:00:00.000Z");
+  assert.equal(nextDigestAt(new Date("2026-10-15T12:00:00Z"), 8).toISOString(), "2026-10-15T13:00:00.000Z");
+  assert.equal(digestHeadline([{ type: "APPROVAL_PENDING" }, { type: "APPROVAL_PENDING" }, { type: "RENDITION_REMINDER" }, { type: "TREASURY_PAYMENT" }]), "2 aprobaciones esperan tu decisión · 1 rendición pendiente · 1 novedad más");
+  const digest = composeNotificationEmail({ user: { name: "Ana" }, appUrl: "https://x.test", digest: true, notifications: [{ type: "APPROVAL_PENDING", title: "Approval pending", message: "SOL-1", path: "/approvals" }] });
+  assert.match(digest.subject, /^Tu resumen del día: 1 novedad/);
+  assert.match(digest.text, /1 aprobación espera tu decisión/);
+
+  const database = `erp_notification_digest_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`, { serverSelectionTimeoutMS: 5000 });
+  const env = { NOTIFICATION_EMAIL_MODE: "LOG", APP_PUBLIC_URL: "https://finanzas.uma.test" };
+  const saved = Object.fromEntries(Object.keys({ ...env, NOTIFICATION_EMAIL_FREQUENCY: "" }).map((key) => [key, process.env[key]]));
+  delete process.env.NOTIFICATION_EMAIL_FREQUENCY;
+  Object.assign(process.env, env);
+  const sent = [];
+  const transport = { name: "TEST", async send(message) { sent.push(message); } };
+  try {
+    await Promise.all([Notification.init(), NotificationDelivery.init()]);
+    const daily = await User.create({ name: "Rosa Daily", email: "rosa@uma.edu.pe", passwordHash: "unused" });
+    const quick = await User.create({ name: "Hugo Quick", email: "hugo@uma.edu.pe", passwordHash: "unused", emailFrequency: "IMMEDIATE" });
+    for (const [user, key] of [[daily, "d1"], [daily, "d2"], [quick, "q1"]]) {
+      await notifyUser({ userId: user._id, eventKey: key, type: "APPROVAL_PENDING", title: notificationText("Approval pending"), message: notificationText("{requestNumber} is waiting for {approvalLevel} approval.", { requestNumber: key, approvalLevel: "AREA_DIRECTOR" }), path: "/approvals" });
+    }
+    const dailyDelivery = await NotificationDelivery.findOne({ user: daily._id });
+    assert.ok(dailyDelivery.sendAfter > new Date(Date.now() + 60000), "the daily summary waits for the digest hour");
+    await processNotificationEmails({ env: process.env, transport });
+    assert.deepEqual(sent.map((message) => message.to), ["hugo@uma.edu.pe"], "right away for the person who chose it");
+    await processNotificationEmails({ env: process.env, transport, now: new Date(dailyDelivery.sendAfter.getTime() + 1000) });
+    assert.equal(sent.length, 2);
+    assert.equal(sent[1].to, "rosa@uma.edu.pe");
+    assert.match(sent[1].subject, /^Tu resumen del día: 2 novedades/);
+  } finally {
     for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     if (mongoose.connection.name === database) await mongoose.connection.dropDatabase();
     await mongoose.disconnect();

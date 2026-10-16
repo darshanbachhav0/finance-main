@@ -118,6 +118,11 @@ const accountsPayableSchema = new mongoose.Schema(
       capturedAt: Date
     },
     scheduledFor: Date,
+    // Treasury's planned payment date (from its Excel payment schedule): the payable joins that
+    // payment run instead of the one its due date gives. Only a plan; scheduling still validates.
+    plannedPaymentDate: Date,
+    plannedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    plannedAt: Date,
     // Payments follow the university cycle (15th / 30th). A date off that cycle needs an audited reason.
     scheduleOverride: {
       reason: String,

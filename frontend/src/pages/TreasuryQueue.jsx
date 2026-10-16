@@ -6,6 +6,7 @@ import WorkspaceTools from "../components/WorkspaceTools.jsx";
 import SectionNavigation from "../components/SectionNavigation.jsx";
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
 import DraftPanel from "../components/DraftPanel.jsx";
+import ExcelImport from "../components/ExcelImport.jsx";
 import {
   AlertTriangle,
   Ban,
@@ -85,7 +86,7 @@ function paymentSteps(row) {
 
 export default function TreasuryQueue({ historyOnly = false }) {
   const [paymentView, setPaymentView] = useState("prepare");
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, language } = useLanguage();
   // The read-only Super Admin follows payments without acting on them.
   const { readOnly } = useAuth();
@@ -117,6 +118,12 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const [pendingCurrency, setPendingCurrency] = useState(null);
   const [detractionRow, setDetractionRow] = useState(null);
   const [detractionForm, setDetractionForm] = useState({ constancyNumber: "", depositDate: "", amount: "" });
+  // The next 15th / 30th payment run: what the payment terms (or Treasury's Excel plan) put in it.
+  // "Prepare this run" lists only those payments and ticks every one that can be paid; Treasury
+  // checks them and generates the bank file.
+  const [nextRun, setNextRun] = useState(null);
+  const [run, setRun] = useState(null);
+  const runSelection = useRef("");
 
   const paymentDraft = useWorkDraft({ scope: "payment-confirmation", recordId: paymentRow ? String(payableIdOf(paymentRow)) : "new", title: "Payment confirmation", enabled: Boolean(paymentRow), value: paymentForm, restore: setPaymentForm, sourceVersion: paymentRow?.updatedAt });
   useDraftResume("payment-confirmation", id => resumeDraftRecord("/treasury/payment-confirmations", id, payableIdOf, openPaymentConfirmation, setActionError));
@@ -135,7 +142,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   // The stage lists load on /treasury only; /treasury/history loads just the file history.
   const linkOptions = { fixedParams: linkParams, deepLink: linkActive, enabled: !historyOnly };
   // The linked CXP is listed whatever its currency; the currency selector follows it (below).
-  const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: linkActive ? { bank, ...linkParams } : { bank, currency }, persistKey: "treasury-queue", deepLink: linkActive, enabled: !historyOnly });
+  const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: linkActive ? { bank, ...linkParams } : { bank, currency, ...(run ? { paymentCycle: run.date } : {}) }, persistKey: "treasury-queue", deepLink: linkActive, enabled: !historyOnly });
   const historyTable = usePaginatedResource("/treasury/bank-files", { enabled: historyOnly });
   const confirmationTable = usePaginatedResource("/treasury/payment-confirmations", linkOptions);
   const bouncedTable = usePaginatedResource("/treasury/bounced-payments", linkOptions);
@@ -191,11 +198,50 @@ export default function TreasuryQueue({ historyOnly = false }) {
     else setCurrency(next);
   }
 
+  function loadNextRun() {
+    if (historyOnly) return;
+    api.get("/treasury/next-run").then((response) => setNextRun(response.data.data || null)).catch(() => setNextRun(null));
+  }
+  useEffect(loadNextRun, [historyOnly]);
+
+  function prepareRun() {
+    if (!nextRun?.date) return;
+    runSelection.current = "waiting";
+    setRun({ date: nextRun.date });
+    setPaymentDate(nextRun.date);
+    setPaymentDateReason("");
+    setSelected([]);
+    selectView("prepare");
+    queueTable.setQuery((current) => ({ ...current, page: 1, pageSize: 100, search: "", filters: {} }));
+    if (run?.date === nextRun.date) queueTable.reload();
+  }
+
+  // Ticks the run's payments once its list has loaded (not the list shown before).
+  useEffect(() => {
+    if (!run || !runSelection.current) return;
+    if (queueTable.loading) { runSelection.current = "loading"; return; }
+    if (runSelection.current !== "loading") return;
+    runSelection.current = "";
+    const ids = queueRows.filter(isSelectable).map((row) => row.selectionKey);
+    setSelected(ids);
+    notify(t("{count} payments of the {date} run are selected. Check them and generate the bank file.").replace("{count}", ids.length).replace("{date}", formatDate(`${run.date}T12:00:00Z`, language)), ids.length ? "success" : "info");
+  }, [run, queueTable.loading, queueTable.rows]);
+
+  // The payment-run notification links here with ?run=next.
+  const runLinkHandled = useRef(false);
+  useEffect(() => {
+    if (runLinkHandled.current || searchParams.get("run") !== "next" || !nextRun) return;
+    runLinkHandled.current = true;
+    prepareRun();
+    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete("run"); return next; }, { replace: true });
+  }, [nextRun, searchParams]);
+
   function reloadAll() {
     if (historyOnly) {
       historyTable.reload();
       return;
     }
+    loadNextRun();
     queueTable.reload();
     confirmationTable.reload();
     bouncedTable.reload();
@@ -467,7 +513,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   ];
 
   return <section>
-      <PageHeader title={historyOnly ? "Payment History" : "Payments"} description={historyOnly ? "Bank files generated for payment, with their downloads." : "Prepare the BBVA bank file, confirm what the bank paid, deposit detractions and reconcile."} actions={<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>} />
+      <PageHeader title={historyOnly ? "Payment History" : "Payments"} description={historyOnly ? "Bank files generated for payment, with their downloads." : "Prepare the BBVA bank file, confirm what the bank paid, deposit detractions and reconcile."} actions={<>{!historyOnly && !readOnly && <ExcelImport kind="payment-schedule" onImported={reloadAll} />}<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button></>} />
       <WorkspaceTools links={[["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Management Reports", "/reports"]]} />
     <Message type="error">{(paymentRow || bounceRow || reprogramRow || reconciliationRow || cancelTarget || detractionRow ? "" : actionError) || resourceError}</Message>
     {linkActive && <DeepLinkNotice title="Showing the payment linked from your notification" missing={linkMissing} missingDescription="This payment is no longer pending in any Treasury stage. It may already be paid and reconciled." clearLabel="Show all payments" onClear={deepLink.clear} />}
@@ -479,6 +525,14 @@ export default function TreasuryQueue({ historyOnly = false }) {
       ? <div className="focus-tabs"><Link to="/treasury">{t("Payments")}</Link></div>
       : <Tabs idPrefix="treasury" label="Payment stages" panels value={paymentView} onChange={selectView} tabs={[["prepare", "Pending payments"], ["confirm", "Confirm payments"], ["detractions", "Detractions"], ["reconcile", "Reconciliation"], ["returned", "Returned payments"]].map(([id, label]) => ({ id, label, count: stageTotals[PAYMENT_VIEWS.indexOf(id)] }))}><Link to="/treasury/history">{t("Payment History")}</Link></Tabs>}
     <div hidden={historyOnly || paymentView !== "prepare"} {...tabPanelProps("treasury", "prepare")}>
+    {nextRun?.date && <div className={`payment-run-banner${run ? " is-active" : ""}`} role="region" aria-label={t("Next payment run")}>
+      <CalendarClock size={20} aria-hidden="true" />
+      <div>
+        <strong>{t("Next payment run")}: {formatDate(`${nextRun.date}T12:00:00Z`, language)}</strong>
+        <span>{nextRun.count ? `${t(nextRun.count === 1 ? "{count} payment due" : "{count} payments due").replace("{count}", nextRun.count)} · ${Object.entries(nextRun.totalsByCurrency || {}).map(([code, item]) => money(code, item.total)).join(" · ")}` : t("Nothing is due for this run yet.")}</span>
+      </div>
+      {!readOnly && nextRun.count > 0 && (run ? <button type="button" className="text-button" onClick={() => { setRun(null); setSelected([]); }}>{t("Show every pending payment")}</button> : <button type="button" className="primary-button" onClick={prepareRun}>{t("Prepare this run")}</button>)}
+    </div>}
     <ol className="bank-file-steps" aria-label={t("Bank file steps")}>
       {[["File details", fileDetailsReady], ["Select payments", selected.length > 0], ["Review and generate", Boolean(result) && !selected.length]].map(([label, done], index) => <li key={label} className={done ? "is-done" : index === currentFileStep ? "is-current" : ""} aria-current={index === currentFileStep ? "step" : undefined}><span className="bank-file-step-number">{index + 1}</span>{t(label)}</li>)}
     </ol>
