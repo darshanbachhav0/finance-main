@@ -17,7 +17,7 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
   await mongoose.connect(`mongodb://127.0.0.1:27017/erp_annual_monthly_test_${process.pid}_${Date.now()}`);
   try {
     await Promise.all([BudgetAllocation.init(), BudgetCommitment.init(), BudgetException.init()]);
-    const user = await User.create({ name: "Budget Planner", role: "Budget", email: "budget.planner@test.invalid", passwordHash: "unused" });
+    const user = await User.create({ name: "Budget Planner", role: "Treasury", email: "budget.planner@test.invalid", passwordHash: "unused" });
     // Changing an existing plan is Admin only; Budget creates plans and reserves funds.
     const planEditor = await User.create({ name: "Plan Editor", role: "Admin", email: "plan.editor@test.invalid", passwordHash: "unused" });
     const center = await CostCenter.create({ code: "CC-PLAN", name: "Budget test", area: "Finance", budgetMode: "TRANSITIONAL", active: true });

@@ -66,7 +66,7 @@ test("Area Director and Vice-Rector can act only at their assigned workflow leve
 });
 
 test("permission catalog preserves existing roles and adds Budget and Management capabilities", () => {
-  assert.equal(hasPermission({ role: ROLES.BUDGET }, PERMISSIONS.BUDGET_MANAGE), true);
+  assert.equal(hasPermission({ role: ROLES.TREASURY }, PERMISSIONS.BUDGET_MANAGE), true);
   assert.equal(hasPermission({ role: ROLES.MANAGEMENT }, PERMISSIONS.REPORT_VIEW), true);
   assert.equal(hasPermission({ role: ROLES.SOLICITOR }, PERMISSIONS.PAYMENT_CONFIRM), false);
   assert.equal(hasPermission({ role: ROLES.ADMIN }, PERMISSIONS.AUDIT_VIEW), true);

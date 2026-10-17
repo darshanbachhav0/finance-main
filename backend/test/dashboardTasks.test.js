@@ -18,7 +18,7 @@ test("dashboard tasks: role work, exact-record links and the Management decision
   await new Promise((resolve) => server.on("listening", resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
   try {
-    const roles = ["Admin", "Solicitor", "Accounting", "Treasury", "Budget", "Management", "AreaDirector"];
+    const roles = ["Admin", "Solicitor", "Accounting", "Treasury", "Management", "AreaDirector"];
     const users = Object.fromEntries((await User.create(roles.map((role) => ({ name: role, email: `${role.toLowerCase()}-tasks@test.local`, passwordHash: "unused", role, area: "Operations", approvalAreas: role === "AreaDirector" ? ["Operations"] : [] })))).map((user) => [user.role, user]));
     const call = async (role, path, method = "GET", body) => {
       const token = jwt.sign({ id: users[role]._id }, process.env.JWT_SECRET || "dev_secret_change_me");
@@ -110,8 +110,8 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       const other = request({ requestNumber: "T-EXC-OTHER", status: "OBSERVADO_PRESUPUESTO" });
       const voided = request({ requestNumber: "T-EXC-VOID", status: "ANULADO" });
       await FinancialRequest.collection.insertMany([open, other, voided]);
-      const exception = (req, fields = {}) => ({ request: req._id, dimensionKey: `k-${new mongoose.Types.ObjectId()}`, costCenter: new mongoose.Types.ObjectId(), strategy: "EXTRAORDINARY_APPROVAL", availableAmount: 0, requestedAmount: 100, requestedBy: users.Budget._id, history: [{ action: "CREATED", by: users.Budget._id }], ...fields });
-      const reviewed = { preparedAt: new Date(), preparedBy: users.Budget._id, preparationComments: "Recommended" };
+      const exception = (req, fields = {}) => ({ request: req._id, dimensionKey: `k-${new mongoose.Types.ObjectId()}`, costCenter: new mongoose.Types.ObjectId(), strategy: "EXTRAORDINARY_APPROVAL", availableAmount: 0, requestedAmount: 100, requestedBy: users.Treasury._id, history: [{ action: "CREATED", by: users.Treasury._id }], ...fields });
+      const reviewed = { preparedAt: new Date(), preparedBy: users.Treasury._id, preparationComments: "Recommended" };
       const [ready] = await BudgetException.create([
         exception(open, reviewed),
         exception(other),
@@ -137,7 +137,7 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       assert.equal(admin.status, 200);
       assert.equal(admin.body.canDecide, false, "Admin reads the queue but never decides");
       assert.equal(admin.body.data.every((row) => row.canDecide === false), true);
-      for (const role of ["Budget", "Solicitor", "AreaDirector"]) assert.equal((await call(role, "/dashboard/decisions/budget-exceptions")).status, 403, `${role} has no decision queue`);
+      for (const role of ["Treasury", "Solicitor", "AreaDirector"]) assert.equal((await call(role, "/dashboard/decisions/budget-exceptions")).status, 403, `${role} has no decision queue`);
 
       const decided = await call("Management", `/budget/exceptions/${ready._id}/decision`, "POST", { status: "APPROVED", comments: "Authorized from the inbox" });
       assert.equal(decided.status, 200);
@@ -145,8 +145,8 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       assert.equal((await call("Management", "/dashboard/decisions/budget-exceptions")).body.total, 1);
       assert.equal((await tasksOf("Management")).byKey.budgetExceptions.count, 1);
 
-      const budget = (await tasksOf("Budget")).byKey.budgetExceptions;
-      assert.equal(budget.count, 2, "Budget still sees every open exception, reviewed or not");
+      const budget = (await tasksOf("Treasury")).byKey.budgetExceptions;
+      assert.equal(budget.count, 2, "Treasury (the former Budget role) still sees every open exception, reviewed or not");
       assert.equal(budget.path, "/budget?tab=exceptions&exceptionStatus=PENDING");
     });
   } finally {

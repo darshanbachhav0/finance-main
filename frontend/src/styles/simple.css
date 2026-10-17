@@ -34,6 +34,8 @@
 .quick-file.is-attached { border-style: solid; border-color: var(--green-700); background: var(--green-100); }
 .quick-file .field-error-text { position: absolute; left: var(--space-3); bottom: -20px; }
 .quick-supplier { display: grid; gap: var(--space-2); }
+.quick-quotes { display: grid; gap: var(--space-2); }
+.quick-quote-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto; align-items: end; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .quick-note { margin: 0; color: var(--gray-700); }
 .quick-track { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); color: var(--gray-800); background: var(--blue-100); }
 .capex-details > summary { display: grid; gap: 2px; min-height: var(--touch-target); padding: var(--space-2) 0; cursor: pointer; }
@@ -43,6 +45,7 @@
 @media (max-width: 640px) {
   .quick-question { padding: var(--space-3); }
   .quick-choices { grid-template-columns: 1fr; }
+  .quick-quote-row { grid-template-columns: 1fr; }
 }
 
 /* ---- Plain request status (requesters) ---- */

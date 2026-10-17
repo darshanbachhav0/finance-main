@@ -19,7 +19,7 @@ const expectedAccounts = [
   ["demo.solicitante.salud@uma.edu.pe", "Solicitor", null],
   ["demo.director.salud@uma.edu.pe", "Approver", "AREA_DIRECTOR"],
   ["demo.vicerrector@uma.edu.pe", "Approver", "VICE_RECTOR"],
-  ["demo.presupuesto@uma.edu.pe", "Budget", null],
+  ["demo.presupuesto@uma.edu.pe", "Treasury", null],
   ["demo.contabilidad@uma.edu.pe", "Accounting", null],
   ["demo.tesoreria@uma.edu.pe", "Treasury", null],
   ["demo.gerencia@uma.edu.pe", "Management", "RECTORATE"]
@@ -101,7 +101,7 @@ async function verifyLifecycleLinks() {
   const rectorateStep = capex.approvalRouteSnapshot.find((step) => step.approvalLevel === "RECTORATE");
   const capexCommitment = await BudgetCommitment.findOne({ request: capex._id });
   check(String(rectorateStep?.completedBy) === String(management._id), "Management/Rectorate approval is not linked to the USD CAPEX scenario.");
-  check(String(capexCommitment?.createdBy) === String(budget._id), "Budget commitment is not linked to the Budget role.");
+  check(String(capexCommitment?.createdBy) === String(budget._id), "Budget commitment is not linked to the Treasury budget user.");
 }
 
 async function verifyIntegrationsAndFiles() {

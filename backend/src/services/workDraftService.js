@@ -9,7 +9,7 @@ const roles = {
   "supplier-bank": ["Admin", "Accounting", "Solicitor"], "supplier-tax-review": ["Admin", "Accounting"], "supplier-finance-review": ["Admin", "Accounting"], "supplier-bank-review": ["Admin", "Accounting"],
   "employee-bank": ["Admin", "Solicitor"], rendition: ["Admin", "Solicitor"],
   "rendition-settlement": ["Admin", "Accounting", "Treasury"],
-  "budget-plan": ["Admin", "Budget", "Accounting"], "budget-adjustment": ["Admin", "Budget", "Accounting"],
+  "budget-plan": ["Admin", "Treasury", "Accounting"], "budget-adjustment": ["Admin", "Treasury", "Accounting"],
   "accounting-period": ["Admin", "Accounting"], fiscal: ["Admin", "Accounting"],
   "payment-confirmation": ["Admin", "Treasury"], "payment-bounce": ["Admin", "Treasury"],
   "payment-reprogram": ["Admin", "Treasury"], "payment-reconciliation": ["Admin", "Treasury"],
@@ -29,7 +29,7 @@ export function assertDraftScope(user, scope) {
   const resource = String(scope).replace(/^resource:/, "");
   const allowed = scope?.startsWith("resource:") && resources.has(resource)
     ? ["users", "approval-rules", "bank-formats", "finance-configurations"].includes(resource) ? ["Admin"]
-      : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Budget"] : ["Admin", "Accounting"] : roles[scope];
+      : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Treasury"] : ["Admin", "Accounting"] : roles[scope];
   const granted = (grants[scope] || []).some((permission) => hasPermission(user, permission));
   if (!allowed?.includes(user.role) && !granted) throw new AppError(403, "Draft access is not available for this role.");
 }

@@ -42,7 +42,7 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
     const opex = await ExpenseType.create({ code: "PO-DEC-OPEX", name: "Operating expense", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", deductible: true, permittedRequestTypes: [REQUEST_TYPE.OPEX], active: true });
     const users = {
       solicitor: await User.create({ name: "Requester", email: "po-dec-requester@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id, authorizedCostCenters: [center._id] }),
-      budget: await User.create({ name: "Budget Officer", email: "po-dec-budget@test.local", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
+      budget: await User.create({ name: "Budget Officer", email: "po-dec-budget@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
       management: await User.create({ name: "Management", email: "po-dec-management@test.local", passwordHash: "unused", role: ROLES.MANAGEMENT, area: "Rectorate", active: true }),
       admin: await User.create({ name: "Admin", email: "po-dec-admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" }),
       accounting: await User.create({ name: "Accounting", email: "po-dec-accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" })
@@ -68,7 +68,8 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
       const policy = await configuredQuotationPolicy(legacy);
       assert.equal(policy.enabled, true);
       assert.equal(policy.minimumCount, 1);
-      assert.deepEqual((await configuredDocumentRequirements(legacy, DOCUMENT_PHASE.SUBMISSION)).map((item) => [item.kind, item.minCount]), [["QUOTATION", 1]]);
+      // A1 is sent with a quote or the invoice, whatever the legacy rule asks for.
+      assert.deepEqual((await configuredDocumentRequirements(legacy, DOCUMENT_PHASE.SUBMISSION)).map((item) => [item.kind, item.minCount]), [["QUOTE_OR_INVOICE", 1]]);
       const base = { supplier: supplier._id, supplierSelectionReason: "Only compliant proposal" };
       const none = validateStructuredQuotationComparison({ ...base, quotations: [] }, policy);
       assert.ok(none.errors.some((error) => error.code === "QUOTATION_MINIMUM_NOT_MET" && error.required === 1));

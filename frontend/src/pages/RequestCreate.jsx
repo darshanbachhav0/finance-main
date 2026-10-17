@@ -45,7 +45,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
-import { coversKind, isAnyDocument, isEitherOf, presentCount, ruleForKind } from "../utils/documentRequirements.js";
+import { coversKind, isAnyDocument, isEitherOf, isQuoteOrInvoice, presentCount, ruleForKind } from "../utils/documentRequirements.js";
 import InvoiceDropZone from "../components/InvoiceDropZone.jsx";
 import InvoiceMatchStrip from "../components/InvoiceMatchStrip.jsx";
 import TrackPicker from "../components/TrackPicker.jsx";
@@ -81,8 +81,8 @@ const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierId = (value) => value?._id || value || "";
 // The simple form's answers (see QuickRequestForm): who gets the money, what the requester has
 // from the supplier, what an employee needs, whether it is CAPEX, and the amount as typed.
-const initialQuick = { payee: "supplier", evidence: "quote", employeeNeed: "advance", capex: false, amount: "" };
-const quickFromForm = (form = {}, amount = "") => ({ payee: form.flowType === "C" ? "employee" : "supplier", evidence: form.flowType === "B" ? "invoice" : "quote", employeeNeed: form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "reimbursement" : "advance", capex: form.requestType === "CAPEX", amount });
+const initialQuick = { payee: "supplier", route: "order", employeeNeed: "advance", capex: false, amount: "" };
+const quickFromForm = (form = {}, amount = "") => ({ payee: form.flowType === "C" ? "employee" : "supplier", route: form.flowType === "B" ? "direct" : "order", employeeNeed: form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "reimbursement" : "advance", capex: form.requestType === "CAPEX", amount });
 const attachmentId = (value) => value?._id || value || "";
 
 const emptyLine = (costCenter = "") => ({
@@ -421,7 +421,9 @@ export default function RequestCreate() {
       setCompletedSteps((data.completedSteps || []).map((item) => typeof item === "number" ? legacy(item) : item));
       // Drafts from before the simple form were made with the full form.
       setMode(data.mode || "full");
-      setQuick({ ...initialQuick, ...(data.quick || quickFromForm(data.form)) });
+      // Drafts from before "how is it paid?" carried evidence: invoice meant direct payment.
+      const saved = data.quick && !data.quick.route ? { ...data.quick, route: data.quick.evidence === "invoice" ? "direct" : "order" } : data.quick;
+      setQuick({ ...initialQuick, ...(saved || quickFromForm(data.form)) });
     }
   });
   useEffect(() => { if (draft.ready) void draft.flush(); }, [stepId]);
@@ -550,7 +552,7 @@ export default function RequestCreate() {
       setLines(invoiceLines);
       setQuick((current) => ({ ...current, amount: String(invoice.totalAmount) }));
     }
-    if (form.flowType === "B" || mode === "quick") attachInvoiceFile(file);
+    if (form.flowType !== "C") attachInvoiceFile(file);
     notify(fill ? "Filled from the invoice: check the supplier, currency and amounts." : "Invoice read. Your amounts were kept; compare them with the invoice in the next step.", "info");
   }
 
@@ -589,6 +591,10 @@ export default function RequestCreate() {
       if (nextSupplier) setForm((current) => ({ ...current, supplier: nextSupplier }));
     }
   }
+
+  // A1 and B are sent with a quote, the invoice, or both.
+  const invoiceAttached = ["xml", "pdf", "feeReceipt"].some((key) => files[key]?.length) || existingAttachments.some((item) => ["XML", "PDF", "FEE_RECEIPT"].includes(item.kind));
+  const quotedWithEvidence = quotations.filter((quotation) => quotationFiles[quotation.clientId] && !quotation.attachment).length;
 
   function validationForStep(id, submitting) {
     const next = {};
@@ -629,14 +635,18 @@ export default function RequestCreate() {
       });
     }
     if (id === "supplier") {
-      if (form.flowType === "A1") quotations.forEach((quotation, quoteIndex) => {
+      if (["A1", "B"].includes(form.flowType)) quotations.forEach((quotation, quoteIndex) => {
         validatePaymentTerms(quotation, { requireComplete: submitting }).forEach(({ field, message }) => {
           next[`quotations.${quoteIndex}.${field}`] = message;
         });
       });
-      if (quotationPolicy.enabled && submitting) {
-        if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size < quotationPolicy.minimumCount) next.quotations = "At least one supplier quotation is required.";
+      // A1 and B: a quote or the invoice, at least one. With only the invoice there is nothing to
+      // compare; any quotation that was started is checked in full.
+      const invoiceOnly = quotationPolicy.invoiceInstead && invoiceAttached && !quotations.some(quotationHasData);
+      if (quotationPolicy.enabled && submitting && !invoiceOnly) {
+        if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size < quotationPolicy.minimumCount) next.quotations = quotationPolicy.invoiceInstead ? "Attach a quote or the invoice (at least one)." : "At least one supplier quotation is required.";
         quotations.forEach((quotation, quoteIndex) => {
+          if (!quotationHasData(quotation) && quotations.some(quotationHasData)) return;
           if (!quotation.supplier) next[`quotations.${quoteIndex}.supplier`] = "Select a supplier.";
           if (!(Number(quotation.amount) > 0)) next[`quotations.${quoteIndex}.amount`] = "Quotation amount must be greater than zero.";
           if (!quotation.attachment && !quotationFiles[quotation.clientId]) next[`quotations.${quoteIndex}.attachment`] = "Quotation evidence is required.";
@@ -648,7 +658,7 @@ export default function RequestCreate() {
       }
       // A saved request always names its supplier, so "Save draft" needs it as well.
       if (!form.supplier && form.flowType !== "C") {
-        if (!quotationPolicy.enabled) next.supplier = "Select a supplier.";
+        if (!quotationPolicy.enabled || invoiceOnly) next.supplier = "Select a supplier.";
         else next.recommended ||= "Select exactly one recommended supplier.";
       }
     }
@@ -658,9 +668,11 @@ export default function RequestCreate() {
         // The invoice is satisfied by its XML or its factura PDF: either card counts.
         const definitions = documentDefinitions.filter((item) => coversKind(rule, item.kind));
         if (!definitions.length) return;
-        const count = presentCount(rule, existingAttachments, Object.fromEntries(definitions.map((item) => [item.kind, files[item.key]?.length || 0])));
+        const count = presentCount(rule, existingAttachments, Object.fromEntries(definitions.map((item) => [item.kind, files[item.key]?.length || 0]))) + (isQuoteOrInvoice(rule) ? quotedWithEvidence : 0);
         if (count >= rule.minCount) return;
-        const message = isAnyDocument(rule)
+        const message = isQuoteOrInvoice(rule)
+          ? t("Attach a quote or the invoice (at least one).")
+          : isAnyDocument(rule)
           ? t("Upload at least one document: any of these files is enough.")
           : isEitherOf(rule)
           ? t("Upload one of these files (one is enough): {documents}.").replace("{documents}", definitions.map((item) => t(item.label)).join(" / "))
@@ -788,7 +800,7 @@ export default function RequestCreate() {
     } : {}));
     data.append("opexDetails", JSON.stringify(form.requestType === "OPEX" ? { expenseFrequency: opexFrequency } : {}));
     data.append("lines", JSON.stringify(lines.map(requestLinePayload)));
-    data.append("quotations", JSON.stringify(quotations.map((quotation) => ({
+    data.append("quotations", JSON.stringify(quotations.filter(quotationHasData).map((quotation) => ({
       ...quotation,
       clientId: undefined,
       attachment: quotationFiles[quotation.clientId] ? undefined : quotation.attachment
@@ -796,7 +808,7 @@ export default function RequestCreate() {
     data.append("submit", String(sendForApproval));
     if (removedAttachmentIds.length) data.append("removeAttachments", JSON.stringify(removedAttachmentIds));
     Object.entries(files).forEach(([key, selectedFiles]) => selectedFiles.forEach((file) => data.append(key, file)));
-    quotations.forEach((quotation) => {
+    quotations.filter(quotationHasData).forEach((quotation) => {
       const file = quotationFiles[quotation.clientId];
       if (file) data.append("quotation", file);
     });
@@ -830,13 +842,14 @@ export default function RequestCreate() {
     clearErrors(["quote", "invoice", "supplier"]);
     const next = { ...quick, ...patch };
     setQuick(next);
-    if (!["payee", "evidence", "employeeNeed", "capex"].some((key) => Object.hasOwn(patch, key))) return;
+    if (!["payee", "route", "employeeNeed", "capex"].some((key) => Object.hasOwn(patch, key))) return;
     const track = quickTrack(next);
     setForm((current) => ({ ...current, ...track, supplier: track.flowType === "C" ? "" : current.supplier }));
-    // Back to "a quote": the invoice read before is no longer this request's evidence.
-    if (patch.evidence === "quote" || patch.payee === "employee") {
+    // The employee's own money: no supplier invoice or quotes.
+    if (patch.payee === "employee") {
       setFiles((current) => ({ ...current, xml: [], pdf: [] }));
       setInvoiceCheck(null);
+      setQuotations([]);
     }
   }
 
@@ -859,46 +872,57 @@ export default function RequestCreate() {
     });
   }
 
-  // Where quotations are required the quote is the recommended quotation; elsewhere it is the
-  // request's supporting document (which is what the document rules then ask for).
-  const quickQuotation = quotations[0];
-  const quoteFile = quotationPolicy.enabled ? (quickQuotation ? quotationFiles[quickQuotation.clientId] : null) : files.supporting?.[0] || null;
-  function changeQuoteFile(file) {
-    clearErrors(["quote", "supporting"]);
-    if (!quotationPolicy.enabled) {
-      setFiles((current) => ({ ...current, supporting: file ? [file] : [] }));
-      return;
-    }
-    const quotation = quotations[0] || emptyQuotation();
-    if (!quotations[0]) setQuotations([quotation]);
-    setQuotationFiles((current) => ({ ...current, [quotation.clientId]: file || undefined }));
+  // The quotes (A1 and B): the first is the chosen supplier's, for the request total and
+  // recommended; more can be added to compare suppliers. A quote or the invoice: at least one.
+  const quoteEvidence = (quotation) => Boolean(quotation && (quotationFiles[quotation.clientId] || quotation.attachment));
+  const firstQuoteAttached = quoteEvidence(quotations[0]);
+  function changeQuoteFile(index, file) {
+    clearErrors(["quote", `quotations.${index}.attachment`]);
+    const list = quotations.length ? quotations : [emptyQuotation()];
+    if (!quotations.length) setQuotations(list);
+    const quotation = list[index];
+    if (quotation) setQuotationFiles((current) => ({ ...current, [quotation.clientId]: file || undefined }));
   }
+  function changeQuickQuote(index, patch) {
+    clearErrors(Object.keys(patch).map((key) => `quotations.${index}.${key}`));
+    setQuotations((current) => current.map((quotation, position) => position === index ? { ...quotation, ...patch } : quotation));
+  }
+  const addQuickQuote = () => setQuotations((current) => [...(current.length ? current : [emptyQuotation()]), { ...emptyQuotation(), currency: form.currency }]);
+  const removeQuickQuote = (index) => setQuotations((current) => current.filter((_, position) => position !== index));
 
-  // The quote is the recommended quotation of the chosen supplier, for the request total.
+  // The first quote follows the chosen supplier and the request total; without its file it is
+  // left blank, so a request sent with only the invoice carries no empty quotation.
   useEffect(() => {
-    if (mode !== "quick" || form.flowType !== "A1" || quick.evidence !== "quote") return;
-    // Quotations not required here: drop the one this form made (the quote is a document).
-    if (!quotationPolicy.enabled) {
-      setQuotations((current) => current.length === 1 && !current[0].attachment && !quotationFiles[current[0].clientId] && !current[0].deliveryPeriod && !current[0].commercialConditions ? [] : current);
-      return;
-    }
+    if (mode !== "quick" || form.flowType === "C") return;
     setQuotations((current) => {
-      if (current.length > 1) return current;
-      const base = current[0] || emptyQuotation();
-      return [{ ...base, supplier: form.supplier, amount: totals.total > 0 ? String(totals.total) : "", currency: form.currency, recommended: Boolean(form.supplier) }];
+      const [first = emptyQuotation(), ...rest] = current;
+      const synced = firstQuoteAttached
+        ? { ...first, supplier: form.supplier, amount: totals.total > 0 ? String(totals.total) : "", currency: form.currency, recommended: Boolean(form.supplier) }
+        : { ...first, supplier: "", amount: "", recommended: false };
+      return [synced, ...rest.map((quotation) => ({ ...quotation, recommended: false }))];
     });
-  }, [mode, form.flowType, quick.evidence, form.supplier, form.currency, totals.total, quotationPolicy.enabled]);
+  }, [mode, form.flowType, form.supplier, form.currency, totals.total, quotations.length, firstQuoteAttached]);
 
-  const quickDocuments = quickExtraDocuments(formPolicy.documentRequirements, documentDefinitions, { evidence: quick.evidence, flowType: form.flowType, quoteIsDocument: form.flowType === "A1" && !quotationPolicy.enabled });
+  const quickDocuments = quickExtraDocuments(formPolicy.documentRequirements, documentDefinitions, { evidence: invoiceAttached ? "invoice" : "quote", flowType: form.flowType });
+  const quotedSuppliers = new Set(quotations.filter(quoteEvidence).map((quotation) => quotation.supplier).filter(Boolean));
 
   function submitQuick() {
     const problems = {};
     if (!String(form.detailedDescription || "").trim()) problems.detailedDescription = "Tell us what you need.";
     if (!(totals.total > 0)) problems["lines.0.totalAmount"] = "Enter the total amount.";
     if (form.flowType === "A1" && !String(form.businessJustification || "").trim()) problems.businessJustification = "Tell us why it is needed.";
-    if (form.flowType !== "C" && !form.supplier) problems.supplier = "Select the supplier.";
-    if (form.flowType === "A1" && !quoteFile && !quickQuotation?.attachment) problems.quote = "Attach the quote.";
-    if (form.flowType === "B" && !files.xml?.length && !files.pdf?.length && !existingAttachments.some((item) => ["XML", "PDF"].includes(item.kind))) problems.invoice = "Attach the invoice XML or PDF.";
+    if (form.flowType !== "C") {
+      if (!form.supplier) problems.supplier = "Select the supplier.";
+      if (!quotations.some(quoteEvidence) && !invoiceAttached) problems.quote = "Attach a quote or the invoice (at least one).";
+      quotations.slice(1).forEach((quotation, position) => {
+        const index = position + 1;
+        if (!quotationHasData(quotation) && !quoteEvidence(quotation)) return;
+        if (!quotation.supplier) problems[`quotations.${index}.supplier`] = "Select a supplier.";
+        if (!(Number(quotation.amount) > 0)) problems[`quotations.${index}.amount`] = "Quotation amount must be greater than zero.";
+        if (!quoteEvidence(quotation)) problems[`quotations.${index}.attachment`] = "Quotation evidence is required.";
+      });
+      if (quotedSuppliers.size > 1 && !String(form.supplierSelectionReason || "").trim()) problems.supplierSelectionReason = "Supplier selection reason is required.";
+    }
     quickDocuments.forEach(({ definition }) => { if (!files[definition.key]?.length && !existingAttachments.some((item) => item.kind === definition.kind)) problems[definition.key] = "Attach this document."; });
     if (Object.keys(problems).length) {
       showProblems(problems);
@@ -956,8 +980,13 @@ export default function RequestCreate() {
       supplierProposalPath={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`}
       invoiceCheck={invoiceCheck}
       onInvoiceFile={(file) => { clearErrors(["invoice"]); readInvoice(file, { fill: true }); }}
-      quoteFile={quoteFile}
+      quotations={quotations}
+      quotationFiles={quotationFiles}
       onQuoteFile={changeQuoteFile}
+      onQuoteChange={changeQuickQuote}
+      onAddQuote={addQuickQuote}
+      onRemoveQuote={removeQuickQuote}
+      compareSuppliers={quotedSuppliers.size > 1}
       extraDocuments={quickDocuments}
       files={files}
       onDocumentFiles={(key, chosen) => { clearErrors([key]); setFiles((current) => ({ ...current, [key]: chosen })); }}
@@ -978,7 +1007,7 @@ export default function RequestCreate() {
         <MotionSurface changeKey={step} directional>
         {stepId === "need" && <div className="wizard-step request-form-blocks">
           {form.flowType !== "C" && <InvoiceDropZone check={invoiceCheck} onFile={(file) => readInvoice(file, { fill: true })} supplierProposalPath={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`} />}
-          {form.flowType === "A1" && invoiceCheck?.status === "done" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("You already have the invoice")}</strong><span>{t("If no quotation or purchase order is needed, Track B (direct payment) is faster: the invoice is checked now and the request goes to payment once approved.")}</span></div><button type="button" className="secondary-button" onClick={() => { setForm((current) => ({ ...current, flowType: "B" })); attachInvoiceFile(invoiceCheck.file); }}>{t("Switch to Track B")}</button></div>}
+          {form.flowType === "A1" && mode === "full" && invoiceCheck?.status === "done" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("You already have the invoice")}</strong><span>{t("If no quotation or purchase order is needed, Track B (direct payment) is faster: the invoice is checked now and the request goes to payment once approved.")}</span></div><button type="button" className="secondary-button" onClick={() => { setForm((current) => ({ ...current, flowType: "B" })); attachInvoiceFile(invoiceCheck.file); }}>{t("Switch to Track B")}</button></div>}
 
           <RequestFormBlock {...blockInfo.need} status={blockStatuses.need}>
           <TrackPicker onChoose={(choice) => setForm((current) => ({ ...current, flowType: choice.flowType, requestType: choice.flowType === "C" ? choice.requestType : requestTypeForFlow(choice.flowType, current.requestType), supplier: choice.flowType === "C" ? "" : current.supplier }))} />
@@ -1052,7 +1081,7 @@ export default function RequestCreate() {
         </div>}
 
         {stepId === "supplier" && <div className="wizard-step">
-          {form.flowType !== "C" && !quotationPolicy.enabled && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("Supplier")}</h3><p>{t("Select the supplier linked to this request. A new supplier can be saved in a draft; the request is sent once the proposer's jefe approves the supplier.")}</p></div></div><div className="form-grid two-column-form"><SearchSelect label="Supplier" value={form.supplier} options={eligibleSuppliers} onChange={(value) => setForm((current) => ({ ...current, supplier: value }))} getOptionLabel={(item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)} - ${t(supplierStatus(item))}`} error={errors.supplier} required searchPlaceholder="Search name or RUC/DNI..." />{selectedSupplier && <div className="supplier-inline-status"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /></div>}</div></div>}
+          {form.flowType !== "C" && (!quotationPolicy.enabled || !quotations.some(quotationHasData)) && <div className="official-subsection"><div className="section-heading compact"><div><h3>{t("Supplier")}</h3><p>{t("Select the supplier linked to this request. A new supplier can be saved in a draft; the request is sent once the proposer's jefe approves the supplier.")}</p></div></div><div className="form-grid two-column-form"><SearchSelect label="Supplier" value={form.supplier} options={eligibleSuppliers} onChange={(value) => setForm((current) => ({ ...current, supplier: value }))} getOptionLabel={(item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)} - ${t(supplierStatus(item))}`} error={errors.supplier} required searchPlaceholder="Search name or RUC/DNI..." />{selectedSupplier && <div className="supplier-inline-status"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /></div>}</div></div>}
 
           {form.flowType !== "C" && <div className="official-subsection quotation-section"><div className="section-heading"><div><h3>{t("Supplier quotations")}</h3><p>{quotationPolicy.enabled ? t("At least one supplier quotation with evidence is required. Add or remove further quotations as needed.") : t("Quotation comparison is optional for this classification.")}</p></div><button type="button" className="secondary-button" onClick={() => setQuotations((current) => [...current, emptyQuotation()])}><Plus size={16} /><span>{t("Add quotation")}</span></button></div>
             {errors.quotations && <Message type="error">{errors.quotations}</Message>}
@@ -1087,10 +1116,13 @@ export default function RequestCreate() {
           // "Invoice XML or factura PDF": each card says the other one also does, and once either is
           // attached the other is optional.
           const alternatives = isEitherOf(rule) ? documentDefinitions.filter((item) => item.key !== document.key && coversKind(rule, item.kind)) : [];
-          const metByAlternative = alternatives.some((item) => existingAttachments.some((file) => file.kind === item.kind) || files[item.key]?.length);
+          const quoted = isQuoteOrInvoice(rule) && (quotedWithEvidence > 0 || existingAttachments.some((file) => file.kind === "QUOTATION"));
+          const metByAlternative = quoted || alternatives.some((item) => existingAttachments.some((file) => file.kind === item.kind) || files[item.key]?.length);
           const required = rule && !metByAlternative;
-          const state = attached ? t("Files attached") : metByAlternative ? t("Optional document") : isAnyDocument(rule) ? t("Any one document is enough") : alternatives.length ? t("Required: this or {other}").replace("{other}", alternatives.map((item) => t(item.label)).join(" / ")) : t(rule ? "Required document" : "Optional document");
-          return <label hidden={!showOptionalDocuments && !rule && !attached && !removed.length && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => { const chosen = Array.from(event.target.files || []); setFiles((current) => ({ ...current, [document.key]: chosen })); if (["xml", "pdf"].includes(document.key) && form.flowType === "B" && chosen[0]) readInvoice(chosen[0]); event.target.value = ""; }} /><UploadedFileList
+          const state = attached ? t("Files attached") : quoted ? t("Optional: the quote is attached") : metByAlternative ? t("Optional document") : isQuoteOrInvoice(rule) ? t("A quote or the invoice: one is enough") : isAnyDocument(rule) ? t("Any one document is enough") : alternatives.length ? t("Required: this or {other}").replace("{other}", alternatives.map((item) => t(item.label)).join(" / ")) : t(rule ? "Required document" : "Optional document");
+          // The fee receipt card is for professional fees.
+          const offTopic = isQuoteOrInvoice(rule) && document.kind === "FEE_RECEIPT" && form.expenseNature !== "PROFESSIONAL_FEES";
+          return <label hidden={(!showOptionalDocuments || offTopic) && (!rule || offTopic) && !attached && !removed.length && !errors[document.key]} className={`document-upload${attached ? " is-attached" : ""}${errors[document.key] ? " field-error" : ""}`} key={document.key}><FileText size={22} /><span><strong>{t(document.label)}{required && !alternatives.length && !isQuoteOrInvoice(rule) ? ` *${rule.minCount > 1 ? ` (${rule.minCount})` : ""}` : ""}</strong><small className="document-state">{state}{attached ? ` · ${attached}` : ""}</small></span><input aria-label={t(document.label)} aria-invalid={Boolean(errors[document.key])} type="file" accept={document.accept} multiple={document.multiple} onChange={(event) => { const chosen = Array.from(event.target.files || []); setFiles((current) => ({ ...current, [document.key]: chosen })); if (["xml", "pdf"].includes(document.key) && form.flowType === "B" && chosen[0]) readInvoice(chosen[0]); event.target.value = ""; }} /><UploadedFileList
             stored={existing}
             removed={removed}
             chosen={files[document.key]}

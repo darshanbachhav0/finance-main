@@ -34,12 +34,13 @@ treasury, suppliers, SUNAT/SIRE integration, and what's intentionally out of sco
 
 ## Roles
 
-Nine stored roles — see **[docs/ROLE_PERMISSIONS_GUIDE.md](docs/ROLE_PERMISSIONS_GUIDE.md)** for the
-full capability matrix and per-role guide:
+Nine stored operational roles — see **[docs/ROLE_PERMISSIONS_GUIDE.md](docs/ROLE_PERMISSIONS_GUIDE.md)**
+for the full capability matrix and per-role guide:
 
-`Admin`, `Solicitor`, `Approver` (Area Director and Vice Rector share this role; `approvalLevel`
-distinguishes them), `Accounting`, `Treasury`, `Budget`, `Procurement`, `Management`,
-`ManagementViewer` (strictly read-only).
+`Admin`, `Solicitor`, `AreaDirector`, `ViceRector` (same permissions; the role sets the approval
+level), `Accounting`, `Treasury` (also manages the budget — the former `Budget` role was folded into
+it), `Procurement`, `Management`, `ManagementViewer` (strictly read-only), plus `SuperAdmin`, which
+manages administrator accounts and takes part in no process.
 
 Backend role/permission/ownership/workflow checks are authoritative; frontend navigation is a
 separate, narrower presentational layer on top of them.

@@ -32,11 +32,11 @@ export async function submissionReadiness(payload, user) {
   if (!quotation.valid) add("QUOTATIONS_INCOMPLETE", "Complete quotation evidence and comparison.", "Requester", "/requests/new", quotation.errors);
   let budget;
   try { budget = await previewFinancialRequestBudget({ payload: request, user }); }
-  catch (error) { if (!error.statusCode) throw error; add(error.code, error.message, "Requester / Budget", "/budget", error.details); }
+  catch (error) { if (!error.statusCode) throw error; add(error.code, error.message, "Requester / Treasury", "/budget", error.details); }
   if (budget?.exchangeRate) request.exchangeRate = budget.exchangeRate;
   try { request.lines = parseRequestLines(request.lines); } catch (error) { add("LINES_INVALID", error.message); }
-  if (budget?.status === "PENDING_VALIDATION") add("BUDGET_PENDING", "Budget or exchange-rate information is incomplete.", "Budget / Accounting", "/budget");
-  if (budget?.status === "INSUFFICIENT") add("BUDGET_SHORTFALL", "Budget is insufficient. Budget review and any required Management exception must be completed before accounting.", "Budget / Management", "/budget");
+  if (budget?.status === "PENDING_VALIDATION") add("BUDGET_PENDING", "Budget or exchange-rate information is incomplete.", "Treasury / Accounting", "/budget");
+  if (budget?.status === "INSUFFICIENT") add("BUDGET_SHORTFALL", "Budget is insufficient. Treasury review and any required Management exception must be completed before accounting.", "Treasury / Management", "/budget");
   return { issues, documents, budget, ready: issues.length === 0, checkedAt: new Date(), informational: true };
 }
 
@@ -50,7 +50,7 @@ export async function requestReadiness(id, user) {
   for (const missing of documents.phases[documents.currentPhase].missing) issues.push({ code: "DOCUMENT", message: `Upload ${missing.label || missing.kind}: ${missing.present}/${missing.required}.`, owner: documents.currentPhase === "ACCOUNTING" ? "Accounting" : "Requester", path });
   if (request.observation?.code && !request.observation.resolvedAt) issues.push({ code: request.observation.code, message: request.observation.detail, owner: "Accounting / Requester", path });
   for (const item of detail.budgetExceptions.filter(row => ["PENDING", "REVIEWED"].includes(row.status))) issues.push({ code: "BUDGET_EXCEPTION", message: "Budget exception requires an authorized decision.", owner: "Management", path: "/budget" });
-  if (request.flowType === "A1" && !request.purchaseOrder && ["APROBADO", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL"].includes(request.status)) issues.push(...(detail.procurementReadiness?.issues || []).map(item => ({ ...item, owner: "Procurement / Budget", path })));
+  if (request.flowType === "A1" && !request.purchaseOrder && ["APROBADO", "APROBADO_DIRECTOR", "APROBADO_VICERRECTOR", "COMPROMISO_PRESUPUESTAL"].includes(request.status)) issues.push(...(detail.procurementReadiness?.issues || []).map(item => ({ ...item, owner: "Procurement / Treasury", path })));
   for (const voucher of detail.sunatVouchers || []) {
     if (voucher.supersededBy || ["VALID", "MANUAL_EXCEPTION", "ANNULLED"].includes(voucher.validationStatus)) continue;
     issues.push({ code: "INVOICE_VALIDATION", message: `${voucher.seriesNumber}: ${voucher.observationDetail || "Individual voucher validation is pending."}`, owner: "Accounting / Requester", path });

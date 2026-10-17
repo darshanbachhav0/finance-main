@@ -17,7 +17,7 @@ const router = Router();
 router.use(protect, authorizePermission(PERMISSIONS.BUDGET_VIEW));
 router.get("/overview", getBudgetOverview);
 router.get("/plans/:id", readBudgetPlan);
-router.post("/plans", authorize(ROLES.ADMIN, ROLES.BUDGET), addBudgetPlan);
+router.post("/plans", authorize(ROLES.ADMIN, ROLES.TREASURY), addBudgetPlan);
 // Changing an existing plan (moving money between months, reserve, annual amount, planning
 // mode, roll-forward) is Admin only; changes above the approval threshold wait for Management.
 router.post("/plans/:id/adjustments", authorize(ROLES.ADMIN), changeBudgetPlan);
@@ -27,7 +27,7 @@ router.post("/plan-changes/:id/cancel", authorize(ROLES.ADMIN), cancelPlanChange
 router.get("/allocations", listBudgetAllocations);
 router.get("/commitments", listBudgetCommitments);
 router.get("/exceptions", listBudgetExceptions);
-router.post("/exceptions/:id/decision", authorize(ROLES.ADMIN, ROLES.BUDGET, ROLES.MANAGEMENT), decideBudgetException);
-router.post("/requests/:id/commit", authorize(ROLES.ADMIN, ROLES.BUDGET), commitRequestBudget);
-router.post("/year-end/carry-over", authorize(ROLES.ADMIN, ROLES.BUDGET), runYearEndCarryOver);
+router.post("/exceptions/:id/decision", authorize(ROLES.ADMIN, ROLES.TREASURY, ROLES.MANAGEMENT), decideBudgetException);
+router.post("/requests/:id/commit", authorize(ROLES.ADMIN, ROLES.TREASURY), commitRequestBudget);
+router.post("/year-end/carry-over", authorize(ROLES.ADMIN, ROLES.TREASURY), runYearEndCarryOver);
 export default router;

@@ -77,7 +77,7 @@ assert.deepEqual(destinations({ role: "AreaDirector" }), ["/", "/approvals", "/r
 assert.deepEqual(destinations({ role: "Treasury" }), ["/", "/treasury", "/treasury/history"]);
 assert.deepEqual(destinations({ role: "Accounting" }), ["/", "/accounting", "/accounting/invoice-observations"]);
 assert.deepEqual(destinations({ role: "ManagementViewer" }), ["/management-view"]);
-for (const role of ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"]) {
+for (const role of ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "ManagementViewer"]) {
   const allowed = navigationForUser({ role }).map(([, path]) => path);
   for (const path of destinations({ role })) assert.ok(allowed.includes(path), `${role}: ${path} is one of the role's menu entries`);
   assert.ok(destinations({ role }).length <= 3, `${role}: at most three destinations plus Search`);

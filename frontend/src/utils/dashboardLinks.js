@@ -7,7 +7,7 @@ export const AWAITING_PURCHASE_ORDER_PATH = "/requests?status=PENDIENTE_OC";
 // status list selects any of them (see listRequestsPage in the backend request service).
 export function dashboardMetricLink(role, key) {
   let destination;
-  if (role === "Budget" || ["budget", "available", "assigned", "committed", "executed", "paid"].includes(key)) {
+  if (["budget", "available", "assigned", "committed", "executed", "paid"].includes(key)) {
     destination = ["/budget", "Open Budget Control"];
   } else if (role === "AreaDirector" || role === "ViceRector") {
     destination = ["/approvals", "Review approvals"];

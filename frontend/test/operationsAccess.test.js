@@ -7,14 +7,15 @@ import { canAccessNavigation, configurationAccess, navigationForUser, reportDown
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const menu = (role) => navigationForUser({ role }).map(([, path]) => path);
 
-// Configuration: Treasury reaches bank-format certification; Budget and Accounting get their links.
+// Configuration: Treasury reaches bank-format certification and (the former Budget role's) budget
+// rules; Accounting gets its links.
 assert.equal(canAccessNavigation("Treasury", "/configuration/bank-formats"), true);
-assert.equal(canAccessNavigation("Treasury", "/configuration/budget-rules"), false);
-assert.equal(canAccessNavigation("Budget", "/configuration/budget-rules"), true);
+assert.equal(canAccessNavigation("Treasury", "/configuration/budget-rules"), true);
+assert.equal(canAccessNavigation("Budget", "/configuration/budget-rules"), false, "the Budget role no longer exists");
 assert.equal(canAccessNavigation("Accounting", "/configuration/finance-configurations"), true);
 assert.equal(canAccessNavigation("Solicitor", "/configuration/unknown-resource"), false);
 assert.equal(canAccessNavigation("Accounting", "/configuration/unknown-resource"), true, "/configuration/* covers the route");
-assert.ok(menu("Treasury").includes("/configuration/bank-formats"));
+assert.ok(menu("Treasury").includes("/settings"));
 // Budget Control's "Configuration" related-tools link (/configuration/budget-rules) now shows.
 assert.match(read("../src/pages/BudgetControl.jsx"), /\["Configuration", "\/configuration\/budget-rules"\]/);
 for (const path of ["/suppliers", "/accounting/invoice-observations", "/accounting/periods"]) {
@@ -33,7 +34,7 @@ for (const [resource, roles] of Object.entries(configurationAccess)) {
 // Report history: download buttons only for roles the backend lets download stored reports.
 const fileAccess = read("../../backend/src/services/fileAccessService.js");
 const backendReportRoles = fileAccess.match(/reports: \[([^\]]+)\]/)[1].split(",").map((item) => item.trim().replace("ROLES.", ""));
-const roleNames = { ADMIN: "Admin", AREA_DIRECTOR: "AreaDirector", VICE_RECTOR: "ViceRector", ACCOUNTING: "Accounting", TREASURY: "Treasury", BUDGET: "Budget", MANAGEMENT: "Management", PROCUREMENT: "Procurement", SUPER_ADMIN: "SuperAdmin" };
+const roleNames = { ADMIN: "Admin", AREA_DIRECTOR: "AreaDirector", VICE_RECTOR: "ViceRector", ACCOUNTING: "Accounting", TREASURY: "Treasury", MANAGEMENT: "Management", PROCUREMENT: "Procurement", SUPER_ADMIN: "SuperAdmin" };
 assert.deepEqual([...reportDownloadRoles].sort(), backendReportRoles.map((role) => roleNames[role]).sort());
 assert.equal(reportDownloadRoles.includes("Procurement"), false);
 assert.match(read("../src/pages/ManagementReports.jsx"), /canDownloadReportFiles \? <ProtectedAssetButton/);

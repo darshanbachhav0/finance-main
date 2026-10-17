@@ -41,9 +41,11 @@ test("structured quotation comparison links one evidence file per supplier and o
   assert.match(page, /data\.append\("quotation", file\)/);
   assert.match(page, /Supplier not found\? Open the official supplier proposal flow/);
   assert.match(page, /\["REJECTED", "INACTIVE"\]/);
-  assert.match(page, /!quotationPolicy\.enabled && <div className="official-subsection">/);
+  // The supplier picker shows where quotations are not required, or when there is no quotation
+  // (A1 / B sent with only the invoice).
+  assert.match(page, /\(!quotationPolicy\.enabled \|\| !quotations\.some\(quotationHasData\)\) && <div className="official-subsection">/);
   // The supplier is required to save the request at all (Save draft too), not only to submit it.
-  assert.match(page, /if \(!form\.supplier && form\.flowType !== "C"\) \{\s*if \(!quotationPolicy\.enabled\) next\.supplier = "Select a supplier\."/);
+  assert.match(page, /if \(!form\.supplier && form\.flowType !== "C"\) \{\s*if \(!quotationPolicy\.enabled \|\| invoiceOnly\) next\.supplier = "Select a supplier\."/);
   assert.match(page, /current\.some\(quotationHasData\) \? current : \[\]/);
 });
 

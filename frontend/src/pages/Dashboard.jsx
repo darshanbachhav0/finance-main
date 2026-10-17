@@ -30,8 +30,7 @@ const descriptions = {
   AreaDirector: "Approval workload, waiting value, oldest requests, and recent decisions.",
   ViceRector: "Approval workload, waiting value, oldest requests, and recent decisions.",
   Accounting: "Period readiness, accounting entries, exchange rates, and pending closures.",
-  Treasury: "Payable workload, currency totals, bank readiness, and generated files.",
-  Budget: "Assigned, available, committed, executed, and paid budget with low-balance controls.",
+  Treasury: "Payable workload, bank readiness, generated files, and the budget: assigned, available, committed and paid.",
   Management: "Institutional CAPEX/OPEX, budget availability, spending, and pending commitments.",
   Procurement: "Approved requests awaiting a Purchase Order, open orders, and invoices registered against them."
 };
@@ -122,7 +121,6 @@ export default function Dashboard() {
     ViceRector: ["/approvals", "Review approvals"],
     Accounting: ["/accounting", "Open Accounting"],
     Treasury: ["/treasury", "Open Treasury"],
-    Budget: ["/budget", "Open Budget Control"],
     Management: ["/approvals", "Review decisions"],
     Procurement: [AWAITING_PURCHASE_ORDER_PATH, "Review requests"]
   }[summary?.role];
@@ -198,7 +196,7 @@ export default function Dashboard() {
               />
             )}
 
-            {["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Management"].includes(summary.role) && <Link className="text-link dashboard-reports-link" to="/reports">{t("More insights in Reports")}</Link>}
+            {["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management"].includes(summary.role) && <Link className="text-link dashboard-reports-link" to="/reports">{t("More insights in Reports")}</Link>}
 
           </div>
         </>

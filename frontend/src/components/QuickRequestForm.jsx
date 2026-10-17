@@ -1,9 +1,9 @@
-import { Building2, FileText, HandCoins, ListChecks, Paperclip, ReceiptText, Save, Send, UserRound, Wallet } from "lucide-react";
+import { Building2, HandCoins, ListChecks, Paperclip, Plus, Save, Send, ShoppingCart, Trash2, UserRound, Wallet, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
 import { formatIsoMonth } from "../utils/dateInput.js";
-import { coversKind, isAnyDocument } from "../utils/documentRequirements.js";
+import { coversKind, isAnyDocument, isQuoteOrInvoice } from "../utils/documentRequirements.js";
 import { currencies, expenseNatureLabels, expenseNatures, optionLabel } from "../utils/options.js";
 import { quickTrackText } from "../utils/quickRequest.js";
 import InvoiceDropZone from "./InvoiceDropZone.jsx";
@@ -38,7 +38,8 @@ function Question({ number, title, children }) {
 // not ask stays available in the full form, which keeps every answer given here.
 export default function QuickRequestForm({
   form, onFormChange, quick, onQuickChange, totals, lines, simpleAmount, onAmountChange,
-  masters, suppliers, supplierProposalPath, invoiceCheck, onInvoiceFile, quoteFile, onQuoteFile,
+  masters, suppliers, supplierProposalPath, invoiceCheck, onInvoiceFile,
+  quotations = [], quotationFiles = {}, onQuoteFile, onQuoteChange, onAddQuote, onRemoveQuote, compareSuppliers = false,
   extraDocuments, files, onDocumentFiles, costCenterLabel, onCostCenterChange, period,
   errors, error, saving, disabled, onSaveDraft, onSubmit, onFullForm
 }) {
@@ -47,6 +48,9 @@ export default function QuickRequestForm({
   const trackText = quickTrackText(form);
   const supplierLabel = (item) => `${item.rucDni} - ${item.legalName || item.name}`;
   const fieldError = (key) => errors[key] && <small className="field-error-text">{t(errors[key])}</small>;
+  const fileOf = (quotation) => (quotation ? quotationFiles[quotation.clientId] : null);
+  const quoteName = (quotation) => fileOf(quotation)?.name || (quotation?.attachment ? t("Attached") : "");
+  const first = quotations[0];
 
   return (
     <div className="quick-request">
@@ -105,21 +109,40 @@ export default function QuickRequestForm({
       </Question>
 
       <Question number={3} title={supplierPayee ? "Attach the quote or the invoice" : "Anything to attach?"}>
-        {supplierPayee && <fieldset className="quick-choices" aria-label={t("What do you have from the supplier?")}>
-          <legend className="quick-legend">{t("What do you have from the supplier?")}</legend>
-          <Choice name="quick-evidence" value="quote" current={quick.evidence} icon={FileText} title="A quote" hint="The purchase goes to approval first" onChange={(evidence) => onQuickChange({ evidence })} />
-          <Choice name="quick-evidence" value="invoice" current={quick.evidence} icon={ReceiptText} title="The invoice" hint="XML or PDF: we read it for you" onChange={(evidence) => onQuickChange({ evidence })} />
+        {supplierPayee && <fieldset className="quick-choices" aria-label={t("How is it paid?")}>
+          <legend className="quick-legend">{t("How is it paid?")}</legend>
+          <Choice name="quick-route" value="order" current={quick.route} icon={ShoppingCart} title="With a purchase order" hint="Procurement places the order after approval" onChange={(route) => onQuickChange({ route })} />
+          <Choice name="quick-route" value="direct" current={quick.route} icon={Zap} title="Direct payment" hint="No order needed: paid once approved" onChange={(route) => onQuickChange({ route })} />
         </fieldset>}
 
-        {supplierPayee && quick.evidence === "invoice" && <InvoiceDropZone check={invoiceCheck} onFile={onInvoiceFile} supplierProposalPath={supplierProposalPath} />}
-        {supplierPayee && quick.evidence === "invoice" && errors.invoice && <small className="field-error-text">{t(errors.invoice)}</small>}
+        {supplierPayee && <p className="quick-note">{t("Attach the supplier's quote, its invoice, or both: at least one.")}</p>}
+        {supplierPayee && errors.quote && <small className="field-error-text">{t(errors.quote)}</small>}
 
-        {supplierPayee && quick.evidence === "quote" && <label className={`quick-file${errors.quote ? " field-error" : ""}${quoteFile ? " is-attached" : ""}`}>
-          <Paperclip size={18} aria-hidden="true" />
-          <span><strong>{quoteFile?.name || t("Attach the quote")}</strong><small>{t(quoteFile ? "Attached" : "PDF, Word, Excel or a photo")}</small></span>
-          <input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" aria-label={t("Attach the quote")} onChange={(event) => { onQuoteFile(event.target.files?.[0] || null); event.target.value = ""; }} />
-          {fieldError("quote")}
-        </label>}
+        {supplierPayee && <InvoiceDropZone check={invoiceCheck} onFile={onInvoiceFile} supplierProposalPath={supplierProposalPath} />}
+
+        {supplierPayee && <div className="quick-quotes">
+          <label className={`quick-file${errors.quote ? " field-error" : ""}${quoteName(first) ? " is-attached" : ""}`}>
+            <Paperclip size={18} aria-hidden="true" />
+            <span><strong>{fileOf(first)?.name || t("Attach the supplier's quote")}</strong><small>{t(quoteName(first) ? "Attached" : "PDF, Word, Excel or a photo")}</small></span>
+            <input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" aria-label={t("Attach the supplier's quote")} onChange={(event) => { onQuoteFile(0, event.target.files?.[0] || null); event.target.value = ""; }} />
+          </label>
+          {quotations.slice(1).map((quotation, position) => {
+            const index = position + 1;
+            return <div className="quick-quote-row" key={quotation.clientId}>
+              <SearchSelect label="Supplier" value={quotation.supplier} options={suppliers} onChange={(supplier) => onQuoteChange(index, { supplier })} getOptionLabel={supplierLabel} error={errors[`quotations.${index}.supplier`]} required searchPlaceholder="Search name or RUC/DNI..." />
+              <label className={`field${errors[`quotations.${index}.amount`] ? " field-error" : ""}`}><span>{t("Amount")} *</span><input type="number" inputMode="decimal" min="0" step="0.01" value={quotation.amount} onChange={(event) => onQuoteChange(index, { amount: event.target.value })} />{fieldError(`quotations.${index}.amount`)}</label>
+              <label className={`quick-file${errors[`quotations.${index}.attachment`] ? " field-error" : ""}${quoteName(quotation) ? " is-attached" : ""}`}>
+                <Paperclip size={18} aria-hidden="true" />
+                <span><strong>{fileOf(quotation)?.name || t("Attach this quote")}</strong><small>{t(quoteName(quotation) ? "Attached" : "PDF, Word, Excel or a photo")}</small></span>
+                <input type="file" accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png" aria-label={t("Attach this quote")} onChange={(event) => { onQuoteFile(index, event.target.files?.[0] || null); event.target.value = ""; }} />
+                {fieldError(`quotations.${index}.attachment`)}
+              </label>
+              <button type="button" className="icon-button danger" onClick={() => onRemoveQuote(index)} title={t("Remove quotation")} aria-label={t("Remove quotation")}><Trash2 size={16} /></button>
+            </div>;
+          })}
+          {quoteName(first) && <button type="button" className="text-button" onClick={onAddQuote}><Plus size={16} aria-hidden="true" />{t("Add another supplier's quote")}</button>}
+          {compareSuppliers && <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Why this supplier?")} *</span><textarea rows="2" value={form.supplierSelectionReason} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} onChange={(event) => onFormChange({ supplierSelectionReason: event.target.value })} />{fieldError("supplierSelectionReason")}</label>}
+        </div>}
 
         {supplierPayee && <div className="quick-supplier">
           <SearchSelect label="Supplier" value={form.supplier} options={suppliers} onChange={(supplier) => onFormChange({ supplier })} getOptionLabel={supplierLabel} error={errors.supplier} required searchPlaceholder="Search name or RUC/DNI..." />
@@ -148,11 +171,10 @@ export default function QuickRequestForm({
 
 // The extra documents a configured rule requires that the quick form's own quote / invoice does
 // not already cover: each gets its own upload in question 3.
-export function quickExtraDocuments(requirements = [], definitions = [], { evidence, flowType, quoteIsDocument = false } = {}) {
+export function quickExtraDocuments(requirements = [], definitions = [], { evidence, flowType } = {}) {
   return requirements
-    .filter((rule) => rule.kind !== "QUOTATION")
-    // The quote, uploaded as a supporting document, already is "at least one document".
-    .filter((rule) => !(quoteIsDocument && evidence === "quote" && isAnyDocument(rule)))
+    // "A quote or the invoice" is question 3 itself.
+    .filter((rule) => rule.kind !== "QUOTATION" && !isQuoteOrInvoice(rule))
     .filter((rule) => !(flowType === "B" && evidence === "invoice" && ["XML", "PDF"].some((kind) => coversKind(rule, kind))))
     // "At least one supporting document": any file is enough, so it is offered as one upload.
     .map((rule) => ({ rule, definition: isAnyDocument(rule) ? definitions.find((item) => item.kind === "SUPPORTING") : definitions.find((item) => coversKind(rule, item.kind)) }))

@@ -9,6 +9,7 @@ import Supplier from "../src/models/Supplier.js";
 import User from "../src/models/User.js";
 import { decideApproval } from "../src/services/approvalService.js";
 import { REQUEST_STATUS, REQUEST_TYPE, EXPENSE_NATURE, ROLES } from "../src/utils/constants.js";
+import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
@@ -29,7 +30,7 @@ test("the parent status never takes on an organization-specific approval-level l
         solicitor: solicitor._id, requester: solicitor._id, supplier: supplier._id,
         description: "Canonical completion test", status: REQUEST_STATUS.PENDING_APPROVAL, approvalStage: approvalRouteSnapshot[0].approvalLevel,
         approvalRouteSnapshot,
-        attachments: [{ kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: solicitor._id }],
+        quotations: [recommendedQuote(supplier._id)], attachments: [quoteAttachment(solicitor._id)],
         lines: [{ costCenter: center._id, expenseType: expenseType._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }]
       });
     }

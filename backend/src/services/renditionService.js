@@ -420,7 +420,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       await observed.save();
       await recordAudit({ entityType: "FinancialRequest", entity: observed, user, req, module: "RENDITION", action: "RENDITION_BUDGET_OBSERVED", comments: error.message });
     }
-    await notifyRoles({ roles: [ROLES.BUDGET, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: "/budget", entityType: "FinancialRequest", entityId: request._id });
+    await notifyRoles({ roles: [ROLES.TREASURY, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: "/budget", entityType: "FinancialRequest", entityId: request._id });
     throw new AppError(409, "Rendition observed due to insufficient budget. Adjust the budget and retry approval.", error.details, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
 }

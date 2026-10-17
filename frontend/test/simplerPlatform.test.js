@@ -10,9 +10,10 @@ import { REQUEST_LIFECYCLE } from "../../shared/workflowStatus.mjs";
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
 // 1. The simple request form: the answers choose the track; nobody picks A1 / B / C.
-assert.deepEqual(quickTrack({ payee: "supplier", evidence: "invoice" }), { flowType: "B", requestType: "OPEX" });
-assert.deepEqual(quickTrack({ payee: "supplier", evidence: "quote" }), { flowType: "A1", requestType: "OPEX" });
-assert.deepEqual(quickTrack({ payee: "supplier", evidence: "quote", capex: true }), { flowType: "A1", requestType: "CAPEX" });
+// A1 and B both take a quote, the invoice or both; "how is it paid?" decides between them.
+assert.deepEqual(quickTrack({ payee: "supplier", route: "direct" }), { flowType: "B", requestType: "OPEX" });
+assert.deepEqual(quickTrack({ payee: "supplier", route: "order" }), { flowType: "A1", requestType: "OPEX" });
+assert.deepEqual(quickTrack({ payee: "supplier", route: "order", capex: true }), { flowType: "A1", requestType: "CAPEX" });
 assert.deepEqual(quickTrack({ payee: "employee", employeeNeed: "advance" }), { flowType: "C", requestType: "ENTREGA_RENDIR" });
 assert.deepEqual(quickTrack({ payee: "employee", employeeNeed: "reimbursement", capex: true }), { flowType: "C", requestType: "REEMBOLSO_SIN_SUSTENTO" });
 assert.match(quickTrackText({ flowType: "B" }), /Direct payment/);
@@ -33,6 +34,14 @@ assert.match(create, /<QuickRequestForm/, "new requests open the three-question 
 assert.match(create, /setMode\("full"\)/, "anything the simple form does not ask opens the full form");
 assert.match(create, /capex-details/, "CAPEX planning details are collapsible");
 assert.doesNotMatch(create, /\["nonApprovalRisk", "Risk if not approved is required\."\]/, "the risk if not approved is optional");
+// A quote or the invoice, at least one: both forms ask for it and count either.
+assert.match(create, /problems\.quote = "Attach a quote or the invoice \(at least one\)\."/);
+assert.match(create, /isQuoteOrInvoice\(rule\) \? quotedWithEvidence : 0/);
+assert.match(create, /quotations\.filter\(quotationHasData\)\.map/, "an empty quotation card is not sent");
+const quickForm = read("../src/components/QuickRequestForm.jsx");
+assert.match(quickForm, /name="quick-route" value="order"/);
+assert.match(quickForm, /onAddQuote/, "more quotations can be added");
+assert.match(quickForm, /<InvoiceDropZone/);
 
 // 2. "Invoice in, request out": one line per factura item when they add up to its totals.
 const invoice = { netAmount: 250, igvAmount: 45, totalAmount: 295, lines: [{ description: "Toner", quantity: 2, unitCode: "NIU", netAmount: 200, igvAmount: 36, totalAmount: 236 }, { description: "Delivery", quantity: 1, unitCode: "ZZ", netAmount: 50, igvAmount: 9, totalAmount: 59 }] };

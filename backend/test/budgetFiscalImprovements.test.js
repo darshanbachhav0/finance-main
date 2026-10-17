@@ -63,7 +63,7 @@ test("budget commitment, exceptions, separation of duties and cancellation histo
   await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`);
   try {
     await Promise.all([BudgetCommitment.init(), BudgetException.init()]);
-    const budget = await User.create({ name: "Budget", email: "budget@fiscal.test", role: "Budget", passwordHash: "unused" });
+    const budget = await User.create({ name: "Budget", email: "budget@fiscal.test", role: "Treasury", passwordHash: "unused" });
     const management = await User.create({ name: "Management", email: "management@fiscal.test", role: "Management", passwordHash: "unused" });
     // Phase 2 / ACTIVE Cost Center: this whole test exercises budget-enforcement (blocking)
     // behavior. Phase 1 / TRANSITIONAL informational (non-blocking) behavior is covered

@@ -52,7 +52,7 @@ export default function BudgetControl() {
   const [processing, setProcessing] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [error, setError] = useState("");
-  const canDecide = ["Admin", "Budget"].includes(user.role);
+  const canDecide = ["Admin", "Treasury"].includes(user.role);
   // Changing an existing plan is Admin only; Management decides changes above the approval threshold.
   const canEditPlans = user.role === "Admin";
   const canDecideChanges = user.role === "Management";

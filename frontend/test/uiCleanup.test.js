@@ -11,7 +11,7 @@ for (const [role, items] of Object.entries(roleNavigation)) {
   items.forEach(([, path]) => assert.ok(canAccessNavigation(role, path), `${role}: ${path}`));
 }
 assert.ok(roleNavigation.Admin.some(([, path]) => path === "/accounting/payables"), "Admin opens workspaces from the menu, not from a hub page");
-assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/operations"]);
+assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/budget", "/operations"], "Treasury also runs Budget Control");
 assert.equal(canAccessNavigation("Solicitor", "/suppliers"), true, "Contextual supplier workflow remains accessible");
 assert.equal(canAccessNavigation("Solicitor", "/settings"), false);
 assert.equal(requestStage("TXT_GENERADO"), 4, "TXT generation does not complete Payment");

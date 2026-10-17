@@ -46,7 +46,7 @@ router.use("/management/v1", externalManagementRoutes);
 // Internal API gate. ManagementViewer is portal-only: it reaches /auth and /management/v1 above
 // and is refused (403) by every internal route below. The Super Admin reads everything below and
 // writes only to /superadmin and its personal settings (superAdminReadOnly).
-router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.SUPER_ADMIN), superAdminReadOnly);
+router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.SUPER_ADMIN), superAdminReadOnly);
 
 router.use("/superadmin", superAdminRoutes);
 

@@ -16,7 +16,7 @@ test("Budget exception authority is configurable per dimension and amount, defau
   const databaseName = `erp_budget_exception_routing_${process.pid}_${Date.now()}`;
   await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
   try {
-    const budgetOfficer = await User.create({ name: "Budget Officer", email: "exc-routing-budget@test.local", role: ROLES.BUDGET, passwordHash: "unused" });
+    const budgetOfficer = await User.create({ name: "Budget Officer", email: "exc-routing-budget@test.local", role: ROLES.TREASURY, passwordHash: "unused" });
     const management = await User.create({ name: "Management", email: "exc-routing-mgmt@test.local", role: ROLES.MANAGEMENT, passwordHash: "unused" });
     const rectorate = await User.create({ name: "Rectorate", email: "exc-routing-rector@test.local", role: ROLES.ADMIN, passwordHash: "unused" });
 

@@ -17,7 +17,7 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
   try {
     await BudgetAllocation.init();
     const admin = await User.create({ name: "Plan Admin", role: "Admin", email: "flex.admin@test.invalid", passwordHash: "unused" });
-    const budget = await User.create({ name: "Budget Officer", role: "Budget", email: "flex.budget@test.invalid", passwordHash: "unused" });
+    const budget = await User.create({ name: "Budget Officer", role: "Treasury", email: "flex.budget@test.invalid", passwordHash: "unused" });
     const management = await User.create({ name: "Management", role: "Management", email: "flex.management@test.invalid", passwordHash: "unused" });
     const req = { headers: {}, ip: "127.0.0.1" };
     let serial = 0;

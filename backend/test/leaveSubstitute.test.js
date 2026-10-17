@@ -15,6 +15,7 @@ import { getMyLeave, updateMyLeave, updateUser } from "../src/controllers/userCo
 import { me } from "../src/controllers/authController.js";
 import { endExpiredLeaves } from "../src/services/userLeaveService.js";
 import { EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
@@ -56,7 +57,7 @@ test("a substitute covers an absent manager's approvals and hands them back on r
         issueDate: "2026-09-10", accountingPeriod: "2026-09", currency: "PEN", flowType: "A1",
         solicitor: requester._id, requester: requester._id, requesterArea: "Gerencia", requesterCostCenter: center._id, supplier: supplier._id,
         description: "Substitute test", status: REQUEST_STATUS.PENDING_APPROVAL,
-        attachments: [{ kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: requester._id }],
+        quotations: [recommendedQuote(supplier._id)], attachments: [quoteAttachment(requester._id)],
         lines: [{ costCenter: center._id, expenseType: expenseType._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }]
       });
       await initializeApprovalRoute(request);
@@ -174,7 +175,7 @@ test("self-service leave: who covers, a last day that ends the leave by itself, 
       issueDate: "2026-09-10", accountingPeriod: "2026-09", currency: "PEN", flowType: "A1",
       solicitor: requester._id, requester: requester._id, requesterArea: "Gerencia", requesterCostCenter: center._id, supplier: supplier._id,
       description: "Self-service leave test", status: REQUEST_STATUS.PENDING_APPROVAL,
-      attachments: [{ kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: requester._id }],
+      quotations: [recommendedQuote(supplier._id)], attachments: [quoteAttachment(requester._id)],
       lines: [{ costCenter: center._id, expenseType: expenseType._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }]
     });
     await initializeApprovalRoute(request);
