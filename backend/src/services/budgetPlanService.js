@@ -16,7 +16,7 @@ import { addMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js
 import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 
 function assertManager(user) {
-  if (!["Admin", "Budget"].includes(user?.role)) throw new AppError(403, "Only Budget or Admin can manage budget plans.", undefined, ERROR_CODES.FORBIDDEN);
+  if (![ROLES.ADMIN, ROLES.TREASURY].includes(user?.role)) throw new AppError(403, "Only Treasury or Admin can manage budget plans.", undefined, ERROR_CODES.FORBIDDEN);
 }
 const invalid = (message, details) => new AppError(422, message, details, ERROR_CODES.VALIDATION_ERROR);
 function amount(value) {

@@ -13,3 +13,7 @@ export const isAnyDocument = (rule) => rule?.kind === "SUBMISSION_DOCUMENT";
 export function presentCount(rule, attachments = [], chosen = {}) {
   return requirementKinds(rule).reduce((sum, kind) => sum + attachments.filter((item) => item.kind === kind).length + (chosen[kind] || 0), 0);
 }
+
+// A1 and B: a quote or the invoice, at least one (backend documentRuleService.QUOTE_OR_INVOICE).
+// Quotations count through their own cards, the invoice through its XML / factura PDF.
+export const isQuoteOrInvoice = (rule) => rule?.kind === "QUOTE_OR_INVOICE";

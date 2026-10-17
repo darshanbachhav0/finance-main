@@ -44,7 +44,7 @@ test("follow-up, weekly report and digest settings have safe defaults", () => {
   assert.equal(followUpConfiguration({ DRAFT_AUTO_CLOSE_DAYS: "0" }).draftCloseDays, 0, "0 turns closing drafts off");
   const weekly = weeklyReportConfiguration({});
   assert.deepEqual([weekly.enabled, weekly.day, weekly.hour], [true, 1, 8]);
-  assert.deepEqual(weekly.roles, [ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.MANAGEMENT]);
+  assert.deepEqual(weekly.roles, [ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT]);
   assert.equal(weeklyReportConfiguration({ WEEKLY_REPORT_ENABLED: "false" }).enabled, false);
   // Monday 19 Oct 2026, 08:30 in Lima.
   assert.deepEqual(limaWeek(new Date("2026-10-19T13:30:00Z")), { weekday: 1, hour: 8, weekKey: "2026-10-19" });
@@ -59,7 +59,7 @@ test("imports, payment runs, follow-ups and the weekly report", { timeout: 90000
   try {
     await Promise.all([Notification.init(), WorkDraft.init()]);
     const [budget, solicitor, treasury, accounting] = await User.create([
-      { name: "Bea Budget", role: ROLES.BUDGET, passwordHash: "x", email: "bea@uma.edu.pe" },
+      { name: "Bea Budget", role: ROLES.TREASURY, passwordHash: "x", email: "bea@uma.edu.pe" },
       { name: "Sol Requester", role: ROLES.SOLICITOR, passwordHash: "x", email: "sol@uma.edu.pe" },
       { name: "Teo Treasury", role: ROLES.TREASURY, passwordHash: "x", email: "teo@uma.edu.pe" },
       { name: "Ana Accounting", role: ROLES.ACCOUNTING, passwordHash: "x", email: "ana@uma.edu.pe" }

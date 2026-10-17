@@ -80,7 +80,7 @@ Background workers (see §4 — in production they run inside the web service pr
   follow-ups run by the operations worker (see §4 "Automatic follow-ups and the weekly report").
 - `WEEKLY_REPORT_ENABLED` (default on while emails are on), `WEEKLY_REPORT_DAY` (1 = Monday),
   `WEEKLY_REPORT_HOUR` (Lima, default 8), `WEEKLY_REPORT_ROLES` (default
-  `Accounting,Treasury,Budget,Management`) — the weekly Excel report.
+  `Accounting,Treasury,Management`) — the weekly Excel report.
 
 Authentication:
 - `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 15) — per-account
@@ -276,7 +276,7 @@ away - one paid payable with the same currency, amount, operation number and a p
 ambiguous and unmatched rows are left for a person.
 
 Excel imports (`POST /api/imports/:kind`, checked first with nothing saved, then imported):
-`budget-plans` (Budget / Admin: new annual plans per Cost Center), `suppliers` (Admin / Accounting /
+`budget-plans` (Treasury / Admin: new annual plans per Cost Center), `suppliers` (Admin / Accounting /
 Procurement: supplier proposals, pending approval as usual) and `payment-schedule` (Treasury / Admin:
 planned payment date and priority of open payables). Each screen offers the template.
 
@@ -367,6 +367,16 @@ npm run backup                          # dumps collections + uploads/generated 
 npm run migrate:workflow                # dry run
 npm run migrate:workflow:apply          # apply, after reviewing the dry-run report
 npm run verify:data
+```
+
+**Retired roles.** The `Budget` role was folded into `Treasury`. Every server start moves users,
+previous roles and approval rules still stored as `Budget` to `Treasury` (one audit entry each, and
+a log line saying how many moved), so nothing has to be run on Render. To see or apply the same
+change by hand, from `backend` with the target `MONGODB_URI`:
+
+```powershell
+npm run migrate:retired-roles           # dry run: what would move
+npm run migrate:retired-roles:apply     # apply
 ```
 
 Migration reports are written under `backend/migration-reports`. Every migration script no-ops if

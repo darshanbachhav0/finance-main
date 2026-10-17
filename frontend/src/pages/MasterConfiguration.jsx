@@ -125,7 +125,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value" }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? formatDate(row.effectiveFrom) : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? formatDate(row.effectiveTo) : t("No end date") }, { key: "active", label: "Status" }]
     },
     "budget-rules": {
-      label: "Budget Rules", roles: ["Admin", "Budget", "SuperAdmin"], endpoint: "/budget-rules",
+      label: "Budget Rules", roles: ["Admin", "Treasury", "SuperAdmin"], endpoint: "/budget-rules",
       description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
       fields: [
         { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
@@ -140,7 +140,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "active", label: "Status" }]
     },
     "budget-allocations": {
-      label: "Budget Allocations", roles: ["Admin", "Budget", "SuperAdmin"], endpoint: "/budget-allocations",
+      label: "Budget Allocations", roles: ["Admin", "Treasury", "SuperAdmin"], endpoint: "/budget-allocations",
       description: "Maintain assigned budget by period, Cost Center, and project.",
       fields: [
         { name: "period", label: "Period / year", required: true, placeholder: "YYYY or YYYY-MM" },

@@ -40,7 +40,7 @@ const SuperAdminAlerts = lazy(() => import("./pages/superadmin/SuperAdminAlerts.
 const SuperAdminAudit = lazy(() => import("./pages/superadmin/SuperAdminAudit.jsx"));
 const SuperAdminSettings = lazy(() => import("./pages/superadmin/SuperAdminSettings.jsx"));
 
-const internalRoles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management"];
+const internalRoles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management"];
 // The Super Admin reads these pages (read-only) besides its own console.
 const readers = [...internalRoles, "SuperAdmin"];
 
@@ -102,10 +102,10 @@ export default function App() {
           <Route path="reimbursement-bank" element={<ProtectedRoute roles={["Admin", "Solicitor", "Accounting", "Treasury"]} permissions={["employee-bank:manage-own", "employee-bank:review"]} />}>
             <Route index element={<EmployeeReimbursementBanking />} />
           </Route>
-          <Route path="budget" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Budget", "Management", "SuperAdmin"]} permissions={["budget:view"]} />}>
+          <Route path="budget" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", "SuperAdmin"]} permissions={["budget:view"]} />}>
             <Route index element={<BudgetControl />} />
           </Route>
-          <Route path="reports" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "SuperAdmin"]} permissions={["report:view"]} />}>
+          <Route path="reports" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "SuperAdmin"]} permissions={["report:view"]} />}>
             <Route index element={<ManagementReports />} />
           </Route>
           <Route path="suppliers" element={<ProtectedRoute roles={readers} permissions={["supplier:bank-view"]} />}>

@@ -20,8 +20,11 @@ financial-progress derivation, budget-planning math, payment-terms math, line-am
 
 ## 2. Roles
 
-Ten stored roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`, `AreaDirector`,
-`ViceRector`, `Accounting`, `Treasury`, `Budget`, `Procurement`, `Management`, `ManagementViewer`.
+Nine stored operational roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`,
+`AreaDirector`, `ViceRector`, `Accounting`, `Treasury`, `Procurement`, `Management`,
+`ManagementViewer` (plus `SuperAdmin`, which takes part in no process). The former `Budget` role was
+folded into `Treasury` (`RETIRED_ROLES`): users, previous roles and approval rules still stored as
+`Budget` are moved to `Treasury` when the server starts (`services/legacyRoleService.js`, audited).
 `AreaDirector` and `ViceRector` are distinct roles with identical permissions
 (`ROLE_PERMISSIONS`). On a manager-chain request any approver, whatever their role, may finalize
 or send the approval to their own jefe (`forward: true` in `decideApproval`) — see §3.3. Each role's `approvalLevel` (`AREA_DIRECTOR` / `VICE_RECTOR`) is implied by the role
@@ -41,10 +44,10 @@ section only summarizes each role's purpose:
   forward to, and the final approval level in that pair (cannot forward further).
 - **Accounting** — supplier homologation, fiscal/XML processing, Accounts Payable, journals,
   periods, SIRE export, rendition review.
-- **Treasury** — payment scheduling, BBVA bank-file generation, payment confirmation,
-  reconciliation, BBVA format certification (with Admin).
-- **Budget** — allocations, commitments, budget exceptions (prepares them; only Management
-  decides), budget reporting. Does **not** issue Purchase Orders — that's Procurement.
+- **Treasury** — the budget (annual/monthly plans, rules, allocations, commitments, year-end
+  carry-over, and preparing/reviewing budget exceptions — only Management decides them), payment
+  scheduling, BBVA bank-file generation, payment confirmation, reconciliation, BBVA format
+  certification (with Admin). Does **not** issue Purchase Orders — that's Procurement.
 - **Procurement** — issues Purchase/Service Orders once a request is approved and budget-committed
   (Track A1), tracks invoices registered against open orders, has its own dashboard.
 - **Management** — executive reporting, and the sole authority that may approve/reject a
@@ -94,8 +97,10 @@ the actual child records before allowing it).
 ### 3.2 Tracks A1 / A2 / B / C
 
 Requesters do not choose a track: a new request opens a three-question form (what is needed and
-why, how much, the quote or invoice they have) and the answers decide it — a supplier's invoice →
-B, a supplier's quote → A1, money for the employee → C (advance, or undocumented reimbursement).
+why, how much, who is paid and how) and the answers decide it — a supplier paid through an order →
+A1, a supplier paid directly → B, money for the employee → C (advance, or undocumented
+reimbursement). A1 and B take a supplier quote, the invoice or both, and more suppliers' quotes can
+be added.
 The cost center, unit, an open month, currency and priority are filled in from the profile; a
 dropped invoice XML fills the supplier and its item lines. The title defaults to the description's
 first line, the "risk if not approved" is optional, a supplier selection reason is asked only when
@@ -107,9 +112,12 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
 
 - **A1 — standard procurement** (default track). Full path: submission → approval → budget
   commitment → Procurement issues a Purchase Order → invoice registered against the order (with
-  SUNAT/XML validation) → accounting → treasury → payment → reconciliation → close. Wherever quotations apply (`DocumentRule`), **at
-  least one** supplier quotation with evidence is required; there is no minimum amount and three
-  quotations are not compulsory — the requester adds or removes quotations freely. The former
+  SUNAT/XML validation) → accounting → treasury → payment → reconciliation → close. A1 is sent
+  with **a quote or the invoice, at least one** (`documentRuleService.QUOTE_OR_INVOICE`: any of
+  QUOTATION, XML, PDF or FEE_RECEIPT); quotations entered are checked (each with its file, one
+  recommended, a selection reason when two or more are compared), and the invoice can stand in for
+  them (`quotationPolicy.invoiceInstead`). There is no minimum amount and three quotations are not
+  compulsory — the requester adds or removes quotations freely. The former
   single-source quotation exception was retired with the three-quotation rule, and legacy rules
   that still store "3" are normalized to 1 (`documentRuleService.QUOTATION_MINIMUM_COUNT`).
   A1 requests whose expense nature is never bought through an order (`TRAVEL`, `RESEARCH`,
@@ -127,10 +135,15 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
   (`/batch-invoices`), processed asynchronously by `backend/src/workers/batchInvoiceWorker.js`.
   Valid invoices post automatically; invalid ones become `InvoiceObservation`s for Accounting to
   resolve. **Requires the batch worker to actually be running** — see `OPERATIONS.md`.
-- **B — direct payment.** Skips A1's Purchase Order/quotation steps (e.g. a small recurring service
+- **B — direct payment.** Skips A1's Purchase Order step (e.g. a small recurring service
   payment). The requester chooses it; there is no eligibility rule by area, expense nature or amount
-  (the former `DirectPaymentEligibilityRule` was removed). The invoice/XML is validated up front, the
-  Track B approval route applies, and the request auto-provisions to Treasury on approval.
+  (the former `DirectPaymentEligibilityRule` was removed). Like A1 it is sent with **a quote or the
+  invoice, at least one**, and the Track B approval route applies. With a validated invoice it
+  auto-provisions to Treasury on approval. Sent with only a quote, approval commits the budget and
+  the request waits at `COMPROMISO_PRESUPUESTAL`; the requester is notified (`INVOICE_NEEDED`) and
+  registers the invoice from the request (`POST /requests/:id/invoice`,
+  `directInvoiceService.registerDirectPaymentInvoice`; owner, Accounting or Admin). It must match the
+  approved amounts; the request is then provisioned to Treasury, which is notified.
 - **C — advances (`ENTREGA_RENDIR`) and undocumented reimbursements
   (`REEMBOLSO_SIN_SUSTENTO`).** An advance pays out first (against Account 14), then requires the
   employee to submit a rendition within a configurable deadline counted in **working days** from
@@ -207,7 +220,7 @@ return or reject.
 - **After final approval** every route — rule-based, manager-chain or Management-final — runs the
   automatic budget commitment (`commitApprovedRequestBudget`). A budget shortfall keeps the
   existing exception/observation/rejection behaviour; any other failure leaves the commitment to
-  Budget's manual retry. The requester is notified that the request was approved.
+  Treasury's manual retry. The requester is notified that the request was approved.
 
 ## 4. Budget
 
@@ -224,11 +237,11 @@ enforced funds) and `exceptionStrategy` when a request would exceed availability
   audited as an `EXCEPTION_INCREASE` adjustment), so the retried commitment proceeds.
 - **`EXTRAORDINARY_APPROVAL`** — creates a `BudgetException` that only **Management** may
   approve/reject (never Admin, never any other configurable role — `BudgetRule.exceptionApproverRole`
-  can only ever be `"Management"` at the schema level). Budget prepares/reviews; Management decides.
+  can only ever be `"Management"` at the schema level). Treasury prepares/reviews; Management decides.
   An optional `exceptionEscalationAmount` can require a second look above a threshold, but the
   authority is still Management either way — there is no higher role to escalate to.
 
-**Exception workflow:** Budget (or Admin) reviews first (`REVIEWED`); Management can approve or reject
+**Exception workflow:** Treasury (or Admin) reviews first (`REVIEWED`); Management can approve or reject
 only a reviewed exception, and is notified — and counted on its dashboard — once the review is saved.
 A resubmitted request whose previous exception was `REJECTED`, or `APPROVED` but now exceeded, gets a
 **new** exception that `supersedes` the stale one (only one `PENDING` exception per request dimension
@@ -239,7 +252,7 @@ was released — is auto-resolved (`RESOLVED`) so it neither blocks closure nor 
 commitment instead of attempting an enforced top-up, and TRANSITIONAL usage is reported in the budget
 overview's committed/executed/paid totals (`totals.transitional`) without reducing availability.
 
-**Year-end carry-over** (`POST /budget/year-end/carry-over`, Budget/Admin, confirmation dialog in
+**Year-end carry-over** (`POST /budget/year-end/carry-over`, Treasury/Admin, confirmation dialog in
 Budget Control): every commitment of the fiscal year that is still open (committed, not yet executed
 by an invoice) moves with its funds into January of the next year's plan/allocation for the same
 dimension (created if missing). Executed/paid history stays in the closing year. It is audited and

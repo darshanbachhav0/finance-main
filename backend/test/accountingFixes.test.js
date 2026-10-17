@@ -15,6 +15,7 @@ import FinancialRequest from "../src/models/FinancialRequest.js";
 import InvoiceObservation from "../src/models/InvoiceObservation.js";
 import JournalEntry from "../src/models/JournalEntry.js";
 import MassUploadBatch from "../src/models/MassUploadBatch.js";
+import Notification from "../src/models/Notification.js";
 import PurchaseOrder from "../src/models/PurchaseOrder.js";
 import SunatVoucher from "../src/models/SunatVoucher.js";
 import Supplier from "../src/models/Supplier.js";
@@ -34,6 +35,7 @@ import { reserveBudget } from "../src/services/budgetService.js";
 import { syncFinancialProgress } from "../src/services/financialProgressService.js";
 import { approveManualSunatException, registerA1Invoice, supersedeObservedInvoice } from "../src/services/invoiceRegistrationService.js";
 import { commitApprovedRequestBudget } from "../src/services/approvalService.js";
+import { registerDirectPaymentInvoice } from "../src/services/directInvoiceService.js";
 import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
 import { observationOwner } from "../src/utils/permissions.js";
 import { closeAccountingPeriod } from "../src/services/periodAdministrationService.js";
@@ -347,6 +349,48 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
         if (previousDir === undefined) delete process.env.SUNAT_PADRON_DATA_DIR; else process.env.SUNAT_PADRON_DATA_DIR = previousDir;
         await fs.rm(padronDir, { recursive: true, force: true });
       }
+    });
+
+    await t.test("1c. Track B sent with only a quote: approval reserves the budget and waits; the invoice registered later must match and then provisions the payable", async () => {
+      const quote = await writeTemp("quote.pdf", "%PDF-1.4 quote");
+      const request = await makeRequest({
+        flowType: "B", status: "APROBADO",
+        attachments: [{ kind: "QUOTATION", originalName: "quote.pdf", filename: quote.filename, url: "/test/quote.pdf", path: quote.path, mimetype: "application/pdf", size: quote.size }]
+      });
+      const loaded = await FinancialRequest.findById(request._id).select("+attachments.path").populate("supplier");
+      await commitApprovedRequestBudget({ request: loaded, user: admin, req, automatic: true });
+      const waiting = await FinancialRequest.findById(request._id);
+      assert.equal(waiting.status, "COMPROMISO_PRESUPUESTAL", "the budget is reserved and the request waits for its invoice");
+      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0, "no payable before the invoice");
+      const notice = await Notification.findOne({ eventKey: `request:${request._id}:direct-invoice-needed` });
+      assert.ok(notice && String(notice.user) === String(owner._id) && !notice.resolvedAt, "the requester is asked for the invoice");
+      assert.ok(allowedRequestActions(waiting, owner).includes("REGISTER_INVOICE"));
+      assert.ok(allowedRequestActions(waiting, accounting).includes("REGISTER_INVOICE"));
+
+      // Someone else's requester cannot register it, and an invoice that does not match the approved amounts is refused and not kept.
+      const stranger = await User.create({ name: "Fix stranger", email: "fix.stranger@test.local", passwordHash: "unused", role: "Solicitor", area: "Operations" });
+      const voucher = invoice({ netAmount: 1000, igvAmount: 180, totalAmount: 1180 });
+      const strangers = await writeTemp("stranger.xml", invoiceXml(voucher));
+      await assert.rejects(() => registerDirectPaymentInvoice({ requestId: request._id, files: { xml: [strangers] }, user: stranger, req }), (error) => error.statusCode === 403);
+      const wrong = await writeTemp("wrong.xml", invoiceXml(invoice({ netAmount: 1000, igvAmount: 180, totalAmount: 1190 })));
+      await assert.rejects(() => registerDirectPaymentInvoice({ requestId: request._id, files: { xml: [wrong] }, user: owner, req }), (error) => error.code === "XML_AMOUNT_MISMATCH");
+      const unchanged = await FinancialRequest.findById(request._id);
+      assert.equal(unchanged.status, "COMPROMISO_PRESUPUESTAL");
+      assert.ok(!unchanged.attachments.some((item) => item.kind === "XML"), "a refused invoice is not attached");
+
+      const right = await writeTemp("invoice.xml", invoiceXml(voucher));
+      const result = await registerDirectPaymentInvoice({ requestId: request._id, files: { xml: [right] }, user: owner, req });
+      assert.ok(result.accountsPayable, "the payable is created");
+      const paid = await FinancialRequest.findById(request._id);
+      assert.equal(paid.status, "CONTABILIZADO");
+      assert.equal(paid.xmlValidation.validated, true);
+      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
+      assert.ok(await AuditLog.findOne({ entityId: request._id, action: "DIRECT_INVOICE_REGISTERED" }));
+      assert.ok((await Notification.findById(notice._id)).resolvedAt, "the invoice request is closed");
+      assert.ok(!allowedRequestActions(paid, owner).includes("REGISTER_INVOICE"));
+      // Once provisioned it cannot be registered again.
+      const again = await writeTemp("again.xml", invoiceXml(voucher));
+      await assert.rejects(() => registerDirectPaymentInvoice({ requestId: request._id, files: { xml: [again] }, user: owner, req }), (error) => error.code === "INVALID_STATUS_TRANSITION");
     });
 
     await t.test("6. cancelling a CXP restores the PO, annuls the voucher, re-syncs the request and posts the reversal now", async () => {

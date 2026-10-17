@@ -21,7 +21,7 @@ test("Budget Phase 1 (TRANSITIONAL) is genuinely informational and Phase 2 (ACTI
   await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`);
   try {
     await Promise.all([BudgetCommitment.init(), BudgetException.init()]);
-    const budget = await User.create({ name: "Budget Officer", email: "budget-phase@test.local", role: "Budget", passwordHash: "unused" });
+    const budget = await User.create({ name: "Budget Officer", email: "budget-phase@test.local", role: "Treasury", passwordHash: "unused" });
     const make = (center, amount) => ({
       _id: new mongoose.Types.ObjectId(),
       requestNumber: `R-${new mongoose.Types.ObjectId()}`,

@@ -164,7 +164,7 @@ function Definition({ label, children }) {
 
 const DetailTab = createContext("General");
 const tabIcons = { General: FileText, Documents: FileCheck2, Approvals: CheckCircle2, Comments: MessageSquare, Budget: WalletCards, Accounting: BookOpenCheck, Payment: Landmark, History: HistoryIcon };
-const sectionTabs = { "Budget preview": "Budget", "Budget commitment": "Budget", "Procurement Readiness": "Budget", "Documents and fiscal validation": "Documents", "Register A1 invoice and conformity": "Documents", "Invoice control register": "Accounting", "Financial control records": "Payment" };
+const sectionTabs = { "Budget preview": "Budget", "Budget commitment": "Budget", "Procurement Readiness": "Budget", "Documents and fiscal validation": "Documents", "Register A1 invoice and conformity": "Documents", "Register the invoice": "Documents", "Invoice control register": "Accounting", "Financial control records": "Payment" };
 function Section({ title, description, children, className = "" }) {
   const { t } = useLanguage();
   const activeTab = useContext(DetailTab);
@@ -769,7 +769,7 @@ export default function RequestDetail() {
           </Section>
 
           {permissions.canRegisterInvoice && (
-            <Section title="Register A1 invoice and conformity" description="Upload the invoice XML or its factura PDF (one is enough) and the other required documents. The amounts are read from the XML, or from the factura PDF when there is no XML.">
+            <Section title={request.flowType === "B" ? "Register the invoice" : "Register A1 invoice and conformity"} description={request.flowType === "B" ? "Approved with its quote: upload the supplier's invoice (XML or factura PDF). It must match the approved amounts; once checked it goes to Treasury for payment." : "Upload the invoice XML or its factura PDF (one is enough) and the other required documents. The amounts are read from the XML, or from the factura PDF when there is no XML."}>
               <DraftPanel busy={invoiceSubmitting} draft={invoiceDraft}><form className="invoice-registration-panel" onSubmit={submitInvoice}>
                 <p className="draft-file-list">{Object.values(invoiceFiles).filter(Boolean).map(file => file.name).join(", ")}</p><div className="file-upload-grid">
                   {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => coversKind(item, field.kind))).map((field) => {
@@ -779,11 +779,11 @@ export default function RequestDetail() {
                     return <label className="field" key={field.kind}><span>{t(field.label)}{either ? "" : " *"}</span><input type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key] && !chosenElsewhere} />{either && <small className="field-hint">{t(chosenElsewhere ? "Optional document" : "This or the other invoice file: one is enough.")}</small>}</label>;
                   })}
                 </div>
-                <div className="invoice-control-note">
+                {order && <div className="invoice-control-note">
                   <strong>{order?.poNumber}</strong>
                   <span>{t("Remaining PO balance")}: {formatCurrency(order?.remainingAmount, order?.currency || request.currency, language)}</span>
                   <span>{t("The server validates SUNAT, anti-duplication and the PO ceiling before creating CXP.")}</span>
-                </div>
+                </div>}
                 <Message type="error">{invoiceError}</Message>
                 <button className="primary-button" type="submit" disabled={invoiceSubmitting}><UploadCloud size={16} /><span>{t(invoiceSubmitting ? "Processing..." : "Validate and provision invoice")}</span></button>
               </form></DraftPanel>

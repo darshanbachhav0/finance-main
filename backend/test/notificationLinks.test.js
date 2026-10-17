@@ -48,7 +48,7 @@ test("mapping API authorization, deep-link filters and escalation counters", { t
   await new Promise((resolve) => server.on("listening", resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
   try {
-    const roles = ["Admin", "Accounting", "Treasury", "Solicitor", "Budget"];
+    const roles = ["Admin", "Accounting", "Treasury", "Solicitor"];
     const users = Object.fromEntries((await User.create(roles.map((role) => ({ name: role, email: `${role.toLowerCase()}-links@test.local`, passwordHash: "unused", role })))).map((user) => [user.role, user]));
     const call = async (role, path, method = "GET", body) => {
       const token = jwt.sign({ id: users[role]._id }, process.env.JWT_SECRET || "dev_secret_change_me");
@@ -57,7 +57,7 @@ test("mapping API authorization, deep-link filters and escalation counters", { t
     };
 
     await t.test("only Admin and Accounting read or maintain accounting mappings", async () => {
-      for (const role of ["Treasury", "Solicitor", "Budget"]) {
+      for (const role of ["Treasury", "Solicitor"]) {
         assert.equal((await call(role, "/accounting-mappings")).status, 403, `${role} cannot list mappings`);
         assert.equal((await call(role, "/accounting-mappings", "POST", { code: "X", name: "X", purpose: "BANK", accountNumber: "1041" })).status, 403, `${role} cannot create mappings`);
       }

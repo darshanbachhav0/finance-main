@@ -53,7 +53,7 @@ test("analytics provide real drilldowns and an exact tabular fallback", () => {
 
 test("shared login exposes all nine UMA demo roles and fills their DNI-based credentials", () => {
   const login = source("../src/pages/Login.jsx");
-  for (const key of ["admin", "solicitor", "director", "vice", "accounting", "treasury", "budget", "management", "procurement"]) {
+  for (const key of ["admin", "solicitor", "director", "vice", "accounting", "treasury", "management", "procurement"]) {
     assert.match(login, new RegExp(`key: "${key}"`));
   }
   assert.match(login, /setDni\(account\.dni\)/);

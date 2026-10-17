@@ -18,7 +18,7 @@ test("budget simulator uses live annual/monthly limits and never writes a financ
   try {
     const center = await CostCenter.create({ code: "SIM", name: "Simulation", area: "Finance", active: true, budgetMode: "TRANSITIONAL" });
     const expense = await ExpenseType.create({ code: "SIM-EXP", name: "Supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
-    const planner = await User.create({ name: "Planner", email: "planner@test.local", passwordHash: "unused", role: "Budget" });
+    const planner = await User.create({ name: "Planner", email: "planner@test.local", passwordHash: "unused", role: "Treasury" });
     const user = await User.create({ name: "Requester", email: "requester@test.local", passwordHash: "unused", role: "Solicitor", costCenter: center._id });
     const plan = await createBudgetPlan({ year: "2036", planningMode: "ANNUAL_MONTHLY", costCenter: String(center._id), expenseType: String(expense._id), assignedAmount: 12000, distribution: "CUSTOM", months: [1000,2000,...Array(10).fill(0)], reason: "Test plan" }, planner, { headers: {} });
     const annual = await createBudgetPlan({ year: "2037", planningMode: "ANNUAL_ONLY", costCenter: String(center._id), expenseType: String(expense._id), assignedAmount: 12000, reason: "Annual test plan" }, planner, { headers: {} });

@@ -211,10 +211,10 @@ async function buildTasks(user) {
     const period = await AccountingPeriod.findOne({ period: currentPeriod() });
     items.push({ key: "period", label: period?.status === "OPEN" ? "Current accounting period open" : "Current accounting period unavailable", count: period?.status === "OPEN" ? 0 : 1, path: "/accounting/periods", tone: "warning" });
   }
-  // Budget/Admin see every open exception (review first); Management sees the ones Budget has
+  // Treasury/Admin see every open exception (review first); Management sees the ones Treasury has
   // reviewed and that now await its decision, decided from the Approval Inbox. Moot or
   // terminal-request exceptions never count.
-  if ([ROLES.ADMIN, ROLES.BUDGET, ROLES.MANAGEMENT].includes(user.role)) {
+  if ([ROLES.ADMIN, ROLES.TREASURY, ROLES.MANAGEMENT].includes(user.role)) {
     const management = user.role === ROLES.MANAGEMENT;
     const count = await countPendingBudgetExceptions(management ? { awaitingDecision: true } : {});
     const single = !management && count === 1 ? (await openBudgetExceptions())[0] : null;
@@ -390,7 +390,8 @@ async function roleDetails(user, common) {
     data.recentOrders = recentOrders;
   }
 
-  if (user.role === ROLES.BUDGET) {
+  // Treasury also watches the budget (it took over the former Budget role).
+  if (user.role === ROLES.TREASURY) {
     const overview = await budgetOverview({ period });
     metrics.push(
       { key: "assigned", label: "Assigned", value: overview.totals.assigned, format: "currency", tone: "neutral" },

@@ -21,6 +21,7 @@ function canonicalNature(value) { return LEGACY_EXPENSE_NATURE_MAP[value] || val
 // silently reintroduce the old three-quotation gate.
 export const QUOTATION_MINIMUM_COUNT = 1;
 function normalizeRequirement(requirement) {
+  if (requirement.kind === QUOTE_OR_INVOICE) return quoteOrInvoiceRequirement();
   if (requirement.kind === "QUOTATION") return { kind: requirement.kind, labelKey: "at least one quotation", minCount: QUOTATION_MINIMUM_COUNT };
   if (requirement.kind === INVOICE_EVIDENCE) return { kind: INVOICE_EVIDENCE, anyOf: [...requirement.anyOf], minCount: 1, labelKey: requirement.labelKey };
   if (requirement.kind === SUBMISSION_DOCUMENT) return anySubmissionDocument();
@@ -57,6 +58,18 @@ function collapseInvoiceEvidence(input) {
 // Quotations keep their own rule (each one carries its evidence), and where the invoice is part of
 // the submission (Track B) it already is that one document, since it must be verified.
 export const SUBMISSION_DOCUMENT = "SUBMISSION_DOCUMENT";
+
+// Product decision (A1 and B): a request is sent with the supplier's quote, its invoice, or both -
+// at least one of them. The requester may add as many quotations as they want. This replaces every
+// other submission requirement for A1 and B, configured or default; later phases keep theirs.
+export const QUOTE_OR_INVOICE = "QUOTE_OR_INVOICE";
+export const QUOTE_OR_INVOICE_KINDS = Object.freeze(["QUOTATION", "XML", "PDF", "FEE_RECEIPT"]);
+export function quoteOrInvoiceRequirement() {
+  return { kind: QUOTE_OR_INVOICE, anyOf: [...QUOTE_OR_INVOICE_KINDS], minCount: 1, labelKey: "a quote or the invoice" };
+}
+const quoteOrInvoiceFlow = (request) => [FLOW_TYPE.A1, FLOW_TYPE.B].includes(request.flowType || FLOW_TYPE.A1);
+// The invoice attached to an A1 / B request (its XML, factura PDF or fee receipt).
+export const hasInvoiceEvidence = (request) => (request.attachments || []).some((attachment) => EVIDENCE_KINDS.includes(attachment.kind));
 export const SUBMISSION_DOCUMENT_KINDS = Object.freeze(["CONTRACT", "PURCHASE_ORDER", "CONFORMITY", "ACTIVITY_REPORT", "SUPPORTING", "XML", "PDF", "FEE_RECEIPT"]);
 function anySubmissionDocument() {
   return { kind: SUBMISSION_DOCUMENT, anyOf: [...SUBMISSION_DOCUMENT_KINDS], minCount: 1, labelKey: "at least one supporting document" };
@@ -87,6 +100,7 @@ function requirement(kind, labelKey, minCount = 1) { return { kind, minCount, la
 function invoiceEvidence(kinds = ["XML", "PDF"]) { return invoiceEvidenceRequirement(new Set(kinds)); }
 
 export function defaultDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
+  if (phase === DOCUMENT_PHASE.SUBMISSION && quoteOrInvoiceFlow(request)) return [quoteOrInvoiceRequirement()];
   const requirements = phaseDocumentRequirements(request, phase);
   return phase === DOCUMENT_PHASE.SUBMISSION ? atLeastOneSubmissionDocument(requirements) : requirements;
 }
@@ -94,7 +108,8 @@ export function defaultDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBM
 function phaseDocumentRequirements(request, phase) {
   const flowType = request.flowType || FLOW_TYPE.A1;
   const nature = canonicalNature(request.expenseNature);
-  if (flowType === FLOW_TYPE.B) return phase === DOCUMENT_PHASE.SUBMISSION ? [invoiceEvidence()] : [];
+  // A B request sent with only its quote registers the invoice after approval.
+  if (flowType === FLOW_TYPE.B) return phase === DOCUMENT_PHASE.SUBMISSION ? [quoteOrInvoiceRequirement()] : phase === DOCUMENT_PHASE.INVOICE_REGISTRATION ? [invoiceEvidence()] : [];
   if (flowType === FLOW_TYPE.A2) return phase === DOCUMENT_PHASE.INVOICE_REGISTRATION ? [invoiceEvidence()] : [];
   // An undocumented reimbursement (REEMBOLSO_SIN_SUSTENTO) is, by definition, backed by
   // the signed declaration rather than receipts, so no default rendition file is required.
@@ -141,6 +156,7 @@ async function matchingRules(request, phase) {
 }
 
 export async function configuredDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
+  if (phase === DOCUMENT_PHASE.SUBMISSION && quoteOrInvoiceFlow(request)) return [quoteOrInvoiceRequirement()];
   const rules = await matchingRules(request, phase);
   if (!rules.length) return mergeRequirements(defaultDocumentRequirements(request, phase));
   const requirements = mergeRequirements(rules.flatMap((rule) => rule.requirements || []));
@@ -167,12 +183,17 @@ export async function documentStatusByPhase(request) {
   return { currentPhase: currentDocumentPhase(request), phases };
 }
 
+// A1 and B: quotations are checked whenever there are any, and the invoice can stand in for them.
+const quoteOrInvoicePolicy = () => ({ enabled: true, minimumCount: QUOTATION_MINIMUM_COUNT, invoiceInstead: true, source: QUOTE_OR_INVOICE });
+
 export function defaultQuotationPolicy(request) {
+  if (quoteOrInvoiceFlow(request)) return quoteOrInvoicePolicy();
   const quotation = defaultDocumentRequirements(request, DOCUMENT_PHASE.SUBMISSION).find((item) => item.kind === "QUOTATION");
   return { enabled: Boolean(quotation), minimumCount: QUOTATION_MINIMUM_COUNT, source: "DEFAULT_DOCUMENT_REQUIREMENTS" };
 }
 
 export async function configuredQuotationPolicy(request) {
+  if (quoteOrInvoiceFlow(request)) return quoteOrInvoicePolicy();
   const rules = await matchingRules(request, DOCUMENT_PHASE.SUBMISSION);
   if (!rules.length) return defaultQuotationPolicy(request);
   const quotationRequired = rules.some((rule) => rule.quotationPolicy?.enabled || (rule.requirements || []).some((item) => item.kind === "QUOTATION"));
@@ -186,6 +207,8 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
   const paymentErrors = (request.quotations || []).flatMap((quotation, index) => validatePaymentTerms(quotation).map((error) => ({ code: "QUOTATION_PAYMENT_TERMS_INVALID", quotation: index + 1, ...error })));
   if (!policy.enabled) return { valid: paymentErrors.length === 0, applicable: false, policy, errors: paymentErrors };
   const quotations = request.quotations || [];
+  // The invoice instead of a quotation: nothing to compare, nothing to recommend.
+  if (policy.invoiceInstead && !quotations.length && hasInvoiceEvidence(request)) return { valid: paymentErrors.length === 0, applicable: true, policy, errors: paymentErrors, invoiceInstead: true };
   const errors = [...paymentErrors];
   const supplierIds = new Set(quotations.map((quotation) => String(quotation.supplier?._id || quotation.supplier || "")).filter(Boolean));
   if (supplierIds.size < QUOTATION_MINIMUM_COUNT) errors.push({ code: "QUOTATION_MINIMUM_NOT_MET", required: QUOTATION_MINIMUM_COUNT, present: supplierIds.size });

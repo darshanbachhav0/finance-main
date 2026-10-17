@@ -9,6 +9,7 @@ import { getSunatPadronStatus } from "./src/services/sunatPadronService.js";
 import { getSunatProvider } from "./src/services/sunatService.js";
 
 import app from "./src/app.js";
+import { migrateRetiredRoles } from "./src/services/legacyRoleService.js";
 import { startInProcessWorkers, usesPublicPadron as usesPublicPadronMode } from "./src/workers/inProcessWorkers.js";
 
 const PORT =
@@ -51,6 +52,11 @@ function warnIfSunatProviderMisconfigured() {
 
 connectDB()
   .then(async () => {
+    // A role the app no longer has (Budget, folded into Treasury) is moved before anyone signs in.
+    const retired = await migrateRetiredRoles();
+    for (const [role, moved] of Object.entries(retired)) {
+      if (moved.users || moved.previousRoles || moved.approvalRules) console.log(`[ROLES] ${role} retired: ${moved.users} user(s), ${moved.approvalRules} approval rule(s) moved to ${moved.replacement}.`);
+    }
     if (
       usesPublicPadron
     ) {

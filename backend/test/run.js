@@ -64,6 +64,7 @@ import "./productionControls.test.js";
 import "./inProcessWorkers.test.js";
 import "./operationsNumbers.test.js";
 import "./accountingFixes.test.js";
+import "./retiredRoles.test.js";
 import "./plainClone.test.js";
 import "./seedSmoke.test.js";
 import "./notificationLinks.test.js";

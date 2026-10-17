@@ -37,7 +37,7 @@ test("generated financial files enforce the server-side role matrix", async () =
   // database in bankFileVerification.test.js.
   const bankFile = resolveStoredAsset("/generated/bank-files/BCP-DEMO.txt");
   await assert.rejects(() => assertStoredAssetAccess(bankFile, { role: ROLES.SOLICITOR }), /permission/);
-  await assert.rejects(() => assertStoredAssetAccess(bankFile, { role: ROLES.BUDGET }), /permission/);
+  await assert.rejects(() => assertStoredAssetAccess(bankFile, { role: ROLES.PROCUREMENT }), /permission/);
 
   const report = resolveStoredAsset("/generated/reports/month-end.csv");
   await assert.doesNotReject(() => assertStoredAssetAccess(report, { role: ROLES.MANAGEMENT }));

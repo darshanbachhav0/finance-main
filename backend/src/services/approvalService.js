@@ -120,10 +120,15 @@ async function validateApprovalControls(request, user) {
     }, { request, requestNumber: request.requestNumber, supplier, user, fileName: xmlAttachment.originalName });
     request.xmlValidationHistory.push(request.xmlValidation);
   }
-  if (request.flowType === FLOW_TYPE.B && !request.xmlValidation?.validated) {
+  // B sent with only its quote: the invoice is registered after approval (registerDirectPaymentInvoice).
+  if (request.flowType === FLOW_TYPE.B && xmlAttachment && !request.xmlValidation?.validated) {
     throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
   }
 }
+
+// A B request that carries its verified invoice is paid straight after approval; one sent with only
+// its quote waits, budget reserved, for the invoice.
+export const directInvoiceReady = (request) => request.flowType === FLOW_TYPE.B && Boolean(latestInvoiceEvidence(request.attachments) && request.xmlValidation?.validated);
 
 export async function listApprovalInbox(queryParams, user) {
   const query = { status: { $in: activeApprovalStatuses } };
@@ -281,7 +286,8 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
   const supplier = request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier);
   assertSupplierUsable(supplier);
   let directPaymentPreflight;
-  if (request.flowType === FLOW_TYPE.B) {
+  const payNow = directInvoiceReady(request);
+  if (payNow) {
     directPaymentPreflight = await preflightDirectPayment({ request, user, req, observe: true });
     if (!directPaymentPreflight.valid) {
       const accountingDecides = directPaymentPreflight.resolver === "ACCOUNTING";
@@ -316,12 +322,25 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     const commitment = await reserveBudget(request, user._id, { session });
     request.budgetCommitment = commitment._id;
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed and budget commitment recorded.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, skipRoleCheck: automatic, session });
-    if (request.flowType === FLOW_TYPE.B) await provisionDirectPayment({ request, user, req, session, preflight: directPaymentPreflight });
+    if (payNow) await provisionDirectPayment({ request, user, req, session, preflight: directPaymentPreflight });
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);
   await resolveNotification(`request:${request._id}:sunat-exception`);
   await resolveNotification(`request:${request._id}:budget-commitment`);
+  if (request.flowType === FLOW_TYPE.B && !payNow) {
+    await notifyUser({
+      userId: request.requester?._id || request.requester || request.solicitor,
+      eventKey: `request:${request._id}:direct-invoice-needed`,
+      type: "INVOICE_NEEDED",
+      title: notificationText("Upload the invoice to get it paid"),
+      message: notificationText("{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives and it goes to payment.", { requestNumber: request.requestNumber }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+    return result;
+  }
   await notifyRoles({
     roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.PROCUREMENT],
     eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,
@@ -513,7 +532,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     // Terminal - resolveBudgetCommitmentFailure already notified the requester; no Budget task to raise.
   } else if (budgetWarning) {
     await notifyRoles({
-      roles: [ROLES.BUDGET, ROLES.ADMIN],
+      roles: [ROLES.TREASURY, ROLES.ADMIN],
       eventKey: `request:${request._id}:budget-exception`,
       type: "BUDGET_EXCEPTION",
       title: notificationText("Budget exception pending"),
@@ -530,7 +549,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     // create a misleading Accounting/Treasury task while the XML is observed.
   } else if (budgetDeferred) {
     await notifyRoles({
-      roles: [ROLES.BUDGET, ROLES.ADMIN],
+      roles: [ROLES.TREASURY, ROLES.ADMIN],
       eventKey: `request:${request._id}:budget-commitment`,
       type: "BUDGET_COMMITMENT",
       title: notificationText("Budget commitment required"),

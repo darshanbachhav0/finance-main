@@ -54,7 +54,7 @@ export function assertExceptionDecisionAllowed(exception, request, user, action,
     throw new AppError(409, "The request of this exception is already closed, voided or rejected; there is nothing left to decide.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (action === "REVIEWED") {
-    if (!["Budget", "Admin"].includes(user.role)) throw new AppError(403, "Budget review permission is required.");
+    if (![ROLES.TREASURY, ROLES.ADMIN].includes(user.role)) throw new AppError(403, "Budget review permission is required.");
     return;
   }
   if (!["APPROVED", "REJECTED"].includes(action)) throw new AppError(422, "Invalid exception action.");
@@ -85,7 +85,7 @@ async function notifyAfterDecision(exception, request, action) {
   }
   await resolveNotification(`budget-exception:${exception._id}:decision`);
   await notifyRoles({
-    roles: [ROLES.BUDGET, ROLES.ADMIN],
+    roles: [ROLES.TREASURY, ROLES.ADMIN],
     eventKey: `budget-exception:${exception._id}:${action.toLowerCase()}`,
     type: "BUDGET_EXCEPTION",
     title: action === "APPROVED" ? notificationText("Budget exception approved") : notificationText("Budget exception rejected"),

@@ -13,7 +13,7 @@ import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 
 // "Import from Excel": the sheets Finance and Treasury keep today become platform records, through
 // the same services the screens use (so every rule, audit and notification still applies).
-//   budget-plans      Budget / Admin      a new annual budget plan per Cost Center (and project)
+//   budget-plans      Treasury / Admin      a new annual budget plan per Cost Center (and project)
 //   suppliers         Admin / Accounting / Procurement   supplier proposals, pending approval
 //   payment-schedule  Treasury / Admin    the planned payment date (and priority) of open payables
 // Every import is checked first (dryRun): each row says what will happen or what is wrong, and
@@ -170,7 +170,7 @@ async function applyScheduleRow(checked, { user }) {
 }
 
 export const IMPORTERS = Object.freeze({
-  "budget-plans": { roles: [ROLES.ADMIN, ROLES.BUDGET], module: "BUDGET", check: checkBudgetRow, apply: applyBudgetRow },
+  "budget-plans": { roles: [ROLES.ADMIN, ROLES.TREASURY], module: "BUDGET", check: checkBudgetRow, apply: applyBudgetRow },
   suppliers: { roles: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.PROCUREMENT], module: "SUPPLIERS", check: checkSupplierRow, apply: applySupplierRow },
   "payment-schedule": { roles: [ROLES.ADMIN, ROLES.TREASURY], module: "TREASURY", check: checkScheduleRow, apply: applyScheduleRow }
 });

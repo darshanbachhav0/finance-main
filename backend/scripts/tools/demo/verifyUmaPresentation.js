@@ -33,7 +33,7 @@ try {
   for(const field of ['committedAmount','executedAmount','paidAmount']) assert.ok(Math.abs(plan[field]-plan.months.reduce((sum,x)=>sum+x[field],0))<0.01,field);
  }
  const users=await User.find({active:true});
- for(const role of ['Admin','Management','Budget','Accounting','Treasury','Solicitor','Approver']) {
+ for(const role of ['Admin','Management','Accounting','Treasury','Solicitor','Approver']) {
   const user=users.find(x=>x.role===role); assert.ok(user,role);
   const token=jwt.sign({id:user._id},process.env.JWT_SECRET||'dev_secret_change_me');
   const read=async route=>{const response=await fetch(`http://127.0.0.1:${server.address().port}/api${route}`,{headers:{Authorization:`Bearer ${token}`}});const body=await response.json();assert.equal(response.status,200,JSON.stringify(body));return body.data||body;};

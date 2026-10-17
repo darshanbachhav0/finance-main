@@ -499,7 +499,8 @@ function normalizeTrackFields(request) {
     request.opexDetails = {};
   }
 
-  if (request.flowType !== FLOW_TYPE.A1) {
+  // A1 and B carry the supplier's quotations; the other tracks have none.
+  if (![FLOW_TYPE.A1, FLOW_TYPE.B].includes(request.flowType)) {
     request.quotations = [];
     request.supplierSelectionReason = "";
   }
@@ -585,12 +586,16 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       if (officialRequest) assertOfficialRequestFields(request);
       // Every track uses a supplier only once the proposer's jefe has approved it.
       assertSupplierUsable(supplier);
-      await assertQuotationPolicy(request);
     } else {
       assertSupplierUsable(supplier);
     }
+    // A1 / B: "a quote or the invoice" first (the clearer message when neither is there), then
+    // the quotations that were added, checked in full.
     await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
-    if (request.flowType === FLOW_TYPE.B && !request.xmlValidation?.validated) {
+    if ([FLOW_TYPE.A1, FLOW_TYPE.B].includes(request.flowType)) await assertQuotationPolicy(request);
+    // A B request may be sent with only its quote (the invoice is registered after approval); an
+    // invoice that is attached must match the request.
+    if (request.flowType === FLOW_TYPE.B && latestInvoiceEvidence(request.attachments) && !request.xmlValidation?.validated) {
       throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
     }
   }

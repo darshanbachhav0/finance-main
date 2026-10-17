@@ -41,10 +41,10 @@ export const approvalRuleRouter = Router();
 bindCrud(approvalRuleRouter, approvalRules, [ROLES.ADMIN]);
 
 export const budgetRuleRouter = Router();
-bindCrud(budgetRuleRouter, budgetRules, [ROLES.ADMIN, ROLES.BUDGET]);
+bindCrud(budgetRuleRouter, budgetRules, [ROLES.ADMIN, ROLES.TREASURY]);
 
 export const budgetAllocationRouter = Router();
-bindCrud(budgetAllocationRouter, budgetAllocations, [ROLES.ADMIN, ROLES.BUDGET]);
+bindCrud(budgetAllocationRouter, budgetAllocations, [ROLES.ADMIN, ROLES.TREASURY]);
 
 export const documentRuleRouter = Router();
 bindCrud(documentRuleRouter, documentRules, [ROLES.ADMIN, ROLES.ACCOUNTING]);
@@ -60,7 +60,7 @@ bindCrud(bankFormatRouter, bankFormats, [ROLES.ADMIN]);
 bankFormatRouter.post("/:id/certify", protect, authorizePermission(PERMISSIONS.BANK_FORMAT_CERTIFY), bankFormats.certify);
 
 export const financeConfigurationRouter = Router();
-financeConfigurationRouter.get("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.BUDGET), financeConfigurations.list);
+financeConfigurationRouter.get("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), financeConfigurations.list);
 financeConfigurationRouter.post("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), financeConfigurations.create);
 financeConfigurationRouter.put("/:id", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), financeConfigurations.update);
 financeConfigurationRouter.delete("/:id", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), financeConfigurations.remove);
