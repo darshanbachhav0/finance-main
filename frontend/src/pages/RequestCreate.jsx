@@ -387,6 +387,19 @@ export default function RequestCreate() {
     return () => { active = false; };
   }, [id]);
 
+  // Advances and reimbursements (Track C) are not invoices: their lines carry no IGV, so the
+  // amount typed is the amount paid. Lines follow the track as the answers change it.
+  const igvExempt = form.flowType === "C";
+  useEffect(() => {
+    setLines((current) => current.some((line) => Boolean(line.igvExempt) !== igvExempt)
+      ? current.map((line) => {
+        if (Boolean(line.igvExempt) === igvExempt) return line;
+        if (line.legacyAmounts || line.unitPrice === "" || line.unitPrice === undefined) return { ...line, igvExempt, ...(igvExempt ? { netAmount: line.totalAmount, igvAmount: 0 } : {}) };
+        return editRequestLine({ ...line, igvExempt }, { priceIncludesIGV: line.priceIncludesIGV ?? true });
+      })
+      : current);
+  }, [igvExempt, lines.length]);
+
   useEffect(() => {
     if (!hydrated || !form.requestType || !form.expenseNature) return undefined;
     let active = true;
@@ -868,7 +881,7 @@ export default function RequestCreate() {
     setQuick((current) => ({ ...current, amount: value }));
     setLines((current) => {
       const base = current[0] || emptyLine(form.requesterCostCenter);
-      return [editRequestLine(base, { quantity: "1", unitOfMeasure: base.unitOfMeasure || "UNIT", unitPrice: value, priceIncludesIGV: true, itemDescription: base.itemDescription || titleFromDescription(form.detailedDescription) })];
+      return [editRequestLine(base, { quantity: "1", unitOfMeasure: base.unitOfMeasure || "UNIT", unitPrice: value, priceIncludesIGV: true, igvExempt, itemDescription: base.itemDescription || titleFromDescription(form.detailedDescription) })];
     });
   }
 

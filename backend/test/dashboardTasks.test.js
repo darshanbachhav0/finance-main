@@ -105,6 +105,17 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       await AccountsPayable.deleteMany({});
     });
 
+    await t.test("an advance whose pay date has come is Treasury's urgent task", async () => {
+      const advance = (dueDate) => ({ _id: new mongoose.Types.ObjectId(), status: "OPEN", flowType: "C", voucher: { voucherType: "ANTICIPO" }, currency: "PEN", amount: 56, outstandingAmount: 56, request: new mongoose.Types.ObjectId(), dueDate });
+      await AccountsPayable.collection.insertMany([advance(new Date(now - day)), advance(new Date(now + 5 * day))]);
+      const tasks = await tasksOf("Treasury");
+      assert.equal(tasks.byKey.advancesDue.count, 1, "only the advance due by today");
+      assert.equal(tasks.byKey.advancesDue.overdue, 1, "unpaid since yesterday");
+      assert.equal(tasks.byKey.advancesDue.tone, "danger");
+      assert.equal(tasks.byKey.advancesDue.path, "/treasury?advances=due");
+      await AccountsPayable.deleteMany({});
+    });
+
     await t.test("Management decides reviewed budget exceptions from the Approval Inbox", async () => {
       const open = request({ requestNumber: "T-EXC-OPEN", status: "OBSERVADO_PRESUPUESTO" });
       const other = request({ requestNumber: "T-EXC-OTHER", status: "OBSERVADO_PRESUPUESTO" });

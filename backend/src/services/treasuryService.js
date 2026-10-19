@@ -33,6 +33,7 @@ import {
 } from "./paymentDestinationService.js";
 import { ensureDetraction, pendingDetractionAmount, resolveSupplierDetractionAccount } from "./detractionService.js";
 import { notifyBouncedAccountReview } from "./bankNotificationService.js";
+import { ADVANCE_PAYMENT_REASON, advanceReturnAccount, isAdvancePayable } from "./advancePaymentService.js";
 import { isPaymentCycleDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { nextPaymentBatchNumber } from "./sequenceService.js";
@@ -175,16 +176,17 @@ function dateKeyOf(value, field) {
 
 // University payment schedule: payments run on the 15th and the 30th (last day of February).
 // The default is the next cycle date; any other date needs a reason (audited) and a date in the
-// past is never accepted.
-export function resolvePaymentSchedule({ paymentDate, reason, now = new Date() } = {}) {
+// past is never accepted. Advances to render are paid the same working day: a file holding only
+// advances defaults to today and needs no typed reason (the platform records why).
+export function resolvePaymentSchedule({ paymentDate, reason, now = new Date(), advancesOnly = false } = {}) {
   const cycleDate = nextPaymentCycleDate(now);
-  const date = paymentDate ? dateKeyOf(paymentDate, "paymentDate") : cycleDate;
+  const date = paymentDate ? dateKeyOf(paymentDate, "paymentDate") : advancesOnly ? limaDateKey(now) : cycleDate;
   if (date < limaDateKey(now)) {
     throw new AppError(422, "A payment cannot be scheduled on a past date.", { field: "paymentDate", paymentDate: date, today: limaDateKey(now) }, ERROR_CODES.VALIDATION_ERROR);
   }
   // Noon UTC is 07:00 in Lima, so the Lima calendar date is the key itself.
   const onCycle = isPaymentCycleDate(new Date(`${date}T12:00:00.000Z`));
-  const overrideReason = String(reason || "").trim();
+  const overrideReason = String(reason || "").trim() || (advancesOnly ? ADVANCE_PAYMENT_REASON : "");
   if (!onCycle && !overrideReason) {
     throw new AppError(422, `Payments follow the 15th/30th cycle (next: ${cycleDate}). A reason is required to schedule on another date.`, { field: "paymentDateReason", paymentDate: date, cycleDate }, ERROR_CODES.VALIDATION_ERROR);
   }
@@ -194,6 +196,12 @@ export function resolvePaymentSchedule({ paymentDate, reason, now = new Date() }
 function paymentCycleOf(accountsPayable, now = new Date()) {
   // scheduledFor is stored as the UTC midnight of the chosen calendar date.
   if (accountsPayable.scheduledFor) return new Date(accountsPayable.scheduledFor).toISOString().slice(0, 10);
+  // An advance is paid on its pay date; one not paid yet is still owed today.
+  if (isAdvancePayable(accountsPayable)) {
+    const today = limaDateKey(now);
+    const due = accountsPayable.dueDate ? limaDateKey(accountsPayable.dueDate) : today;
+    return due > today ? due : today;
+  }
   // Treasury's planned date (Excel payment schedule) wins over the due date of the payment terms.
   const planned = accountsPayable.plannedPaymentDate ? new Date(accountsPayable.plannedPaymentDate) : null;
   if (planned) return nextPaymentCycleDate(planned > now ? planned : now);
@@ -224,6 +232,20 @@ export async function nextPaymentRunSummary(now = new Date()) {
   ]);
   const totalsByCurrency = Object.fromEntries(groups.map((item) => [item._id, { total: roundMoney(item.total), count: item.count }]));
   return { date, count: groups.reduce((sum, item) => sum + item.count, 0), totalsByCurrency };
+}
+
+// Advances to render waiting for their bank file whose pay date has come (today or earlier).
+export function advancesDueFilter(now = new Date()) {
+  return { flowType: FLOW_TYPE.C, "voucher.voucherType": "ANTICIPO", status: { $in: PAYMENT_RUN_STATUSES }, dueDate: { $lte: new Date(`${limaDateKey(now)}T23:59:59.999-05:00`) } };
+}
+
+export async function advancesDueSummary(now = new Date()) {
+  const groups = await AccountsPayable.aggregate([
+    { $match: advancesDueFilter(now) },
+    { $group: { _id: "$currency", total: { $sum: "$outstandingAmount" }, count: { $sum: 1 } } }
+  ]);
+  const totalsByCurrency = Object.fromEntries(groups.map((item) => [item._id, { total: roundMoney(item.total), count: item.count }]));
+  return { date: limaDateKey(now), count: groups.reduce((sum, item) => sum + item.count, 0), totalsByCurrency };
 }
 
 function selectedAccountId(accountSelections, requestId, payableId) {
@@ -422,6 +444,8 @@ export async function listTreasuryQueue(queryParams) {
     const currentIds = query.request?.$in;
     query.request = { $in: currentIds ? requestIds.filter((id) => currentIds.some((current) => String(current) === String(id))) : requestIds };
   }
+  // "Advances to pay now": only advances whose pay date has come.
+  if (String(queryParams.advancesDue || "") === "true") Object.assign(query, advancesDueFilter());
   // "Prepare the next payment run": only what falls into the run of that cycle date.
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(queryParams.paymentCycle || ""))) {
     query.status = { $in: PAYMENT_RUN_STATUSES };
@@ -554,9 +578,9 @@ export async function getEligiblePaymentDestinations({ requestId, bank, currency
 
 export async function schedulePayments({ requestIds = [], payableIds = [], bank, currency, paymentDate, paymentDateReason, accountSelections, user, req }) {
   if ((!Array.isArray(requestIds) || !requestIds.length) && (!Array.isArray(payableIds) || !payableIds.length)) throw new AppError(422, "Select at least one payable CXP.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  const schedule = resolvePaymentSchedule({ paymentDate, reason: paymentDateReason });
   const normalizedBank = String(bank || "").toUpperCase();
   const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
+  const schedule = resolvePaymentSchedule({ paymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && items.every((item) => isAdvancePayable(item.accountsPayable)) });
   await runFinancialOperation(async (session) => {
     for (const item of items) await scheduleLoadedItem(item, schedule, user, req, session);
   });
@@ -565,8 +589,6 @@ export async function schedulePayments({ requestIds = [], payableIds = [], bank,
 
 export async function generatePaymentBatch({ requestIds = [], payableIds = [], bank, currency, paymentDate: requestedPaymentDate, paymentDateReason, accountSelections, user, req }) {
   if ((!Array.isArray(requestIds) || !requestIds.length) && (!Array.isArray(payableIds) || !payableIds.length)) throw new AppError(422, "Select at least one payable CXP.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  const schedule = resolvePaymentSchedule({ paymentDate: requestedPaymentDate, reason: paymentDateReason });
-  const { paymentDate } = schedule;
   const normalizedBank = String(bank || "").trim().toUpperCase();
   assertBbvaSource(normalizedBank);
   const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
@@ -583,6 +605,9 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
     specificationVersion: configuration.specificationVersion
   };
   const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
+  const advanceCount = items.filter((item) => isAdvancePayable(item.accountsPayable)).length;
+  const schedule = resolvePaymentSchedule({ paymentDate: requestedPaymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && advanceCount === items.length });
+  const { paymentDate } = schedule;
   adapter.validateBatch(items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot })));
   const batchNumber = await nextPaymentBatchNumber(paymentDate);
   const adapterItems = items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot }));
@@ -722,8 +747,10 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
       roles: [ROLES.ACCOUNTING],
       eventKey: bankFileVerificationTaskKey(result.batch._id),
       type: "BANK_FILE_VERIFICATION",
-      title: notificationText("Bank file awaiting verification"),
-      message: notificationText("{batchNumber} ({count} payments) must be verified before Treasury can download it.", { batchNumber, count: items.length }),
+      title: advanceCount ? notificationText("Verify today: bank file with an advance") : notificationText("Bank file awaiting verification"),
+      message: advanceCount
+        ? notificationText("{batchNumber} ({count} payments) includes {advances} advance(s) to pay today. Verify it so Treasury can send it.", { batchNumber, count: items.length, advances: advanceCount })
+        : notificationText("{batchNumber} ({count} payments) must be verified before Treasury can download it.", { batchNumber, count: items.length }),
       path: `/accounting/bank-files?record=${result.batch._id}`,
       entityType: "PaymentBatch",
       entityId: result.batch._id
@@ -863,7 +890,11 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
   const advanceFullyPaid = request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR && result.accountsPayable.status === AP_STATUS.PAID;
   if (advanceFullyPaid) {
     const dueLabel = request.rendition?.dueAt ? limaDateKey(request.rendition.dueAt).split("-").reverse().join("/") : "";
-    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: notificationText("Rendition pending"), message: notificationText("{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time).", { requestNumber: request.requestNumber, dueDate: dueLabel }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+    const returnAccount = await advanceReturnAccount();
+    const renditionMessage = returnAccount
+      ? notificationText("{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time). Return any money left over to {account} and attach the deposit slip.", { requestNumber: request.requestNumber, dueDate: dueLabel, account: returnAccount })
+      : notificationText("{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time).", { requestNumber: request.requestNumber, dueDate: dueLabel });
+    await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:rendition`, type: "RENDITION_PENDING", title: notificationText("Rendition pending"), message: renditionMessage, path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   } else {
     await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${request._id}:paid:${accountsPayable._id}`, type: "PAYMENT_CONFIRMED", title: notificationText("Payment confirmed"), message: notificationText("{requestNumber} CXP was paid with operation {operationNumber}.", { requestNumber: request.requestNumber, operationNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
   }

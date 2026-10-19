@@ -8,7 +8,9 @@ import {
 const financeConfigurationSchema = new mongoose.Schema(
   {
     key: { type: String, enum: Object.values(FINANCE_CONFIGURATION_KEYS), required: true, trim: true, uppercase: true },
-    numericValue: { type: Number, required: true, min: 0 },
+    numericValue: { type: Number, required: true, min: 0, default: 0 },
+    // For settings that are text (ADVANCE_RETURN_ACCOUNT); numericValue is then 0.
+    textValue: { type: String, trim: true, default: "", maxlength: 300 },
     currency: { type: String, enum: CURRENCY, default: "PEN", required: true },
     behavior: { type: String, enum: FINANCE_CONFIGURATION_BEHAVIORS, default: "WARNING", required: true },
     effectiveFrom: { type: Date, required: true },

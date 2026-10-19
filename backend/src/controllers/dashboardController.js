@@ -1,4 +1,5 @@
 import AccountsPayable from "../models/AccountsPayable.js";
+import { advancesDueFilter } from "../services/treasuryService.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import AuditLog from "../models/AuditLog.js";
 import BudgetException from "../models/BudgetException.js";
@@ -25,7 +26,7 @@ import { personalDashboard } from "../services/personalDashboardService.js";
 import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
-import { limaToday } from "../../../shared/businessCalendar.mjs";
+import { limaDateKey, limaToday } from "../../../shared/businessCalendar.mjs";
 
 function currentPeriod() {
   return limaToday().slice(0, 7);
@@ -183,6 +184,12 @@ async function buildTasks(user) {
       earliestDate(AccountsPayable, payableQuery, "dueDate"),
       AccountsPayable.countDocuments({ ...payableQuery, dueDate: { $lt: now } })
     ]);
+    const advancesQuery = advancesDueFilter(now);
+    const [advancesDue, advancesLate] = await Promise.all([
+      AccountsPayable.countDocuments(advancesQuery),
+      AccountsPayable.countDocuments({ ...advancesQuery, dueDate: { $lt: new Date(`${limaDateKey(now)}T00:00:00.000-05:00`) } })
+    ]);
+    items.push({ key: "advancesDue", label: "Advances to pay now", count: advancesDue, path: "/treasury?advances=due", tone: "danger", dueAt: advancesDue ? now : undefined, overdue: advancesLate });
     items.push({ key: "payable", label: "CXP ready for Treasury", count: payable, path: (await singleRecordPath(payable, AccountsPayable, payableQuery, (record) => `/treasury?tab=prepare&record=${record._id}`)) || "/treasury?tab=prepare", tone: payableOverdue ? "danger" : "accent", dueAt: payableDueAt, overdue: payableOverdue });
     items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: (await singleRecordPath(confirmation, AccountsPayable, confirmationQuery, (record) => `/treasury?tab=confirm&record=${record._id}`)) || "/treasury?tab=confirm", tone: "warning" });
     items.push({ key: "bouncedPayments", label: "Returned payments to reprogram", count: bounced, path: (await singleRecordPath(bounced, AccountsPayable, bouncedQuery, (record) => `/treasury?tab=returned&record=${record._id}`)) || "/treasury?tab=returned", tone: "danger" });

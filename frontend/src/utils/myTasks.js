@@ -15,6 +15,7 @@ export const TASK_SENTENCES = {
   "rendition:submit": ["{count} rendition to submit", "{count} renditions to submit"],
   "rendition:review": ["{count} rendition to review", "{count} renditions to review"],
   "rendition:outstanding": ["{count} rendition outstanding", "{count} renditions outstanding"],
+  advancesDue: ["{count} advance to pay now", "{count} advances to pay now"],
   payable: ["{count} CXP ready to be paid", "{count} CXP ready to pay"],
   paymentConfirmation: ["{count} payment to confirm", "{count} payments to confirm"],
   bouncedPayments: ["{count} returned payment to reprogram", "{count} returned payments to reprogram"],

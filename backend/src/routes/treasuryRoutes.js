@@ -24,7 +24,7 @@ import {
 } from "../controllers/treasuryController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { nextPaymentRunSummary } from "../services/treasuryService.js";
+import { advancesDueSummary, nextPaymentRunSummary } from "../services/treasuryService.js";
 import { uploadFields } from "../middleware/upload.js";
 import { ROLES } from "../utils/constants.js";
 
@@ -40,6 +40,7 @@ router.use(protect, authorize(ROLES.ADMIN, ROLES.TREASURY));
 router.get("/queue", paymentQueue);
 // The next 15th / 30th payment run and what falls into it (Payments page banner).
 router.get("/next-run", asyncHandler(async (_req, res) => res.json({ data: await nextPaymentRunSummary() })));
+router.get("/advances-due", asyncHandler(async (_req, res) => res.json({ data: await advancesDueSummary() })));
 router.get("/bank-files", listBankFiles);
 router.get("/payment-confirmations", paymentConfirmationQueue);
 router.get("/bounced-payments", bouncedPaymentQueue);

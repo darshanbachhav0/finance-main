@@ -1,4 +1,5 @@
 import { assertVoucherEvidenceMatches, latestInvoiceEvidence } from "./xmlValidationService.js";
+import { advancePaymentDateKey } from "./advancePaymentService.js";
 import { assertPostingAllowed } from "./financialProgressService.js";
 import Supplier from "../models/Supplier.js";
 import SunatVoucher from "../models/SunatVoucher.js";
@@ -304,7 +305,9 @@ export async function provisionTrackCAdvance({ request, user, req, session, auto
     igvAmount: 0,
     totalAmount: request.totalAmount
   };
-  const accountsPayable = await createAccountsPayableFromVoucher({ request, voucher, user, paymentPriority: "PRIORITY", dueDate: new Date(), session });
+  // Paid the same working day (next working day after the cut-off), not on the 15th / 30th.
+  const payDate = await advancePaymentDateKey();
+  const accountsPayable = await createAccountsPayableFromVoucher({ request, voucher, user, paymentPriority: "PRIORITY", dueDate: new Date(`${payDate}T17:00:00.000Z`), session });
   await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "ADVANCE_PROVISIONED", comments: "Track C budget reserved before the advance is posted to Account 14; expense execution remains deferred until rendition validation.", session, skipControls: true, skipRoleCheck: automatic });
   return { accountsPayable, commitment };
 }

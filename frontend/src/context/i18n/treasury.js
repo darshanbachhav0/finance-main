@@ -130,5 +130,10 @@ export default {
   "Accounting verification": "Verificación de Contabilidad",
   "Accounting rejected this bank file.": "Contabilidad rechazó este archivo bancario.",
   "Waiting for Accounting to verify the bank file.": "A la espera de que Contabilidad verifique el archivo bancario.",
-  "Download a payment file once Accounting has verified it, then send it to the bank.": "Descarga un archivo de pago cuando Contabilidad lo haya verificado y luego envíalo al banco."
+  "Download a payment file once Accounting has verified it, then send it to the bank.": "Descarga un archivo de pago cuando Contabilidad lo haya verificado y luego envíalo al banco.",
+  "Advances are paid the same working day, outside the 15th/30th cycle.": "Los anticipos se pagan el mismo día hábil, fuera del ciclo del 15 y 30.",
+  "Pay now": "Pagar ahora",
+  "{count} advances to pay today are selected. Generate the bank file dated today.": "{count} anticipos por pagar hoy están seleccionados. Genera el archivo bancario con fecha de hoy.",
+  "Advances are paid the same working day; no reason is needed.": "Los anticipos se pagan el mismo día hábil; no hace falta un motivo.",
+  "Advance to render: paid the same working day, outside the 15th/30th cycle.": "Anticipo a rendir: se paga el mismo día hábil, fuera del ciclo del 15 y 30."
 };

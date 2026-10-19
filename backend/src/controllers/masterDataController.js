@@ -222,7 +222,7 @@ export const bankFormats = {
 export const financeConfigurations = resourceController({
   Model: FinanceConfiguration,
   label: "FinanceConfiguration",
-  fields: ["key", "numericValue", "currency", "behavior", "effectiveFrom", "effectiveTo", "active", "description", "source"],
+  fields: ["key", "numericValue", "textValue", "currency", "behavior", "effectiveFrom", "effectiveTo", "active", "description", "source"],
   searchFields: ["key", "description", "source"],
   sortFields: ["key", "effectiveFrom", "effectiveTo", "numericValue", "active"],
   defaultSort: { key: 1, effectiveFrom: -1 },

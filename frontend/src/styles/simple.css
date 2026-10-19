@@ -97,6 +97,8 @@
 .payment-run-banner > div { display: grid; flex: 1 1 240px; gap: 2px; }
 .payment-run-banner span { color: var(--gray-700); font-size: var(--font-sm); }
 .payment-run-banner.is-active { border-color: var(--uma-primary); background: var(--accent-soft); }
+.payment-run-banner.is-urgent { border-color: var(--red-700); background: var(--red-100); }
+.payment-run-banner.is-urgent > svg { color: var(--red-700); }
 
 /* ---- Account menu ---- */
 .user-popover > a { display: flex; align-items: center; gap: 9px; margin-top: 5px; padding: 9px 10px; color: var(--red-700); border-radius: var(--radius-xs); font-size: var(--font-sm); font-weight: 700; text-decoration: none; }

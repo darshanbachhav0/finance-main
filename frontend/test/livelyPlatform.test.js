@@ -43,6 +43,18 @@ assert.equal(journeySummary(bankHold("ACCOUNTING"), { viewerId: "r1" }).holder.n
 assert.deepEqual(plainNextStep(bankHold("REQUESTER")), { text: "Register your bank account in {currency} under My bank account. The advance is paid once Accounting verifies it.", params: { currency: "PEN" }, yours: true });
 assert.equal(plainNextStep(bankHold("ACCOUNTING")).yours, false);
 assert.equal(journeySummary({ ...bankHold("REQUESTER"), observation: { code: "REIMBURSEMENT_BANK_REQUIRED", resolvedAt: "2026-10-19T15:00:00Z" } }).text, "Approved. The budget is being committed.", "a cleared hold is not shown");
+// An advance is paid the same working day: the expected date is its pay date (today once it has come).
+const advanceBooked = { flowType: "C", requestType: "ENTREGA_RENDIR", status: "CONTABILIZADO", requester: { _id: "r1", name: "Ruth" } };
+const advancePayable = [{ status: "OPEN", dueDate: "2026-10-19T17:00:00.000Z" }];
+assert.deepEqual(expectedPayment(advanceBooked, advancePayable, new Date("2026-10-19T15:00:00Z")), { state: "estimated", date: "2026-10-19" });
+assert.deepEqual(expectedPayment(advanceBooked, advancePayable, new Date("2026-10-21T15:00:00Z")), { state: "estimated", date: "2026-10-21" }, "still unpaid: owed today");
+assert.equal(journeySummary(advanceBooked, { viewerId: "r1", payment: { date: "19 Oct" } }).text, "Approved. Treasury sends your advance on {date}.");
+assert.equal(journeySummary(advanceBooked, { viewerId: "other", payment: { date: "19 Oct" } }).text, "Approved. Treasury sends the advance on {date}.");
+const treasuryQueue = source("../src/pages/TreasuryQueue.jsx");
+assert.match(treasuryQueue, /advancesDue: "true"/, "Pay now lists only the advances due");
+assert.match(treasuryQueue, /t\("Pay now"\)/);
+assert.match(treasuryQueue, /offCycle && !advancesOnly/, "no reason asked for a file of advances");
+assert.match(source("../src/components/RequestItemLine.jsx"), /line\.igvExempt \?/, "no IGV option on advance lines");
 // Paid on Thursday 15 Oct, due 29 Oct: on Monday 26 Oct three working days remain.
 const countdown = renditionCountdown({ dueAt: "2026-10-30T04:59:59.999Z" }, { now: new Date("2026-10-26T15:00:00Z"), openedAt: "2026-10-15T17:00:00Z" });
 assert.equal(countdown.daysLeft, 3);

@@ -49,6 +49,12 @@ export function expectedPayment(request, payables = [], now = new Date()) {
   const unpaid = payables.filter((payable) => UNPAID_PAYABLE.includes(payable.status));
   const scheduled = unpaid.filter((payable) => payable.scheduledFor).map((payable) => new Date(payable.scheduledFor).toISOString().slice(0, 10)).sort()[0];
   if (scheduled) return { state: "scheduled", date: scheduled };
+  // An advance is paid the same working day: on its pay date, or today once that has come.
+  if (isAdvance(request) && unpaid.length) {
+    const today = limaDateKey(now);
+    const due = unpaid.map((payable) => payable.dueDate && limaDateKey(payable.dueDate)).filter(Boolean).sort()[0] || today;
+    return { state: "estimated", date: due > today ? due : today };
+  }
   if (unpaid.length || rank >= 4) return { state: "estimated", date: nextPaymentCycleDate(now) };
   return null;
 }
@@ -84,6 +90,9 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
     if (request.flowType === "A1" && request.purchaseOrder) return { text: "Purchase order {order} issued. Next: register the supplier's invoice.", params: { order: request.purchaseOrder?.poNumber || "" }, holder: requester, since };
     return { text: "Approved and budgeted. Accounting books the invoice next.", holder: team("Accounting"), since };
   }
+  if (status === "CONTABILIZADO" && isAdvance(request)) return payment?.date
+    ? { text: mine ? "Approved. Treasury sends your advance on {date}." : "Approved. Treasury sends the advance on {date}.", params: { date: payment.date }, holder: team("Treasury"), since }
+    : { text: mine ? "Approved. Treasury sends your advance next." : "Approved. Treasury sends the advance next.", holder: team("Treasury"), since };
   if (status === "CONTABILIZADO") return { text: payment?.date ? "Booked by Accounting. Treasury pays it on the next payment day, {date}." : "Booked by Accounting. Treasury pays it next.", params: { date: payment?.date }, holder: team("Treasury"), since };
   if (status === "PROGRAMADO") return { text: "Scheduled for payment on {date}.", params: { date: payment?.date }, holder: team("Treasury"), since };
   if (status === "TXT_GENERADO") return { text: "In the bank file. Treasury confirms the payment.", holder: team("Treasury"), since };

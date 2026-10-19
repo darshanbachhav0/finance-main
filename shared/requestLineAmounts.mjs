@@ -23,13 +23,16 @@ function scaledDecimal(value, scale, field) {
 const divideRounded = (value, divisor) => (value + divisor / 2n) / divisor;
 const money = cents => Number(cents) / 100;
 
-export function calculateRequestLineAmounts({ quantity, unitPrice, priceIncludesIGV }) {
+// igvExempt: advances and reimbursements (Track C) are not invoices, so they carry no IGV: the
+// amount is the quantity times the price, whatever the IGV option says.
+export function calculateRequestLineAmounts({ quantity, unitPrice, priceIncludesIGV, igvExempt = false }) {
+  if (igvExempt) priceIncludesIGV = true;
   if (typeof priceIncludesIGV !== "boolean") throw new Error("Choose whether the unit price includes IGV.");
   const quantityUnits = scaledDecimal(quantity, 8, "quantity");
   const priceCents = scaledDecimal(unitPrice, 2, "unit price");
   const subtotal = divideRounded(quantityUnits * priceCents, QUANTITY_SCALE);
-  const net = priceIncludesIGV ? divideRounded(subtotal * 100n, 118n) : subtotal;
-  const igv = priceIncludesIGV ? subtotal - net : divideRounded(subtotal * 18n, 100n);
+  const net = igvExempt ? subtotal : priceIncludesIGV ? divideRounded(subtotal * 100n, 118n) : subtotal;
+  const igv = igvExempt ? 0n : priceIncludesIGV ? subtotal - net : divideRounded(subtotal * 18n, 100n);
   const total = net + igv;
   if (priceCents > MAX_CENTS || total > MAX_CENTS) throw new Error("The item amount is too large.");
   return { unitPrice: money(priceCents), subtotal: money(subtotal), netAmount: money(net), igvAmount: money(igv), totalAmount: money(total) };

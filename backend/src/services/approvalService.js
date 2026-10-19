@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
@@ -277,9 +278,10 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
   if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req, automatic });
   if (request.flowType === FLOW_TYPE.C) {
     let result;
+    let advancePayable;
     try {
       result = await runFinancialOperation(async (session) => {
-        await provisionTrackCAdvance({ request, user, req, session, automatic });
+        ({ accountsPayable: advancePayable } = await provisionTrackCAdvance({ request, user, req, session, automatic }));
         return request;
       });
     } catch (error) {
@@ -291,7 +293,22 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
       return request;
     }
     await resolveBankNotices(request);
-    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: notificationText("Track C advance ready"), message: notificationText("{requestNumber} is ready for priority advance payment.", { requestNumber: request.requestNumber }), path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
+    const payDate = advancePayable?.dueDate ? limaDateKey(advancePayable.dueDate) : limaDateKey(new Date());
+    await notifyRoles({
+      roles: [ROLES.TREASURY],
+      eventKey: `request:${request._id}:treasury`,
+      type: "TREASURY_PAYMENT",
+      title: notificationText("Advance to pay now"),
+      message: notificationText("{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.", {
+        requestNumber: request.requestNumber,
+        amount: `${request.currency} ${Number(request.totalAmount || 0).toFixed(2)}`,
+        name: request.rendition?.beneficiarySnapshot?.name || "",
+        date: payDate.split("-").reverse().join("/")
+      }),
+      path: "/treasury?advances=due",
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
     return result;
   }
 

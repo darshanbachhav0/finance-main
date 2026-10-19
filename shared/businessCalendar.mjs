@@ -126,6 +126,17 @@ export function nextPaymentCycleDate(value) {
   return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-15`;
 }
 
+// Advances to render are paid the same working day they are approved: today (Lima) when it is a
+// working day and the approval came before the cut-off hour, otherwise the next working day.
+// Returns a Lima date key.
+export const ADVANCE_CUTOFF_HOUR = 15;
+export function advancePaymentDate(value = new Date(), { cutoffHour = ADVANCE_CUTOFF_HOUR, ...options } = {}) {
+  const time = new Date(value).getTime();
+  const limaHour = new Date(time + LIMA_OFFSET_MS).getUTCHours();
+  const afterCutoff = isBusinessDay(time, options) && limaHour >= cutoffHour;
+  return limaDateKey(nextBusinessDay(afterCutoff ? time + DAY_MS : time, options));
+}
+
 export function isPaymentCycleDate(value) {
   const key = limaDateKey(value);
   const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7)), day = Number(key.slice(8, 10));
