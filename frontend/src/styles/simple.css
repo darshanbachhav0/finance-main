@@ -109,3 +109,39 @@
   .approval-choice { grid-template-columns: 1fr; }
   .approval-summary dl > div { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* ---- The employee's advance: what to do now, and the simple receipts ---- */
+.advance-rendition-card { display: grid; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-4); border: 1px solid var(--border-subtle); border-left: 4px solid var(--uma-primary); border-radius: var(--radius-lg); background: var(--surface-panel); }
+.advance-rendition-card.tone-warning { border-left-color: var(--amber-700); }
+.advance-rendition-card.tone-danger { border-left-color: var(--red-700); }
+.advance-rendition-card.tone-success { border-left-color: var(--green-700); }
+.advance-rendition-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3); }
+.advance-rendition-head > div { display: grid; flex: 1 1 240px; gap: var(--space-1); }
+.advance-rendition-head h2 { margin: 0; font-size: var(--font-lg); }
+.advance-rendition-head p, .advance-rendition-line { margin: 0; color: var(--gray-700); font-size: var(--font-sm); }
+.advance-rendition-numbers, .simple-rendition-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); margin: 0; }
+.advance-rendition-numbers > div, .simple-rendition-totals > div { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--gray-50); }
+.advance-rendition-numbers dt, .simple-rendition-totals dt { color: var(--gray-600); font-size: var(--font-xs); }
+.advance-rendition-numbers dd, .simple-rendition-totals dd { margin: 0; font-weight: 750; }
+.simple-rendition-totals .is-balanced { background: var(--green-100); }
+.simple-rendition-totals .is-open { background: var(--amber-100); }
+.simple-rendition-fields { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.simple-rendition-rows { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.simple-rendition-row { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.simple-rendition-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.simple-rendition-row-head > .field { flex: 1 1 220px; margin: 0; }
+.simple-rendition-row-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-2); }
+.simple-rendition-wide { grid-column: span 2; }
+.simple-rendition-file small { display: block; color: var(--gray-600); font-size: var(--font-xs); }
+.simple-rendition-return { display: grid; gap: var(--space-2); }
+.simple-rendition-return h4 { margin: 0; }
+.simple-rendition-return p { margin: 0; color: var(--gray-700); font-size: var(--font-sm); }
+.simple-rendition-problems { margin: 0; padding-left: var(--space-4); color: var(--amber-700); font-size: var(--font-sm); }
+.simple-rendition-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.simple-rendition-list li { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); }
+.simple-rendition-list small { grid-column: 2; color: var(--gray-600); font-size: var(--font-xs); }
+.action-more summary { cursor: pointer; font-weight: 700; }
+@media (max-width: 640px) {
+  .simple-rendition-wide { grid-column: auto; }
+  .simple-rendition-list li { grid-template-columns: 1fr auto; }
+}

@@ -343,6 +343,8 @@ export function hasOpenRequiredApprovalStep(route = []) {
   return (route || []).some((step) => step.required !== false && !["APPROVED", "SKIPPED"].includes(step.status));
 }
 export const RENDITION_LINE_TYPES = Object.freeze(["GOODS", "SERVICES"]);
+// A receipt presented in an advance's rendition: what kind of document backs the expense.
+export const RENDITION_RECEIPT_TYPES = Object.freeze(["FACTURA", "BOLETA", "TICKET", "RECIBO_HONORARIOS", "OTHER"]);
 export const ACKNOWLEDGMENT_TYPES = Object.freeze(["AUTHENTICATED_ELECTRONIC_SIGN_OFF", "PHYSICAL_DOCUMENT"]);
 
 export const FINANCE_CONFIGURATION_KEYS = Object.freeze({

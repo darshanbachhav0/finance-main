@@ -161,7 +161,15 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
   (`bankFileAccountRules`); other banks are paid by CCI. The automatic Track C steps run whatever the final approver's role
   (`automatic: true`, as for the other tracks). Track C lines carry no IGV: the model computes them
   IGV-exempt (`calculateRequestLineAmounts({ igvExempt })`), so the amount typed is the amount paid,
-  and the form hides the IGV option. An advance pays out first (against Account 14), then requires the
+  and the form hides the IGV option. The employee's own paid advance has a simple view: one card
+  saying what to do and by when, Summary / Receipts / History tabs, and a receipts form
+  (`SimpleRenditionForm`). Each expense is a receipt with its photo or PDF (`rendition.receiptLines`,
+  a factura's XML or PDF fills its details), transport without receipt (`mobilityLines`) or an
+  expense without receipt (`unsupportedExpenseLines`); the money returned comes with its deposit
+  slip (`returnDepositSlip`, a `RETURN_RECEIPT` attachment); the accounting line is built on the
+  request's CECO with a factura's 18% IGV separated. Accounting keeps the full review view.
+  Uploaded file names are decoded as UTF-8 (`utils/fileName.js`), and names stored before were
+  repaired once at startup. An advance pays out first (against Account 14), then requires the
   employee to submit a rendition within a configurable deadline counted in **working days** from
   the actual payment date (default 10, `FinanceConfiguration` key `RENDITION_OVERDUE_DAYS`;
   weekends, Peruvian holidays and `UMA_EXTRA_HOLIDAYS` excluded; the deadline ends at the close of
