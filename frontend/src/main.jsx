@@ -9,6 +9,7 @@ import { ToastProvider } from "./context/ToastContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import CelebrationLayer from "./components/CelebrationLayer.jsx";
 import "./styles/global.css";
+import "./styles/workspace.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

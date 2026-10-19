@@ -169,7 +169,6 @@ export default function AccountsPayable() {
     <section className="accounts-payable-page">
       <PageHeader
         title="Accounts Payable"
-        description="Every invoice's payable (CXP): what is owed, when it is due and how it is paid."
         actions={<button type="button" className="secondary-button" onClick={reload} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>}
       />
       <Message type="error">{(noteTarget || cancelTarget ? "" : actionError) || payableTable.error}</Message>

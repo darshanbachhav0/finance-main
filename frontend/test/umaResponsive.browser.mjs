@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "playwright";
+import { navigationForUser } from "../src/utils/navigationAccess.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = fileURLToPath(new URL("../../.tmp/uma-ui/", import.meta.url));
@@ -34,8 +35,12 @@ const plan = { _id: "plan", period: "2026", planningMode: "ANNUAL_MONTHLY", assi
 const paginate = (data) => ({ data, pagination: { total: data.length, page: 1, pageSize: 10, totalPages: 1 } });
 
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("erp_language")) localStorage.setItem("erp_language", "en");
+    localStorage.setItem("uma_tour_done_uma-test", "true");
+  });
   page.setDefaultTimeout(8000);
   page.on("pageerror", (error) => runtimeErrors.push({ url: page.url(), error: error.message }));
   await page.route((url) => url.pathname.startsWith("/api/"), async (route) => {
@@ -111,7 +116,8 @@ try {
   await page.getByRole('heading', {name:'My Team', exact:true}).waitFor();
   assert.equal(await page.locator('.sidebar a[href="/my-team"]').count(), 1);
   const paths = ["/my-team", "/administration", "/accounting/invoices", "/treasury/history", "/configuration/bank-formats", "/", "/management-view", "/requests", "/requests/new", "/requests/request-0", "/approvals", "/budget", "/treasury", "/reports", "/suppliers", "/accounting", "/accounting/payables", "/accounting/periods", "/accounting/invoice-observations", "/accounting/sire", "/batch-invoices", "/reimbursement-bank", "/cost-centers", "/expense-types", "/exchange-rates", "/users", "/audit", "/configuration/projects", "/configuration/budget-allocations"];
-  for (const width of [1440, 1024, 768, 390, 320]) {
+  const widths = process.env.UI_VIEWPORTS ? process.env.UI_VIEWPORTS.split(",").map(Number) : [1440, 1024, 768, 390, 320];
+  for (const width of widths) {
     await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
     for (const path of paths) {
       await page.goto(`http://127.0.0.1:5190${path}`);
@@ -127,11 +133,12 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("http://127.0.0.1:5190/requests/new");
   await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Use the full form", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   const validationMessage = page.locator(".message-error").first();
   await validationMessage.waitFor();
   assert.match(await validationMessage.innerText(), /Please complete or correct:/);
-  assert.match(await validationMessage.innerText(), /Item 1/);
+  assert.match(await validationMessage.innerText(), /Description: This field is required/);
   assert.doesNotMatch(await validationMessage.innerText(), /Review the highlighted fields/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.goto("http://127.0.0.1:5190/requests");
@@ -189,31 +196,32 @@ try {
   await page.emulateMedia({ media: "screen" });
 
   await page.goto("http://127.0.0.1:5190/requests/request-0");
-  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
   assert.equal(await page.locator("#request-section-documents-and-fiscal-validation").isVisible(), true);
   assert.equal(await page.locator("#request-section-requirement-and-justification").isVisible(), false);
-  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.getByRole("tab", { name: "General", exact: true }).click();
   assert.equal(await page.locator("#request-section-requirement-and-justification").isVisible(), true);
   await page.goto("http://127.0.0.1:5190/treasury");
-  await page.getByRole("button", { name: "Confirm payments", exact: true }).click();
+  await page.getByRole("tab", { name: "Confirm payments", exact: true }).click();
   assert.equal(await page.locator("#treasury-confirm").isVisible(), true);
   assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
   await page.goto("http://127.0.0.1:5190/treasury/history");
   await page.locator("#treasury-history").waitFor({ state: "visible" });
   assert.equal(await page.locator("#treasury-history").isVisible(), true);
   assert.equal(await page.locator("#treasury-prepare").isVisible(), false);
-  for (const [role, expected, approvalLevel] of [["Solicitor", 5], ["AreaDirector", 4, "AREA_DIRECTOR"], ["ViceRector", 4, "VICE_RECTOR"], ["Accounting", 6], ["Treasury", 5], ["Management", 5], ["Procurement", 5], ["Admin", 3]]) {
+  for (const [role, approvalLevel] of [["Solicitor"], ["AreaDirector", "AREA_DIRECTOR"], ["ViceRector", "VICE_RECTOR"], ["Accounting"], ["Treasury"], ["Management"], ["Procurement"], ["Admin"]]) {
     user.role = role; user.approvalLevel = approvalLevel;
     await page.goto("http://127.0.0.1:5190/");
     await page.waitForLoadState("networkidle");
-    assert.equal(await page.locator(".sidebar nav a").count(), expected, `${role} primary navigation`);
+    const expected = navigationForUser(user, { pendingApprovals: 3 }).map(([, path]) => path).sort();
+    assert.deepEqual(await page.locator(".sidebar nav a").evaluateAll(links => links.map(link => link.getAttribute("href")).sort()), expected, `${role} primary navigation`);
   }
 
   user.passwordResetRequired = true;
   await page.goto("http://127.0.0.1:5190/requests");
   await page.getByRole("button", { name: "Change password", exact: true }).waitFor();
-  await page.getByLabel("Password", { exact: true }).fill("InitialSecurePassword!123");
-  await page.getByLabel("New password", { exact: true }).fill("NewSecurePassword!123");
+  await page.getByLabel("Current password", { exact: true }).fill("InitialSecurePassword!123");
+  await page.getByLabel(/^New password/).fill("NewSecurePassword!123");
   await page.getByRole("button", { name: "Change password", exact: true }).click();
   await page.locator(".sidebar").waitFor();
   assert.equal(await page.evaluate(() => localStorage.getItem("erp_token")), "changed-test-token");

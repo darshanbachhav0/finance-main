@@ -153,7 +153,7 @@ export default function Dashboard() {
           <div className="dashboard-grid">
             <div className="workspace-panel dashboard-primary">
               <div className="section-heading">
-                <div><h3>{t(isApprovalRole(summary.role) ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3><p>{t("Current operational work in priority order.")}</p></div>
+                <div><h3>{t(isApprovalRole(summary.role) ? "Oldest requests awaiting decision" : summary.role === "Treasury" ? "Next payable requests" : "Recent requests")}</h3></div>
                 <Link className="text-link" to={isApprovalRole(summary.role) ? "/approvals" : summary.role === "Treasury" ? "/treasury" : "/requests"}>{t("View all")}</Link>
               </div>
               <DataTable className="dashboard-request-table cards-narrow-only" controls={false} rowKey={operationalRows.some((row) => row.rowId) ? "rowId" : "_id"} rows={operationalRows.slice(0, 5)} columns={requestColumns} emptyDescription="No current requests." />

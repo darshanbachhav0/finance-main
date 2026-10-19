@@ -7,8 +7,8 @@ const css = source("../src/styles/global.css");
 const main = source("../src/main.jsx");
 const layer = css.slice(css.indexOf("/* ==== design system (final layer)"));
 
-// One stylesheet, loaded once, with the design-system layer last so it settles the older layers.
-assert.deepEqual(main.match(/import "\.\/styles\/[^"]+";/g), ['import "./styles/global.css";']);
+// Tokens and domain styles load before the shared responsive workspace presentation.
+assert.deepEqual(main.match(/import "\.\/styles\/[^"]+";/g), ['import "./styles/global.css";', 'import "./styles/workspace.css";']);
 assert.ok(layer.length > 1000, "design-system layer is present at the end of global.css");
 for (const token of ["--space-4", "--radius-md", "--control-height", "--touch-target", "--select-chevron"]) assert.ok(layer.includes(token), token);
 // Descriptions wrap (the old one-line ellipsis cut every page description).

@@ -127,7 +127,6 @@ export default function RequestsList() {
     <section>
       <PageHeader
         title={ownScope ? "My Requests" : "Requests"}
-        description="Create, track, submit, and review financial requests by status and accounting period."
         help={plain ? undefined : <WorkflowStatusLegend align="start" />}
         actions={canCreate && <Link className="primary-button" to="/requests/new"><Plus size={16} /><span>{t("New request")}</span></Link>}
       />

@@ -172,7 +172,7 @@ export default function AccountingEntries() {
 
   return (
     <section>
-      <PageHeader title="Accounting Entries" description="Process fiscal documents, post balanced journals, reconcile the month, and retain export history." actions={<><Link className="secondary-button" to="/accounting/payables">{t("Accounts Payable")}</Link><Link className="secondary-button" to="/accounting/periods">{t("Manage periods")}</Link></>} />
+      <PageHeader title="Accounting Entries" actions={<><Link className="secondary-button" to="/accounting/payables">{t("Accounts Payable")}</Link><Link className="secondary-button" to="/accounting/periods">{t("Manage periods")}</Link></>} />
       <WorkspaceTools links={[["Accounting Periods", "/accounting/periods"], ["Accounting Mappings", "/configuration/accounting-mappings"], ["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Cost Centers", "/cost-centers"], ["Accounting Accounts", "/expense-types"], ["Exchange Rates", "/exchange-rates"], ["Management Reports", "/reports"]]} />
       <Message type="error">{(selectedRequest || exceptionTarget ? "" : actionError) || entriesTable.error || pendingTable.error || historyTable.error}</Message>
 

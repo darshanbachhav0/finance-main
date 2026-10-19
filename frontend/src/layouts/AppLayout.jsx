@@ -117,6 +117,19 @@ export default function AppLayout() {
   }, []);
 
   useEffect(() => {
+    if (!taskOpen && !userOpen) return;
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      const trigger = menusRef.current?.querySelector('button[aria-expanded="true"]');
+      setTaskOpen(false);
+      setUserOpen(false);
+      trigger?.focus({ preventScroll: true });
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [taskOpen, userOpen]);
+
+  useEffect(() => {
     const openCommand = (event) => {
       const target = event.target;
       const isEditing = target instanceof HTMLElement && (target.matches("input, textarea, select") || target.isContentEditable);
@@ -180,7 +193,7 @@ export default function AppLayout() {
     <div className={`app-shell${collapsed ? " sidebar-collapsed" : ""}${mobileOpen ? " mobile-nav-open" : ""}`}>
       <a className="skip-link" href="#main-content">{t("Skip to main content")}</a>
       {mobileBackdrop.shouldRender && <button type="button" className={`mobile-nav-backdrop motion-${mobileBackdrop.phase}`} onClick={() => { setMobileOpen(false); window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true })); }} aria-label={t("Close navigation")} />}
-      <aside ref={sidebarRef} className="sidebar" aria-label={t("Primary navigation")} inert={mobile && !mobileOpen ? "" : undefined}>
+      <aside id="primary-navigation" ref={sidebarRef} className="sidebar" aria-label={t("Primary navigation")} inert={mobile && !mobileOpen ? "" : undefined}>
         <div className="brand">
           <Link to="/" aria-label={t("UMA home")}><UmaBrand /></Link>
           <button type="button" className="icon-button sidebar-mobile-close" onClick={() => { setMobileOpen(false); window.requestAnimationFrame(() => mobileMenuRef.current?.focus({ preventScroll: true })); }} aria-label={t("Close navigation")}><X size={19} /></button>
@@ -222,7 +235,7 @@ export default function AppLayout() {
       <div className="main-shell">
         <header className="topbar">
           <div className="topbar-title">
-            <button ref={mobileMenuRef} type="button" className="icon-button mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label={t("Open navigation")}><Menu size={20} /></button>
+            <button ref={mobileMenuRef} type="button" className="icon-button mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label={t("Open navigation")} aria-expanded={mobileOpen} aria-controls="primary-navigation"><Menu size={20} /></button>
             {/* The page's own header carries its title; the bar shows where the page sits. */}
             <nav className="breadcrumbs" aria-label={t("Breadcrumbs")}>
               <ol>

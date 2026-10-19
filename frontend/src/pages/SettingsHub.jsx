@@ -29,7 +29,7 @@ export default function SettingsHub() {
 
   return (
     <section>
-      <PageHeader title="Settings" description="Organization, finance, rules and banking settings you can manage." />
+      <PageHeader title="Settings" />
       {groups.map((group, index) => (
         <section className="settings-group" key={group.label} aria-labelledby={`settings-group-${index}`}>
           <h2 id={`settings-group-${index}`}>{t(group.label)}</h2>

@@ -45,7 +45,7 @@ export default function AdminUsers() {
     <Message type="error">{error}</Message>
     <ResourceManager
       title="User Administration"
-      description="Users, roles and access."
+
       endpoint="/users"
       deleteMode="deactivate"
       duplicateFields={["dni"]}

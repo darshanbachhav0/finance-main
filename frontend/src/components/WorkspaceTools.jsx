@@ -11,7 +11,6 @@ export default function WorkspaceTools({ links }) {
   const visible = links.filter(([, path]) => canAccessNavigation(user.role, path, user));
   if (!visible.length) return null;
   return <nav className="workspace-shortcuts" aria-label={t("Related tools")}>
-    <span className="workspace-shortcuts-label" aria-hidden="true">{t("Related tools")}</span>
     <ul>{visible.map(([label, path]) => <li key={path}><Link className="shortcut-chip" to={path}><span>{t(label)}</span><ArrowUpRight size={14} aria-hidden="true" /></Link></li>)}</ul>
   </nav>;
 }

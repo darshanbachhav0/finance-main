@@ -1,0 +1,83 @@
+/* Shared workspace presentation. Domain styles keep their workflow-specific layouts.
+   All colors follow the existing light/dark tokens; mobile rules are the default. */
+@media screen {
+  .content { padding: var(--space-5) var(--space-3) var(--space-6); max-width: 1600px; }
+  .topbar { background: var(--surface-panel); }
+  .topbar-title { flex: 1 1 auto; }
+  .topbar-actions { flex: 0 0 auto; }
+  .breadcrumbs ol { overflow: hidden; }
+  .breadcrumbs li { flex-shrink: 0; }
+  .breadcrumbs li:last-child { flex-shrink: 1; overflow: hidden; }
+  .nav-group-label { text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .nav-item { font-weight: 500; }
+  .nav-item.active { font-weight: 650; }
+  .workspace-panel { padding: var(--space-4); }
+  .workspace-panel, .analytics-panel, .stat-card { box-shadow: none; }
+  .section-heading, .analytics-heading { flex-wrap: wrap; gap: var(--space-3); }
+  .section-heading > div, .analytics-heading > div { min-width: 0; }
+  .section-heading h3, .analytics-heading h3 { line-height: 1.4; }
+  .dashboard-grid, .analytics-grid { gap: var(--space-4); }
+  .stat-card { padding: var(--space-4); border-top-width: 1px; }
+  .stat-card > strong { font-variant-numeric: tabular-nums; }
+  .page-actions > *, .budget-form-actions { max-width: 100%; }
+  .page-actions :is(.primary-button, .secondary-button), .drawer-footer button { white-space: normal; text-align: center; }
+  .form-grid > *, .analytics-grid > *, .dashboard-grid > * { min-width: 0; }
+  .field input, .field select, .field textarea { max-width: 100%; }
+  .field-hint { line-height: 1.5; }
+  .table-toolbar { align-items: flex-start; gap: var(--space-3); }
+  .table-toolbar-primary { flex: 1 1 auto; }
+  .table-toolbar-actions { flex: 0 1 auto; max-width: 100%; }
+  .table-result-bar { flex-wrap: wrap; padding-block: var(--space-2); }
+  .table-scroll { overscroll-behavior-inline: contain; }
+  .table-scroll th { text-transform: none; font-weight: 650; }
+  .table-scroll td { line-height: 1.5; }
+  .table-pagination { flex-wrap: wrap; gap: var(--space-3); }
+  .table-preferences { max-width: 100%; }
+  .topbar-popover { max-height: calc(100dvh - 96px); overflow-y: auto; overscroll-behavior: contain; }
+  .popover-heading { flex-wrap: wrap; gap: var(--space-2); }
+  .popover-heading span { height: auto; padding: var(--space-1) var(--space-2); }
+  .user-popover-info :is(strong, span, small) { overflow-wrap: anywhere; }
+  .drawer-header > div { min-width: 0; overflow-wrap: anywhere; }
+  .drawer-header > button { flex-shrink: 0; }
+  .settings-card { padding: var(--space-4); }
+  .settings-card:hover { background: var(--gray-50); }
+}
+
+/* The popup is portalled outside scrolling form bodies. Floating UI supplies its
+   position, width and available height, including when it needs to open upward. */
+.search-select-popover { inset: auto; z-index: 500; display: flex; flex-direction: column; }
+.search-select-search { flex-shrink: 0; }
+.search-select-popover ul { min-height: 0; overscroll-behavior: contain; }
+.search-select-popover li { min-height: var(--touch-target); font-size: var(--font-sm); font-weight: 500; }
+.search-select-popover li:hover, .search-select-popover li.active { color: var(--uma-primary); background: var(--uma-soft); }
+
+@media screen and (min-width: 641px) {
+  .content { padding: var(--space-5) var(--space-5) var(--space-6); }
+  .workspace-panel, .settings-card { padding: var(--space-5); }
+  .dashboard-grid, .analytics-grid { gap: var(--space-5); }
+}
+
+@media screen and (min-width: 1081px) {
+  .content { padding: var(--space-6); }
+  .nav-groups { padding: var(--space-5) var(--space-3); }
+}
+
+@media screen and (max-width: 768px) {
+  .topbar-actions { gap: var(--space-1); }
+  .topbar-title { overflow: hidden; }
+  .topbar-title > button { flex-shrink: 0; }
+  .table-toolbar { flex-wrap: wrap; }
+  .table-toolbar-primary, .table-toolbar-actions { width: 100%; }
+  .table-toolbar-actions { justify-content: flex-start; }
+  .drawer-footer { gap: var(--space-2); }
+}
+
+@media screen and (max-width: 640px) {
+  .page-actions > :is(.primary-button, .secondary-button) { flex: 1 1 auto; justify-content: center; }
+  .page-actions .last-updated { white-space: normal; }
+  .topbar-popover { max-width: calc(100vw - 24px); max-height: calc(100dvh - 156px); }
+  .field input:not([type="checkbox"]):not([type="radio"]), .field select, .field textarea,
+  .table-search input, .search-select-search input { font-size: var(--font-lg); }
+  .table-toolbar :is(button, select), .table-pagination button { min-height: var(--touch-target); }
+  .section-tabs { scroll-padding-inline: var(--space-3); }
+}

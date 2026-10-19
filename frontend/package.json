@@ -10,6 +10,7 @@
     "test:payment-terms-ui": "node test/quotationPaymentTerms.browser.mjs",
     "test:budget-planning-ui": "node test/annualMonthlyBudget.browser.mjs",
     "test:uma-ui": "node test/umaResponsive.browser.mjs",
+    "test:search-select-ui": "node test/searchSelectResponsive.browser.mjs",
     "test:supplier-ruc-ui": "node test/supplierRuc.browser.mjs",
     "test:request-item-ui": "node test/requestItemAmounts.browser.mjs",
     "test:notification-bell-ui": "node test/notificationBell.browser.mjs",
