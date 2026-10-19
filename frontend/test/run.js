@@ -51,4 +51,5 @@ import "./rowActions.test.js";
 import "./accountsPayable.test.js";
 
 import "./livelyPlatform.test.js";
+import "./simpleRendition.test.js";
 import "./simplerPlatform.test.js";

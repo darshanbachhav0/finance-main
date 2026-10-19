@@ -5,6 +5,7 @@ import path from "path";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { tempUploadDir } from "../services/storageService.js";
+import { utf8FileName } from "../utils/fileName.js";
 
 fs.mkdirSync(tempUploadDir, { recursive: true });
 
@@ -30,6 +31,8 @@ const allowedMimeByExtension = new Map([
 ]);
 
 function fileFilter(_req, file, cb) {
+  // "Años.png" arrives as "AÃ±os.png": keep the name the person gave the file.
+  file.originalname = utf8FileName(file.originalname);
   const extension = path.extname(file.originalname).toLowerCase();
   const allowedMimes = allowedMimeByExtension.get(extension);
   if (!allowedMimes || !allowedMimes.has(String(file.mimetype || "").toLowerCase())) {

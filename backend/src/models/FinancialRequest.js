@@ -19,6 +19,7 @@ import {
   OPEX_EXPENSE_FREQUENCIES,
   PAYBACK_UNITS,
   RENDITION_LINE_TYPES,
+  RENDITION_RECEIPT_TYPES,
   REQUEST_PRIORITIES,
   REQUEST_STATUS,
   REQUEST_TYPES
@@ -108,6 +109,20 @@ const unsupportedExpenseLineSchema = new mongoose.Schema(
     description: { type: String, trim: true, default: "" },
     goodsServiceType: { type: String, enum: RENDITION_LINE_TYPES },
     grossAmount: { type: Number, min: 0, default: 0 }
+  },
+  { _id: true }
+);
+
+// A receipt presented in an advance's rendition (factura, boleta, ticket...), with its file.
+const receiptLineSchema = new mongoose.Schema(
+  {
+    date: Date,
+    documentType: { type: String, enum: RENDITION_RECEIPT_TYPES, default: "BOLETA" },
+    documentNumber: { type: String, trim: true, default: "" },
+    issuerRuc: { type: String, trim: true, default: "" },
+    description: { type: String, trim: true, default: "" },
+    amount: { type: Number, min: 0, default: 0 },
+    attachment: { type: mongoose.Schema.Types.ObjectId }
   },
   { _id: true }
 );
@@ -433,9 +448,13 @@ const financialRequestSchema = new mongoose.Schema(
         costCenterCode: String,
         costCenterName: String
       },
+      receiptLines: { type: [receiptLineSchema], default: [] },
       mobilityLines: { type: [mobilityLineSchema], default: [] },
       unsupportedExpenseLines: { type: [unsupportedExpenseLineSchema], default: [] },
+      receiptSubtotal: { type: Number, default: 0, min: 0 },
       mobilitySubtotal: { type: Number, default: 0, min: 0 },
+      // The deposit slip for the unspent money the employee returned.
+      returnDepositSlip: { type: mongoose.Schema.Types.ObjectId },
       unsupportedExpenseSubtotal: { type: Number, default: 0, min: 0 },
       reimbursementTotal: { type: Number, default: 0, min: 0 },
       detailReconciliation: {
@@ -595,18 +614,22 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
   else if (incompleteCommercialLine || commercialLineCount !== (this.lines || []).length) this.commercialTotalStatus = "INCOMPLETE";
   else this.commercialTotalStatus = moneyEquals(this.totalCommercialAmount, this.totalAmount) ? "MATCH" : "MISMATCH";
 
+  const receiptLines = this.rendition?.receiptLines || [];
   const mobilityLines = this.rendition?.mobilityLines || [];
   const unsupportedLines = this.rendition?.unsupportedExpenseLines || [];
+  for (const line of receiptLines) line.amount = roundMoney(line.amount);
   for (const line of mobilityLines) line.amount = roundMoney(line.amount);
   for (const line of unsupportedLines) line.grossAmount = roundMoney(line.grossAmount);
   if (this.rendition) {
+    this.rendition.receiptSubtotal = sumMoney(receiptLines.map((line) => line.amount));
     this.rendition.mobilitySubtotal = sumMoney(mobilityLines.map((line) => line.amount));
     this.rendition.unsupportedExpenseSubtotal = sumMoney(unsupportedLines.map((line) => line.grossAmount));
     this.rendition.reimbursementTotal = sumMoney([
+      this.rendition.receiptSubtotal,
       this.rendition.mobilitySubtotal,
       this.rendition.unsupportedExpenseSubtotal
     ]);
-    const hasOfficialDetails = mobilityLines.length > 0 || unsupportedLines.length > 0;
+    const hasOfficialDetails = receiptLines.length > 0 || mobilityLines.length > 0 || unsupportedLines.length > 0;
     this.rendition.detailReconciliation.accountingRenderedAmount = roundMoney(this.rendition.amountRendered);
     this.rendition.detailReconciliation.difference = subtractMoney(
       this.rendition.reimbursementTotal,

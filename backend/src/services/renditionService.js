@@ -21,17 +21,19 @@ import { evaluateConfiguredMobilityLines, getEffectiveFinanceConfiguration } fro
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { nextRenditionNumber } from "./sequenceService.js";
 import { AppError } from "../utils/AppError.js";
-import { APPROVAL_STAGES, DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+import { RENDITION_RECEIPT_TYPES, APPROVAL_STAGES, DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 import { actsAsRequester, canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney, toMinorUnits } from "../utils/money.js";
 
 const APPLICABLE_TYPES = Object.freeze([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
 
 function renditionAttachments(files, userId) {
-  return (files.rendition || []).map((file) => ({
-    kind: "RENDITION", originalName: file.originalname, filename: file.filename, path: file.path,
+  const attachment = (kind) => (file) => ({
+    kind, originalName: file.originalname, filename: file.filename, path: file.path,
     url: file.url, mimetype: file.mimetype, size: file.size, checksum: file.checksum, uploadedBy: userId
-  }));
+  });
+  // Receipts first, in upload order (receipt lines point at them by position), then the deposit slip.
+  return [...(files.rendition || []).map(attachment("RENDITION")), ...(files.returnReceipt || []).map(attachment("RETURN_RECEIPT"))];
 }
 
 function requestOwnerId(request) {
@@ -75,6 +77,29 @@ function parseMobilityLines(value) {
     const amount = roundMoney(source.amount);
     if (!(amount > 0)) throw new AppError(422, "Mobility amount must be greater than zero.", { field: `mobilityLines.${index}.amount`, line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
     return { date, origin, destination, servicePurpose, amount, limitExceeded: false };
+  });
+}
+
+// Receipts (facturas, boletas, tickets...): each points at its file, a newly uploaded one by its
+// position among the rendition files (fileIndex) or one already attached (attachment).
+function parseReceiptLines(value, { newFileCount, existingAttachments }) {
+  return parseOptionalArray(value, "receiptLines").map((source, index) => {
+    const date = validDate(source.date);
+    if (!date) throw new AppError(422, "A valid receipt date is required.", { field: `receiptLines.${index}.date`, line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    const documentType = String(source.documentType || "BOLETA").toUpperCase();
+    if (!RENDITION_RECEIPT_TYPES.includes(documentType)) throw new AppError(422, "Select the type of every receipt.", { field: `receiptLines.${index}.documentType`, line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    const description = String(source.description || "").trim();
+    if (!description) throw new AppError(422, "Say what every receipt was for.", { field: `receiptLines.${index}.description`, line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    const amount = roundMoney(source.amount);
+    if (!(amount > 0)) throw new AppError(422, "Receipt amount must be greater than zero.", { field: `receiptLines.${index}.amount`, line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    const issuerRuc = String(source.issuerRuc || "").replace(/\s/g, "");
+    if (issuerRuc && !/^\d{11}$/.test(issuerRuc)) throw new AppError(422, "A receipt RUC has 11 digits.", { field: `receiptLines.${index}.issuerRuc`, line: index + 1 }, ERROR_CODES.VALIDATION_ERROR);
+    const fileIndex = source.fileIndex === undefined || source.fileIndex === null || source.fileIndex === "" ? null : Number(source.fileIndex);
+    const existing = source.attachment ? existingAttachments.find((item) => String(item._id) === String(source.attachment)) : null;
+    if (!(Number.isInteger(fileIndex) && fileIndex >= 0 && fileIndex < newFileCount) && !existing) {
+      throw new AppError(422, "Attach the photo or PDF of every receipt.", { field: `receiptLines.${index}.file`, line: index + 1 }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
+    }
+    return { date, documentType, documentNumber: String(source.documentNumber || "").trim(), issuerRuc, description, amount, fileIndex: existing ? null : fileIndex, attachment: existing?._id };
   });
 }
 
@@ -154,9 +179,14 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
   assertOwner(request, user);
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "RENDITION", user, req, module: "RENDITION", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
 
+  const receiptLines = parseReceiptLines(payload.receiptLines, {
+    newFileCount: (files.rendition || []).length,
+    existingAttachments: (request.attachments || []).filter((item) => item.kind === "RENDITION")
+  });
   const mobilityLines = parseMobilityLines(payload.mobilityLines);
   const unsupportedExpenseLines = parseUnsupportedExpenseLines(payload.unsupportedExpenseLines);
-  if (!mobilityLines.length && !unsupportedExpenseLines.length) throw new AppError(422, "Add at least one local mobility or unsupported-expense detail line.", { fields: ["mobilityLines", "unsupportedExpenseLines"] }, ERROR_CODES.VALIDATION_ERROR);
+  if (!receiptLines.length && !mobilityLines.length && !unsupportedExpenseLines.length) throw new AppError(422, "Add at least one local mobility or unsupported-expense detail line.", { fields: ["receiptLines", "mobilityLines", "unsupportedExpenseLines"] }, ERROR_CODES.VALIDATION_ERROR);
+  if (receiptLines.length && request.requestType !== REQUEST_TYPE.ENTREGA_RENDIR) throw new AppError(422, "An undocumented reimbursement has no receipts; declare the expenses without supporting documents.", { field: "receiptLines" }, ERROR_CODES.VALIDATION_ERROR);
   if (request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO && !unsupportedExpenseLines.length) throw new AppError(422, "Unsupported reimbursement requires at least one unsupported-expense detail line.", { field: "unsupportedExpenseLines" }, ERROR_CODES.UNSUPPORTED_EXPENSE_DESCRIPTION_REQUIRED);
   if (unsupportedExpenseLines.length && !parseBoolean(payload.confirmedExceptionalUse)) throw new AppError(422, "Confirm the exceptional unsupported-document declaration.", { field: "confirmedExceptionalUse" }, ERROR_CODES.UNSUPPORTED_EXPENSE_DECLARATION_REQUIRED);
   if (!parseBoolean(payload.beneficiaryAcknowledged)) throw new AppError(422, "Authenticated beneficiary acknowledgment is required.", { field: "beneficiaryAcknowledged" }, ERROR_CODES.BENEFICIARY_ACKNOWLEDGMENT_REQUIRED);
@@ -184,7 +214,7 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
     balanceOutstanding = 0;
   }
 
-  const officialTotal = sumMoney([sumMoney(mobilityLines.map((line) => line.amount)), sumMoney(unsupportedExpenseLines.map((line) => line.grossAmount))]);
+  const officialTotal = sumMoney([sumMoney(receiptLines.map((line) => line.amount)), sumMoney(mobilityLines.map((line) => line.amount)), sumMoney(unsupportedExpenseLines.map((line) => line.grossAmount))]);
   if (!moneyEquals(officialTotal, amountRendered)) throw new AppError(422, "Official rendition details must equal the authoritative accounting amount.", { officialTotal, accountingRenderedAmount: amountRendered, difference: subtractMoney(officialTotal, amountRendered) }, ERROR_CODES.RENDITION_TOTAL_MISMATCH);
 
   const [beneficiary, mobilityResult, unsupportedResult, bankSnapshot] = await Promise.all([
@@ -199,7 +229,12 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
     const firstNewAttachment = request.attachments.length;
     request.attachments.push(...attachments);
     request.rendition.lines = lines.map((line) => ({ ...line, currency: request.currency, exchangeRate: request.exchangeRate, penEquivalent: multiplyMoney(line.totalAmount, request.exchangeRate) }));
-    request.rendition.documentIds.push(...request.attachments.slice(firstNewAttachment).map((item) => item._id));
+    const added = request.attachments.slice(firstNewAttachment);
+    request.rendition.documentIds.push(...added.map((item) => item._id));
+    const receiptFiles = added.filter((item) => item.kind === "RENDITION");
+    request.rendition.receiptLines = receiptLines.map(({ fileIndex, ...line }) => ({ ...line, attachment: line.attachment || receiptFiles[fileIndex]?._id }));
+    const slip = added.find((item) => item.kind === "RETURN_RECEIPT");
+    if (slip) request.rendition.returnDepositSlip = slip._id;
     request.rendition.amountAdvanced = amountAdvanced;
     request.rendition.amountRendered = amountRendered;
     request.rendition.amountReturned = amountReturned;
@@ -229,7 +264,7 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
     await request.save();
     requestSaved = true;
     await recordAudit({ entityType: "FinancialRequest", entity: request, action: "OFFICIAL_RENDITION_SUBMITTED", user, req, module: "RENDITION", newValues: {
-      renditionNumber: request.rendition.number, mobilitySubtotal: request.rendition.mobilitySubtotal, unsupportedExpenseSubtotal: request.rendition.unsupportedExpenseSubtotal,
+      renditionNumber: request.rendition.number, receiptSubtotal: sumMoney(receiptLines.map((line) => line.amount)), mobilitySubtotal: request.rendition.mobilitySubtotal, unsupportedExpenseSubtotal: request.rendition.unsupportedExpenseSubtotal,
       reimbursementTotal: officialTotal, detailReconciliation: request.rendition.detailReconciliation,
       mobilityLimit: mobilityResult?.configured ? { behavior: mobilityResult.behavior, configuredValue: mobilityResult.configuredValue, exceededLineCount: mobilityResult.exceededLineCount } : null,
       unsupportedLimit: unsupportedResult, beneficiaryAcknowledgmentReference: submissionEvent.signature, bankSnapshotCaptured: Boolean(bankSnapshot)

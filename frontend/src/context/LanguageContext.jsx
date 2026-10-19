@@ -1791,9 +1791,22 @@ function sentenceCase(value) {
   }).join(" ");
 }
 
+// Spanish text stored by the institution (e.g. document-rule labels such as "documentos de
+// sustento de rendición") shown on the English page: its English key, when the dictionary has one.
+// A text that is itself a dictionary key (English) is never reverse-translated.
+let spanishToEnglish;
+function englishFor(text) {
+  if (typeof text !== "string" || !/[a-záéíóúñ]/.test(text) || Object.hasOwn(spanishDictionary, text) || Object.hasOwn(umaSpanish, text)) return undefined;
+  if (!spanishToEnglish) {
+    spanishToEnglish = new Map();
+    for (const source of [umaSpanish, spanishDictionary]) for (const [english, spanish] of Object.entries(source)) if (typeof spanish === "string" && spanish !== english && !spanishToEnglish.has(spanish)) spanishToEnglish.set(spanish, english);
+  }
+  return spanishToEnglish.get(text);
+}
+
 export function translateMessage(text, language = "en") {
   if (text === undefined || text === null) return "";
-  const display = umaCopy[text] || interfaceCodeLabels[text] || text;
+  const display = umaCopy[text] || interfaceCodeLabels[text] || (language === "en" ? englishFor(text) : undefined) || text;
   const result = language === "en" ? display : umaSpanish[display] || spanishDictionary[display] || spanishDictionary[text] || display;
   return typeof text === "string" && CODE.test(text) && result !== text && result.length > 3 && result === result.toUpperCase() && !ACRONYMS.has(result) && /[A-ZÁÉÍÓÚÑ]/.test(result) ? sentenceCase(result) : result;
 }

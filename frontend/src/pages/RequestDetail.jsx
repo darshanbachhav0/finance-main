@@ -46,6 +46,9 @@ import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import OfficialRenditionWorkspace from "../components/rendition/OfficialRenditionWorkspace.jsx";
+import SimpleRenditionForm from "../components/rendition/SimpleRenditionForm.jsx";
+import AdvanceRenditionCard from "../components/rendition/AdvanceRenditionCard.jsx";
+import { RENDITION_STAGES } from "../utils/simpleRendition.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import EmptyState from "../components/EmptyState.jsx";
@@ -165,10 +168,11 @@ function Definition({ label, children }) {
 const DetailTab = createContext("General");
 const tabIcons = { General: FileText, Documents: FileCheck2, Approvals: CheckCircle2, Comments: MessageSquare, Budget: WalletCards, Accounting: BookOpenCheck, Payment: Landmark, History: HistoryIcon };
 const sectionTabs = { "Budget preview": "Budget", "Budget commitment": "Budget", "Procurement Readiness": "Budget", "Documents and fiscal validation": "Documents", "Register A1 invoice and conformity": "Documents", "Register the invoice": "Documents", "Invoice control register": "Accounting", "Financial control records": "Payment" };
-function Section({ title, description, children, className = "" }) {
+function Section({ title, description, children, className = "", skip = false }) {
   const { t } = useLanguage();
   const activeTab = useContext(DetailTab);
   const [expanded, setExpanded] = useState(true);
+  if (skip) return null;
   const sectionId = `request-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
     <div hidden={activeTab !== (sectionTabs[title] || "General")} className={`workspace-panel detail-section ${className}`.trim()} id={sectionId}>
@@ -517,6 +521,11 @@ export default function RequestDetail() {
   // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
   const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
   const isOwner = String(request.requester?._id || request.requester) === String(user._id);
+  // The employee's own paid advance: one card saying what to do, the receipts, and the history.
+  // Invoice validation, document phases and the accounting detail stay with Finance.
+  const simpleAdvance = isOwner && request.flowType === "C" && request.requestType === "ENTREGA_RENDIR" && RENDITION_STAGES.includes(request.rendition?.status);
+  const advanceOpen = !["CERRADO", "ANULADO", "RECHAZADO"].includes(request.status);
+  const openReceipts = () => { setActiveTab("Documents"); window.requestAnimationFrame(() => document.getElementById("official-rendition")?.scrollIntoView({ behavior: "smooth", block: "start" })); };
   // "Repeat this request": a new draft with the same need, supplier and amounts (RequestCreate ?from=).
   const canRepeat = ["Admin", "Solicitor"].includes(user.role) && isOwner && request.status !== "BORRADOR";
   const requestDescription = request.flowType === "C"
@@ -537,7 +546,7 @@ export default function RequestDetail() {
       />
 
       <Message type="error">{error}</Message>
-      <ReadinessPanel requestId={id} revision={request.updatedAt} />
+      {!simpleAdvance && <ReadinessPanel requestId={id} revision={request.updatedAt} />}
 
       <dl className="request-overview">
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
@@ -545,18 +554,20 @@ export default function RequestDetail() {
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
       </dl>
       <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} />
-      <RenditionCountdown request={request} mine={isOwner} onOpen={() => { setActiveTab("Documents"); window.requestAnimationFrame(() => document.getElementById("official-rendition")?.scrollIntoView({ behavior: "smooth", block: "start" })); }} />
+      {simpleAdvance ? <AdvanceRenditionCard request={request} onOpen={openReceipts} /> : <RenditionCountdown request={request} mine={isOwner} onOpen={openReceipts} />}
       {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1] === "Documents" ? "Open documents" : "View actions")}</a></div>}
       {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
         ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
         : request.observation.detail)}</Message>}
-      {usesPlainStatuses(user) ? <div className="stage-row" role="group" aria-label={t("Current status")}><PlainStatus request={request} steps /></div> : <div className="stage-row" role="group" aria-label={t("Current status")}>
+      {simpleAdvance ? null : usesPlainStatuses(user) ? <div className="stage-row" role="group" aria-label={t("Current status")}><PlainStatus request={request} steps /></div> : <div className="stage-row" role="group" aria-label={t("Current status")}>
         <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
       </div>}
-      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={(usesPlainStatuses(user) ? ["General", "Documents", "Approvals", "Comments", "Payment"] : ["General", "Documents", "Approvals", "Comments", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"]).map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
+      <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={simpleAdvance
+        ? [{ id: "General", label: "Summary", icon: tabIcons.General }, { id: "Documents", label: "Receipts", icon: tabIcons.Documents }, { id: "Approvals", label: "History", icon: tabIcons.History }]
+        : (usesPlainStatuses(user) ? ["General", "Documents", "Approvals", "Comments", "Payment"] : ["General", "Documents", "Approvals", "Comments", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"]).map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
 
       <div className="request-detail-layout">
         <div className="request-detail-main">
@@ -565,7 +576,7 @@ export default function RequestDetail() {
             <ApprovalTimeline history={[...(request.approvalHistory || [])].reverse()} />
           </div>
 
-          <div hidden={activeTab !== "Comments"}><RequestComments requestId={id} canWrite={!readOnly} /></div>
+          <div hidden={!(activeTab === "Comments" || (simpleAdvance && activeTab === "Approvals"))}><RequestComments requestId={id} canWrite={!readOnly} /></div>
 
           <div hidden={activeTab !== "History"} className="workspace-panel timeline-panel">
             <div className="section-heading"><div><h3>{t("Immutable audit")}</h3><p>{t("Application audit records are append-only.")}</p></div></div>
@@ -614,7 +625,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <Section title="Item / service breakdown" description="All accounting dimensions and immutable commercial totals are shown per line.">
+          <Section skip={simpleAdvance} title="Item / service breakdown" description="All accounting dimensions and immutable commercial totals are shown per line.">
             <DataTable
               controls={false}
               rows={request.lines || []}
@@ -721,7 +732,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <Section title="Documents and fiscal validation" description="Original evidence is protected and fiscal amounts come from server-side XML parsing.">
+          <Section skip={simpleAdvance} title="Documents and fiscal validation" description="Original evidence is protected and fiscal amounts come from server-side XML parsing.">
             <div className="document-phase-heading">
               <span>{t("Current document phase")}</span>
               <StatusBadge status={documentStatus.currentPhase || "SUBMISSION"} />
@@ -870,7 +881,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <div hidden={activeTab !== "Documents"}><FinancialValidationSummary request={request} related={related} /></div>
+          {!simpleAdvance && <div hidden={activeTab !== "Documents"}><FinancialValidationSummary request={request} related={related} /></div>}
           <Section title="Financial control records" description="Budget, purchase order, CXP, journals, bank batches, payment, and reconciliation remain independently traceable.">
             <DefinitionGrid>
               <Definition label="Purchase / Service Order">{order?.poNumber || "-"}</Definition>
@@ -959,7 +970,9 @@ export default function RequestDetail() {
             )}
 </div>
           {["ENTREGA_RENDIR", "REEMBOLSO_SIN_SUSTENTO"].includes(request.requestType) && (
-            <div id="official-rendition" hidden={!["Documents", "Payment"].includes(activeTab)}><OfficialRenditionWorkspace request={request} masters={masters} user={user} onReload={load} /></div>
+            simpleAdvance
+              ? <div id="official-rendition" hidden={activeTab !== "Documents"}><SimpleRenditionForm request={request} onReload={load} /></div>
+              : <div id="official-rendition" hidden={!["Documents", "Payment"].includes(activeTab)}><OfficialRenditionWorkspace request={request} masters={masters} user={user} onReload={load} /></div>
           )}
         </div>
 
@@ -1001,12 +1014,20 @@ export default function RequestDetail() {
               {permissions.canClose && (
                 <button type="button" className="primary-button" onClick={confirmClose}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
               )}
-              {canRepeat && (
+              {canRepeat && (simpleAdvance && advanceOpen ? (
+                <details className="action-more">
+                  <summary>{t("More")}</summary>
+                  <div className="action-item">
+                    <div><strong>{t("Repeat this request")}</strong><span>{t("Starts a new draft with the same need, supplier and amounts. Attach this time's documents.")}</span></div>
+                    <div className="action-item-buttons"><Link className="secondary-button" to={`/requests/new?from=${id}`}><Copy size={16} /><span>{t("Repeat")}</span></Link></div>
+                  </div>
+                </details>
+              ) : (
                 <div className="action-item">
                   <div><strong>{t("Repeat this request")}</strong><span>{t("Starts a new draft with the same need, supplier and amounts. Attach this time's documents.")}</span></div>
                   <div className="action-item-buttons"><Link className="secondary-button" to={`/requests/new?from=${id}`}><Copy size={16} /><span>{t("Repeat")}</span></Link></div>
                 </div>
-              )}
+              ))}
               {canPrepareRecurring && (
                 <div className="action-item">
                   <div><strong>{t("Prepare recurring drafts")}</strong><span>{t("Creates next months' drafts from this request; each one needs its own documents and approval.")}</span></div>
