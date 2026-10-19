@@ -355,8 +355,13 @@ export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   BUDGET_CHANGE_APPROVAL_THRESHOLD: "BUDGET_CHANGE_APPROVAL_THRESHOLD",
   // PEN. The CAPEX planning fields (project, asset category, useful life, NPV, payback) are shown
   // to the requester only from this request total; below it Treasury/Accounting complete them.
-  CAPEX_DETAILS_THRESHOLD: "CAPEX_DETAILS_THRESHOLD"
+  CAPEX_DETAILS_THRESHOLD: "CAPEX_DETAILS_THRESHOLD",
+  // Lima hour (0-24). An advance approved from this hour is paid the next working day.
+  ADVANCE_PAYMENT_CUTOFF_HOUR: "ADVANCE_PAYMENT_CUTOFF_HOUR",
+  // Text: where employees deposit unspent advance money (bank, account, CCI).
+  ADVANCE_RETURN_ACCOUNT: "ADVANCE_RETURN_ACCOUNT"
 });
+export const DEFAULT_ADVANCE_PAYMENT_CUTOFF_HOUR = 15;
 export const DEFAULT_RENDITION_OVERDUE_DAYS = 10;
 export const DEFAULT_CAPEX_DETAILS_THRESHOLD = 50000;
 export const FINANCE_CONFIGURATION_BEHAVIORS = Object.freeze(["INFORMATION", "WARNING", "FLAG", "BLOCK"]);

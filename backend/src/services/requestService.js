@@ -1,4 +1,5 @@
 import BudgetException from "../models/BudgetException.js";
+import { advanceReturnAccount } from "./advancePaymentService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { assertRequestActive, assertClosureAllowed, getFinancialProgress, getFinancialProgressForRequests } from "./financialProgressService.js";
 import { canonicalRequestStatus, renditionSettledForClosure, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
@@ -773,7 +774,9 @@ export async function getRequestDetail(id, user) {
     procurementReadiness,
     sunatVouchers,
     massUploadBatches,
-    invoiceObservations
+    invoiceObservations,
+    // An advance shows the employee where to return unspent money.
+    advanceReturnAccount: request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR ? await advanceReturnAccount() : undefined
   };
 }
 

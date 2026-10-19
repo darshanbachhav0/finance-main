@@ -151,7 +151,9 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
   employee is told to register the account (or Accounting to verify one waiting for review), and
   verifying the account (or choosing a verified one as preferred) provisions it automatically
   (`advanceBankHoldService`). The automatic Track C steps run whatever the final approver's role
-  (`automatic: true`, as for the other tracks). An advance pays out first (against Account 14), then requires the
+  (`automatic: true`, as for the other tracks). Track C lines carry no IGV: the model computes them
+  IGV-exempt (`calculateRequestLineAmounts({ igvExempt })`), so the amount typed is the amount paid,
+  and the form hides the IGV option. An advance pays out first (against Account 14), then requires the
   employee to submit a rendition within a configurable deadline counted in **working days** from
   the actual payment date (default 10, `FinanceConfiguration` key `RENDITION_OVERDUE_DAYS`;
   weekends, Peruvian holidays and `UMA_EXTRA_HOLIDAYS` excluded; the deadline ends at the close of
@@ -302,6 +304,17 @@ per-line and reversed symmetrically on cancellation/void (`releaseBudget`,
   number is refused with 409). Treasury can put the unpaid remainder into a new BBVA file.
 - **Payment cycle**: payments run on the 15th and 30th (last day in February). Scheduling defaults
   to the next cycle date; another date needs an audited reason; past dates are refused.
+  **Advances to render are the exception**: they are paid the same working day they are approved
+  (`advancePaymentService`, shared `advancePaymentDate`): today in Lima, or the next working day
+  when approved from the cut-off hour (`FinanceConfiguration` key `ADVANCE_PAYMENT_CUTOFF_HOUR`,
+  default 15) or on a weekend/holiday. The advance payable is due on that date, Treasury gets an
+  urgent "Advance to pay now" notice and dashboard task, and Payments shows an "Advances to pay
+  now" banner whose **Pay now** lists and ticks them (`GET /treasury/advances-due`, queue filter
+  `advancesDue=true`). A bank file holding only advances can be dated today without a typed reason
+  (the platform records `ADVANCE_PAYMENT_REASON`); Accounting is asked to verify such a file today.
+  The rendition then follows the usual 10 working days from the actual payment date. The
+  employee's rendition screen and the "Rendition pending" notice show where to return unspent
+  money (`FinanceConfiguration` key `ADVANCE_RETURN_ACCOUNT`, a `textValue`).
 - **Bounced payments** carry a reason category. `BANK_DETAILS` (incorrect/invalid/changed/unverified
   data) flags the destination account `OBSERVED` until Accounting re-verifies it and requires a
   signed CCI letter to reprogram; `TECHNICAL` on a still-verified account is retried without a

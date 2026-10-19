@@ -84,6 +84,9 @@ function paymentSteps(row) {
   return steps.map((step, index) => ({ label: step.label, state: step.done ? "done" : index === current ? "current" : "todo" }));
 }
 
+// The advance payable (Track C, entrega a rendir): paid the same working day, not on the cycle.
+const isAdvanceRow = (row) => row?.accountsPayable?.flowType === "C" && row?.accountsPayable?.voucher?.voucherType === "ANTICIPO";
+
 export default function TreasuryQueue({ historyOnly = false }) {
   const [paymentView, setPaymentView] = useState("prepare");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -123,6 +126,10 @@ export default function TreasuryQueue({ historyOnly = false }) {
   // checks them and generates the bank file.
   const [nextRun, setNextRun] = useState(null);
   const [run, setRun] = useState(null);
+  // Advances to render are paid the same working day: "Pay now" lists the ones due, ticks them
+  // and dates the file today (no reason needed for advances).
+  const [advancesDue, setAdvancesDue] = useState(null);
+  const [advanceRun, setAdvanceRun] = useState(false);
   const runSelection = useRef("");
 
   const paymentDraft = useWorkDraft({ scope: "payment-confirmation", recordId: paymentRow ? String(payableIdOf(paymentRow)) : "new", title: "Payment confirmation", enabled: Boolean(paymentRow), value: paymentForm, restore: setPaymentForm, sourceVersion: paymentRow?.updatedAt });
@@ -142,7 +149,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   // The stage lists load on /treasury only; /treasury/history loads just the file history.
   const linkOptions = { fixedParams: linkParams, deepLink: linkActive, enabled: !historyOnly };
   // The linked CXP is listed whatever its currency; the currency selector follows it (below).
-  const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: linkActive ? { bank, ...linkParams } : { bank, currency, ...(run ? { paymentCycle: run.date } : {}) }, persistKey: "treasury-queue", deepLink: linkActive, enabled: !historyOnly });
+  const queueTable = usePaginatedResource("/treasury/queue", { fixedParams: linkActive ? { bank, ...linkParams } : { bank, currency, ...(advanceRun ? { advancesDue: "true" } : run ? { paymentCycle: run.date } : {}) }, persistKey: "treasury-queue", deepLink: linkActive, enabled: !historyOnly });
   const historyTable = usePaginatedResource("/treasury/bank-files", { enabled: historyOnly });
   const confirmationTable = usePaginatedResource("/treasury/payment-confirmations", linkOptions);
   const bouncedTable = usePaginatedResource("/treasury/bounced-payments", linkOptions);
@@ -203,10 +210,31 @@ export default function TreasuryQueue({ historyOnly = false }) {
     api.get("/treasury/next-run").then((response) => setNextRun(response.data.data || null)).catch(() => setNextRun(null));
   }
   useEffect(loadNextRun, [historyOnly]);
+  function loadAdvancesDue() {
+    if (historyOnly) return;
+    api.get("/treasury/advances-due").then((response) => setAdvancesDue(response.data.data || null)).catch(() => setAdvancesDue(null));
+  }
+  useEffect(loadAdvancesDue, [historyOnly]);
+
+  function payAdvancesNow() {
+    if (!advancesDue?.count) return;
+    runSelection.current = "waiting";
+    setRun(null);
+    setAdvanceRun(true);
+    setPaymentDate(todayKey);
+    setPaymentDateReason("");
+    setSelected([]);
+    const currencies = Object.keys(advancesDue.totalsByCurrency || {});
+    if (currencies.length === 1) setCurrency(currencies[0]);
+    selectView("prepare");
+    queueTable.setQuery((current) => ({ ...current, page: 1, pageSize: 100, search: "", filters: {} }));
+    if (advanceRun) queueTable.reload();
+  }
 
   function prepareRun() {
     if (!nextRun?.date) return;
     runSelection.current = "waiting";
+    setAdvanceRun(false);
     setRun({ date: nextRun.date });
     setPaymentDate(nextRun.date);
     setPaymentDateReason("");
@@ -218,14 +246,25 @@ export default function TreasuryQueue({ historyOnly = false }) {
 
   // Ticks the run's payments once its list has loaded (not the list shown before).
   useEffect(() => {
-    if (!run || !runSelection.current) return;
+    if (!(run || advanceRun) || !runSelection.current) return;
     if (queueTable.loading) { runSelection.current = "loading"; return; }
     if (runSelection.current !== "loading") return;
     runSelection.current = "";
     const ids = queueRows.filter(isSelectable).map((row) => row.selectionKey);
     setSelected(ids);
-    notify(t("{count} payments of the {date} run are selected. Check them and generate the bank file.").replace("{count}", ids.length).replace("{date}", formatDate(`${run.date}T12:00:00Z`, language)), ids.length ? "success" : "info");
-  }, [run, queueTable.loading, queueTable.rows]);
+    notify(advanceRun
+      ? t("{count} advances to pay today are selected. Generate the bank file dated today.").replace("{count}", ids.length)
+      : t("{count} payments of the {date} run are selected. Check them and generate the bank file.").replace("{count}", ids.length).replace("{date}", formatDate(`${run.date}T12:00:00Z`, language)), ids.length ? "success" : "info");
+  }, [run, advanceRun, queueTable.loading, queueTable.rows]);
+
+  // The advance notice and the dashboard task link here with ?advances=due.
+  const advancesLinkHandled = useRef(false);
+  useEffect(() => {
+    if (advancesLinkHandled.current || searchParams.get("advances") !== "due" || !advancesDue) return;
+    advancesLinkHandled.current = true;
+    payAdvancesNow();
+    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete("advances"); return next; }, { replace: true });
+  }, [advancesDue, searchParams]);
 
   // The payment-run notification links here with ?run=next.
   const runLinkHandled = useRef(false);
@@ -242,6 +281,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       return;
     }
     loadNextRun();
+    loadAdvancesDue();
     queueTable.reload();
     confirmationTable.reload();
     bouncedTable.reload();
@@ -305,7 +345,8 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const queueTotals = useMemo(() => Object.fromEntries(Object.entries(queueTable.payload.summary?.totalsByCurrency || {}).map(([key, value]) => [key, Number(value.total || 0)])), [queueTable.payload.summary]);
   const missingBank = Number(queueTable.payload.summary?.missingBankDetails || 0);
   // Bank-file steps: 1 file details (an off-cycle date needs a reason), 2 selection, 3 review.
-  const fileDetailsReady = Boolean(paymentDate) && (!offCycle || Boolean(paymentDateReason.trim()));
+  const advancesOnly = selectedRows.length > 0 && selectedRows.every(isAdvanceRow);
+  const fileDetailsReady = Boolean(paymentDate) && (!offCycle || advancesOnly || Boolean(paymentDateReason.trim()));
   const currentFileStep = !fileDetailsReady ? 0 : !selected.length ? 1 : 2;
 
   async function generate() {
@@ -323,7 +364,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
         bank,
         currency,
         paymentDate,
-        paymentDateReason: offCycle ? paymentDateReason : undefined,
+        paymentDateReason: offCycle && paymentDateReason.trim() ? paymentDateReason : undefined,
         accountSelections: selectedAccounts
       });
       setResult(response.data);
@@ -505,7 +546,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       return <label className="table-account-select" onClick={(event) => event.stopPropagation()}><span className="sr-only">{t("Treasury Account Selection")}</span><select value={selectedId || ""} onChange={(event) => setAccountSelections((current) => ({ ...current, [payableId]: event.target.value }))}>{accounts.map((account) => <option key={account._id} value={account._id}>{account.preferred ? `${t("Preferred account")} - ` : ""}{account.bank} - {account.cci || account.accountNumber}</option>)}</select><small>{selectedAccount?.preferred ? <><Star size={11} />{t("Preferred account")}</> : t("Only verified eligible current accounts are listed.")}</small></label>;
     } },
     { key: "status", type: "status", label: "CXP status", getValue: (row) => row.accountsPayable?.status, render: (row) => <StatusBadge status={row.accountsPayable?.status} /> },
-    { key: "paymentCycle", type: "date", label: "Payment cycle", sortable: false, getValue: (row) => row.accountsPayable?.paymentCycleDate, render: (row) => row.accountsPayable?.paymentCycleDate ? <span className="primary-cell"><strong>{formatDate(`${row.accountsPayable.paymentCycleDate}T12:00:00Z`)}</strong>{row.accountsPayable?.scheduleOverride?.reason && <small>{t("Off-cycle")}: {row.accountsPayable.scheduleOverride.reason}</small>}</span> : "-" },
+    { key: "paymentCycle", type: "date", label: "Payment cycle", sortable: false, getValue: (row) => row.accountsPayable?.paymentCycleDate, render: (row) => row.accountsPayable?.paymentCycleDate ? <span className="primary-cell"><strong>{formatDate(`${row.accountsPayable.paymentCycleDate}T12:00:00Z`)}</strong>{row.accountsPayable?.scheduleOverride?.reason && <small>{t("Off-cycle")}: {t(row.accountsPayable.scheduleOverride.reason)}</small>}</span> : "-" },
     { key: "amount", type: "money", sortKey: "outstandingAmount", label: "Outstanding", getValue: amountOf, render: (row) => <div className="primary-cell"><strong>{money(row.accountsPayable?.currency || row.currency, amountOf(row))}</strong>{netAmountOf(row) !== amountOf(row) && <small>{t("Net transfer")}: {money(row.accountsPayable?.currency || row.currency, netAmountOf(row))}</small>}</div> },
     { key: "detraction", label: "Detraction (SPOT)", sortable: false, render: detractionCell },
     { key: "paymentTerms", label: "Payment Terms", sortable: false, getValue: (row) => paymentTermsSummary(row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot || {}, t), render: (row) => <PaymentTermsSummary terms={row.accountsPayable?.paymentTermsSnapshot || row.paymentTermsSnapshot} showAmounts={false} /> },
@@ -525,6 +566,14 @@ export default function TreasuryQueue({ historyOnly = false }) {
       ? <div className="focus-tabs"><Link to="/treasury">{t("Payments")}</Link></div>
       : <Tabs idPrefix="treasury" label="Payment stages" panels value={paymentView} onChange={selectView} tabs={[["prepare", "Pending payments"], ["confirm", "Confirm payments"], ["detractions", "Detractions"], ["reconcile", "Reconciliation"], ["returned", "Returned payments"]].map(([id, label]) => ({ id, label, count: stageTotals[PAYMENT_VIEWS.indexOf(id)] }))}><Link to="/treasury/history">{t("Payment History")}</Link></Tabs>}
     <div hidden={historyOnly || paymentView !== "prepare"} {...tabPanelProps("treasury", "prepare")}>
+    {advancesDue?.count > 0 && <div className={`payment-run-banner is-urgent${advanceRun ? " is-active" : ""}`} role="region" aria-label={t("Advances to pay now")}>
+      <AlertTriangle size={20} aria-hidden="true" />
+      <div>
+        <strong>{t("Advances to pay now")}: {advancesDue.count}</strong>
+        <span>{Object.entries(advancesDue.totalsByCurrency || {}).map(([code, item]) => money(code, item.total)).join(" · ")} · {t("Advances are paid the same working day, outside the 15th/30th cycle.")}</span>
+      </div>
+      {!readOnly && (advanceRun ? <button type="button" className="text-button" onClick={() => { setAdvanceRun(false); setSelected([]); }}>{t("Show every pending payment")}</button> : <button type="button" className="primary-button" onClick={payAdvancesNow}>{t("Pay now")}</button>)}
+    </div>}
     {nextRun?.date && <div className={`payment-run-banner${run ? " is-active" : ""}`} role="region" aria-label={t("Next payment run")}>
       <CalendarClock size={20} aria-hidden="true" />
       <div>
@@ -536,7 +585,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     <ol className="bank-file-steps" aria-label={t("Bank file steps")}>
       {[["File details", fileDetailsReady], ["Select payments", selected.length > 0], ["Review and generate", Boolean(result) && !selected.length]].map(([label, done], index) => <li key={label} className={done ? "is-done" : index === currentFileStep ? "is-current" : ""} aria-current={index === currentFileStep ? "step" : undefined}><span className="bank-file-step-number">{index + 1}</span>{t(label)}</li>)}
     </ol>
-    <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3><span className="bank-file-step-number">1</span>{t("File details")}</h3><p>{t("New payment files use BBVA. Beneficiary accounts may use another bank through CCI.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => changeCurrency(event.target.value)}><option value="PEN">PEN</option><option value="USD">USD</option></select><small className="field-hint">{t("One bank file per currency.")}</small></label><label className="field"><span>{t("Payment date")}</span><DateInput min={todayKey} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /><small className="field-hint">{t("Payments run on the 15th and the 30th of each month.")}</small></label>{offCycle && <label className="field"><span>{t("Reason for paying off the payment cycle")} *</span><input required value={paymentDateReason} onChange={(event) => setPaymentDateReason(event.target.value)} /></label>}</div>{paymentCycles.length > 0 && <div className="filter-row" aria-label={t("Payment cycles")}>{paymentCycles.map((group) => <span key={group.date} className="badge badge-info"><CalendarClock size={12} />{formatDate(`${group.date}T12:00:00Z`)} · {group.count} · {Object.entries(group.totals).map(([code, value]) => money(code, value)).join(" / ")}</span>)}</div>}</div>
+    <div id="treasury-prepare" className="workspace-panel treasury-file-controls"><div className="section-heading"><div><h3><span className="bank-file-step-number">1</span>{t("File details")}</h3><p>{t("New payment files use BBVA. Beneficiary accounts may use another bank through CCI.")}</p></div></div><div className="filter-row"><label className="field"><span>{t("Currency")}</span><select value={currency} onChange={(event) => changeCurrency(event.target.value)}><option value="PEN">PEN</option><option value="USD">USD</option></select><small className="field-hint">{t("One bank file per currency.")}</small></label><label className="field"><span>{t("Payment date")}</span><DateInput min={todayKey} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /><small className="field-hint">{t("Payments run on the 15th and the 30th of each month.")}</small></label>{offCycle && !advancesOnly && <label className="field"><span>{t("Reason for paying off the payment cycle")} *</span><input required value={paymentDateReason} onChange={(event) => setPaymentDateReason(event.target.value)} /></label>}{offCycle && advancesOnly && <p className="field-hint">{t("Advances are paid the same working day; no reason is needed.")}</p>}</div>{paymentCycles.length > 0 && <div className="filter-row" aria-label={t("Payment cycles")}>{paymentCycles.map((group) => <span key={group.date} className="badge badge-info"><CalendarClock size={12} />{formatDate(`${group.date}T12:00:00Z`)} · {group.count} · {Object.entries(group.totals).map(([code, value]) => money(code, value)).join(" / ")}</span>)}</div>}</div>
 
     {result && <div className="success-result" role="status"><div><strong>{t("Bank instruction generated")}</strong><span>{result.fileName} · {result.notice}</span></div><span className="cell-note">{t("Sent to Accounting for verification. You can download it from Payment History once it is verified.")}</span></div>}
 

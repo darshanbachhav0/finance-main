@@ -85,5 +85,8 @@ export default {
   "Budget exception approved.": "Excepción presupuestal aprobada.",
   "Budget exception rejected.": "Excepción presupuestal rechazada.",
   "Budget increase": "Ampliación presupuestal",
-  "Extraordinary approval": "Aprobación extraordinaria"
+  "Extraordinary approval": "Aprobación extraordinaria",
+  "{count} advance to pay now": "{count} anticipo por pagar ahora",
+  "{count} advances to pay now": "{count} anticipos por pagar ahora",
+  "Advances to pay now": "Anticipos por pagar ahora"
 };

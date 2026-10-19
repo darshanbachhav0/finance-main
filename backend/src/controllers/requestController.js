@@ -44,7 +44,7 @@ export const listRequests = asyncHandler(async (req, res) => {
 export const getRequest = asyncHandler(async (req, res) => {
   const result = await getRequestDetail(req.params.id, req.user);
   res.json({
-    data: { ...publicRequestPayload(result.request, req.user), allowedActions: result.allowedActions },
+    data: { ...publicRequestPayload(result.request, req.user), allowedActions: result.allowedActions, advanceReturnAccount: result.advanceReturnAccount || undefined },
     related: {
       accountsPayable: result.accountsPayable,
       journalEntries: result.journalEntries,

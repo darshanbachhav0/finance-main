@@ -182,5 +182,9 @@ export default {
   "Swipe a request right to approve it, or left to observe it.": "Desliza una solicitud a la derecha para aprobarla o a la izquierda para observarla.",
   "Approved. Accounting is verifying the bank account; then the advance is paid.": "Aprobada. Contabilidad está verificando la cuenta bancaria; después se paga el anticipo.",
   "Approved. Register your bank account so the advance can be paid.": "Aprobada. Registra tu cuenta bancaria para que se pueda pagar el anticipo.",
-  "Approved. Waiting for the requester's verified bank account.": "Aprobada. Esperando la cuenta bancaria verificada del solicitante."
+  "Approved. Waiting for the requester's verified bank account.": "Aprobada. Esperando la cuenta bancaria verificada del solicitante.",
+  "Approved. Treasury sends your advance on {date}.": "Aprobada. Tesorería envía tu anticipo el {date}.",
+  "Approved. Treasury sends the advance on {date}.": "Aprobada. Tesorería envía el anticipo el {date}.",
+  "Approved. Treasury sends your advance next.": "Aprobada. Tesorería envía tu anticipo a continuación.",
+  "Approved. Treasury sends the advance next.": "Aprobada. Tesorería envía el anticipo a continuación."
 };

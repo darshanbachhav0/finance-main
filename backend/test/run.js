@@ -22,6 +22,7 @@ import "./directPaymentWorkflow.test.js";
 import "./renditionDeadline.test.js";
 import "./trackCRenditions.test.js";
 import "./advanceWaitsForBank.test.js";
+import "./advancePaidToday.test.js";
 import "./bankFileVerification.test.js";
 import "./leaveSubstitute.test.js";
 import "./notificationBell.test.js";

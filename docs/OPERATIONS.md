@@ -251,6 +251,12 @@ server (Render runs in UTC) or of the user's device:
 - The backend process sets `TZ=America/Lima` at startup (`backend/src/config/timeZone.js`); business
   rules (SLA deadlines, working days, payment cycle 15/30, rendition deadlines) compute Lima dates
   explicitly.
+- Advances to render are paid the same working day, not on the 15/30 cycle. Two Finance
+  configurations (Settings → Finance Configurations, Admin/Accounting) tune it:
+  `ADVANCE_PAYMENT_CUTOFF_HOUR` (Lima hour, default 15: an advance approved from then is paid the next
+  working day) and `ADVANCE_RETURN_ACCOUNT` (write UMA's account for unspent advance money, bank,
+  account number and CCI, in **Text value**, with Value 0). Without the second one employees are not
+  told where to deposit leftovers.
 
 ### Automatic follow-ups and the weekly report
 

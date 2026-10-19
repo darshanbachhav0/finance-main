@@ -41,8 +41,6 @@ export default {
   "{requestNumber}: Management rejected the exception. The request stays observed until it is corrected and resubmitted.": "{requestNumber}: Gerencia rechazó la excepción. La solicitud seguirá observada hasta que se corrija y se vuelva a enviar.",
 
   // Procurement, Accounting and Treasury handoffs
-  "Track C advance ready": "Adelanto del Track C listo",
-  "{requestNumber} is ready for priority advance payment.": "{requestNumber} está lista para el pago prioritario del adelanto.",
   "Direct-payment invoice observed": "Comprobante de pago directo observado",
   "Priority payment ready": "Pago prioritario listo",
   "{requestNumber} was auto-provisioned and is ready for priority Treasury payment.": "{requestNumber} se provisionó automáticamente y está lista para el pago prioritario de Tesorería.",
@@ -180,5 +178,10 @@ export default {
   "{requestNumber} is approved. Your bank account is waiting for Accounting's verification; the advance is paid once it is verified.": "{requestNumber} está aprobada. Tu cuenta bancaria espera la verificación de Contabilidad; el anticipo se paga cuando esté verificada.",
   "{requestNumber} is approved. Register your bank account in {currency} under My bank account; the advance is paid once Accounting verifies it.": "{requestNumber} está aprobada. Registra tu cuenta bancaria en {currency} en Mi cuenta bancaria; el anticipo se paga cuando Contabilidad la verifique.",
   "Verify a bank account to release an advance": "Verifica una cuenta bancaria para liberar un anticipo",
-  "{requestNumber}: the advance is approved and waits for the employee's bank account to be verified.": "{requestNumber}: el anticipo está aprobado y espera que se verifique la cuenta bancaria del colaborador."
+  "{requestNumber}: the advance is approved and waits for the employee's bank account to be verified.": "{requestNumber}: el anticipo está aprobado y espera que se verifique la cuenta bancaria del colaborador.",
+  "Advance to pay now": "Anticipo por pagar ahora",
+  "{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.": "{requestNumber}: paga el anticipo de {amount} a {name} el {date}. Los anticipos se pagan el mismo día hábil, fuera del ciclo del 15 y 30.",
+  "Verify today: bank file with an advance": "Verifica hoy: archivo bancario con un anticipo",
+  "{batchNumber} ({count} payments) includes {advances} advance(s) to pay today. Verify it so Treasury can send it.": "{batchNumber} ({count} pagos) incluye {advances} anticipo(s) por pagar hoy. Verifícalo para que Tesorería pueda enviarlo.",
+  "{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time). Return any money left over to {account} and attach the deposit slip.": "{requestNumber} fue pagada. Presenta la rendición hasta el {dueDate} (días hábiles, hora de Lima). Devuelve el dinero sobrante a {account} y adjunta el voucher de depósito."
 };

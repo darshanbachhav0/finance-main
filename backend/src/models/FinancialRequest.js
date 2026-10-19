@@ -545,14 +545,20 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
 
   let commercialLineCount = 0;
   let incompleteCommercialLine = false;
+  // An advance or a reimbursement (Track C) is not an invoice: its lines carry no IGV, so the
+  // amount is what is paid.
+  const igvExempt = this.flowType === FLOW_TYPE.C;
   for (const [index, line] of (this.lines || []).entries()) {
     const automaticIGV = typeof line.priceIncludesIGV === "boolean";
     if (automaticIGV) {
-      const calculated = calculateRequestLineAmounts(line);
+      const calculated = calculateRequestLineAmounts({ quantity: line.quantity, unitPrice: line.unitPrice, priceIncludesIGV: line.priceIncludesIGV, igvExempt });
       line.unitPrice = calculated.unitPrice;
       line.netAmount = calculated.netAmount;
       line.igvAmount = calculated.igvAmount;
       line.totalAmount = calculated.totalAmount;
+    } else if (igvExempt) {
+      line.netAmount = line.totalAmount;
+      line.igvAmount = 0;
     }
     line.netAmount = roundMoney(line.netAmount);
     line.igvAmount = roundMoney(line.igvAmount);
