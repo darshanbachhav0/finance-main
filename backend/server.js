@@ -10,6 +10,7 @@ import { getSunatProvider } from "./src/services/sunatService.js";
 
 import app from "./src/app.js";
 import { migrateRetiredRoles } from "./src/services/legacyRoleService.js";
+import { DEFAULT_LOCKOUT_MINUTES, migrateLockoutDefault } from "./src/services/platformSettingsService.js";
 import { startInProcessWorkers, usesPublicPadron as usesPublicPadronMode } from "./src/workers/inProcessWorkers.js";
 
 const PORT =
@@ -57,6 +58,7 @@ connectDB()
     for (const [role, moved] of Object.entries(retired)) {
       if (moved.users || moved.previousRoles || moved.approvalRules) console.log(`[ROLES] ${role} retired: ${moved.users} user(s), ${moved.approvalRules} approval rule(s) moved to ${moved.replacement}.`);
     }
+    if ((await migrateLockoutDefault()).changed) console.log(`[SETTINGS] The saved sign-in lock of 15 minutes was the old default; it is now ${DEFAULT_LOCKOUT_MINUTES} minutes.`);
     if (
       usesPublicPadron
     ) {
