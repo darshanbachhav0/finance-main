@@ -1,5 +1,5 @@
 import AccountsPayable from "../models/AccountsPayable.js";
-import { advancesDueFilter } from "../services/treasuryService.js";
+import { advancesDueFilter, reconciliationPendingQuery } from "../services/treasuryService.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import AuditLog from "../models/AuditLog.js";
 import BudgetException from "../models/BudgetException.js";
@@ -193,6 +193,10 @@ async function buildTasks(user) {
     items.push({ key: "payable", label: "CXP ready for Treasury", count: payable, path: (await singleRecordPath(payable, AccountsPayable, payableQuery, (record) => `/treasury?tab=prepare&record=${record._id}`)) || "/treasury?tab=prepare", tone: payableOverdue ? "danger" : "accent", dueAt: payableDueAt, overdue: payableOverdue });
     items.push({ key: "paymentConfirmation", label: "Payments awaiting confirmation", count: confirmation, path: (await singleRecordPath(confirmation, AccountsPayable, confirmationQuery, (record) => `/treasury?tab=confirm&record=${record._id}`)) || "/treasury?tab=confirm", tone: "warning" });
     items.push({ key: "bouncedPayments", label: "Returned payments to reprogram", count: bounced, path: (await singleRecordPath(bounced, AccountsPayable, bouncedQuery, (record) => `/treasury?tab=returned&record=${record._id}`)) || "/treasury?tab=returned", tone: "danger" });
+    // Paid payments still to be matched with the bank statement; then Accounting closes the request.
+    const reconcileQuery = await reconciliationPendingQuery();
+    const reconcile = await AccountsPayable.countDocuments(reconcileQuery);
+    items.push({ key: "reconciliation", label: "Payments to reconcile", count: reconcile, path: (await singleRecordPath(reconcile, AccountsPayable, reconcileQuery, (record) => `/treasury?tab=reconcile&record=${record._id}`)) || "/treasury?tab=reconcile", tone: "accent" });
   }
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
     const bankReviewQuery = { active: true, verificationStatus: "PENDING" };
@@ -213,6 +217,16 @@ async function buildTasks(user) {
     ]);
     items.push({ key: "bankFileVerification", label: "Bank files awaiting verification", count: bankFiles, path: (await singleRecordPath(bankFiles, PaymentBatch, bankFileQuery, (record) => `/accounting/bank-files?record=${record._id}`)) || "/accounting/bank-files", tone: bankFilesOverdue ? "danger" : "warning", dueAt: bankFileDueAt, overdue: bankFilesOverdue });
     items.push({ key: "invoiceObservations", label: "Open invoice observations", count: await InvoiceObservation.countDocuments({ resolutionStatus: "OPEN" }), path: "/accounting/invoice-observations", tone: "warning" });
+    // The end of a request: a reconciled one is closed by Accounting; a validated rendition can
+    // leave a non-deductible balance to settle, and a rejected one an advance to recover.
+    const closeQuery = { status: REQUEST_STATUS.RECONCILED };
+    const balanceQuery = { flowType: "C", requestType: "ENTREGA_RENDIR", "rendition.status": "VALIDATED", "rendition.nonDeductibleOutstanding": { $gt: 0 }, status: { $nin: TERMINAL_REQUEST_STATUSES } };
+    const recoveryQuery = { flowType: "C", requestType: "ENTREGA_RENDIR", "rendition.status": "REJECTED", "rendition.recovery.status": "PENDING", status: { $nin: TERMINAL_REQUEST_STATUSES } };
+    const [closeReady, balances, recoveries] = await Promise.all([closeQuery, balanceQuery, recoveryQuery].map((query) => FinancialRequest.countDocuments(query)));
+    const requestPath = (record) => `/requests/${record._id}`;
+    items.push({ key: "closeReady", label: "Requests ready to close", count: closeReady, path: (await singleRecordPath(closeReady, FinancialRequest, closeQuery, requestPath)) || `/requests?status=${REQUEST_STATUS.RECONCILED}`, tone: "accent" });
+    items.push({ key: "renditionBalance", label: "Rendition balances to settle", count: balances, path: (await singleRecordPath(balances, FinancialRequest, balanceQuery, requestPath)) || "/requests?renditionStatus=VALIDATED", tone: "warning" });
+    items.push({ key: "advanceRecovery", label: "Advances to recover", count: recoveries, path: (await singleRecordPath(recoveries, FinancialRequest, recoveryQuery, requestPath)) || "/requests?renditionStatus=REJECTED", tone: "warning" });
     const missingDates = await missingExchangeRateDates();
     items.push({ key: "missingExchangeRate", label: "Missing exchange-rate dates", count: missingDates.length, details: missingDates, path: "/exchange-rates", tone: "danger" });
     const period = await AccountingPeriod.findOne({ period: currentPeriod() });

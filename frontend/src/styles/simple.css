@@ -145,3 +145,43 @@
   .simple-rendition-wide { grid-column: auto; }
   .simple-rendition-list li { grid-template-columns: 1fr auto; }
 }
+
+/* ---- "Your turn" on a request (NextStepCard) ---------------------------- */
+.next-step-card { display: grid; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-4); border: 1px solid var(--border-subtle); border-left: 4px solid var(--accent); border-radius: var(--radius-lg); background: var(--surface-panel); box-shadow: var(--shadow-sm); scroll-margin-top: var(--space-4); }
+.next-step-card.tone-warning { border-left-color: var(--amber-700); }
+.next-step-card.tone-success { border-left-color: var(--green-700); }
+.next-step-head { display: flex; align-items: flex-start; gap: var(--space-3); }
+.next-step-head > div { display: grid; gap: var(--space-1); min-width: 0; }
+.next-step-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-md); color: var(--accent); background: var(--accent-soft); }
+.next-step-eyebrow { margin: 0; color: var(--accent); font-size: var(--font-xs); font-weight: 750; }
+.next-step-head h2 { margin: 0; font-size: var(--font-xl); }
+.next-step-head p:last-child { margin: 0; color: var(--gray-700); font-size: var(--font-md); }
+.next-step-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.rendition-review { display: grid; gap: var(--space-3); }
+.rendition-review .advance-rendition-numbers .is-balanced { background: var(--green-100); }
+.rendition-review .advance-rendition-numbers .is-open { background: var(--amber-100); }
+.rendition-review-checks { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; font-size: var(--font-sm); }
+.rendition-review-checks li { display: flex; align-items: center; gap: var(--space-2); }
+.rendition-review-checks .is-ok { color: var(--green-700); }
+.rendition-review-checks .is-problem { color: var(--red-700); font-weight: 700; }
+.rendition-review-checks .is-info { color: var(--gray-700); }
+.rendition-review-note { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--gray-50); color: var(--gray-800); font-size: var(--font-sm); }
+.rendition-review-items li { grid-template-columns: 10rem 1fr auto 5.5rem; }
+.rendition-review-items li > :nth-child(4) { justify-self: end; }
+.rendition-review-items .type-chip { justify-self: start; }
+.type-chip { display: inline-flex; align-items: center; padding: 2px var(--space-2); border-radius: var(--radius-sm); background: var(--gray-50); color: var(--gray-700); font-size: var(--font-xs); font-weight: 700; white-space: nowrap; }
+/* The section a "Your turn" button opened, briefly marked. */
+.is-step-target { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-md); transition: outline-color 0.6s ease; }
+@media (prefers-reduced-motion: reduce) { .is-step-target { transition: none; } }
+@media (max-width: 640px) {
+  .next-step-card { padding: var(--space-3); }
+  .next-step-head h2 { font-size: var(--font-lg); }
+  .next-step-actions > * { flex: 1 1 100%; justify-content: center; }
+  .rendition-review-items li { grid-template-columns: 1fr auto; }
+  .rendition-review-items .type-chip { grid-column: 1 / -1; }
+  .rendition-review-items li > strong { grid-column: 1; }
+  .rendition-review-items li > b { grid-column: 2; }
+  .rendition-review-items small { grid-column: 1 / -1; order: 1; }
+  .rendition-review-items li > :nth-child(4) { grid-column: 1 / -1; justify-self: start; order: 2; }
+  .rendition-review-items li > span[aria-hidden="true"] { display: none; }
+}

@@ -11,10 +11,9 @@ import { canonicalRequestStatus } from "../../../../shared/workflowStatus.mjs";
 import { celebrate } from "../../utils/celebrate.js";
 import { todayIso } from "../../utils/dateInput.js";
 import { formatCurrency, formatDate } from "../../utils/formatters.js";
-import { RECEIPT_TYPES, emptyRow, renditionPayload, renditionTotals, rowProblems, rowsFromRendition, transportDaysOverLimit } from "../../utils/simpleRendition.js";
+import { RECEIPT_LABELS, RECEIPT_TYPES, emptyRow, renditionPayload, renditionTotals, rowProblems, rowsFromRendition, transportDaysOverLimit } from "../../utils/simpleRendition.js";
 
 const KIND_LABELS = { RECEIPT: "Receipt (factura, boleta, ticket)", TRANSPORT: "Transport without receipt", NO_RECEIPT: "Expense without receipt" };
-const RECEIPT_LABELS = { FACTURA: "Factura", BOLETA: "Boleta de venta", TICKET: "Ticket", RECIBO_HONORARIOS: "Recibo por honorarios", OTHER: "Other receipt" };
 const readable = (file) => /\.(xml|pdf)$/i.test(file?.name || "");
 
 // The employee's rendition of an advance, in plain steps: list what was spent (one row per

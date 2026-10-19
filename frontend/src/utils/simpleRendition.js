@@ -4,6 +4,8 @@
 // unsupportedExpenseLines. The accounting allocation is built from them on the request's CECO.
 export const RECEIPT_TYPES = Object.freeze(["FACTURA", "BOLETA", "TICKET", "RECIBO_HONORARIOS", "OTHER"]);
 export const RENDITION_STAGES = Object.freeze(["PENDING", "OBSERVED", "SUBMITTED", "VALIDATED", "REJECTED"]);
+// What each receipt type reads as (t() keys).
+export const RECEIPT_LABELS = Object.freeze({ FACTURA: "Factura", BOLETA: "Boleta de venta", TICKET: "Ticket", RECIBO_HONORARIOS: "Recibo por honorarios", OTHER: "Other receipt" });
 
 const cents = (value) => Math.round(Number(value || 0) * 100);
 const money = (value) => Math.round(value) / 100;
@@ -89,4 +91,42 @@ export function transportDaysOverLimit(rows, limit) {
   const byDay = {};
   for (const row of rows) if (row.kind === "TRANSPORT" && row.date) byDay[row.date] = (byDay[row.date] || 0) + cents(row.amount);
   return Object.entries(byDay).filter(([, total]) => total > cents(limit)).map(([day]) => day).sort();
+}
+
+// What Accounting reviews, in one view: the money, what the employee presented (each with its
+// file) and the checks that matter. Reasons a check fails are the same ones the server enforces.
+export function reviewSummary(request = {}) {
+  const rendition = request.rendition || {};
+  const isAdvance = request.requestType === "ENTREGA_RENDIR";
+  const attachments = request.attachments || [];
+  const fileOf = (id) => (id ? attachments.find((item) => String(item._id) === String(id?._id || id)) || null : null);
+  const receipts = (rendition.receiptLines || []).map((line, index) => ({ key: `receipt-${line._id || index}`, kind: "RECEIPT", date: line.date, title: line.description, detail: [RECEIPT_LABELS[line.documentType] || line.documentType, line.documentNumber, line.issuerRuc && `RUC ${line.issuerRuc}`].filter(Boolean), amount: Number(line.amount || 0), file: fileOf(line.attachment) }));
+  const transport = (rendition.mobilityLines || []).map((line, index) => ({ key: `transport-${line._id || index}`, kind: "TRANSPORT", date: line.date, title: `${line.origin || "-"} → ${line.destination || "-"}`, detail: [line.servicePurpose].filter(Boolean), amount: Number(line.amount || 0), file: null }));
+  const noReceipt = (rendition.unsupportedExpenseLines || []).map((line, index) => ({ key: `no-receipt-${line._id || index}`, kind: "NO_RECEIPT", date: line.date, title: line.description, detail: [], amount: Number(line.grossAmount || 0), file: null }));
+  const linked = new Set(receipts.map((item) => String(item.file?._id || "")).filter(Boolean));
+  const depositSlip = fileOf(rendition.returnDepositSlip) || attachments.find((item) => item.kind === "RETURN_RECEIPT") || null;
+  const otherFiles = attachments.filter((item) => item.kind === "RENDITION" && !linked.has(String(item._id)));
+  const advanced = Number(rendition.amountAdvanced || 0);
+  const spent = Number(rendition.amountRendered || 0);
+  const returned = Number(rendition.amountReturned || 0);
+  const balance = money(cents(advanced) - cents(spent) - cents(returned));
+  const checks = [];
+  if (isAdvance) {
+    checks.push(balance === 0
+      ? { key: "balance", ok: true, text: "Expenses and money returned add up to the advance." }
+      : { key: "balance", ok: false, text: "{amount} of the advance is not accounted for.", amount: balance });
+  }
+  if (receipts.length) {
+    checks.push(receipts.every((item) => item.file)
+      ? { key: "files", ok: true, text: "Every receipt has its photo or PDF." }
+      : { key: "files", ok: false, text: "Some receipts have no photo or PDF." });
+  }
+  if (isAdvance && returned > 0) {
+    checks.push(depositSlip
+      ? { key: "slip", ok: true, text: "The deposit slip for the money returned is attached." }
+      : { key: "slip", ok: false, text: "There is no deposit slip for the money returned." });
+  }
+  if (rendition.detailReconciliation?.status === "MISMATCH") checks.push({ key: "detail", ok: false, text: "The expense details do not add up to the accounting amount." });
+  if (noReceipt.length) checks.push({ key: "noReceipt", ok: null, text: noReceipt.length === 1 ? "1 expense without receipt, declared by the employee." : "{count} expenses without receipt, declared by the employee.", count: noReceipt.length });
+  return { isAdvance, advanced, spent, returned, balance, items: [...receipts, ...transport, ...noReceipt], depositSlip, otherFiles, checks, note: rendition.comments || "", ready: checks.every((check) => check.ok !== false) };
 }

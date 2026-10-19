@@ -168,6 +168,14 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
   expense without receipt (`unsupportedExpenseLines`); the money returned comes with its deposit
   slip (`returnDepositSlip`, a `RETURN_RECEIPT` attachment); the accounting line is built on the
   request's CECO with a factura's 18% IGV separated. Accounting keeps the full review view.
+  Every request page opens with a "Your turn" card (`utils/nextStep.js`, `NextStepCard`) for the
+  person whose step it is: approve, commit the budget, register the invoice, verify the bank file,
+  pay, confirm, reconcile, close, settle a rendition balance or recover a rejected advance. Its
+  button does the action or opens the exact section or screen. Accounting reviews a submitted
+  rendition on that card (`RenditionReviewPanel`): the money, each receipt with its file, the
+  deposit slip, the checks the server enforces, and Approve / Send back / Reject through the same
+  endpoints. "My tasks" also lists payments to reconcile, requests ready to close, rendition
+  balances to settle and advances to recover.
   Uploaded file names are decoded as UTF-8 (`utils/fileName.js`), and names stored before were
   repaired once at startup. An advance pays out first (against Account 14), then requires the
   employee to submit a rendition within a configurable deadline counted in **working days** from
