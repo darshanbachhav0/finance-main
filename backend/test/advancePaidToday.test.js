@@ -22,7 +22,7 @@ import { decideApproval } from "../src/services/approvalService.js";
 import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { createFinancialRequest, getRequestDetail } from "../src/services/requestService.js";
 import { generatedRoot } from "../src/services/storageService.js";
-import { advancesDueSummary, confirmTreasuryPayable, generatePaymentBatch, resolvePaymentSchedule } from "../src/services/treasuryService.js";
+import { advancesDueSummary, confirmTreasuryPayable, generatePaymentBatch, previewPaymentBatch, resolvePaymentSchedule } from "../src/services/treasuryService.js";
 import { REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { installBbvaTestConfiguration } from "./bbvaFixtures.js";
 
@@ -113,6 +113,15 @@ test("an approved advance goes to Treasury to pay now, and the employee is told 
       assert.equal(summary.count, 1);
       assert.equal(summary.totalsByCurrency.PEN.total, 56);
       assert.equal((await advancesDueSummary(lima(`${due}T18:00:00`).getTime() - 2 * 86400000)).count, 0, "not due before its pay date");
+    });
+
+    await t.test("the readiness check passes an employee advance when no account is chosen for it", async () => {
+      const clean = await previewPaymentBatch({ payableIds: [String(payable._id)], currency: "PEN", accountSelections: {} });
+      assert.deepEqual(clean.issues, [], "the advance goes to its fixed employee destination");
+      // What the screen used to send: an account for the advance, which the server refuses.
+      const profile = (await FinancialRequest.findById(advance._id)).rendition.reimbursementBankSnapshot.profile;
+      const sent = await previewPaymentBatch({ payableIds: [String(payable._id)], currency: "PEN", accountSelections: { [String(payable._id)]: String(profile) } });
+      assert.match(sent.issues[0]?.message || "", /immutable rendition bank snapshot/);
     });
 
     await t.test("Treasury pays it today without a reason; Accounting is asked to verify the file today", async () => {

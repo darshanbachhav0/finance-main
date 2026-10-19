@@ -346,26 +346,32 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const missingBank = Number(queueTable.payload.summary?.missingBankDetails || 0);
   // Bank-file steps: 1 file details (an off-cycle date needs a reason), 2 selection, 3 review.
   const advancesOnly = selectedRows.length > 0 && selectedRows.every(isAdvanceRow);
-  const fileDetailsReady = Boolean(paymentDate) && (!offCycle || advancesOnly || Boolean(paymentDateReason.trim()));
+  // An off-cycle date needs a typed reason, except for a file of advances only (the platform
+  // records why). Step 1, the Generate button and its note all use this one rule.
+  const reasonMissing = offCycle && !advancesOnly && !paymentDateReason.trim();
+  const fileDetailsReady = Boolean(paymentDate) && !reasonMissing;
+  // The account chosen for each selected supplier payment. An employee advance or reimbursement,
+  // or a destination already frozen, is paid to its fixed destination, so no choice is sent: the
+  // server refuses one. The readiness check and the file use the same selection.
+  const fileAccountSelections = useMemo(() => Object.fromEntries(selected.map((id) => {
+    const row = rows.find((item) => String(payableIdOf(item)) === String(id));
+    return row?.destinationLocked || row?.paymentDestination?.sourceType === "EMPLOYEE_REIMBURSEMENT"
+      ? [id, null]
+      : [id, accountSelections[id]];
+  }).filter(([, accountId]) => accountId)), [selected, rows, accountSelections]);
   const currentFileStep = !fileDetailsReady ? 0 : !selected.length ? 1 : 2;
 
   async function generate() {
     setProcessing(true);
     setActionError("");
     try {
-      const selectedAccounts = Object.fromEntries(selected.map((id) => {
-        const row = rows.find((item) => String(payableIdOf(item)) === String(id));
-        return row?.destinationLocked || row?.paymentDestination?.sourceType === "EMPLOYEE_REIMBURSEMENT"
-          ? [id, null]
-          : [id, accountSelections[id]];
-      }).filter(([, accountId]) => accountId));
       const response = await api.post("/treasury/bank-file", {
         payableIds: selected,
         bank,
         currency,
         paymentDate,
         paymentDateReason: offCycle && paymentDateReason.trim() ? paymentDateReason : undefined,
-        accountSelections: selectedAccounts
+        accountSelections: fileAccountSelections
       });
       setResult(response.data);
       // The generated CXPs leave the queue; the selection is cleared so none is sent twice.
@@ -592,10 +598,10 @@ export default function TreasuryQueue({ historyOnly = false }) {
     <div className="workspace-panel section-spacer"><div className="section-heading"><div><h3><span className="bank-file-step-number">2</span>{t("Select payments")}</h3><p>{t("Only payments with a verified account in the file currency can be selected.")}</p></div></div><DataTable detailSteps={paymentSteps} rows={queueRows} rowKey="selectionKey" emptyTitle="No payments pending" emptyDescription="Approved CXP records appear here when they are ready to be paid." emptyAction={{ label: "Payment History", to: "/treasury/history" }} selection={{ selected, onChange: setSelected, isRowSelectable: isSelectable }} toolbarActions={readOnly ? undefined : <button type="button" className="secondary-button" disabled={!selectableOnPage.length || allOnPageSelected} onClick={selectAllVisible}><ListChecks size={16} /><span>{t("Select all visible")}</span></button>} loading={queueTable.loading} remote={queueTable.remote} filters={[{ key: "requestType", label: "types", allLabel: "All types", options: requestTypes }, { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes }, { key: "paymentPriority", label: "priorities", allLabel: "All priorities", options: ["NORMAL", "PRIORITY"] }]} searchPlaceholder="Search request, supplier, voucher, or cost center..." rowActions={(row) => [{ label: "Open request", icon: Eye, onClick: () => setQuickViewId(requestIdOf(row)) }]} columns={queueColumns} />
     {selected.length > 0 && <div className="bank-file-review" role="region" aria-labelledby="bank-file-review-title">
       <h3 id="bank-file-review-title"><span className="bank-file-step-number">3</span>{t("Review and generate")}</h3>
-      {!readOnly && <ReadinessPanel paymentPayload={{ payableIds: selected, currency, accountSelections }} defaultOpen />}
+      {!readOnly && <ReadinessPanel paymentPayload={{ payableIds: selected, currency, accountSelections: fileAccountSelections }} defaultOpen />}
     </div>}
     {/* The bar stays in reach (sticky) while payments are being chosen, through the whole stage. */}
-    {selected.length > 0 && <div className="bulk-bar bank-file-bar" role="region" aria-label={t("Review and generate")}><div className="bulk-bar-summary"><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ")} · BBVA · {formatDate(`${paymentDate}T12:00:00Z`, language)}</span></div><div className="bulk-bar-actions"><button type="button" className="primary-button" disabled={processing || (offCycle && !paymentDateReason.trim())} onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Generate file")}</span></button><button type="button" className="text-button" onClick={() => setSelected([])}>{t("Clear selection")}</button></div>{offCycle && !paymentDateReason.trim() && <p className="bulk-bar-note">{t("Enter the reason for paying off the payment cycle to generate the file.")}</p>}</div>}
+    {selected.length > 0 && <div className="bulk-bar bank-file-bar" role="region" aria-label={t("Review and generate")}><div className="bulk-bar-summary"><strong>{t("{count} CXP records selected").replace("{count}", selected.length)}</strong><span>{selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ")} · BBVA · {formatDate(`${paymentDate}T12:00:00Z`, language)}</span></div><div className="bulk-bar-actions"><button type="button" className="primary-button" disabled={processing || reasonMissing} onClick={() => setConfirmOpen(true)}><FileDown size={16} /><span>{t("Generate file")}</span></button><button type="button" className="text-button" onClick={() => setSelected([])}>{t("Clear selection")}</button></div>{reasonMissing && <p className="bulk-bar-note">{t("Enter the reason for paying off the payment cycle to generate the file.")}</p>}</div>}
     </div>
 
     </div>
@@ -652,7 +658,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     ]} /></div>
 
     <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
-    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: formatDate(`${paymentDate}T12:00:00Z`, language) }, ...(offCycle ? [{ label: "Reason for paying off the payment cycle", value: paymentDateReason }] : []), { label: "Total", value: selectedByCurrency.length ? selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ") : money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
+    <ConfirmDialog open={confirmOpen} title="Generate this bank TXT instruction?" description="Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed." details={[{ label: "Selected CXP", value: selected.length }, { label: "Bank", value: bank }, { label: "Currency", value: currency }, { label: "Payment date", value: formatDate(`${paymentDate}T12:00:00Z`, language) }, ...(offCycle ? [{ label: "Reason for paying off the payment cycle", value: paymentDateReason.trim() || (advancesOnly ? t("Advance to render: paid the same working day, outside the 15th/30th cycle.") : "") }] : []), { label: "Total", value: selectedByCurrency.length ? selectedByCurrency.map(([code, value]) => money(code, value)).join(" · ") : money(currency, selectedTotal) }]} confirmLabel="Generate bank TXT" loading={processing} onClose={() => !processing && setConfirmOpen(false)} onConfirm={generate} />
     <ConfirmDialog open={Boolean(pendingCurrency)} title="Change the file currency?" description="A bank file holds one currency, so the selected payments are cleared." details={[{ label: "Selected CXP", value: selected.length }, { label: "New currency", value: pendingCurrency || "" }]} confirmLabel="Change currency" cancelLabel="Keep selection" onClose={() => setPendingCurrency(null)} onConfirm={() => { setCurrency(pendingCurrency); setSelected([]); setPendingCurrency(null); }} />
 
     <Drawer open={Boolean(paymentRow)} error={actionError} title="Confirm actual bank payment" description={paymentRow ? `${paymentRow.requestNumber} - ${paymentRow.supplier?.legalName || paymentRow.supplier?.name || t("UMA collaborator")}` : ""} onClose={() => !processing && setPaymentRow(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setPaymentRow(null)}>{t("Cancel")}</button><button type="submit" form="payment-confirmation-form" className="primary-button" disabled={processing}><CircleCheckBig size={16} />{t(processing ? "Processing..." : "Confirm payment")}</button></>}><div className="document-requirement required"><AlertTriangle size={20} /><div><strong>{t("This settles the selected Accounts Payable record")}</strong><p>{t("Confirmation posts the payment journal and does not infer payment from a downloaded TXT. Enter less than the outstanding amount to record a partial payment; the remaining balance stays open for a later confirmation.")}</p></div></div><DraftPanel busy={processing} draft={paymentDraft} onDiscard={() => setPaymentRow(null)}><form id="payment-confirmation-form" className="form-grid" onSubmit={confirmPayment}><label className="field"><span>{t("Operation number")} *</span><input required value={paymentForm.operationNumber} onChange={(event) => setPaymentForm({ ...paymentForm, operationNumber: event.target.value })} /></label><label className="field"><span>{t("Actual payment date")} *</span><DateInput required value={paymentForm.paidAt} onChange={(event) => setPaymentForm({ ...paymentForm, paidAt: event.target.value })} /></label><label className="field"><span>{t("Confirmed amount")} *</span><input required type="number" min="0.01" max={paymentRow ? amountOf(paymentRow) : undefined} step="0.01" value={paymentForm.confirmedAmount} onChange={(event) => setPaymentForm({ ...paymentForm, confirmedAmount: event.target.value })} /></label><label className="field"><span>{t("Comments")}</span><textarea rows="4" value={paymentForm.comments} onChange={(event) => setPaymentForm({ ...paymentForm, comments: event.target.value })} /></label></form></DraftPanel></Drawer>
