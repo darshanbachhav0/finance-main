@@ -83,7 +83,7 @@ Background workers (see §4 — in production they run inside the web service pr
   `Accounting,Treasury,Management`) — the weekly Excel report.
 
 Authentication:
-- `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 15) — per-account
+- `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 5) — per-account
   lockout after repeated failed sign-ins. Failed, locked-out and successful sign-ins and sign-outs
   are written to the audit log (module `AUTH`). The lock ends by itself after the lockout time (the
   sign-in page says when); an administrator's password reset in User Administration also lifts it.
@@ -107,7 +107,10 @@ Authentication:
 - Platform settings saved by the Super Admin (password minimum length and expiry, failed sign-ins
   before locking, lock duration, session length, maintenance mode, announcement) override
   `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES` and `JWT_EXPIRES_IN`; an empty value falls
-  back to the environment.
+  back to the environment. Saving that page stores every value it shows, so the lock duration was
+  often stored as the old 15-minute default: the first server start with the 5-minute default moves
+  a stored 15 to 5, once (`platformSettingsService.migrateLockoutDefault`, audited). A value chosen
+  after that stays as chosen.
 - `BACKUP_DIR` (default `backend/backups`) — where `npm run backup` and the Super Admin's "Start
   backup" write. On a host without a persistent disk, copy each backup somewhere safe.
 

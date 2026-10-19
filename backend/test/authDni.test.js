@@ -6,6 +6,7 @@ import AuditLog from "../src/models/AuditLog.js";
 import User from "../src/models/User.js";
 import { login, loginLockoutPolicy, logout } from "../src/controllers/authController.js";
 import { protect } from "../src/middleware/auth.js";
+import { clearPlatformSettingsCache, effectiveSettings, migrateLockoutDefault } from "../src/services/platformSettingsService.js";
 
 // Resolves with the error passed to next() (undefined on success).
 function runMiddleware(middleware, req) {
@@ -74,8 +75,9 @@ test("DNI-based login", { timeout: 60000 }, async (t) => {
     });
 
     await t.test("locks the account after repeated failures, then unlocks after the window", async () => {
-      const { maxAttempts } = loginLockoutPolicy();
+      const { maxAttempts, lockoutMinutes } = loginLockoutPolicy();
       assert.equal(maxAttempts, 5);
+      assert.equal(lockoutMinutes, 5, "a locked account waits 5 minutes");
       await User.create({ name: "Lock User", dni: "87654321", passwordHash: await bcrypt.hash("Right-Password-1!", 12), role: "Solicitor", active: true });
       // A success resets the counter.
       for (let attempt = 1; attempt < maxAttempts; attempt++) assert.equal((await callLogin({ dni: "87654321", password: "nope" })).error?.statusCode, 401);
@@ -86,7 +88,7 @@ test("DNI-based login", { timeout: 60000 }, async (t) => {
       assert.equal(locking.error?.statusCode, 429);
       assert.equal(locking.error?.code, "ACCOUNT_LOCKED");
       const locked = await User.findOne({ dni: "87654321" });
-      assert.ok(locked.lockedUntil.getTime() > Date.now() + 14 * 60000 && locked.lockedUntil.getTime() <= Date.now() + 15 * 60000);
+      assert.ok(locked.lockedUntil.getTime() > Date.now() + 4 * 60000 && locked.lockedUntil.getTime() <= Date.now() + 5 * 60000);
       // Even the right password is refused while locked, and the lock is audited.
       assert.equal((await callLogin({ dni: "87654321", password: "Right-Password-1!" })).error?.code, "ACCOUNT_LOCKED");
       assert.ok(await AuditLog.exists({ module: "AUTH", action: "ACCOUNT_LOCKED", entityId: locked._id }));
@@ -96,6 +98,36 @@ test("DNI-based login", { timeout: 60000 }, async (t) => {
       assert.equal((await callLogin({ dni: "87654321", password: "Right-Password-1!" })).error, undefined);
       const unlocked = await User.findOne({ dni: "87654321" });
       assert.equal(unlocked.lockedUntil, null);
+    });
+
+    await t.test("the lock lasts 5 minutes unless LOGIN_LOCKOUT_MINUTES or the Super Admin says otherwise", () => {
+      assert.equal(effectiveSettings({}, {}).passwordPolicy.lockoutMinutes, 5);
+      assert.equal(effectiveSettings({}, { LOGIN_LOCKOUT_MINUTES: "20" }).passwordPolicy.lockoutMinutes, 20);
+      assert.equal(effectiveSettings({ passwordPolicy: { lockoutMinutes: 30 } }, { LOGIN_LOCKOUT_MINUTES: "20" }).passwordPolicy.lockoutMinutes, 30);
+    });
+
+    await t.test("a saved 15-minute lock (the old default) becomes 5 minutes, once", async () => {
+      const db = mongoose.connection.db;
+      const settings = db.collection("platformsettings");
+      const runs = db.collection("migrationruns");
+      // A value the Super Admin chose is kept.
+      await settings.insertOne({ key: "platform", passwordPolicy: { lockoutMinutes: 30, maxFailedAttempts: 5 } });
+      assert.deepEqual(await migrateLockoutDefault({ db }), { applied: true, changed: false });
+      assert.equal((await settings.findOne({ key: "platform" })).passwordPolicy.lockoutMinutes, 30);
+      await runs.deleteMany({});
+      // The old default, stored when the settings page was saved, moves to 5.
+      await settings.updateOne({ key: "platform" }, { $set: { "passwordPolicy.lockoutMinutes": 15 } });
+      assert.deepEqual(await migrateLockoutDefault({ db }), { applied: true, changed: true });
+      const saved = await settings.findOne({ key: "platform" });
+      assert.deepEqual([saved.passwordPolicy.lockoutMinutes, saved.passwordPolicy.maxFailedAttempts], [5, 5], "only the lock length changes");
+      assert.ok(await db.collection("auditlogs").findOne({ entityId: saved._id, action: "PLATFORM_SETTINGS_UPDATED" }));
+      // It runs once: a 15 chosen afterwards stays.
+      await settings.updateOne({ key: "platform" }, { $set: { "passwordPolicy.lockoutMinutes": 15 } });
+      assert.deepEqual(await migrateLockoutDefault({ db }), { applied: false, changed: false });
+      assert.equal((await settings.findOne({ key: "platform" })).passwordPolicy.lockoutMinutes, 15);
+      await settings.deleteMany({});
+      await runs.deleteMany({});
+      clearPlatformSettingsCache();
     });
 
     await t.test("logout revokes the session server-side", async () => {
