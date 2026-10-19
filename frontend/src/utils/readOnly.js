@@ -1,9 +1,10 @@
 // The Super Admin oversees the platform read-only: it opens what an Admin opens but never acts in
-// a process. The backend refuses its writes (middleware/auth.js superAdminReadOnly); the UI hides
-// the actions and, as a safety net, api/client.js stops a write before it is sent. Must match
-// SUPER_ADMIN_WRITE_PATHS in backend/src/middleware/auth.js.
+// a process, except the CECO budget plans it manages with Admin and Treasury. The backend refuses
+// its other writes (middleware/auth.js superAdminReadOnly); the UI hides the actions and, as a
+// safety net, api/client.js stops a write before it is sent. Must match SUPER_ADMIN_WRITE_PATHS in
+// backend/src/middleware/auth.js.
 export const READ_ONLY_ROLES = Object.freeze(["SuperAdmin"]);
-export const READ_ONLY_WRITE_PATHS = Object.freeze(["/superadmin/", "/notifications/", "/users/me/notification-preferences", "/work-drafts/", "/auth/"]);
+export const READ_ONLY_WRITE_PATHS = Object.freeze(["/superadmin/", "/notifications/", "/users/me/notification-preferences", "/work-drafts/", "/budget/plans/", "/budget/plan-changes/", "/auth/"]);
 
 export function isReadOnlyRole(role) {
   return READ_ONLY_ROLES.includes(role);

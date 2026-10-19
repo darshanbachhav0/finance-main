@@ -199,6 +199,10 @@ export async function submitRendition({ requestId, payload, files = {}, user, re
   if (request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
     lines = parseRequestLines(payload.lines);
     assertRequestLines(lines);
+    // What was spent is charged to the CECO the advance was reserved on: the employee's own.
+    const ownCenters = new Set([request.requesterCostCenter, ...(request.lines || []).map((line) => line.costCenter)].filter(Boolean).map((value) => String(value?._id || value)));
+    const foreign = lines.findIndex((line) => !ownCenters.has(String(line.costCenter?._id || line.costCenter || "")));
+    if (ownCenters.size && foreign >= 0) throw new AppError(422, "A rendition is charged to the advance's own CECO; another CECO cannot be used.", { line: foreign + 1, field: "costCenter" }, ERROR_CODES.INVALID_COST_CENTER_LINE);
     await validateAccountingDimensions({ requestType: REQUEST_TYPE.OPEX, expenseNature: request.expenseNature, lines, user });
     amountRendered = sumMoney(lines.map((line) => line.totalAmount));
     amountReturned = roundMoney(payload.amountReturned || 0);
@@ -455,8 +459,10 @@ export async function reviewRendition({ requestId, action, comments, user, req }
       await observed.save();
       await recordAudit({ entityType: "FinancialRequest", entity: observed, user, req, module: "RENDITION", action: "RENDITION_BUDGET_OBSERVED", comments: error.message });
     }
-    await notifyRoles({ roles: [ROLES.TREASURY, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: "/budget", entityType: "FinancialRequest", entityId: request._id });
-    throw new AppError(409, "Rendition observed due to insufficient budget. Adjust the budget and retry approval.", error.details, ERROR_CODES.INSUFFICIENT_BUDGET);
+    // The notice opens the budget exception itself, where Treasury reviews it and Management decides.
+    const exceptionPath = error.details?.budgetException ? `/budget?tab=exceptions&record=${error.details.budgetException}` : "/budget?tab=exceptions&exceptionStatus=PENDING";
+    await notifyRoles({ roles: [ROLES.TREASURY, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: exceptionPath, entityType: "FinancialRequest", entityId: request._id });
+    throw new AppError(409, "The CECO budget is short for this rendition. Treasury reviews the budget exception and Management approves it in Budget > Exceptions; then approve the rendition again.", error.details, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
 }
 

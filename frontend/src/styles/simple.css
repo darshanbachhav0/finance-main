@@ -185,3 +185,7 @@
   .rendition-review-items li > :nth-child(4) { grid-column: 1 / -1; justify-self: start; order: 2; }
   .rendition-review-items li > span[aria-hidden="true"] { display: none; }
 }
+
+/* ---- Budget plan: equal or custom monthly split -------------------------- */
+.budget-split-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.budget-split-actions small { flex-basis: 100%; color: var(--gray-600); font-size: var(--font-xs); }

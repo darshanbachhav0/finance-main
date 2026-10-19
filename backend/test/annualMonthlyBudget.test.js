@@ -173,7 +173,7 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
       const repeated = await adjustBudgetPlan(saved._id, { operationId: duplicate.operationId }, planEditor, req);
       assert.equal(repeated.months[10].assignedAmount, 13000);
       await assert.rejects(() => adjustBudgetPlan(saved._id, { operationId: "stale-adjustment", action: "INCREASE", revision: 0, amount: 100, reason: "Stale" }, planEditor, req), (error) => error.statusCode === 409);
-      await assert.rejects(() => adjustBudgetPlan(saved._id, { operationId: "budget-role-change", action: "INCREASE", revision: saved.__v, amount: 100, reason: "Not allowed" }, user, req), (error) => error.statusCode === 403, "Budget can no longer change a plan");
+      await assert.rejects(() => adjustBudgetPlan(saved._id, { operationId: "budget-role-change", action: "INCREASE", revision: saved.__v, amount: 100, reason: "Not allowed" }, { ...user.toObject(), role: "Solicitor" }, req), (error) => error.statusCode === 403, "a requester never changes a plan");
       await assert.rejects(() => adjust(saved, "ALLOCATE_RESERVE", 3000, { toMonth: 12 }), /annual reserve has only/);
       const attempts = await Promise.allSettled([adjust(saved, "TRANSFER", 1000, { fromMonth: 1, toMonth: 2 }), adjust(saved, "TRANSFER", 1000, { fromMonth: 1, toMonth: 3 })]);
       assert.equal(attempts.filter((item) => item.status === "fulfilled").length, 1);

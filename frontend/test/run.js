@@ -53,4 +53,5 @@ import "./accountsPayable.test.js";
 import "./livelyPlatform.test.js";
 import "./simpleRendition.test.js";
 import "./nextStep.test.js";
+import "./cecoBudget.test.js";
 import "./simplerPlatform.test.js";

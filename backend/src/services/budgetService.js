@@ -708,11 +708,15 @@ export async function deferBudget(request, userId, { session } = {}) {
 
 export async function assertRenditionBudgetAvailable(request, userId, lines, { session } = {}) {
   const commitment = await BudgetCommitment.findOne({ request: request._id }).session(session || null);
+  // Same rule as at approval (reserveBudget): a CECO without an annual budget plan (TRANSITIONAL)
+  // only records its spending. An advance approved that way (NO_BUDGET) never blocks its rendition.
+  if (commitment?.status === BUDGET_STATUS.NO_BUDGET) return;
   if (!commitment || ![BUDGET_STATUS.COMMITTED, BUDGET_STATUS.DEFERRED, BUDGET_STATUS.CLOSED].includes(commitment.status)) throw new AppError(409, "A valid advance budget record is required before rendition posting.", undefined, ERROR_CODES.INSUFFICIENT_BUDGET);
   if (commitment.status === BUDGET_STATUS.CLOSED) return;
   const preview = await previewBudget({ ...(request.toObject?.() || request), accountingPeriod: commitment.period, lines });
   const demands = new Map();
   for (const line of preview.lines) {
+    if (line.mode === "TRANSITIONAL") continue;
     const sourceId = String(line.allocation || line.costCenter);
     const requested = addMoney(demands.get(sourceId) || 0, line.amount);
     demands.set(sourceId, requested);
@@ -727,7 +731,7 @@ export async function assertRenditionBudgetAvailable(request, userId, lines, { s
       comments: "Insufficient actual-expense budget detected before rendition posting."
     });
     if (line.status !== "PENDING_VALIDATION" && strategy === "EXTRAORDINARY_APPROVAL" && exception.strategy === strategy && exception.status === "APPROVED" && exception.requestedAmount >= line.amount) continue;
-    throw new AppError(409, "Rendition exceeds available budget; resolve the budget exception before accounting.", { budgetException: exception._id, available, required: line.amount }, ERROR_CODES.INSUFFICIENT_BUDGET);
+    throw new AppError(409, "Rendition exceeds available budget; resolve the budget exception before accounting.", { budgetException: exception._id, available, required: line.amount, costCenter: line.costCenterSnapshot?.code }, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
 }
 

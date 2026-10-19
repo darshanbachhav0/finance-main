@@ -19,6 +19,8 @@ export const ROLES = Object.freeze({
 export const RETIRED_ROLES = Object.freeze({ Budget: "Treasury" });
 
 export const ADMINISTRATOR_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
+// Who sets each CECO's annual budget and spreads it over the months (equally or not).
+export const BUDGET_PLAN_MANAGERS = Object.freeze([ROLES.ADMIN, ROLES.TREASURY, ROLES.SUPER_ADMIN]);
 // Super Admin accounts are created from the server (npm run superadmin:create), never from the UI.
 export const MAX_SUPER_ADMINS = 2;
 

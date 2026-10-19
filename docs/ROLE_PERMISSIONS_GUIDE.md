@@ -409,7 +409,7 @@ Treasury does not have the dedicated Accounting, SIRE, global audit or general c
 
 ### What Treasury can do
 
-- Create annual budget plans, set the permitted monthly structure/control mode, and post supported adjustments with reasons and an audit trail.
+- Create each CECO's annual budget plan and change it, as Admin and the Super Admin can: spread it over the months equally (a split that never goes below what a month already used, or only from the current month) or by typing each month, move money between months, and change the annual amount. Every change needs a reason and is audited; changes above the approval threshold wait for Management.
 - Maintain budget rules and allocations; review insufficient-budget cases and prepare or mark reviewed a supported exception outcome. Treasury cannot itself approve or reject the exception — only Management may decide it, and only after Treasury's review. Approving a budget-increase exception adds the shortfall to the budget automatically.
 - Run the year-end carry-over for a fiscal year (Budget Control → Year-end carry-over), which moves still-open commitments with their funds into the next year's plan. It is audited and safe to repeat.
 - Every fully approved request commits its budget automatically at final approval (rule-based, manager-chain and Management-final routes alike). Treasury commits manually only to retry after a budget observation or exception has been resolved, or when the automatic commitment could not run. This commitment is what makes an A1 request eligible for Procurement to issue the order next.
@@ -553,10 +553,11 @@ Everything an Admin can open, read-only: requests and their approval history, su
 - **Security alerts:** a bell notification (and its email copy) when an Admin reopens an accounting period, changes an approval rule or a bank format, changes someone's additional permissions, or gives someone the Treasury or Accounting role, and when an administrator account is locked after failed sign-ins.
 - **Platform settings:** password minimum length and expiry, failed sign-ins before locking and lock duration, session length (the Super Admin's own sessions default to 60 minutes), maintenance mode (only Admin and Super Admin can sign in) and an announcement banner for every user; start a backup and see the backup history.
 - **Overview:** administrator counts, alerts and blocked sign-ins, pending work in every department (counts only), configuration checks, email and SUNAT status, and the last backup.
+- **CECO budget plans:** with Admin and Treasury, create a CECO's annual budget and spread it over the months, equally or not (Budget Control). Changes above the approval threshold wait for Management.
 
 ### Limitations
 
-The backend refuses every write from the Super Admin outside its console and its own notification and email preferences (`READ_ONLY_ROLE`), so it cannot create, approve, register, commit, pay, verify, post, close, reopen, export the official SIRE TXT or the accounting consolidation, or change master data. It is never a jefe, substitute or approval-rule role, receives no workflow tasks and has no leave. Super Admin accounts are created and recovered only from the server: `npm run superadmin:create`, `npm run superadmin:list`, `npm run superadmin:reset-2fa` (lost phone) and `npm run account:recover` (locked account).
+The backend refuses every write from the Super Admin outside its console, its own notification and email preferences and the CECO budget plans (`READ_ONLY_ROLE`), so it cannot create, approve, register, commit, pay, verify, post, close, reopen, export the official SIRE TXT or the accounting consolidation, or change master data. It is never a jefe, substitute or approval-rule role, receives no workflow tasks and has no leave. Super Admin accounts are created and recovered only from the server: `npm run superadmin:create`, `npm run superadmin:list`, `npm run superadmin:reset-2fa` (lost phone) and `npm run account:recover` (locked account).
 
 ### Sign-in
 

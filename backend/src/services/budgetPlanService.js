@@ -11,12 +11,12 @@ import { notificationText, notifyRoles } from "./notificationService.js";
 import { budgetAvailable, budgetLimits, findBudgetAllocation, isBudgetPlan } from "./budgetAllocationService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
-import { BUDGET_STATUS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, ROLES } from "../utils/constants.js";
+import { BUDGET_PLAN_MANAGERS, BUDGET_STATUS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, ROLES } from "../utils/constants.js";
 import { addMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
 import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 
 function assertManager(user) {
-  if (![ROLES.ADMIN, ROLES.TREASURY].includes(user?.role)) throw new AppError(403, "Only Treasury or Admin can manage budget plans.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!BUDGET_PLAN_MANAGERS.includes(user?.role)) throw new AppError(403, "Only Admin, Treasury or the Super Admin can manage budget plans.", undefined, ERROR_CODES.FORBIDDEN);
 }
 const invalid = (message, details) => new AppError(422, message, details, ERROR_CODES.VALIDATION_ERROR);
 function amount(value) {
@@ -55,7 +55,7 @@ export async function getBudgetPlan(id) {
     closedPlanMonths(plan.period),
     BudgetPlanChange.find({ plan: plan._id, status: "PENDING" }).sort({ createdAt: 1 }).lean()
   ]);
-  // closedMonths: months in a closed accounting period (Admin may still edit them).
+  // closedMonths: months in a closed accounting period (plan managers may still edit them).
   return { ...serializeBudgetPlan(plan), closedMonths, pendingChanges };
 }
 
@@ -75,8 +75,15 @@ export async function createBudgetPlan(payload, user, req) {
   const year = String(payload.year);
   const existing = await BudgetAllocation.findOne({ ...dimension, period: new RegExp(`^${year}(?:-|$)`) });
   if (existing) throw new AppError(409, "This Cost Center already has a budget for this year. Existing budgets remain unchanged; adjust it from Budget Control or choose another year.", { allocation: existing._id }, ERROR_CODES.CONFLICT);
-  const historical = await BudgetCommitment.exists({ period: new RegExp(`^${year}-`), lines: { $elemMatch: { costCenter: center._id, project: project || { $in: ["", null] } } } });
+  // Only budget-controlled (ACTIVE) usage blocks a new plan for the year. Spending recorded while
+  // the CECO had no plan (TRANSITIONAL) was never counted against a budget: the plan starts from
+  // now, and the amount is returned so the page can say it is not in the plan.
+  const yearPeriod = new RegExp(`^${year}-`);
+  const lineDimension = { costCenter: center._id, project: project || { $in: ["", null] } };
+  const historical = await BudgetCommitment.exists({ period: yearPeriod, lines: { $elemMatch: { ...lineDimension, mode: "ACTIVE" } } });
   if (historical) throw new AppError(409, "This Cost Center already has budget activity in the selected year. Create a plan for a new year to preserve its recorded usage.", undefined, ERROR_CODES.CONFLICT);
+  const unplanned = await BudgetCommitment.find({ period: yearPeriod, status: { $nin: [BUDGET_STATUS.RELEASED] }, lines: { $elemMatch: lineDimension } }).select("lines").lean();
+  const priorUnplannedAmount = sumMoney(unplanned.flatMap((commitment) => commitment.lines.filter((line) => String(line.costCenter) === String(center._id) && (line.project || "") === project).map((line) => line.amount || 0)));
   let distributed = Array(12).fill(0);
   if (payload.planningMode === "ANNUAL_MONTHLY") {
     if (payload.distribution === "EQUAL") distributed = distributeAnnualBudget(annual);
@@ -92,12 +99,12 @@ export async function createBudgetPlan(payload, user, req) {
     if (error.code === 11000) throw new AppError(409, "A budget already exists for this year and dimension.", undefined, ERROR_CODES.CONFLICT);
     throw error;
   }
-  await recordAudit({ entityType: "BudgetAllocation", entity: plan, action: "PLAN_CREATED", module: "BUDGET", period: year, user, req, comments: notes, newValues: serializeBudgetPlan(plan) });
-  return getBudgetPlan(plan._id);
+  await recordAudit({ entityType: "BudgetAllocation", entity: plan, action: "PLAN_CREATED", module: "BUDGET", period: year, user, req, comments: notes, newValues: { ...serializeBudgetPlan(plan), priorUnplannedAmount } });
+  return { ...(await getBudgetPlan(plan._id)), priorUnplannedAmount };
 }
 
 // ---------------------------------------------------------------------------------------------
-// Plan changes (Admin only). Every change is validated against the plan as it is now, applied
+// Plan changes (Admin, Treasury or the Super Admin). Every change is validated against the plan as it is now, applied
 // atomically with its history entry, and audited. A change that moves more money than the
 // BUDGET_CHANGE_APPROVAL_THRESHOLD finance configuration waits for Management approval instead
 // (BudgetPlanChange); approving it replays the same change after re-checking every rule.
@@ -112,7 +119,7 @@ const usedIn = (bucket) => addMoney(bucket?.committedAmount || 0, bucket?.execut
 const reserveOf = (plan) => subtractMoney(plan.assignedAmount, sumMoney((plan.months || []).map((bucket) => bucket.assignedAmount)));
 
 function assertPlanEditor(user) {
-  if (user?.role !== "Admin") throw new AppError(403, "Only Admin can change a budget plan.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!BUDGET_PLAN_MANAGERS.includes(user?.role)) throw new AppError(403, "Only Admin, Treasury or the Super Admin can change a budget plan.", undefined, ERROR_CODES.FORBIDDEN);
 }
 
 // Lima calendar month, so a "month end" matches the university's own calendar.
