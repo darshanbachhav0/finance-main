@@ -1,5 +1,6 @@
 import { businessDaysBetween, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
+import { waitsForBankAccount } from "./plainStatus.js";
 
 // "Where is my request?": the milestones of the request's own track, who has it now and when the
 // payment is expected - in plain words, from the data the request page already loads.
@@ -65,6 +66,9 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
 
   if (status === "BORRADOR") return { text: mine ? "Draft: only you can see it. Submit it when it is ready." : "Draft, not submitted yet.", holder: requester, since };
   if (status === "PENDIENTE_APROBACION") return { text: "Waiting for {name}'s approval.", params: { name: activeStep?.approverSnapshot?.name || "-" }, holder: person(activeStep?.approverSnapshot?.name), since: activeStep?.startedAt || since };
+  if (waitsForBankAccount(request)) return request.observation.resolver === "ACCOUNTING"
+    ? { text: "Approved. Accounting is verifying the bank account; then the advance is paid.", holder: team("Accounting"), since, tone: "attention" }
+    : { text: mine ? "Approved. Register your bank account so the advance can be paid." : "Approved. Waiting for the requester's verified bank account.", holder: requester, since, tone: "attention" };
   if (status === "APROBADO") return { text: "Approved. The budget is being committed.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status)) return { text: mine ? "Returned to you for corrections. Fix it and submit it again." : "Returned to the requester for corrections.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Treasury"), since, tone: "attention" };

@@ -6,6 +6,7 @@ import { expectedPayment, journeyMilestones, journeySummary, renditionCountdown 
 import { parseServerEvent } from "../src/utils/serverEvents.js";
 import { recommendTrack } from "../src/utils/trackRecommendation.js";
 import { paymentDayState } from "../src/utils/paymentCycle.js";
+import { plainNextStep } from "../src/utils/plainStatus.js";
 
 const source = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const states = (steps) => Object.fromEntries(steps.map((step) => [step.key, step.state]));
@@ -34,6 +35,14 @@ assert.deepEqual(expectedPayment({ status: "PAGADO", payment: { paidAt: "2026-10
 const waiting = journeySummary({ flowType: "B", status: "PENDIENTE_APROBACION", requester: { _id: "r1", name: "Rosa" } }, { activeStep: { approverSnapshot: { name: "Dario Director" }, startedAt: "2026-10-13T15:00:00Z" }, viewerId: "r1" });
 assert.deepEqual([waiting.text, waiting.params, waiting.holder, waiting.since], ["Waiting for {name}'s approval.", { name: "Dario Director" }, { name: "Dario Director" }, "2026-10-13T15:00:00Z"]);
 assert.equal(journeySummary({ flowType: "C", requestType: "ENTREGA_RENDIR", status: "PAGADO", requester: "r1", rendition: { status: "PENDING" } }, { viewerId: "r1" }).text, "Advance paid. Submit your rendition before the deadline.");
+// An approved advance waiting for the employee's bank account says so, instead of "Finance is processing it".
+const bankHold = (resolver) => ({ flowType: "C", requestType: "ENTREGA_RENDIR", status: "APROBADO", currency: "PEN", requester: { _id: "r1", name: "Ruth" }, observation: { code: "REIMBURSEMENT_BANK_REQUIRED", resolver } });
+assert.deepEqual([journeySummary(bankHold("REQUESTER"), { viewerId: "r1" }).text, journeySummary(bankHold("REQUESTER"), { viewerId: "r1" }).holder], ["Approved. Register your bank account so the advance can be paid.", { name: "Ruth" }]);
+assert.equal(journeySummary(bankHold("REQUESTER"), { viewerId: "other" }).text, "Approved. Waiting for the requester's verified bank account.");
+assert.equal(journeySummary(bankHold("ACCOUNTING"), { viewerId: "r1" }).holder.name, "Accounting");
+assert.deepEqual(plainNextStep(bankHold("REQUESTER")), { text: "Register your bank account in {currency} under My bank account. The advance is paid once Accounting verifies it.", params: { currency: "PEN" }, yours: true });
+assert.equal(plainNextStep(bankHold("ACCOUNTING")).yours, false);
+assert.equal(journeySummary({ ...bankHold("REQUESTER"), observation: { code: "REIMBURSEMENT_BANK_REQUIRED", resolvedAt: "2026-10-19T15:00:00Z" } }).text, "Approved. The budget is being committed.", "a cleared hold is not shown");
 // Paid on Thursday 15 Oct, due 29 Oct: on Monday 26 Oct three working days remain.
 const countdown = renditionCountdown({ dueAt: "2026-10-30T04:59:59.999Z" }, { now: new Date("2026-10-26T15:00:00Z"), openedAt: "2026-10-15T17:00:00Z" });
 assert.equal(countdown.daysLeft, 3);

@@ -175,5 +175,10 @@ export default {
   "Upload the invoice to get it paid": "Sube la factura para que se pague",
   "{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives and it goes to payment.": "{requestNumber} está aprobada y su presupuesto reservado. Sube la factura del proveedor cuando llegue y pasará a pago.",
   "Next payment run": "Próxima corrida de pagos",
-  "Payment run of {date}: {count} payments ({total}) are due. Prepare it in one click.": "Corrida de pagos del {date}: vencen {count} pagos ({total}). Prepárala con un clic."
+  "Payment run of {date}: {count} payments ({total}) are due. Prepare it in one click.": "Corrida de pagos del {date}: vencen {count} pagos ({total}). Prepárala con un clic.",
+  "Register your bank account to receive the advance": "Registra tu cuenta bancaria para recibir el anticipo",
+  "{requestNumber} is approved. Your bank account is waiting for Accounting's verification; the advance is paid once it is verified.": "{requestNumber} está aprobada. Tu cuenta bancaria espera la verificación de Contabilidad; el anticipo se paga cuando esté verificada.",
+  "{requestNumber} is approved. Register your bank account in {currency} under My bank account; the advance is paid once Accounting verifies it.": "{requestNumber} está aprobada. Registra tu cuenta bancaria en {currency} en Mi cuenta bancaria; el anticipo se paga cuando Contabilidad la verifique.",
+  "Verify a bank account to release an advance": "Verifica una cuenta bancaria para liberar un anticipo",
+  "{requestNumber}: the advance is approved and waits for the employee's bank account to be verified.": "{requestNumber}: el anticipo está aprobado y espera que se verifique la cuenta bancaria del colaborador."
 };

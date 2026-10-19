@@ -1,6 +1,7 @@
 import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBankAccount.js";
 import User from "../models/User.js";
 import { recordAudit } from "./auditService.js";
+import { releaseAdvancesWaitingForBank } from "./advanceBankHoldService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
@@ -209,6 +210,7 @@ export async function setPreferredEmployeeReimbursementBankAccount({ accountId, 
     await account.save({ session });
     await recordAudit({ entityType: "EmployeeReimbursementBankAccount", entity: account, action: "EMPLOYEE_BANK_PREFERRED", user, req, module: "EMPLOYEE_BANKING", newValues: { preferred: true }, session });
   });
+  if (account.verificationStatus === "VERIFIED") await releaseWaitingAdvances(account, user, req);
   return bankPayload(account, user);
 }
 
@@ -264,14 +266,27 @@ export async function reviewEmployeeReimbursementBankAccount({ accountId, payloa
     newValues: { verificationStatus: result, verificationSource: account.verificationSource }
   });
   await notifyEmployeeBankDecision(account);
+  if (result === "VERIFIED") await releaseWaitingAdvances(account, user, req);
   return bankPayload(account, user);
+}
+
+// The bank decision stands even if releasing an advance fails; that advance stays with Treasury.
+async function releaseWaitingAdvances(account, user, req) {
+  try {
+    await releaseAdvancesWaitingForBank({ userId: account.user?._id || account.user, currency: account.currency, user, req });
+  } catch (error) {
+    console.error("Releasing advances waiting for a bank account failed", error?.message || error);
+  }
 }
 
 export async function getVerifiedEmployeeReimbursementBankAccount({ userId, profileId, currency = "PEN", session } = {}) {
   const query = { user: userId, active: true, verificationStatus: "VERIFIED", currency };
-  if (profileId) query._id = profileId;
-  else query.preferred = true;
-  return EmployeeReimbursementBankAccount.findOne(query).select(accountSelector()).session(session || null);
+  if (profileId) return EmployeeReimbursementBankAccount.findOne({ ...query, _id: profileId }).select(accountSelector()).session(session || null);
+  const preferred = await EmployeeReimbursementBankAccount.findOne({ ...query, preferred: true }).select(accountSelector()).session(session || null);
+  if (preferred) return preferred;
+  // A single verified account in that currency is the one to pay into, marked preferred or not.
+  const verified = await EmployeeReimbursementBankAccount.find(query).select(accountSelector()).limit(2).session(session || null);
+  return verified.length === 1 ? verified[0] : null;
 }
 
 export function publicEmployeeBankPayload(account, user) {

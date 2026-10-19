@@ -174,5 +174,9 @@ export default {
   "Only Treasury or Admin can manage budget plans.": "Solo Tesorería o Administración pueden gestionar los planes de presupuesto.",
   "The invoice is registered once the request is approved and its budget reserved.": "La factura se registra cuando la solicitud está aprobada y su presupuesto reservado.",
   "This step is only for Track B requests.": "Este paso es solo para solicitudes de la vía B.",
-  "Only the requester or Accounting can register this invoice.": "Solo el solicitante o Contabilidad pueden registrar esta factura."
+  "Only the requester or Accounting can register this invoice.": "Solo el solicitante o Contabilidad pueden registrar esta factura.",
+  "Nothing. Accounting is verifying your bank account; then the advance is paid.": "Nada. Contabilidad está verificando tu cuenta bancaria; después se paga el anticipo.",
+  "Register your bank account in {currency} under My bank account. The advance is paid once Accounting verifies it.": "Registra tu cuenta bancaria en {currency} en Mi cuenta bancaria. El anticipo se paga cuando Contabilidad la verifique.",
+  "This advance waits for the employee's verified bank account. It is paid out automatically once Accounting verifies it; Commit budget is not needed.": "Este anticipo espera la cuenta bancaria verificada del colaborador. Se paga automáticamente cuando Contabilidad la verifique; no hace falta Comprometer presupuesto.",
+  "Track C requires a verified employee bank account before the advance can be released.": "La vía C necesita una cuenta bancaria verificada del colaborador antes de liberar el anticipo."
 };
