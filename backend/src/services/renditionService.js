@@ -266,12 +266,12 @@ export function rejectionRecoveryAmounts(request) {
 
 // Track C undocumented reimbursement: once every approval is complete the budget is
 // committed and the employee submits the official declaration (no advance is paid).
-export async function commitUndocumentedReimbursementBudget({ request, user, req }) {
+export async function commitUndocumentedReimbursementBudget({ request, user, req, automatic = false }) {
   if (!isTrackCReimbursement(request)) throw new AppError(422, "Only a Track C undocumented reimbursement can use this budget handoff.", { flowType: request.flowType, requestType: request.requestType }, ERROR_CODES.VALIDATION_ERROR);
   const result = await runFinancialOperation(async (session) => {
     const commitment = await reserveBudget(request, user._id, { session });
     request.budgetCommitment = commitment._id;
-    await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed; budget committed for the undocumented reimbursement.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, session });
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed; budget committed for the undocumented reimbursement.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, skipRoleCheck: automatic, session });
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);

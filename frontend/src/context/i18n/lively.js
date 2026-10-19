@@ -179,5 +179,8 @@ export default {
   "Post comment": "Publicar comentario",
 
   // Swipe to approve
-  "Swipe a request right to approve it, or left to observe it.": "Desliza una solicitud a la derecha para aprobarla o a la izquierda para observarla."
+  "Swipe a request right to approve it, or left to observe it.": "Desliza una solicitud a la derecha para aprobarla o a la izquierda para observarla.",
+  "Approved. Accounting is verifying the bank account; then the advance is paid.": "Aprobada. Contabilidad está verificando la cuenta bancaria; después se paga el anticipo.",
+  "Approved. Register your bank account so the advance can be paid.": "Aprobada. Registra tu cuenta bancaria para que se pueda pagar el anticipo.",
+  "Approved. Waiting for the requester's verified bank account.": "Aprobada. Esperando la cuenta bancaria verificada del solicitante."
 };

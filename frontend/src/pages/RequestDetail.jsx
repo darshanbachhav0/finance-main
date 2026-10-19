@@ -66,7 +66,7 @@ import { coversKind, isEitherOf, presentCount } from "../utils/documentRequireme
 import { invoiceMismatchLines } from "../utils/validationMessages.js";
 import RequestJourney from "../components/RequestJourney.jsx";
 import PlainStatus from "../components/PlainStatus.jsx";
-import { usesPlainStatuses } from "../utils/plainStatus.js";
+import { usesPlainStatuses, waitsForBankAccount } from "../utils/plainStatus.js";
 import RenditionCountdown from "../components/RenditionCountdown.jsx";
 import RequestComments from "../components/RequestComments.jsx";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
@@ -465,6 +465,7 @@ export default function RequestDetail() {
     ? [user?.role === "Accounting" || user?.role === "Admin"
       ? "SUNAT could not verify this invoice. Review it in Accounting > SUNAT exceptions; once the exception is approved the payment continues without new approvals."
       : "SUNAT could not verify this invoice. Accounting will review it; once it approves a manual SUNAT exception the payment continues on its own. You do not need to submit the request again.", "Documents", "#request-section-documents-and-fiscal-validation"]
+    : waitsForBankAccount(request) && permissions.canCommitBudget ? ["This advance waits for the employee's verified bank account. It is paid out automatically once Accounting verifies it; Commit budget is not needed.", "Available actions", "#request-actions"]
     : permissions.canCommitBudget ? ["Review budget availability and commit the approved request.", "Available actions", "#request-actions"]
     : permissions.modifiable
     ? (missingDocuments.length ? ["Complete the required documents before submitting.", "Documents", "#request-section-documents-and-fiscal-validation"] : ["Your request is ready for your submission review.", "Available actions", "#request-actions"])

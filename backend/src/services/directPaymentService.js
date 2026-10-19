@@ -257,7 +257,9 @@ export async function provisionDirectPayment({ request, user, req, session, pref
   return { observed: false, sunatVoucher, accountsPayable };
 }
 
-export async function provisionTrackCAdvance({ request, user, req, session }) {
+// automatic: run as the consequence of the final approval (or of the employee's bank account
+// being verified), so the role of whoever triggered it does not authorize the step.
+export async function provisionTrackCAdvance({ request, user, req, session, automatic = false }) {
   await assertPostingAllowed(request, { user, req });
   if (request.flowType !== FLOW_TYPE.C) throw new AppError(422, "Advance provisioning is only available for Track C.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
   if (![REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status)) throw new AppError(409, "Track C can be provisioned only after all approvals are complete or after a budget observation is resolved.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
@@ -265,6 +267,10 @@ export async function provisionTrackCAdvance({ request, user, req, session }) {
   if (!requester?.active || !/^\d{8}$/.test(requester.dni || "")) throw new AppError(422, "An active employee with a valid DNI is required for an advance payment.");
   const bank = await getVerifiedEmployeeReimbursementBankAccount({ userId: requester._id, currency: request.currency, session });
   if (!bank) throw new AppError(422, "Track C requires a verified employee bank account before the advance can be released.", undefined, ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED);
+  if (request.observation?.code === ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED && !request.observation.resolvedAt) {
+    request.observation.resolvedAt = new Date();
+    request.observation.resolvedBy = user._id;
+  }
 
   request.rendition ||= {};
   request.rendition.beneficiarySnapshot = {
@@ -299,6 +305,6 @@ export async function provisionTrackCAdvance({ request, user, req, session }) {
     totalAmount: request.totalAmount
   };
   const accountsPayable = await createAccountsPayableFromVoucher({ request, voucher, user, paymentPriority: "PRIORITY", dueDate: new Date(), session });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "ADVANCE_PROVISIONED", comments: "Track C budget reserved before the advance is posted to Account 14; expense execution remains deferred until rendition validation.", session, skipControls: true });
+  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "ADVANCE_PROVISIONED", comments: "Track C budget reserved before the advance is posted to Account 14; expense execution remains deferred until rendition validation.", session, skipControls: true, skipRoleCheck: automatic });
   return { accountsPayable, commitment };
 }

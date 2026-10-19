@@ -31,6 +31,10 @@ export function plainStatusKey(request) {
 const advanceOpen = (request) => request?.flowType === "C" && request?.requestType !== "REEMBOLSO_SIN_SUSTENTO" && ["PENDING", "OBSERVED"].includes(request?.rendition?.status);
 
 // "What we need from you": one sentence, and whether the requester has something to do.
+// An approved advance waiting for the employee's verified bank account before it can be paid.
+export const waitsForBankAccount = (request) => canonicalRequestStatus(request?.status) === "APROBADO"
+  && request?.observation?.code === "REIMBURSEMENT_BANK_REQUIRED" && !request.observation.resolvedAt;
+
 export function plainNextStep(request) {
   const key = plainStatusKey(request);
   const status = canonicalRequestStatus(request?.status);
@@ -40,6 +44,9 @@ export function plainNextStep(request) {
   if (key === "WAITING") return pendingStep?.approverSnapshot?.name ? { text: "Nothing. Waiting for {name}.", params: { name: pendingStep.approverSnapshot.name }, yours: false } : { text: "Nothing. Waiting for your jefe.", yours: false };
   if (request?.requestType === "REEMBOLSO_SIN_SUSTENTO" && status === "COMPROMISO_PRESUPUESTAL") return { text: "Sign and send your declaration to get paid.", yours: true };
   if (advanceOpen(request)) return { text: "Present your receipts (rendition) before the deadline.", yours: true };
+  if (waitsForBankAccount(request)) return request.observation.resolver === "ACCOUNTING"
+    ? { text: "Nothing. Accounting is verifying your bank account; then the advance is paid.", yours: false }
+    : { text: "Register your bank account in {currency} under My bank account. The advance is paid once Accounting verifies it.", params: { currency: request.currency || "PEN" }, yours: true };
   if (key === "IN_PROCESS") return { text: "Nothing. Finance is processing it.", yours: false };
   if (key === "PAID") return { text: "Nothing. It is paid.", yours: false };
   return { text: "Nothing. It will not continue.", yours: false };

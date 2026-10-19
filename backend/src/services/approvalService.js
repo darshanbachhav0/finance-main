@@ -21,6 +21,7 @@ import { reserveBudget } from "./budgetService.js";
 import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "./directPaymentService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { commitUndocumentedReimbursementBudget } from "./renditionService.js";
+import { holdAdvanceForBankAccount, resolveBankNotices } from "./advanceBankHoldService.js";
 import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notificationText, notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
@@ -273,12 +274,23 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     throw new AppError(409, "Financial handoff can only run after every required approval is complete or after a budget observation is resolved.", { status: request.status, approvalStage: request.approvalStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
 
-  if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req });
+  if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req, automatic });
   if (request.flowType === FLOW_TYPE.C) {
-    const result = await runFinancialOperation(async (session) => {
-      await provisionTrackCAdvance({ request, user, req, session });
+    let result;
+    try {
+      result = await runFinancialOperation(async (session) => {
+        await provisionTrackCAdvance({ request, user, req, session, automatic });
+        return request;
+      });
+    } catch (error) {
+      if (error.code !== ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED) throw error;
+      // No verified bank account yet: the approvals stay and the employee is told what to do;
+      // verifying the account releases the advance. A manual retry still reports why.
+      await holdAdvanceForBankAccount({ request, user, req, error });
+      if (!automatic) throw error;
       return request;
-    });
+    }
+    await resolveBankNotices(request);
     await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`, type: "TREASURY_PAYMENT", title: notificationText("Track C advance ready"), message: notificationText("{requestNumber} is ready for priority advance payment.", { requestNumber: request.requestNumber }), path: "/treasury", entityType: "FinancialRequest", entityId: request._id });
     return result;
   }

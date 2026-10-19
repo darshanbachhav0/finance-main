@@ -145,7 +145,13 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
   `directInvoiceService.registerDirectPaymentInvoice`; owner, Accounting or Admin). It must match the
   approved amounts; the request is then provisioned to Treasury, which is notified.
 - **C — advances (`ENTREGA_RENDIR`) and undocumented reimbursements
-  (`REEMBOLSO_SIN_SUSTENTO`).** An advance pays out first (against Account 14), then requires the
+  (`REEMBOLSO_SIN_SUSTENTO`).** An advance is paid into the employee's verified reimbursement
+  account: the preferred one, or the only verified one in that currency. Without one, the final
+  approval keeps the request at `APROBADO` with the observation `REIMBURSEMENT_BANK_REQUIRED`, the
+  employee is told to register the account (or Accounting to verify one waiting for review), and
+  verifying the account (or choosing a verified one as preferred) provisions it automatically
+  (`advanceBankHoldService`). The automatic Track C steps run whatever the final approver's role
+  (`automatic: true`, as for the other tracks). An advance pays out first (against Account 14), then requires the
   employee to submit a rendition within a configurable deadline counted in **working days** from
   the actual payment date (default 10, `FinanceConfiguration` key `RENDITION_OVERDUE_DAYS`;
   weekends, Peruvian holidays and `UMA_EXTRA_HOLIDAYS` excluded; the deadline ends at the close of
