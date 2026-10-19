@@ -53,10 +53,11 @@ export default function BudgetControl() {
   const [confirm, setConfirm] = useState(null);
   const [error, setError] = useState("");
   const canDecide = ["Admin", "Treasury"].includes(user.role);
-  // Changing an existing plan is Admin only; Management decides changes above the approval threshold.
-  const canEditPlans = user.role === "Admin";
+  // Admin, Treasury and the Super Admin set each CECO's annual budget and spread it over the months
+  // (equally or not); Management decides changes above the approval threshold.
+  const canEditPlans = ["Admin", "Treasury", "SuperAdmin"].includes(user.role);
   const canDecideChanges = user.role === "Management";
-  useDraftResume("budget-plan", () => { if (canDecide) setWorkspace({ planId: null }); });
+  useDraftResume("budget-plan", () => { if (canEditPlans) setWorkspace({ planId: null }); });
   useDraftResume("budget-adjustment", id => { if (canEditPlans) setWorkspace({ planId: id }); });
   const allocationTable = usePaginatedResource("/budget/allocations", { fixedParams: { period } });
   const exceptionTable = usePaginatedResource("/budget/exceptions", { fixedParams: exceptionLink || { period }, initialFilters: exceptionStatus ? { status: exceptionStatus } : {}, deepLink: Boolean(exceptionLink) });
@@ -181,7 +182,7 @@ export default function BudgetControl() {
       : [{ label: "Request", value: confirm.row.request?.requestNumber }, { label: "Strategy", value: confirm.row.strategy }, { label: "Result", value: confirm.kind === "commit" ? "The request advances only if the backend budget check passes." : `Exception status changes to ${confirm.status}.` }];
 
   return <section>
-      <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={canDecide && <div className="budget-form-actions"><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><ExcelImport kind="budget-plans" onImported={() => { load(); allocationTable.reload(); }} /><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link><button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
+      <PageHeader title="Budget Control" description="Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions." actions={(canDecide || canEditPlans) && <div className="budget-form-actions">{canDecide && <><button type="button" className="secondary-button" onClick={() => setConfirm({ kind: "carryOver", year: period.slice(0, 4), title: "Carry over open commitments?", description: "Open commitments of the selected year that were not yet invoiced move, with their funds, into January of the next budget year. Invoiced and paid amounts stay in the closing year. Running it again has no further effect.", confirmLabel: "Carry over commitments" })}><CalendarClock size={16} /><span>{t("Year-end carry-over")}</span></button><ExcelImport kind="budget-plans" onImported={() => { load(); allocationTable.reload(); }} /><Link className="secondary-button" to="/configuration/budget-allocations">{t("Legacy allocations")}</Link></>}<button type="button" className="primary-button" onClick={() => setWorkspace({ planId: null })}>{t("Create annual budget")}</button></div>} />
       <WorkspaceTools links={[["Configuration", "/configuration/budget-rules"], ["Management Reports", "/reports"]]} />
     <Message type="error">{error || allocationTable.error || exceptionTable.error || commitmentTable.error || changeTable.error}</Message>
     <div className="period-toolbar budget-period-toolbar">
@@ -197,10 +198,11 @@ export default function BudgetControl() {
     {data.warnings?.length > 0 && <div className="alert-strip warning"><AlertTriangle size={20} /><div><strong>{t("Budget attention required")}</strong><p>{t("One or more dimensions have low availability or over-execution.")}</p></div></div>}
 
     <Tabs idPrefix="budget" label="Sections" panels value={focusView} onChange={setFocusView} tabs={["Budget", "Exceptions", "Commitments", "Budget changes"].map((view) => ({ id: view, label: view }))} />
-      <div hidden={focusView !== "Budget"} {...tabPanelProps("budget", "Budget")} className="workspace-panel"><div className="section-heading"><div><h3>{t("Dimensional budget")}</h3><p>{t("Period, Cost Center, expense classification, and project remain visible together.")}</p></div><span className="section-count">{allocationTable.pagination.total}</span></div><DataTable rows={allocationTable.rows} loading={allocationTable.loading} remote={allocationTable.remote} rowActions={(row) => row.source === "LINKED_ANNUAL_PLAN" ? [{ label: "View annual plan", onClick: () => setWorkspace({ planId: row._id }) }] : []} filters={[{ key: "source", label: "sources", allLabel: "All sources", options: ["LINKED_ANNUAL_PLAN", "DIMENSIONAL_ALLOCATION", "TRANSITIONAL_COST_CENTER"] }]} searchPlaceholder="Search Cost Center, account, project, or period..." columns={[
+      <div hidden={focusView !== "Budget"} {...tabPanelProps("budget", "Budget")} className="workspace-panel"><div className="section-heading"><div><h3>{t("Budget by CECO")}</h3><p>{t("Each CECO (area) has an annual budget, spread over the months equally or not. Every request is charged to its requester's own CECO.")}</p></div><span className="section-count">{allocationTable.pagination.total}</span></div><DataTable rows={allocationTable.rows} loading={allocationTable.loading} remote={allocationTable.remote} rowActions={(row) => row.source === "LINKED_ANNUAL_PLAN" ? [{ label: "View annual plan", onClick: () => setWorkspace({ planId: row._id }) }] : []} filters={[{ key: "source", label: "sources", allLabel: "All sources", options: ["LINKED_ANNUAL_PLAN", "DIMENSIONAL_ALLOCATION", "TRANSITIONAL_COST_CENTER"] }]} searchPlaceholder="Search Cost Center, account, project, or period..." columns={[
       { key: "period", label: "Period", render: (row) => row.period || t("Undated legacy balance") },
       { key: "planningMode", label: "Budget planning mode", sortable: false, render: (row) => t(BUDGET_PLANNING_MODES[row.planningMode] || "Legacy allocation") },
       { key: "costCenter", label: "Cost center", sortable: false, getValue: (row) => `${row.costCenter?.code || ""} ${row.costCenter?.name || ""}`, render: (row) => <div className="primary-cell"><strong>{row.costCenter?.code || "-"}</strong><span>{row.costCenter?.name}</span></div> },
+      { key: "area", label: "Area", sortable: false, getValue: (row) => row.costCenter?.area || "", render: (row) => row.costCenter?.area || "-" },
       { key: "project", label: "Project", render: (row) => row.project || t("All") }, { key: "assignedAmount", label: "Assigned", align: "right", render: (row) => money(row.assignedAmount) },
       { key: "committedAmount", label: "Committed", align: "right", render: (row) => money(row.committedAmount) }, { key: "executedAmount", label: "Executed", align: "right", render: (row) => money(row.executedAmount) },
       { key: "paidAmount", label: "Paid", align: "right", render: (row) => money(row.paidAmount) }, { key: "availableAmount", label: "Available", sortable: false, align: "right", render: (row) => <strong className={row.availableAmount < 0 ? "text-danger" : ""}>{money(row.availableAmount)}</strong> }
@@ -229,7 +231,7 @@ export default function BudgetControl() {
       { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
       { key: "decision", label: "Decision", sortable: false, render: (row) => row.decidedByName ? <div className="primary-cell"><strong>{row.decidedByName}</strong><span>{row.decisionComments || "-"}</span></div> : "-" }
     ]} /></div>
-    <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canDecide} canEdit={canEditPlans} onClose={() => setWorkspace(null)} onSaved={planSaved} />
+    <BudgetPlanWorkspace open={Boolean(workspace)} planId={workspace?.planId} year={period.slice(0, 4)} selectedPeriod={period} canManage={canEditPlans} canEdit={canEditPlans} onClose={() => setWorkspace(null)} onSaved={planSaved} />
     <ConfirmDialog open={Boolean(confirm)} {...confirm} details={confirmDetails} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
   </section>;
 }

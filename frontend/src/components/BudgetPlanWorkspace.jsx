@@ -9,7 +9,8 @@ import { ListSkeleton } from "./WorkspaceSkeleton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
-import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget } from "../../../shared/budgetPlanning.mjs";
+import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget, splitAnnualBudget } from "../../../shared/budgetPlanning.mjs";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 
 const initial = (year) => ({ year, costCenter: "", project: "", planningMode: "ANNUAL_ONLY", assignedAmount: "", distribution: "EQUAL", months: Array(12).fill("0"), reason: "" });
 const adjustmentForm = (action = "TRANSFER") => ({ operationId: crypto.randomUUID(), action, fromMonth: "1", toMonth: "2", amount: "", planningMode: "ANNUAL_MONTHLY", distribution: "USAGE", reason: "" });
@@ -116,6 +117,8 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
       await draft.complete();
       setPlan(response.data.data);
       onSaved(response.data.data);
+      const prior = Number(response.data.data.priorUnplannedAmount || 0);
+      if (prior > 0) setNotice(t("{amount} was spent this year before this budget existed and is not counted in it. Set the annual budget to what is left for the year if needed.").replace("{amount}", money(prior)));
     } catch (err) { setError(err.message); } finally { setSaving(false); }
   }
 
@@ -150,6 +153,17 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
   function openGrid() {
     setShowAdjustment(false);
     setGrid({ operationId: crypto.randomUUID(), months: plan.months.map((bucket) => String(bucket.assignedAmount)), reason: "" });
+  }
+  // Equal split of the annual budget, never below what a month already used; from the current
+  // month, earlier months keep only what they used and the rest is split until December.
+  const today = limaDateKey(new Date());
+  const splitFrom = plan && today.slice(0, 4) === String(plan.period) ? Number(today.slice(5, 7)) : 1;
+  function splitGrid(fromMonth) {
+    try {
+      const months = splitAnnualBudget(Number(plan.assignedAmount).toFixed(2), { floors: plan.months.map((bucket) => usedIn(bucket) / 100), fromMonth });
+      setGrid((current) => ({ ...current, months: months.map((value) => value.toFixed(2)) }));
+      setError("");
+    } catch (err) { setError(err.message); }
   }
   // Live checks mirror the server rules so problems show before saving.
   const gridRows = grid && plan ? plan.months.map((bucket, index) => {
@@ -203,7 +217,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
     <Message type="error">{t(error)}</Message>
     {notice && <Message>{t(notice)}</Message>}
     {loading ? <div role="status"><span className="sr-only">{t("Loading...")}</span><ListSkeleton rowCount={4} columnCount={3} /></div> : plan ? <>
-      <div className="budget-plan-heading"><div><strong>{plan.period} · {plan.costCenter?.code}</strong><p>{plan.costCenter?.name}{plan.project ? ` / ${plan.project}` : ""}</p></div><span className="budget-mode-tag">{t(BUDGET_PLANNING_MODES[plan.planningMode])}</span></div>
+      <div className="budget-plan-heading"><div><strong>{plan.period} · {plan.costCenter?.code}</strong><p>{plan.costCenter?.name}{plan.costCenter?.area ? ` · ${plan.costCenter.area}` : ""}{plan.project ? ` / ${plan.project}` : ""}</p></div><span className="budget-mode-tag">{t(BUDGET_PLANNING_MODES[plan.planningMode])}</span></div>
       <dl className="budget-plan-metrics">
         <div><dt>{t("Annual budget")}</dt><dd>{money(plan.assignedAmount)}</dd></div>
         <div><dt>{t("Annual available")}</dt><dd>{money(plan.availableAmount)}</dd></div>
@@ -231,6 +245,11 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
           <td data-label={t("Executed")}>{money(row.bucket.executedAmount)}</td>
           <td data-label={t("Available after")} className={row.belowFloor ? "text-danger" : ""}>{row.value === null ? "—" : money((row.value - row.floor) / 100)}</td>
         </tr>)}</tbody></table></div>
+        <div className="budget-split-actions">
+          <button type="button" className="secondary-button" onClick={() => splitGrid(1)}>{t("Split equally across the 12 months")}</button>
+          {splitFrom > 1 && <button type="button" className="secondary-button" onClick={() => splitGrid(splitFrom)}>{t("Split the rest equally from {month}").replace("{month}", t(BUDGET_MONTHS[splitFrom - 1]))}</button>}
+          <small>{t("Or type each month's amount for an unequal split. No month can go below what it already used.")}</small>
+        </div>
         <div className="budget-grid-totals" aria-live="polite">
           <span>{t("Annual budget")}: <strong>{money(gridAnnual / 100)}</strong></span>
           <span>{t("Distributed to months")}: <strong className={gridTotal > gridAnnual ? "text-danger" : ""}>{money(gridTotal / 100)}</strong></span>
@@ -238,7 +257,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
           <span>{t("Months changed")}: <strong>{gridChanged}</strong></span>
         </div>
         {gridProblems.length > 0 && <Message type="error"><ul className="plain-list">{gridProblems.map((problem) => <li key={problem}>{problem}</li>)}</ul></Message>}
-        {gridRows.some((row) => row.changed && closed.has(row.bucket.month)) && <Message>{t("Some changed months belong to a closed accounting period. The change is allowed for Admin and recorded in the history.")}</Message>}
+        {gridRows.some((row) => row.changed && closed.has(row.bucket.month)) && <Message>{t("Some changed months belong to a closed accounting period. The change is allowed and recorded in the history.")}</Message>}
         <label className="field"><span>{t("Reason / approval reference")} *</span><textarea aria-label={t("Reason / approval reference")} maxLength="2000" required rows="2" value={grid.reason} onChange={(event) => setGrid((current) => ({ ...current, reason: event.target.value }))} /></label>
         <div className="budget-form-actions"><button type="button" className="secondary-button" disabled={saving} onClick={() => setGrid(null)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={saving || gridProblems.length > 0 || !gridChanged}>{t(saving ? "Saving..." : "Save distribution")}</button></div>
       </form> : <div className="budget-month-table"><table><thead><tr>{["Month", "Assigned", "Committed", "Executed", "Paid", "Available"].map((label) => <th key={label}>{t(label)}</th>)}</tr></thead><tbody>{plan.months.map((bucket) => <tr key={bucket.month} className={selectedPeriod === `${plan.period}-${String(bucket.month).padStart(2, "0")}` ? "is-current-month" : ""}><th scope="row">{t(BUDGET_MONTHS[bucket.month - 1])}{closed.has(bucket.month) && <span className="budget-closed-tag"><Lock size={12} aria-hidden="true" />{t("closed period")}</span>}</th><td data-label={t("Assigned")}>{monthly ? money(bucket.assignedAmount) : "—"}</td><td data-label={t("Committed")}>{money(bucket.committedAmount)}</td><td data-label={t("Executed")}>{money(bucket.executedAmount)}</td><td data-label={t("Paid")}>{money(bucket.paidAmount)}</td><td data-label={t("Available")} className={bucket.availableAmount < 0 ? "text-danger" : ""}>{money(bucket.availableAmount)}</td></tr>)}</tbody></table></div>}
@@ -262,7 +281,7 @@ export default function BudgetPlanWorkspace({ open, planId, year, selectedPeriod
       <div className="form-grid two-column-form">
         <label className="field"><span>{t("Budget year")} *</span><input aria-label={t("Budget year")} type="number" min="2000" max="2199" step="1" required value={form.year} onChange={(event) => change("year", event.target.value)} /></label>
         <label className="field"><span>{t("Budget planning mode")}</span><select aria-label={t("Budget planning mode")} value={form.planningMode} onChange={(event) => change("planningMode", event.target.value)}>{Object.entries(BUDGET_PLANNING_MODES).map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
-        <label className="field"><span>{t("Cost center")} *</span><select aria-label={t("Cost center")} required value={form.costCenter} onChange={(event) => change("costCenter", event.target.value)}><option value="">{t("Select")}</option>{masters.centers.map((center) => <option key={center._id} value={center._id}>{center.code} · {center.name}</option>)}</select></label>
+        <label className="field"><span>{t("Cost center")} *</span><select aria-label={t("Cost center")} required value={form.costCenter} onChange={(event) => change("costCenter", event.target.value)}><option value="">{t("Select")}</option>{masters.centers.map((center) => <option key={center._id} value={center._id}>{center.code} · {center.name}{center.area ? ` (${center.area})` : ""}</option>)}</select></label>
         <label className="field"><span>{t("Project")}</span><input aria-label={t("Project")} maxLength="150" value={form.project} onChange={(event) => change("project", event.target.value)} /></label>
         <label className="field"><span>{t("Annual budget")} · PEN *</span><input aria-label={t("Annual budget")} type="number" min="0.01" step="0.01" required value={form.assignedAmount} onChange={(event) => change("assignedAmount", event.target.value)} /></label>
       </div>

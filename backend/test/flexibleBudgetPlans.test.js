@@ -31,11 +31,11 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
     const use = (value, month, committed, executed = 0) => BudgetAllocation.updateOne({ _id: value._id }, { $inc: { committedAmount: committed, executedAmount: executed, [`months.${month - 1}.committedAmount`]: committed, [`months.${month - 1}.executedAmount`]: executed } });
     const assigned = (value) => value.months.map((bucket) => bucket.assignedAmount);
 
-    await t.test("only Admin changes an existing plan; Budget still creates plans", async () => {
+    await t.test("Admin and Treasury change an existing plan; Management only decides large changes", async () => {
       const value = await plan();
-      await assert.rejects(() => change(value, "INCREASE", { amount: 100 }, budget), (error) => error.statusCode === 403);
       await assert.rejects(() => change(value, "INCREASE", { amount: 100 }, management), (error) => error.statusCode === 403);
-      assert.equal((await change(value, "INCREASE", { amount: 100 })).assignedAmount, 12100);
+      assert.equal((await change(value, "INCREASE", { amount: 100 }, budget)).assignedAmount, 12100, "Treasury sets the annual budget too");
+      assert.equal((await change(value, "INCREASE", { amount: 100 })).assignedAmount, 12200);
     });
 
     await t.test("the monthly grid is edited in one audited redistribution that respects committed and spent money", async () => {

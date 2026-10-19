@@ -54,7 +54,12 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
   // The employee's own paid advance has its own card (AdvanceRenditionCard).
   if (ownAdvance) return null;
 
+  const budgetShort = rendition.status === "SUBMITTED" && request.observation?.code === "INSUFFICIENT_BUDGET";
+  if (budgetShort && role === "Treasury") {
+    return turn("renditionBudget", "Review the budget exception", "The CECO budget is short for this rendition. Review the exception so Management can approve it; then Accounting approves the rendition.", { tone: "warning", action: { label: "Open budget exceptions", href: "/budget?tab=exceptions&exceptionStatus=PENDING" } });
+  }
   if (FINANCE.includes(role) && rendition.status === "SUBMITTED" && rendition.financeReview?.result === "PENDING") {
+    if (budgetShort) return turn("reviewRendition", "Review the receipts from {name}", "The CECO budget was short when the rendition was approved. Once Management approves the budget exception, approve it again.", { params: { name }, tone: "warning", review: true, more: { label: "Open budget exceptions", href: "/budget?tab=exceptions&exceptionStatus=PENDING" } });
     return isAdvance
       ? turn("reviewRendition", "Review the receipts from {name}", "Check that the receipts and the money returned add up to the advance. Then approve the rendition, or send it back with a comment.", { params: { name }, review: true, more: { label: "See every detail", open: { tab: "Documents", target: "official-rendition" } } })
       : turn("reviewRendition", "Review the declaration from {name}", "Check the expenses declared without receipts. Then approve them so the reimbursement is paid, or send them back with a comment.", { params: { name }, review: true, more: { label: "See every detail", open: { tab: "Documents", target: "official-rendition" } } });

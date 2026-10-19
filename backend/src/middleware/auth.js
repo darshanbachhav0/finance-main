@@ -104,9 +104,10 @@ export function authorizePermission(...permissions) {
   };
 }
 
-// Writes the Super Admin may make: its own account administration and its personal settings
-// (notifications, email preference, form drafts). Everything else is read-only for it.
-export const SUPER_ADMIN_WRITE_PATHS = Object.freeze(["/api/superadmin/", "/api/notifications/", "/api/users/me/notification-preferences", "/api/work-drafts/"]);
+// Writes the Super Admin may make: its own account administration, its personal settings
+// (notifications, email preference, form drafts) and the CECO budget plans it manages with Admin
+// and Treasury (the routes still check the role). Everything else is read-only for it.
+export const SUPER_ADMIN_WRITE_PATHS = Object.freeze(["/api/superadmin/", "/api/notifications/", "/api/users/me/notification-preferences", "/api/work-drafts/", "/api/budget/plans/", "/api/budget/plan-changes/"]);
 // Reads that still record something in a process (official export history). Not for the Super Admin.
 export const SUPER_ADMIN_BLOCKED_READS = Object.freeze(["/api/sire/export", "/api/accounting/consolidation/export"]);
 

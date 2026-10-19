@@ -22,7 +22,8 @@ financial-progress derivation, budget-planning math, payment-terms math, line-am
 
 Nine stored operational roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`,
 `AreaDirector`, `ViceRector`, `Accounting`, `Treasury`, `Procurement`, `Management`,
-`ManagementViewer` (plus `SuperAdmin`, which takes part in no process). The former `Budget` role was
+`ManagementViewer` (plus `SuperAdmin`, which takes part in no process; it only manages CECO budget
+plans with Admin and Treasury). The former `Budget` role was
 folded into `Treasury` (`RETIRED_ROLES`): users, previous roles and approval rules still stored as
 `Budget` are moved to `Treasury` when the server starts (`services/legacyRoleService.js`, audited).
 `AreaDirector` and `ViceRector` are distinct roles with identical permissions
@@ -294,6 +295,20 @@ An annual/monthly `BudgetAllocation` ("budget plan") always forces `ACTIVE` mode
 regardless of the cost center's own default. Committed → executed → paid amounts are tracked
 per-line and reversed symmetrically on cancellation/void (`releaseBudget`,
 `reverseBudgetExecution`).
+
+**CECO budgets.** A plan belongs to one CECO (shown with its area) and holds the annual budget,
+either annual-only or spread over the twelve months. **Admin, Treasury and the Super Admin**
+(`BUDGET_PLAN_MANAGERS`, the one business write the Super Admin may make) create and change plans;
+changes above `BUDGET_CHANGE_APPROVAL_THRESHOLD` still wait for Management. The months are split
+equally (`splitAnnualBudget`: never below what a month already used; "from this month" leaves the
+earlier months with their usage and splits the rest until December) or typed one by one. A plan can
+start mid-year when the CECO's earlier spending that year was only informational (TRANSITIONAL);
+that amount is returned as `priorUnplannedAmount` so the page says it is not in the plan.
+Budget-controlled (`ACTIVE`) usage in the year still blocks a second plan. Requests are charged to
+the requester's own CECO (or one their profile authorizes), and an advance's rendition only to the
+advance's own CECO. At rendition, the check follows the approval rule: an advance approved without
+a plan (`NO_BUDGET`) and TRANSITIONAL lines never block, and an ACTIVE line counts what the advance
+itself reserved.
 
 ## 5. Accounting, Accounts Payable & Treasury
 

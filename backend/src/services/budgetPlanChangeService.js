@@ -5,7 +5,7 @@ import { applyPlanChange } from "./budgetPlanService.js";
 import { notificationText, notifyUser, resolveNotification } from "./notificationService.js";
 import { paginatedPayload, parsePagination } from "./queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, ROLES } from "../utils/constants.js";
+import { BUDGET_PLAN_MANAGERS, ERROR_CODES, ROLES } from "../utils/constants.js";
 
 // Budget plan changes above the approval threshold: Admin requests, Management decides, the
 // requesting Admin may withdraw while it is still pending.
@@ -76,7 +76,7 @@ export async function decideBudgetPlanChange(id, { decision, comments } = {}, us
 }
 
 export async function cancelBudgetPlanChange(id, user, req) {
-  if (user?.role !== ROLES.ADMIN) throw new AppError(403, "Only Admin can withdraw a budget change.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!BUDGET_PLAN_MANAGERS.includes(user?.role)) throw new AppError(403, "Only Admin, Treasury or the Super Admin can withdraw a budget change.", undefined, ERROR_CODES.FORBIDDEN);
   const change = await loadPending(id);
   const cancelled = await BudgetPlanChange.findOneAndUpdate({ _id: change._id, status: "PENDING" }, { $set: { status: "CANCELLED", decidedBy: user._id, decidedByName: user.name, decidedAt: new Date() } }, { new: true });
   if (!cancelled) throw new AppError(409, "This budget change was already decided.", undefined, ERROR_CODES.CONFLICT);

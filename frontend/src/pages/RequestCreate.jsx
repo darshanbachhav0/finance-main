@@ -960,6 +960,13 @@ export default function RequestCreate() {
   }
 
   const quickCostCenter = masters.costCenters.find((item) => item._id === form.requesterCostCenter);
+  // The request is charged to the requester's own CECO; another one only when the profile authorizes it.
+  const ownCostCenter = masters.costCenters.find((item) => item._id === supplierId(user.costCenter));
+  const ownCostCenterHint = !form.requesterCostCenter || !ownCostCenter
+    ? t("Only Cost Centers assigned to your profile are available.")
+    : form.requesterCostCenter === ownCostCenter._id
+      ? t("Charged to your own CECO. Its remaining budget is shown below.")
+      : t("Charged to {ceco}, a CECO you are authorized for. Your own CECO is {own}.").replace("{ceco}", quickCostCenter?.code || "").replace("{own}", ownCostCenter.code);
   const capexOpen = showCapexDetails({ total: totals.total, threshold: formPolicy.capexDetailsThreshold ?? 50000, capex });
 
   const blockStatuses = requestBlockStatuses(hydrated ? liveProblems() : {}, {
@@ -1060,7 +1067,7 @@ export default function RequestCreate() {
           <RequestFormBlock {...blockInfo.budget} status={blockStatuses.budget}>
           <div className="form-grid two-column-form">
             <label className="field"><span>{t("Requesting area")}</span><input value={user.area || "General"} disabled title={t("Assigned from the signed-in user profile.")} /></label>
-            <div className="form-span-two"><SearchSelect label="Cost Center / CECO" value={form.requesterCostCenter} options={masters.costCenters} onChange={setHeaderCostCenter} getOptionLabel={(item) => `${item.code} - ${item.name}${item.area ? ` (${item.area})` : ""}`} error={errors.requesterCostCenter} required searchPlaceholder="Search authorized CECO..." /><small className="field-hint">{t("Only Cost Centers assigned to your profile are available.")}</small></div>
+            <div className="form-span-two"><SearchSelect label="Cost Center / CECO" value={form.requesterCostCenter} options={masters.costCenters} onChange={setHeaderCostCenter} getOptionLabel={(item) => `${item.code} - ${item.name}${item.area ? ` (${item.area})` : ""}`} error={errors.requesterCostCenter} required searchPlaceholder="Search authorized CECO..." /><small className="field-hint">{ownCostCenterHint}</small></div>
             <label className={`field${errors.issueDate ? " field-error" : ""}`}><span>{t("Issue date")} *</span><DateInput required value={form.issueDate} onChange={(event) => setForm((current) => ({ ...current, issueDate: event.target.value, accountingPeriod: event.target.value.slice(0, 7) }))} onBlur={() => validateField("issueDate", "accountingPeriod")} aria-invalid={Boolean(errors.issueDate)} />{errors.issueDate && <small className="field-error-text">{t(errors.issueDate)}</small>}</label>
             <label className={`field${errors.accountingPeriod ? " field-error" : ""}`}><span>{t("Request month")} *</span><select value={form.accountingPeriod} onChange={(event) => setForm((current) => ({ ...current, accountingPeriod: event.target.value }))} onBlur={() => validateField("accountingPeriod")} aria-invalid={Boolean(errors.accountingPeriod)}><option value="">{t("Select")}</option>{masters.periods.map((period) => <option key={period._id} value={period.period} disabled={period.status !== "OPEN"}>{formatIsoMonth(period.period) || period.period} - {t(period.status)}</option>)}</select>{errors.accountingPeriod && <small className="field-error-text">{t(errors.accountingPeriod)}</small>}</label>
             <label className={`field${errors.currency ? " field-error" : ""}`}><span>{t("Currency")} *</span><select value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))} onBlur={() => validateField("currency")}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select>{errors.currency && <small className="field-error-text">{t(errors.currency)}</small>}</label>
