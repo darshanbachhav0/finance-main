@@ -43,7 +43,7 @@ export async function migrateHierarchyFinalization(db, { apply = false } = {}) {
         if (result.modifiedCount !== 1) throw new Error(`Concurrent change: ${request.requestNumber}; rerun dry-run.`);
         await db.collection("auditlogs").insertOne({ ...event, eventKey, entity: "FinancialRequest", entityType: "FinancialRequest", entityId: request._id, requestId: request._id, requestNumber: request.requestNumber, module: "APPROVALS", oldValues: { status: request.status, approvalRouteSnapshot: request.approvalRouteSnapshot }, newValues: { status: "APROBADO", approvalRouteSnapshot: plan.route, evidence: plan.evidence } }, { session });
         await db.collection("notifications").updateMany({ entityId: request._id, type: { $in: ["APPROVAL_PENDING", "SLA_DUE_SOON", "SLA_OVERDUE", "SLA_ESCALATION"] }, resolvedAt: null }, { $set: { resolvedAt: now } }, { session });
-        const recipients = await db.collection("users").find({ active: true, role: { $in: ["Budget", "Admin"] } }, { session, projection: { _id: 1 } }).toArray();
+        const recipients = await db.collection("users").find({ active: true, role: { $in: ["Budget", "Treasury", "Admin"] } }, { session, projection: { _id: 1 } }).toArray();
         for (const recipient of recipients) await db.collection("notifications").updateOne({ user: recipient._id, eventKey }, { $setOnInsert: { user: recipient._id, eventKey, type: "BUDGET_COMMITMENT", title: "Budget commitment required", message: `${request.requestNumber}: jefe approval is complete. Review budget controls.`, path: "/budget", entityType: "FinancialRequest", entityId: request._id, createdAt: now, updatedAt: now } }, { upsert: true, session });
       });
     } finally { await session.endSession(); }

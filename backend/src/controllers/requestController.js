@@ -3,7 +3,9 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { previewInvoiceForRequest } from "../services/invoicePreviewService.js";
 import { addRequestComment, listRequestComments, mentionableUsers } from "../services/requestCommentService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES } from "../utils/constants.js";
+import { ERROR_CODES, FLOW_TYPE } from "../utils/constants.js";
+import FinancialRequest from "../models/FinancialRequest.js";
+import { registerDirectPaymentInvoice } from "../services/directInvoiceService.js";
 import {
   closeFinancialRequest,
   createFinancialRequest,
@@ -12,6 +14,7 @@ import {
   getRequestProcurementReadiness,
   listRequestsPage,
   previewFinancialRequestBudget,
+  requestPopulate,
   publicRequestPayload,
   requestAuthorizedCostCenters,
   requestDocumentRequirements,
@@ -124,7 +127,12 @@ export const updateRequest = asyncHandler(async (req, res) => {
 });
 
 export const registerInvoice = asyncHandler(async (req, res) => {
-  const result = await registerA1Invoice({ requestId: req.params.id, files: req.files, user: req.user, req });
+  // Track B sent with only its quote registers its invoice here too, after approval.
+  const target = await FinancialRequest.findById(req.params.id).select("flowType").lean();
+  const result = target?.flowType === FLOW_TYPE.B
+    ? await registerDirectPaymentInvoice({ requestId: req.params.id, files: req.files, user: req.user, req })
+    : await registerA1Invoice({ requestId: req.params.id, files: req.files, user: req.user, req });
+  if (target?.flowType === FLOW_TYPE.B) await result.request.populate(requestPopulate);
   res.json({ data: publicRequestPayload(result.request, req.user), sunatVoucher: result.sunatVoucher, accountsPayable: result.accountsPayable, observed: result.observed });
 });
 

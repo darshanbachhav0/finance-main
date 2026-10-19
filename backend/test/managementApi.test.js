@@ -23,8 +23,8 @@ test("ManagementViewer is portal-only: the management-portal permission and noth
   const legacyViewer = { role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.REPORT_VIEW, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.USER_MANAGE] };
   assert.deepEqual(permissionsFor(legacyViewer), [PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
   // Other roles keep additive custom permissions (grantable ones only).
-  assert.equal(hasPermission({ role: ROLES.BUDGET, permissions: [PERMISSIONS.REQUEST_CREATE] }, PERMISSIONS.REQUEST_CREATE), true);
-  assert.equal(hasPermission({ role: ROLES.BUDGET, permissions: [PERMISSIONS.AUDIT_VIEW] }, PERMISSIONS.AUDIT_VIEW), false);
+  assert.equal(hasPermission({ role: ROLES.TREASURY, permissions: [PERMISSIONS.REQUEST_CREATE] }, PERMISSIONS.REQUEST_CREATE), true);
+  assert.equal(hasPermission({ role: ROLES.TREASURY, permissions: [PERMISSIONS.AUDIT_VIEW] }, PERMISSIONS.AUDIT_VIEW), false);
   assert.equal(hasPermission(ROLES.MANAGEMENT, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
   assert.equal(hasPermission(ROLES.ADMIN, PERMISSIONS.MANAGEMENT_PORTAL_VIEW), true);
 });
@@ -35,7 +35,7 @@ test("a ManagementViewer can never be saved with any other permission", async ()
   assert.equal(error?.name, "ValidationError");
   assert.match(error.errors.permissions.message, /request:approve/);
   await new User({ name: "Viewer", dni: "44444445", passwordHash: "unused", role: ROLES.MANAGEMENT_VIEWER, permissions: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW] }).validate();
-  await new User({ name: "Budget", dni: "44444446", passwordHash: "unused", role: ROLES.BUDGET, permissions: [PERMISSIONS.AUDIT_VIEW] }).validate();
+  await new User({ name: "Budget", dni: "44444446", passwordHash: "unused", role: ROLES.TREASURY, permissions: [PERMISSIONS.AUDIT_VIEW] }).validate();
 
   const res = { status() { return this; }, json() { return this; } };
   let caught;

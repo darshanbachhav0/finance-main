@@ -87,10 +87,13 @@ export function allowedRequestActions(request, user, context = {}) {
   if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) && context.closureReady === true) actions.add(REQUEST_ACTION.CLOSE);
   // After Management rejected the budget exception the request must be corrected and approved
   // again; committing it as it stands would bypass that decision.
-  if ([ROLES.ADMIN, ROLES.BUDGET].includes(user.role) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(status)
+  if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(status)
       && !activeApprovalStep(request) && !(status === REQUEST_STATUS.OBSERVED_BUDGET && observationOwner(request) === "REQUESTER")) actions.add(REQUEST_ACTION.COMMIT_BUDGET);
   if (hasPermission(user, PERMISSIONS.PROCUREMENT_ORDER_CREATE) && context.procurementReady === true) actions.add(REQUEST_ACTION.ISSUE_ORDER);
   if (request.flowType === "A1" && request.purchaseOrder && invoiceStatuses.has(status)
+      && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
+  // Track B approved with only its quote: its invoice is registered once it arrives.
+  if (request.flowType === "B" && status === REQUEST_STATUS.BUDGET_COMMITTED && !request.xmlValidation?.validated
       && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
 
   return [...actions];

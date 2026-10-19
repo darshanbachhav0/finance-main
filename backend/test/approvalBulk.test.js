@@ -17,6 +17,7 @@ import { activeApprovalStep, initializeApprovalRoute } from "../src/services/app
 import { MAX_BULK_APPROVALS, bulkApproveRequests } from "../src/services/approvalService.js";
 import { countUnreadNotifications, dismissNotification, listUserNotifications, notifyUser } from "../src/services/notificationService.js";
 import { EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
@@ -61,7 +62,7 @@ test("bulk approval runs decideApproval per request with one shared decision", {
         issueDate: "2026-09-10", accountingPeriod: "2026-09", currency: "PEN", flowType: "A1",
         solicitor: owner._id, requester: owner._id, requesterArea: "Operations", requesterCostCenter: center._id, supplier: supplier._id,
         description: "Bulk approval test", status: REQUEST_STATUS.PENDING_APPROVAL,
-        attachments: attachments ? [{ kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: owner._id }] : [],
+        quotations: attachments ? [recommendedQuote(supplier._id)] : [], attachments: attachments ? [quoteAttachment(owner._id)] : [],
         lines: [{ costCenter: center._id, expenseType: expenseType._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }]
       });
       await initializeApprovalRoute(request);

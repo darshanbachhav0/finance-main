@@ -26,9 +26,10 @@ assert.equal(treasuryRequester[1].label, "My work", "My work comes right after O
 // Settings is one menu entry; a single settings page is linked directly.
 const menu = (user) => navigationForUser(user).map(([, path]) => path);
 assert.ok(menu({ role: "Accounting" }).includes("/settings"));
-assert.ok(menu({ role: "Budget" }).includes("/settings"), "Budget reaches budget rules and allocations");
-assert.ok(!menu({ role: "Treasury" }).includes("/settings"));
-assert.ok(menu({ role: "Treasury" }).includes("/configuration/bank-formats"), "Treasury's only settings page is linked directly");
+// Treasury took over the Budget role: bank formats plus budget rules and allocations.
+assert.ok(menu({ role: "Treasury" }).includes("/settings"), "Treasury reaches bank formats, budget rules and allocations");
+assert.deepEqual(settingsPagesFor({ role: "Treasury" }), ["/configuration/budget-rules", "/configuration/budget-allocations", "/configuration/bank-formats"]);
+assert.ok(menu({ role: "Treasury" }).includes("/budget"), "Treasury runs Budget Control");
 assert.ok(menu({ role: "Solicitor", permissions: ["bank-format:certify"] }).includes("/configuration/bank-formats"));
 for (const role of ["Solicitor", "AreaDirector", "Procurement", "Management", "ManagementViewer"]) assert.ok(!menu({ role }).includes("/settings"), `${role} has no settings`);
 assert.deepEqual(settingsPagesFor({ role: "Accounting" }), ["/cost-centers", "/expense-types", "/configuration/accounting-mappings", "/configuration/finance-configurations", "/exchange-rates"]);
@@ -49,6 +50,7 @@ assert.deepEqual(trail("/requests/abc123/edit"), [["Dashboard", "/"], ["Requests
 assert.deepEqual(trail("/requests/new", { role: "Solicitor" }), [["Dashboard", "/"], ["My Requests", "/requests"], ["New request", undefined]]);
 assert.deepEqual(trail("/treasury/history"), [["Dashboard", "/"], ["Payments", "/treasury"], ["Payment History", undefined]]);
 assert.deepEqual(trail("/users"), [["Dashboard", "/"], ["Settings", "/settings"], ["Users", undefined]]);
-assert.deepEqual(trail("/configuration/bank-formats", { role: "Treasury" }), [["Dashboard", "/"], ["Bank Formats", undefined]], "no Settings level for a single settings page");
+assert.deepEqual(trail("/configuration/bank-formats", { role: "Solicitor", permissions: ["bank-format:certify"] }), [["Dashboard", "/"], ["Bank Formats", undefined]], "no Settings level for a single settings page");
+assert.deepEqual(trail("/configuration/bank-formats", { role: "Treasury" }), [["Dashboard", "/"], ["Settings", "/settings"], ["Bank Formats", undefined]], "Treasury has several settings pages");
 assert.deepEqual(trail("/budget/"), trail("/budget"), "a trailing slash is ignored");
 console.log("PASS The sidebar groups every role's menu into fixed sections in a stable order; Settings is one entry; breadcrumbs follow the page hierarchy.");

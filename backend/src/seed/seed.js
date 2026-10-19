@@ -30,7 +30,7 @@ import { processAccountsPayable } from "../services/accountingService.js";
 import { recordAudit, workflowEvent } from "../services/auditService.js";
 import { createMassUploadBatch, processMassUploadBatch } from "../services/batchInvoiceService.js";
 import { closeFinancialRequest, submitFinancialRequest } from "../services/requestService.js";
-import { defaultQuotationPolicy } from "../services/documentRuleService.js";
+import { defaultQuotationPolicy, hasInvoiceEvidence } from "../services/documentRuleService.js";
 import { getSunatPadronStatus } from "../services/sunatPadronService.js";
 import { ensureSpotCategories, pendingDetractionAmount } from "../services/detractionService.js";
 import { requiresPurchaseOrder } from "../services/procurementReadinessService.js";
@@ -160,10 +160,11 @@ async function seedUsers(costCenters) {
     },
     {
       key: "budget",
-      name: "Presupuesto UMA (Demo)",
+      // Budget work is Treasury's: a second Treasury user handles budget plans and exceptions.
+      name: "Tesorería - Presupuesto UMA (Demo)",
       email: "demo.presupuesto@uma.edu.pe",
       dni: "10000007",
-      role: ROLES.BUDGET,
+      role: ROLES.TREASURY,
       area: AREAS.FINANCE,
       approvalAreas: ["*"]
     },
@@ -1115,7 +1116,8 @@ async function seedRequest({
     draftSavedAt: now
   });
   if (evidence !== "NONE") await addEvidenceProfile(request, evidence, supplier, requester, voucherNumber);
-  const needsQuotation = request.flowType !== FLOW_TYPE.C && defaultQuotationPolicy(request).enabled;
+  // A1 and B are sent with a quote or the invoice: a request without its invoice gets the quote.
+  const needsQuotation = request.flowType !== FLOW_TYPE.C && defaultQuotationPolicy(request).enabled && !hasInvoiceEvidence(request);
   if (!competingSuppliers.length && needsQuotation && supplier && !request.attachments.some((attachment) => attachment.kind === "QUOTATION")) {
     // Single-quotation purchase: at least one quotation is required and more are optional.
     await addAttachment(request, "QUOTATION", `cotizacion-1-${request.requestNumber}.pdf`, minimalPdf(`Cotización 1 - ${request.requestNumber}`), requester);

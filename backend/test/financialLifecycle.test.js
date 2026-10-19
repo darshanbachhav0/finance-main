@@ -42,6 +42,7 @@ import { validateInvoiceAgainstRequest } from "../src/services/xmlValidationServ
 import { recordAudit } from "../src/services/auditService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
 import { AP_STATUS, BUDGET_STATUS, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
 
 const period = "2026-08";
 const issueDate = "2026-08-10";
@@ -74,7 +75,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       vice: await User.create({ name: "Vice", email: "vice@test.local", passwordHash: "unused", role: ROLES.VICE_RECTOR, approvalLevel: "VICE_RECTOR", approvalAreas: ["*"], area: "Rectorate" }),
       accounting: await User.create({ name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" }),
       treasury: await User.create({ name: "Treasury", email: "treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
-      budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
+      budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
       admin: await User.create({ name: "Admin", email: "admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" })
     };
     users.solicitor.jefe = users.director._id;
@@ -127,13 +128,18 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
           currency: "PEN",
           supplier: supplier._id.toString(),
           description: "Canonical lifecycle test",
+          detailedDescription: "Canonical lifecycle test",
+          businessJustification: "Keeps the lifecycle covered end to end.",
           lines: [{ costCenter: center._id.toString(), expenseType: opex._id.toString(), netAmount: 100, igvAmount: 18, totalAmount: 118 }],
           submit: false
         },
         files: {}, user: users.solicitor, req
       });
       cleanupPaths.push(path.join(uploadRoot, "requests", String(request._id)));
+      // Sent with the supplier's quote (A1: a quote or the invoice, at least one).
+      request.quotations.push(recommendedQuote(supplier._id));
       request.attachments.push(
+        quoteAttachment(users.solicitor._id),
         { kind: "CONTRACT", originalName: "contract.pdf", filename: "contract.pdf", url: "/test/contract.pdf", mimetype: "application/pdf", size: 10, uploadedBy: users.solicitor._id },
         { kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 10, uploadedBy: users.solicitor._id }
       );

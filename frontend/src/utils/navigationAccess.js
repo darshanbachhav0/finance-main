@@ -5,7 +5,6 @@ export const authenticatedRoles = [
   "ViceRector",
   "Accounting",
   "Treasury",
-  "Budget",
   "Procurement",
   "Management",
   "ManagementViewer",
@@ -27,24 +26,24 @@ export const configurationAccess = Object.freeze({
   "approval-rules": ["Admin", "SuperAdmin"],
   "finance-configurations": ["Admin", "Accounting", "SuperAdmin"],
   "accounting-mappings": ["Admin", "Accounting", "SuperAdmin"],
-  "budget-rules": ["Admin", "Budget", "SuperAdmin"],
-  "budget-allocations": ["Admin", "Budget", "SuperAdmin"],
+  "budget-rules": ["Admin", "Treasury", "SuperAdmin"],
+  "budget-allocations": ["Admin", "Treasury", "SuperAdmin"],
   "bank-formats": ["Admin", "Treasury", "SuperAdmin"]
 });
 
 // Roles allowed to download a stored report file (generated/reports) - must match the "reports"
 // entry of generatedAccess in backend/src/services/fileAccessService.js.
-export const reportDownloadRoles = Object.freeze(["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Management", "SuperAdmin"]);
+export const reportDownloadRoles = Object.freeze(["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", "SuperAdmin"]);
 
 export const configurationRoles = [...new Set(Object.values(configurationAccess).flat())];
 
 // Everyone who can open at least one Settings page.
-export const settingsRoles = ["Admin", "Accounting", "Budget", "Treasury", SUPER_ADMIN];
+export const settingsRoles = ["Admin", "Accounting", "Treasury", SUPER_ADMIN];
 
 export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
   "/management-view": ["Admin", "Management", "ManagementViewer", SUPER_ADMIN],
-  "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", SUPER_ADMIN],
+  "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", SUPER_ADMIN],
   "/my-team": internalRoles,
   "/requests/new": ["Admin", "Solicitor"],
   "/operations": internalRoles,
@@ -58,10 +57,10 @@ export const navigationAccess = Object.freeze({
   "/accounting/invoice-observations": ["Admin", "Accounting", SUPER_ADMIN],
   "/treasury": ["Admin", "Treasury", SUPER_ADMIN],
   "/reimbursement-bank": ["Admin", "Solicitor", "Accounting", "Treasury"],
-  "/budget": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Budget", "Management", SUPER_ADMIN],
+  "/budget": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", SUPER_ADMIN],
   "/accounting/periods": ["Admin", "Accounting", SUPER_ADMIN],
   "/accounting/sire": ["Admin", "Accounting", SUPER_ADMIN],
-  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", SUPER_ADMIN],
+  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", SUPER_ADMIN],
   // Every internal user can propose suppliers; the Super Admin only reads them.
   "/suppliers": [...internalRoles, SUPER_ADMIN],
   "/cost-centers": ["Admin", "Accounting", SUPER_ADMIN],
@@ -197,10 +196,10 @@ const roleMenus = {
   Solicitor: ["/", "/requests", "/requests/new", "/approvals"],
   AreaDirector: ["/", "/approvals", "/requests"],
   ViceRector: ["/", "/approvals", "/requests"],
-  Budget: ["/", "/budget", "/requests"],
   Procurement: ["/", "/requests", "/suppliers", "/reports"],
   Accounting: ["/", "/accounting/payables", "/accounting/bank-files", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire", "/operations"],
-  Treasury: ["/", "/treasury", "/treasury/history", "/operations"],
+  // Treasury also runs the budget (the former Budget role).
+  Treasury: ["/", "/treasury", "/treasury/history", "/budget", "/operations"],
   // Management also decides budget exceptions and budget changes above the approval threshold.
   Management: ["/", "/approvals", "/budget", "/reports", "/management-view"],
   // Portal only: no internal Reports, dashboards or request data.
@@ -337,7 +336,6 @@ export const bottomNavigation = Object.freeze({
   Solicitor: ["/", "/requests", "/requests/new"],
   AreaDirector: ["/", "/approvals", "/requests"],
   ViceRector: ["/", "/approvals", "/requests"],
-  Budget: ["/", "/budget", "/requests"],
   Procurement: ["/", "/requests", "/suppliers"],
   Accounting: ["/", "/accounting", "/accounting/invoice-observations"],
   Treasury: ["/", "/treasury", "/treasury/history"],

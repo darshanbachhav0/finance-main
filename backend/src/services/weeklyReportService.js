@@ -10,17 +10,17 @@ import { AP_STATUS, ROLES } from "../utils/constants.js";
 import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 
 // The weekly report Finance used to build by hand: every Monday morning (Lima) one Excel workbook
-// is emailed to Accounting, Treasury, Budget and Management - the week's new requests, what waits
+// is emailed to Accounting, Treasury and Management - the week's new requests, what waits
 // for approval, what was paid, what is still to pay and the next payment run. The same workbook
 // can be downloaded any time from Reports (GET /reports/weekly.xlsx).
 //
 // WEEKLY_REPORT_ENABLED (default on while notification emails are on), WEEKLY_REPORT_DAY
 // (1 = Monday ... 7 = Sunday), WEEKLY_REPORT_HOUR (Lima, default 8) and WEEKLY_REPORT_ROLES
-// (comma-separated roles, default Accounting,Treasury,Budget,Management).
+// (comma-separated roles, default Accounting,Treasury,Management).
 
 const DAY_MS = 86400000;
 const LIMA_OFFSET_MS = 5 * 3600000;
-const DEFAULT_ROLES = [ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.BUDGET, ROLES.MANAGEMENT];
+const DEFAULT_ROLES = [ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT];
 const runSchema = new mongoose.Schema({ _id: String, sentAt: Date, recipients: Number }, { timestamps: true });
 export const WeeklyReportRun = mongoose.models.WeeklyReportRun || mongoose.model("WeeklyReportRun", runSchema);
 

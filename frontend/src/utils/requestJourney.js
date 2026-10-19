@@ -65,9 +65,9 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
 
   if (status === "BORRADOR") return { text: mine ? "Draft: only you can see it. Submit it when it is ready." : "Draft, not submitted yet.", holder: requester, since };
   if (status === "PENDIENTE_APROBACION") return { text: "Waiting for {name}'s approval.", params: { name: activeStep?.approverSnapshot?.name || "-" }, holder: person(activeStep?.approverSnapshot?.name), since: activeStep?.startedAt || since };
-  if (status === "APROBADO") return { text: "Approved. The budget is being committed.", holder: team("Budget"), since };
+  if (status === "APROBADO") return { text: "Approved. The budget is being committed.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status)) return { text: mine ? "Returned to you for corrections. Fix it and submit it again." : "Returned to the requester for corrections.", holder: requester, since, tone: "attention" };
-  if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Budget"), since, tone: "attention" };
+  if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Treasury"), since, tone: "attention" };
   if (status === "OBSERVADO_SUNAT") return { text: "The invoice needs attention: SUNAT could not verify it yet.", holder: team("Accounting"), since, tone: "attention" };
   if (status === "OBSERVADO_MONTO_EXCEDIDO") return { text: "The invoice is above what the purchase order allows.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_CARGA_MASIVA") return { text: "A batch of invoices needs attention.", holder: team("Accounting"), since, tone: "attention" };

@@ -43,6 +43,8 @@
     "migrate:triple-track:apply": "node scripts/migrateTripleTrackWorkflow.js --apply",
     "migrate:org-roster": "node scripts/migrateOrgRosterAndManagerChain.js",
     "migrate:org-roster:apply": "node scripts/migrateOrgRosterAndManagerChain.js --apply",
+    "migrate:retired-roles": "node scripts/migrateRetiredRoles.js",
+    "migrate:retired-roles:apply": "node scripts/migrateRetiredRoles.js --apply",
     "migrate:bank-file-verification": "node scripts/migrateBankFileVerification.js",
     "migrate:bank-file-verification:apply": "node scripts/migrateBankFileVerification.js --apply",
     "sunat:padron:index": "node scripts/indexSunatPadron.js",

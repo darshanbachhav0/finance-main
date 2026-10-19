@@ -44,37 +44,39 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
   });
   await t.test("A1 goods requirements are enforced at their correct phases", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS };
-    // Product decision: at least one quotation; three quotations are not compulsory.
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION", 1]]);
+    // Product decision (A1 and B): a quote or the invoice, at least one.
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION|XML|PDF|FEE_RECEIPT", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
   });
 
   await t.test("A1 services separate contract, invoice, and service conformity", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.SERVICES };
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [[ANY_DOCUMENT, 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION|XML|PDF|FEE_RECEIPT", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
   });
 
   await t.test("professional services require receipt, agreement, and activity report", () => {
     const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.PROFESSIONAL_FEES };
-    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [[ANY_DOCUMENT, 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION|XML|PDF|FEE_RECEIPT", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|FEE_RECEIPT", 1]]);
     assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["ACTIVITY_REPORT", 1]]);
   });
 
-  await t.test("submission needs at least one document, never all of them", () => {
-    const requirements = defaultDocumentRequirements({ flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
-    assert.throws(
-      () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, []),
-      error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.missing[0].kind === "SUBMISSION_DOCUMENT"
-    );
-    for (const kind of ["CONTRACT", "PURCHASE_ORDER", "SUPPORTING", "PDF"]) {
-      assert.equal(assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, [{ kind }]).valid, true, `${kind} alone is enough`);
+  await t.test("A1 and B are sent with a quote, the invoice, or both", () => {
+    for (const flowType of [FLOW_TYPE.A1, FLOW_TYPE.B]) {
+      const requirements = defaultDocumentRequirements({ flowType, expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
+      assert.throws(
+        () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, [{ kind: "CONTRACT" }]),
+        error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.missing[0].kind === "QUOTE_OR_INVOICE"
+      );
+      for (const kind of ["QUOTATION", "XML", "PDF"]) {
+        assert.equal(assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, [{ kind }]).valid, true, `${flowType}: ${kind} alone is enough`);
+      }
     }
-    // Track B's one document is its invoice, which must be verified.
-    assert.deepEqual(kinds({ flowType: FLOW_TYPE.B }, DOCUMENT_PHASE.SUBMISSION), [["XML|PDF", 1]]);
+    // A B request sent with only its quote registers the invoice after approval.
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.B }, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
   });
 
   await t.test("missing current-phase evidence blocks progression", () => {
@@ -109,9 +111,9 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
       assert.deepEqual(requirements.map((item) => [item.kind, item.minCount]), [["SUPPORTING", 2]]);
       assert.throws(() => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.ACCOUNTING, [{ kind: "SUPPORTING" }]), error => error.details.missing[0].required === 2);
       const legacySubmission = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
-      // At submission one document is enough, whatever minimum a legacy rule carries.
-      assert.deepEqual(legacySubmission.map((item) => [item.kind, item.minCount]), [["SUBMISSION_DOCUMENT", 1]]);
-      assert.equal(assertDocumentRequirements({}, legacySubmission, DOCUMENT_PHASE.SUBMISSION, [{ kind: "SUPPORTING" }]).valid, true);
+      // At submission A1 asks for a quote or the invoice, whatever a legacy rule carries.
+      assert.deepEqual(legacySubmission.map((item) => [item.kind, item.minCount]), [["QUOTE_OR_INVOICE", 1]]);
+      assert.equal(assertDocumentRequirements({}, legacySubmission, DOCUMENT_PHASE.SUBMISSION, [{ kind: "QUOTATION" }]).valid, true);
       const legacyAccounting = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);
       assert.deepEqual(legacyAccounting.map((item) => [item.kind, item.minCount]), [["CONFORMITY", 1]]);
 

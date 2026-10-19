@@ -275,8 +275,9 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
     });
 
     await t.test("quotation evidence, minimum, recommendation and supplier consistency are enforced", async () => {
+      // Neither a quote nor the invoice: the document rule says what is missing.
       const insufficient = await officialDocument({ quotations: [], attachments: [] });
-      await assert.rejects(() => submitFinancialRequest({ id: insufficient._id, user: solicitor, req }), (error) => error.code === "QUOTATION_MINIMUM_NOT_MET");
+      await assert.rejects(() => submitFinancialRequest({ id: insufficient._id, user: solicitor, req }), (error) => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.missing.some((item) => item.kind === "QUOTE_OR_INVOICE"));
       const noEvidence = await officialDocument();
       noEvidence.quotations[0].attachment = undefined;
       noEvidence.attachments.splice(0, 1);

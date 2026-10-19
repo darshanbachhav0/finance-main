@@ -68,7 +68,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     const users = {
       solicitor: await User.create({ name: "Phase 5 Requester", email: "phase5.requester@uma.edu.pe", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id }),
       approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR" }),
-      budget: await User.create({ name: "Phase 5 Budget", email: "phase5.budget@uma.edu.pe", passwordHash: "unused", role: ROLES.BUDGET, area: "Budget" }),
+      budget: await User.create({ name: "Phase 5 Budget", email: "phase5.budget@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
       procurement: await User.create({ name: "Phase 5 Procurement", email: "phase5.procurement@uma.edu.pe", passwordHash: "unused", role: ROLES.PROCUREMENT, area: "Procurement" }),
       treasury: await User.create({ name: "Phase 5 Treasury", email: "phase5.treasury@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
       accounting: await User.create({ name: "Phase 5 Accounting", email: "phase5.accounting@uma.edu.pe", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" })

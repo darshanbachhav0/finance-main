@@ -5,7 +5,6 @@ export const ROLES = Object.freeze({
   VICE_RECTOR: "ViceRector",
   ACCOUNTING: "Accounting",
   TREASURY: "Treasury",
-  BUDGET: "Budget",
   PROCUREMENT: "Procurement",
   MANAGEMENT: "Management",
   MANAGEMENT_VIEWER: "ManagementViewer",
@@ -14,6 +13,11 @@ export const ROLES = Object.freeze({
 });
 
 // Accounts only the Super Admin creates, edits, deactivates or resets.
+// Roles that no longer exist and the role that took over their work. The Budget role was folded
+// into Treasury: users, approval rules and previous roles still stored as "Budget" are moved at
+// server start (services/legacyRoleService.js).
+export const RETIRED_ROLES = Object.freeze({ Budget: "Treasury" });
+
 export const ADMINISTRATOR_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
 // Super Admin accounts are created from the server (npm run superadmin:create), never from the UI.
 export const MAX_SUPER_ADMINS = 2;
@@ -115,11 +119,13 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT,
     PERMISSIONS.PAYMENT_REPROCESS,
-    PERMISSIONS.BANK_FORMAT_CERTIFY
+    PERMISSIONS.BANK_FORMAT_CERTIFY,
+    // Treasury also does what the former Budget role did: budget plans, commitments and the
+    // review of budget exceptions (Management still decides them). Purchase Orders stay with
+    // Procurement.
+    PERMISSIONS.BUDGET_VIEW,
+    PERMISSIONS.BUDGET_MANAGE
   ],
-  // Budget validates/commits/reserves funds and prepares exceptions; it no longer issues
-  // Purchase Orders directly — that is Procurement's ownership (see ROLES.PROCUREMENT).
-  [ROLES.BUDGET]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.BUDGET_MANAGE, PERMISSIONS.REPORT_VIEW],
   [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
   [ROLES.MANAGEMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
   // Management portal only: the aggregate /api/management/v1 API and nothing internal (no
@@ -348,7 +354,7 @@ export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   // 0: every change applies immediately.
   BUDGET_CHANGE_APPROVAL_THRESHOLD: "BUDGET_CHANGE_APPROVAL_THRESHOLD",
   // PEN. The CAPEX planning fields (project, asset category, useful life, NPV, payback) are shown
-  // to the requester only from this request total; below it Budget/Accounting complete them.
+  // to the requester only from this request total; below it Treasury/Accounting complete them.
   CAPEX_DETAILS_THRESHOLD: "CAPEX_DETAILS_THRESHOLD"
 });
 export const DEFAULT_RENDITION_OVERDUE_DAYS = 10;

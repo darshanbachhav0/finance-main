@@ -172,6 +172,8 @@ export default {
   "{requestNumber} was closed after {days} days without changes. Use \"Repeat this request\" to start it again.": "{requestNumber} se cerró tras {days} días sin cambios. Usa \"Repetir esta solicitud\" para empezarla de nuevo.",
   "Unfinished work": "Trabajo sin terminar",
   "\"{title}\" has not changed in a while. Finish it or it will be closed on {date}.": "\"{title}\" no tiene cambios desde hace tiempo. Termínalo o se cerrará el {date}.",
+  "Upload the invoice to get it paid": "Sube la factura para que se pague",
+  "{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives and it goes to payment.": "{requestNumber} está aprobada y su presupuesto reservado. Sube la factura del proveedor cuando llegue y pasará a pago.",
   "Next payment run": "Próxima corrida de pagos",
   "Payment run of {date}: {count} payments ({total}) are due. Prepare it in one click.": "Corrida de pagos del {date}: vencen {count} pagos ({total}). Prepárala con un clic."
 };

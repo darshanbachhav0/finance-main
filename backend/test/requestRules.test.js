@@ -3,15 +3,18 @@ import test from "node:test";
 import { assertMandatoryDocuments, assertRequestLines, requiredDocumentsFor } from "../src/services/requestRules.js";
 import { MANDATORY_XML_TYPES } from "../src/utils/constants.js";
 
-test("invoice request types need their invoice XML or its factura PDF, not both", () => {
-  const request = { flowType: "B", requestType: MANDATORY_XML_TYPES[0], attachments: [] };
-  assert.throws(() => assertMandatoryDocuments(request), (error) => {
-    assert.equal(error.statusCode, 422);
-    assert.match(error.message, /invoice XML or factura PDF/);
-    return true;
-  });
-  for (const attachments of [[{ kind: "XML" }], [{ kind: "PDF" }], [{ kind: "XML" }, { kind: "PDF" }]]) {
-    assert.doesNotThrow(() => assertMandatoryDocuments({ flowType: "B", requestType: MANDATORY_XML_TYPES[0], attachments }));
+test("A1 and B are sent with a quote, the invoice, or both - at least one", () => {
+  for (const flowType of ["A1", "B"]) {
+    const request = { flowType, requestType: MANDATORY_XML_TYPES[0], attachments: [] };
+    assert.throws(() => assertMandatoryDocuments(request), (error) => {
+      assert.equal(error.statusCode, 422);
+      assert.match(error.message, /a quote or the invoice/);
+      return true;
+    });
+    for (const attachments of [[{ kind: "XML" }], [{ kind: "PDF" }], [{ kind: "QUOTATION" }], [{ kind: "QUOTATION" }, { kind: "XML" }]]) {
+      assert.doesNotThrow(() => assertMandatoryDocuments({ flowType, requestType: MANDATORY_XML_TYPES[0], attachments }), `${flowType}: ${attachments.map((item) => item.kind)}`);
+    }
+    assert.throws(() => assertMandatoryDocuments({ flowType, requestType: MANDATORY_XML_TYPES[0], attachments: [{ kind: "CONTRACT" }] }), "a contract alone is neither a quote nor the invoice");
   }
 });
 
@@ -35,17 +38,12 @@ test("every request needs at least one line with a Cost Center; requesters never
   assert.doesNotThrow(() => assertRequestLines([{ costCenter: "cost-1" }]));
 });
 
-test("goods submission requires at least one quotation (three are not compulsory) while invoice documents belong to the invoice phase", () => {
-  const request = { requestType: "CAPEX", expenseNature: "Compra de Bienes", attachments: [{ kind: "PDF" }] };
-  assert.deepEqual(requiredDocumentsFor(request).map((rule) => [rule.kind, rule.min]), [["QUOTATION", 1]]);
-  assert.throws(() => assertMandatoryDocuments(request), (error) => error.statusCode === 422 && /at least one quotation/.test(error.message));
-  request.attachments.push({ kind: "QUOTATION" });
-  assert.doesNotThrow(() => assertMandatoryDocuments(request));
-});
-
-test("service submission requires at least one document, any one", () => {
-  const request = { requestType: "OPEX", expenseNature: "Contratación de Servicios", attachments: [] };
-  assert.throws(() => assertMandatoryDocuments(request), (error) => error.statusCode === 422 && /at least one supporting document/.test(error.message));
-  assert.doesNotThrow(() => assertMandatoryDocuments({ ...request, attachments: [{ kind: "CONTRACT" }] }));
-  assert.doesNotThrow(() => assertMandatoryDocuments({ ...request, attachments: [{ kind: "SUPPORTING" }] }));
+test("goods and services alike: one rule at submission, invoice documents stay in the invoice phase", () => {
+  for (const expenseNature of ["Compra de Bienes", "Contratación de Servicios"]) {
+    const request = { requestType: "CAPEX", expenseNature, attachments: [] };
+    assert.deepEqual(requiredDocumentsFor(request).map((rule) => [rule.kind, rule.min]), [["QUOTE_OR_INVOICE", 1]]);
+    assert.throws(() => assertMandatoryDocuments(request), (error) => error.statusCode === 422 && /a quote or the invoice/.test(error.message));
+    assert.doesNotThrow(() => assertMandatoryDocuments({ ...request, attachments: [{ kind: "QUOTATION" }] }));
+    assert.doesNotThrow(() => assertMandatoryDocuments({ ...request, attachments: [{ kind: "PDF" }] }));
+  }
 });

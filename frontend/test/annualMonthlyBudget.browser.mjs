@@ -20,7 +20,7 @@ await mongoose.connect(`mongodb://127.0.0.1:27017/erp_budget_browser_test_${proc
 let browser, page, http, vite;
 try {
   await BudgetAllocation.init();
-  const user = await User.create({ name: "Budget Browser Tester", email: "budget.browser@test.invalid", passwordHash: "unused", role: "Budget", area: "Finance" });
+  const user = await User.create({ name: "Budget Browser Tester", email: "budget.browser@test.invalid", passwordHash: "unused", role: "Treasury", area: "Finance" });
   const center = await CostCenter.create({ code: "CC-BROWSER", name: "Laboratory", area: "Science", active: true });
   const expense = await ExpenseType.create({ code: "EXP-BROWSER", name: "Teaching supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
   const app = express();

@@ -98,7 +98,7 @@ export const expenseNatures = [
 export const requestPriorities = ["BAJA", "MEDIA", "ALTA"];
 export const approvalLevels = ["AREA_DIRECTOR", "VICE_RECTOR", "RECTORATE", "GENERAL_MANAGEMENT"];
 export const banks = ["BCP", "BBVA", "INTERBANK", "SCOTIABANK"];
-export const roles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Budget", "Procurement", "Management", "ManagementViewer"];
+export const roles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "ManagementViewer"];
 
 // Extra grants beyond a role's default set - an exception, not the everyday path. Only
 // self-contained features are grantable (mirrors GRANTABLE_PERMISSIONS in the backend); a
