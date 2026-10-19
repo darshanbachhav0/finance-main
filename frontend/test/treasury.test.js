@@ -9,7 +9,8 @@ const page = read("../src/pages/TreasuryQueue.jsx");
 assert.match(page, /\[\["File details", fileDetailsReady\], \["Select payments", selected\.length > 0\], \["Review and generate", /);
 assert.match(page, /const currentFileStep = !fileDetailsReady \? 0 : !selected\.length \? 1 : 2;/);
 const review = page.slice(page.indexOf('<div className="bank-file-review"'), page.indexOf("</div>}", page.indexOf('<div className="bank-file-review"')));
-assert.match(review, /<ReadinessPanel paymentPayload=\{\{ payableIds: selected, currency, accountSelections \}\} defaultOpen \/>/, "readiness is checked in step 3, not pushed above the page");
+// It checks the account choices the file will use (none for employee advances and reimbursements).
+assert.match(review, /<ReadinessPanel paymentPayload=\{\{ payableIds: selected, currency, accountSelections: fileAccountSelections \}\} defaultOpen \/>/, "readiness is checked in step 3, not pushed above the page");
 // Generate is in the sticky bar, a sibling of the list, so it stays in reach while choosing rows.
 const bar = page.slice(page.indexOf('<div className="bulk-bar bank-file-bar"'));
 assert.ok(page.indexOf('<div className="bulk-bar bank-file-bar"') > page.indexOf('<div className="bank-file-review"'));

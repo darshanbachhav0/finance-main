@@ -54,6 +54,10 @@ const treasuryQueue = source("../src/pages/TreasuryQueue.jsx");
 assert.match(treasuryQueue, /advancesDue: "true"/, "Pay now lists only the advances due");
 assert.match(treasuryQueue, /t\("Pay now"\)/);
 assert.match(treasuryQueue, /offCycle && !advancesOnly/, "no reason asked for a file of advances");
+assert.match(treasuryQueue, /disabled=\{processing \|\| reasonMissing\}/, "Generate file follows the same reason rule");
+assert.doesNotMatch(treasuryQueue, /offCycle && !paymentDateReason\.trim\(\)/, "no second, stricter reason check");
+assert.match(treasuryQueue, /paymentPayload=\{\{ payableIds: selected, currency, accountSelections: fileAccountSelections \}\}/, "the readiness check gets the selection the file uses");
+assert.match(treasuryQueue, /accountSelections: fileAccountSelections\s*\}\);/, "the file sends no account for employee advances");
 assert.match(source("../src/components/RequestItemLine.jsx"), /line\.igvExempt \?/, "no IGV option on advance lines");
 // Paid on Thursday 15 Oct, due 29 Oct: on Monday 26 Oct three working days remain.
 const countdown = renditionCountdown({ dueAt: "2026-10-30T04:59:59.999Z" }, { now: new Date("2026-10-26T15:00:00Z"), openedAt: "2026-10-15T17:00:00Z" });
