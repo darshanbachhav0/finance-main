@@ -1400,15 +1400,21 @@ export async function listBouncedPayments(queryParams = {}) {
   }), total, page, pageSize);
 }
 
-export async function listReconciliationQueue(queryParams = {}) {
-  const { page, pageSize, skip } = parsePagination(queryParams);
+// Paid payables of open requests still to be matched with a bank statement: the Reconciliation
+// stage, also counted on Treasury's dashboard.
+export async function reconciliationPendingQuery(queryParams = {}) {
   const covered = await Reconciliation.find().select("accountsPayable accountsPayables").lean();
   const excluded = covered.flatMap(r => [r.accountsPayable, ...(r.accountsPayables || [])]).filter(Boolean);
   const requestQuery = { status: { $nin: ["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"] } };
   if (queryParams.accountingPeriod) requestQuery.accountingPeriod = queryParams.accountingPeriod;
   if (queryParams.search) requestQuery.requestNumber = new RegExp(escapedRegex(queryParams.search), "i");
   const ids = await FinancialRequest.distinct("_id", requestQuery);
-  const query = { status: AP_STATUS.PAID, reconciliation: null, _id: { $nin: excluded }, request: { $in: ids } };
+  return { status: AP_STATUS.PAID, reconciliation: null, _id: { $nin: excluded }, request: { $in: ids } };
+}
+
+export async function listReconciliationQueue(queryParams = {}) {
+  const { page, pageSize, skip } = parsePagination(queryParams);
+  const query = await reconciliationPendingQuery(queryParams);
   if (queryParams.currency) query.currency = queryParams.currency;
   withDeepLink(query, queryParams);
   const [records, total] = await Promise.all([

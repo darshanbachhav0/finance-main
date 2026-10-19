@@ -9,12 +9,14 @@ const fill = (text, params = {}) => Object.entries(params).reduce((result, [key,
 
 // "Where is my request?" at the top of a request: one plain sentence, who has it now and since
 // when, when the payment is expected, and the milestones of its own track.
-export default function RequestJourney({ request, payables = [], activeStep, orderApplies = true, viewerId }) {
+export default function RequestJourney({ request, payables = [], activeStep, orderApplies = true, viewerId, viewerRole, viewerName }) {
   const { t, language } = useLanguage();
   const payment = expectedPayment(request, payables);
   const day = (key) => (key ? formatDate(`${key}T12:00:00Z`, language) : "");
   const summary = journeySummary(request, { activeStep, orderApplies, payment: payment && { ...payment, date: day(payment.date) }, viewerId });
   const milestones = journeyMilestones(request, { orderApplies });
+  // "With you" when the request is with the viewer, or with the viewer's own team.
+  const withViewer = Boolean(summary.holder) && (summary.holder.team ? summary.holder.name === viewerRole : Boolean(viewerName) && summary.holder.name === viewerName);
 
   return (
     <section className={`request-journey tone-${summary.tone || "progress"}`} aria-labelledby="request-journey-title">
@@ -25,7 +27,7 @@ export default function RequestJourney({ request, payables = [], activeStep, ord
           {summary.holder && (
             <p className="journey-holder person-chip">
               {summary.holder.team ? <span className="team-badge" aria-hidden="true"><Users size={13} /></span> : <Avatar name={summary.holder.name} size="sm" />}
-              <span>{t("With {name}").replace("{name}", summary.holder.team ? t(summary.holder.name) : summary.holder.name)}{summary.since ? ` · ${timeAgo(summary.since, language)}` : ""}</span>
+              <span>{withViewer ? (summary.holder.team ? t("With you ({name})").replace("{name}", t(summary.holder.name)) : t("With you")) : t("With {name}").replace("{name}", summary.holder.team ? t(summary.holder.name) : summary.holder.name)}{summary.since ? ` · ${timeAgo(summary.since, language)}` : ""}</span>
             </p>
           )}
         </div>

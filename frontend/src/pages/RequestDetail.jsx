@@ -68,8 +68,11 @@ import {
 import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
 import { invoiceMismatchLines } from "../utils/validationMessages.js";
 import RequestJourney from "../components/RequestJourney.jsx";
+import NextStepCard from "../components/NextStepCard.jsx";
+import { nextStepFor } from "../utils/nextStep.js";
+import { journeySummary } from "../utils/requestJourney.js";
 import PlainStatus from "../components/PlainStatus.jsx";
-import { usesPlainStatuses, waitsForBankAccount } from "../utils/plainStatus.js";
+import { usesPlainStatuses } from "../utils/plainStatus.js";
 import RenditionCountdown from "../components/RenditionCountdown.jsx";
 import RequestComments from "../components/RequestComments.jsx";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
@@ -461,22 +464,6 @@ export default function RequestDetail() {
     && request.observation?.code === "OBSERVADO_SUNAT"
     && related.sunatVouchers?.some((voucher) => voucher.validationStatus === "MANUAL_EXCEPTION"
       && new Date(voucher.manualOverride?.overriddenAt) > new Date(request.observation?.observedAt));
-  const nextAction = invoiceCorrection
-    ? ["Correct the invoice documents. Existing approvals and the issued order remain valid; do not submit the request for approval again.", "Documents", "#request-section-documents-and-fiscal-validation"]
-    : request.observationOwner === "BUDGET" && !permissions.canCommitBudget
-    ? ["Budget is reviewing an exception for this request's budget. You do not need to submit it again; you will be notified of the decision.", "General", "#request-actions"]
-    : request.observationOwner === "ACCOUNTING"
-    ? [user?.role === "Accounting" || user?.role === "Admin"
-      ? "SUNAT could not verify this invoice. Review it in Accounting > SUNAT exceptions; once the exception is approved the payment continues without new approvals."
-      : "SUNAT could not verify this invoice. Accounting will review it; once it approves a manual SUNAT exception the payment continues on its own. You do not need to submit the request again.", "Documents", "#request-section-documents-and-fiscal-validation"]
-    : waitsForBankAccount(request) && permissions.canCommitBudget ? ["This advance waits for the employee's verified bank account. It is paid out automatically once Accounting verifies it; Commit budget is not needed.", "Available actions", "#request-actions"]
-    : permissions.canCommitBudget ? ["Review budget availability and commit the approved request.", "Available actions", "#request-actions"]
-    : permissions.modifiable
-    ? (missingDocuments.length ? ["Complete the required documents before submitting.", "Documents", "#request-section-documents-and-fiscal-validation"] : ["Your request is ready for your submission review.", "Available actions", "#request-actions"])
-    : permissions.canApprove ? ["Review the supporting documents and record your decision.", "Available actions", "#request-actions"]
-    : permissions.canCommitBudget ? ["Review budget availability and commit the approved request.", "Available actions", "#request-actions"]
-    : permissions.canIssueOrder ? ["Review the approved purchase and issue the order.", "Available actions", "#request-actions"]
-    : permissions.canClose ? ["Review the reconciliation before closing this request.", "Available actions", "#request-actions"] : null;
   const confirmCommitBudget = () => setConfirm({
     type: "budget",
     title: "Commit this request budget?",
@@ -504,6 +491,36 @@ export default function RequestDetail() {
     inputLabel: "Closing comments",
     details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes from CONCILIADO to CERRADO." }]
   });
+  // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
+  const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
+  const isOwner = String(request.requester?._id || request.requester) === String(user._id);
+  // The employee's own paid advance: one card saying what to do, the receipts, and the history.
+  // Invoice validation, document phases and the accounting detail stay with Finance.
+  const simpleAdvance = isOwner && request.flowType === "C" && request.requestType === "ENTREGA_RENDIR" && RENDITION_STAGES.includes(request.rendition?.status);
+  const advanceOpen = !["CERRADO", "ANULADO", "RECHAZADO"].includes(request.status);
+  const openReceipts = () => { setActiveTab("Documents"); window.requestAnimationFrame(() => document.getElementById("official-rendition")?.scrollIntoView({ behavior: "smooth", block: "start" })); };
+  // "Your turn": what the viewer has to do now, with the button that does it (utils/nextStep.js).
+  const journey = journeySummary(request, { activeStep: activeApprovalStep, orderApplies: related.procurementReadiness?.applicable !== false, viewerId: user._id });
+  const step = nextStepFor({ request, user, permissions, related, missingDocuments: missingDocuments.length, invoiceCorrection, ownAdvance: simpleAdvance, journey });
+  // A step's place on the page: its tab, then the section itself, briefly highlighted.
+  const openStep = ({ tab, target } = {}) => {
+    if (tab) setActiveTab(tab);
+    if (!target) return;
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const element = document.getElementById(target);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+      element.classList.add("is-step-target");
+      window.setTimeout(() => element.classList.remove("is-step-target"), 2400);
+    }));
+  };
+  const runStep = (run) => ({
+    approve: () => (isChainApprovalStep ? decision("approve", false) : decision("approve")),
+    budget: confirmCommitBudget,
+    submit: submitRequest,
+    order: confirmIssueOrder,
+    close: confirmClose
+  })[run]?.();
   // Phones: the main action the page offers stays within reach in a bar above the bottom
   // navigation. It reuses the action panel's handlers; the full panel stays at #request-actions.
   const stickyAction = permissions.canApprove
@@ -514,18 +531,11 @@ export default function RequestDetail() {
     : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
     : permissions.canIssueOrder ? { label: "Issue order", icon: ShoppingCart, onClick: confirmIssueOrder }
     : permissions.canClose ? { label: "Close request", icon: CheckCircle2, onClick: confirmClose }
-    : nextAction?.[1] === "Documents" ? { label: "Open documents", icon: FileText, href: nextAction[2], onClick: () => setActiveTab("Documents") }
+    : step?.mine && step.review ? { label: "Review receipts", icon: FileText, href: "#next-step", onClick: () => openStep({ target: "next-step" }) }
+    : step?.mine && step.action?.open ? { label: step.action.label, icon: FileText, href: `#${step.action.open.target || "next-step"}`, onClick: () => openStep(step.action.open) }
     : null;
   const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && (permissions.canObserve || permissions.canReturn), permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
   const StickyIcon = stickyAction?.icon;
-  // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
-  const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
-  const isOwner = String(request.requester?._id || request.requester) === String(user._id);
-  // The employee's own paid advance: one card saying what to do, the receipts, and the history.
-  // Invoice validation, document phases and the accounting detail stay with Finance.
-  const simpleAdvance = isOwner && request.flowType === "C" && request.requestType === "ENTREGA_RENDIR" && RENDITION_STAGES.includes(request.rendition?.status);
-  const advanceOpen = !["CERRADO", "ANULADO", "RECHAZADO"].includes(request.status);
-  const openReceipts = () => { setActiveTab("Documents"); window.requestAnimationFrame(() => document.getElementById("official-rendition")?.scrollIntoView({ behavior: "smooth", block: "start" })); };
   // "Repeat this request": a new draft with the same need, supplier and amounts (RequestCreate ?from=).
   const canRepeat = ["Admin", "Solicitor"].includes(user.role) && isOwner && request.status !== "BORRADOR";
   const requestDescription = request.flowType === "C"
@@ -546,6 +556,7 @@ export default function RequestDetail() {
       />
 
       <Message type="error">{error}</Message>
+      {step?.mine && <NextStepCard step={step} request={request} processing={processing} onRun={runStep} onOpen={openStep} onReload={load} />}
       {!simpleAdvance && <ReadinessPanel requestId={id} revision={request.updatedAt} />}
 
       <dl className="request-overview">
@@ -553,9 +564,9 @@ export default function RequestDetail() {
         <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
       </dl>
-      <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} />
+      <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} viewerRole={user.role} viewerName={user.name} />
       {simpleAdvance ? <AdvanceRenditionCard request={request} onOpen={openReceipts} /> : <RenditionCountdown request={request} mine={isOwner} onOpen={openReceipts} />}
-      {nextAction && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(nextAction[0])}</p></div><a className="secondary-button" href={nextAction[2]} onClick={() => setActiveTab(nextAction[1] === "Documents" ? "Documents" : "General")}>{t(nextAction[1] === "Documents" ? "Open documents" : "View actions")}</a></div>}
+      {step && !step.mine && <NextStepCard step={step} request={request} />}
       {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
         ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
         : request.observation.detail)}</Message>}

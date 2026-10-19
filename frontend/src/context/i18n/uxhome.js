@@ -88,5 +88,17 @@ export default {
   "Extraordinary approval": "Aprobación extraordinaria",
   "{count} advance to pay now": "{count} anticipo por pagar ahora",
   "{count} advances to pay now": "{count} anticipos por pagar ahora",
-  "Advances to pay now": "Anticipos por pagar ahora"
+  "Advances to pay now": "Anticipos por pagar ahora",
+  "{count} payment to reconcile": "{count} pago por conciliar",
+  "{count} payments to reconcile": "{count} pagos por conciliar",
+  "{count} request ready to close": "{count} solicitud lista para cerrar",
+  "{count} requests ready to close": "{count} solicitudes listas para cerrar",
+  "{count} rendition balance to settle": "{count} saldo de rendición por regularizar",
+  "{count} rendition balances to settle": "{count} saldos de rendición por regularizar",
+  "{count} advance to recover": "{count} anticipo por recuperar",
+  "{count} advances to recover": "{count} anticipos por recuperar",
+  "Payments to reconcile": "Pagos por conciliar",
+  "Requests ready to close": "Solicitudes listas para cerrar",
+  "Rendition balances to settle": "Saldos de rendición por regularizar",
+  "Advances to recover": "Anticipos por recuperar"
 };

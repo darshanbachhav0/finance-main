@@ -116,6 +116,35 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       await AccountsPayable.deleteMany({});
     });
 
+    await t.test("the end of a request: Treasury reconciles, Accounting closes and settles renditions", async () => {
+      const paidRequest = request({ requestNumber: "T-END-PAID", status: "PAGADO" });
+      const closedRequest = request({ requestNumber: "T-END-CLOSED", status: "CERRADO" });
+      const reconciled = request({ requestNumber: "T-END-RECON", status: "CONCILIADO" });
+      const advance = (fields) => request({ status: "PAGADO", flowType: "C", requestType: "ENTREGA_RENDIR", ...fields });
+      const balance = advance({ requestNumber: "T-END-BAL", rendition: { status: "VALIDATED", nonDeductibleOutstanding: 5 } });
+      const recovery = advance({ requestNumber: "T-END-REC", rendition: { status: "REJECTED", recovery: { status: "PENDING", outstandingAmount: 40 } } });
+      await FinancialRequest.collection.insertMany([paidRequest, closedRequest, reconciled, balance, recovery,
+        advance({ requestNumber: "T-END-SETTLED", rendition: { status: "VALIDATED", nonDeductibleOutstanding: 0 } }),
+        advance({ requestNumber: "T-END-RECOVERED", rendition: { status: "REJECTED", recovery: { status: "RECOVERED", outstandingAmount: 0 } } })]);
+      const paid = { _id: new mongoose.Types.ObjectId(), status: "PAID", currency: "PEN", amount: 10, outstandingAmount: 0, request: paidRequest._id };
+      await AccountsPayable.collection.insertMany([paid, { ...paid, _id: new mongoose.Types.ObjectId(), request: closedRequest._id }]);
+
+      const treasury = await tasksOf("Treasury");
+      assert.equal(treasury.byKey.reconciliation.count, 1, "a closed request's payment is no longer reconciled");
+      assert.equal(treasury.byKey.reconciliation.path, `/treasury?tab=reconcile&record=${paid._id}`, "one payment opens its reconciliation row");
+      assert.equal(treasury.byKey.closeReady, undefined, "closing is Accounting's");
+      const accounting = await tasksOf("Accounting");
+      assert.equal(accounting.byKey.closeReady.count, 1);
+      assert.equal(accounting.byKey.closeReady.path, `/requests/${reconciled._id}`);
+      assert.equal(accounting.byKey.renditionBalance.count, 1, "only a balance still outstanding");
+      assert.equal(accounting.byKey.renditionBalance.path, `/requests/${balance._id}`);
+      assert.equal(accounting.byKey.advanceRecovery.count, 1, "only a recovery still pending");
+      assert.equal(accounting.byKey.advanceRecovery.path, `/requests/${recovery._id}`);
+      assert.equal(accounting.byKey.reconciliation, undefined, "reconciling is Treasury's");
+      await FinancialRequest.deleteMany({ requestNumber: /^T-END/ });
+      await AccountsPayable.deleteMany({});
+    });
+
     await t.test("Management decides reviewed budget exceptions from the Approval Inbox", async () => {
       const open = request({ requestNumber: "T-EXC-OPEN", status: "OBSERVADO_PRESUPUESTO" });
       const other = request({ requestNumber: "T-EXC-OTHER", status: "OBSERVADO_PRESUPUESTO" });
