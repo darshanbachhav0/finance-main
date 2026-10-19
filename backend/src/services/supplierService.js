@@ -1,4 +1,5 @@
 import AuditLog from "../models/AuditLog.js";
+import { assertBankFileAccountNumber } from "./bankFileAccountRules.js";
 import { resolveSupplierBankReview } from "./bankNotificationService.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
@@ -533,6 +534,7 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
   const accountNumber = assertValidBankAccountNumber(payload.accountNumber || payload.bankAccount);
   const cci = assertValidCci(payload.cci, { required: requireCci });
   const currency = payload.accountCurrency || payload.currency || supplier.currency || "PEN";
+  await assertBankFileAccountNumber({ bank, currency, accountNumber, accountType });
   const accountHolderName = String(payload.accountHolderName || supplier.legalName || supplier.name || "").trim();
   if (!bank || !accountHolderName) {
     throw new AppError(422, "Bank and account-holder name are required.", { bank: Boolean(bank), accountHolderName: Boolean(accountHolderName) }, ERROR_CODES.VALIDATION_ERROR);

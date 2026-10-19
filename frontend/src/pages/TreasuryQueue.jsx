@@ -361,6 +361,19 @@ export default function TreasuryQueue({ historyOnly = false }) {
   }).filter(([, accountId]) => accountId)), [selected, rows, accountSelections]);
   const currentFileStep = !fileDetailsReady ? 0 : !selected.length ? 1 : 2;
 
+  // An unpaid advance switches to the employee's current verified bank account (for example after
+  // the employee corrected it and Accounting verified the new one).
+  async function useCurrentBankAccount(row) {
+    setActionError("");
+    try {
+      const response = await api.post(`/treasury/payables/${payableIdOf(row)}/use-current-bank-account`);
+      notify(response.data.data?.changed ? "The advance now pays to the employee's current verified bank account." : "The advance already uses the employee's current verified bank account.", response.data.data?.changed ? "success" : "info");
+      reloadAll();
+    } catch (error) {
+      setActionError(error.message);
+    }
+  }
+
   async function generate() {
     setProcessing(true);
     setActionError("");
@@ -595,7 +608,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
 
     {result && <div className="success-result" role="status"><div><strong>{t("Bank instruction generated")}</strong><span>{result.fileName} · {result.notice}</span></div><span className="cell-note">{t("Sent to Accounting for verification. You can download it from Payment History once it is verified.")}</span></div>}
 
-    <div className="workspace-panel section-spacer"><div className="section-heading"><div><h3><span className="bank-file-step-number">2</span>{t("Select payments")}</h3><p>{t("Only payments with a verified account in the file currency can be selected.")}</p></div></div><DataTable detailSteps={paymentSteps} rows={queueRows} rowKey="selectionKey" emptyTitle="No payments pending" emptyDescription="Approved CXP records appear here when they are ready to be paid." emptyAction={{ label: "Payment History", to: "/treasury/history" }} selection={{ selected, onChange: setSelected, isRowSelectable: isSelectable }} toolbarActions={readOnly ? undefined : <button type="button" className="secondary-button" disabled={!selectableOnPage.length || allOnPageSelected} onClick={selectAllVisible}><ListChecks size={16} /><span>{t("Select all visible")}</span></button>} loading={queueTable.loading} remote={queueTable.remote} filters={[{ key: "requestType", label: "types", allLabel: "All types", options: requestTypes }, { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes }, { key: "paymentPriority", label: "priorities", allLabel: "All priorities", options: ["NORMAL", "PRIORITY"] }]} searchPlaceholder="Search request, supplier, voucher, or cost center..." rowActions={(row) => [{ label: "Open request", icon: Eye, onClick: () => setQuickViewId(requestIdOf(row)) }]} columns={queueColumns} />
+    <div className="workspace-panel section-spacer"><div className="section-heading"><div><h3><span className="bank-file-step-number">2</span>{t("Select payments")}</h3><p>{t("Only payments with a verified account in the file currency can be selected.")}</p></div></div><DataTable detailSteps={paymentSteps} rows={queueRows} rowKey="selectionKey" emptyTitle="No payments pending" emptyDescription="Approved CXP records appear here when they are ready to be paid." emptyAction={{ label: "Payment History", to: "/treasury/history" }} selection={{ selected, onChange: setSelected, isRowSelectable: isSelectable }} toolbarActions={readOnly ? undefined : <button type="button" className="secondary-button" disabled={!selectableOnPage.length || allOnPageSelected} onClick={selectAllVisible}><ListChecks size={16} /><span>{t("Select all visible")}</span></button>} loading={queueTable.loading} remote={queueTable.remote} filters={[{ key: "requestType", label: "types", allLabel: "All types", options: requestTypes }, { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes }, { key: "paymentPriority", label: "priorities", allLabel: "All priorities", options: ["NORMAL", "PRIORITY"] }]} searchPlaceholder="Search request, supplier, voucher, or cost center..." rowActions={(row) => [{ label: "Open request", icon: Eye, onClick: () => setQuickViewId(requestIdOf(row)) }, { label: "Use current bank account", icon: RefreshCw, hidden: readOnly || !isAdvanceRow(row) || row.accountsPayable?.status !== "OPEN", onClick: () => useCurrentBankAccount(row) }]} columns={queueColumns} />
     {selected.length > 0 && <div className="bank-file-review" role="region" aria-labelledby="bank-file-review-title">
       <h3 id="bank-file-review-title"><span className="bank-file-step-number">3</span>{t("Review and generate")}</h3>
       {!readOnly && <ReadinessPanel paymentPayload={{ payableIds: selected, currency, accountSelections: fileAccountSelections }} defaultOpen />}

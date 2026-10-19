@@ -150,7 +150,15 @@ line saying what is needed from them; Finance roles keep the detailed statuses.
   approval keeps the request at `APROBADO` with the observation `REIMBURSEMENT_BANK_REQUIRED`, the
   employee is told to register the account (or Accounting to verify one waiting for review), and
   verifying the account (or choosing a verified one as preferred) provisions it automatically
-  (`advanceBankHoldService`). The automatic Track C steps run whatever the final approver's role
+  (`advanceBankHoldService`). The account is captured on the advance at approval; while nothing of
+  the advance is scheduled or in a bank file, it follows the employee's current verified account:
+  automatically when Accounting verifies a corrected account (or a verified one is chosen as
+  preferred), and on demand with Treasury's "Use current bank account"
+  (`POST /treasury/payables/:id/use-current-bank-account`), each audited
+  (`ADVANCE_DESTINATION_REFRESHED`) with a Treasury notice (`advanceDestinationService`). A BBVA
+  current account (employee or supplier) must have the account-number length the BBVA file
+  format requires (`bbva.internalAccountLength`, 20 by default), checked when it is saved
+  (`bankFileAccountRules`); other banks are paid by CCI. The automatic Track C steps run whatever the final approver's role
   (`automatic: true`, as for the other tracks). Track C lines carry no IGV: the model computes them
   IGV-exempt (`calculateRequestLineAmounts({ igvExempt })`), so the amount typed is the amount paid,
   and the form hides the IGV option. An advance pays out first (against Account 14), then requires the
