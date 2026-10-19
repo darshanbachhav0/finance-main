@@ -177,7 +177,7 @@ test("official UMA Phase 4 rendition and employee reimbursement banking", { time
     await t.test("later employee profile edits retain history and do not change the reimbursement snapshot", async () => {
       const before = await FinancialRequest.findById(reimbursement._id).select("+rendition.reimbursementBankSnapshot.accountNumber +rendition.reimbursementBankSnapshot.cci");
       const snapshotAccount = before.rendition.reimbursementBankSnapshot.accountNumber;
-      const replacement = await updateEmployeeReimbursementBankAccount({ accountId: bank._id, payload: { bank: "BBVA", currency: "PEN", accountHolderName: employee.name, accountNumber: "0011000000002", cci: "01100110000000000002" }, user: employee, req });
+      const replacement = await updateEmployeeReimbursementBankAccount({ accountId: bank._id, payload: { bank: "BBVA", currency: "PEN", accountHolderName: employee.name, accountNumber: "00110000000000000002", cci: "01100110000000000002" }, user: employee, req });
       assert.equal(replacement.verificationStatus, "PENDING");
       assert.equal(await EmployeeReimbursementBankAccount.countDocuments({ user: employee._id }), 2);
       const original = await EmployeeReimbursementBankAccount.findById(bank._id);

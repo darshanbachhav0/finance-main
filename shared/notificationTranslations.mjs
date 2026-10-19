@@ -183,5 +183,7 @@ export default {
   "{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.": "{requestNumber}: paga el anticipo de {amount} a {name} el {date}. Los anticipos se pagan el mismo día hábil, fuera del ciclo del 15 y 30.",
   "Verify today: bank file with an advance": "Verifica hoy: archivo bancario con un anticipo",
   "{batchNumber} ({count} payments) includes {advances} advance(s) to pay today. Verify it so Treasury can send it.": "{batchNumber} ({count} pagos) incluye {advances} anticipo(s) por pagar hoy. Verifícalo para que Tesorería pueda enviarlo.",
-  "{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time). Return any money left over to {account} and attach the deposit slip.": "{requestNumber} fue pagada. Presenta la rendición hasta el {dueDate} (días hábiles, hora de Lima). Devuelve el dinero sobrante a {account} y adjunta el voucher de depósito."
+  "{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time). Return any money left over to {account} and attach the deposit slip.": "{requestNumber} fue pagada. Presenta la rendición hasta el {dueDate} (días hábiles, hora de Lima). Devuelve el dinero sobrante a {account} y adjunta el voucher de depósito.",
+  "Advance bank account updated": "Cuenta bancaria del anticipo actualizada",
+  "{requestNumber}: the advance now pays to {name}'s verified {bank} account ending in {ending}.": "{requestNumber}: el anticipo ahora se paga a la cuenta verificada de {name} en {bank} terminada en {ending}."
 };

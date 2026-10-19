@@ -25,6 +25,7 @@ import {
 import { authorize, protect } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { advancesDueSummary, nextPaymentRunSummary } from "../services/treasuryService.js";
+import { useCurrentBankAccountForAdvance } from "../services/advanceDestinationService.js";
 import { uploadFields } from "../middleware/upload.js";
 import { ROLES } from "../utils/constants.js";
 
@@ -41,6 +42,8 @@ router.get("/queue", paymentQueue);
 // The next 15th / 30th payment run and what falls into it (Payments page banner).
 router.get("/next-run", asyncHandler(async (_req, res) => res.json({ data: await nextPaymentRunSummary() })));
 router.get("/advances-due", asyncHandler(async (_req, res) => res.json({ data: await advancesDueSummary() })));
+// An unpaid advance switches to the employee's current verified bank account.
+router.post("/payables/:id/use-current-bank-account", asyncHandler(async (req, res) => res.json({ data: await useCurrentBankAccountForAdvance({ accountsPayableId: req.params.id, user: req.user, req }) })));
 router.get("/bank-files", listBankFiles);
 router.get("/payment-confirmations", paymentConfirmationQueue);
 router.get("/bounced-payments", bouncedPaymentQueue);

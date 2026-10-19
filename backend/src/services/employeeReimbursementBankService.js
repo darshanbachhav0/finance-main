@@ -2,6 +2,7 @@ import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBan
 import User from "../models/User.js";
 import { recordAudit } from "./auditService.js";
 import { releaseAdvancesWaitingForBank } from "./advanceBankHoldService.js";
+import { assertBankFileAccountNumber } from "./bankFileAccountRules.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
@@ -104,6 +105,7 @@ export async function createEmployeeReimbursementBankAccount({ payload, user, re
   const owner = await User.findById(ownerId).select("name role");
   if (!owner) throw new AppError(404, "Employee was not found.", { ownerId }, ERROR_CODES.NOT_FOUND);
   const facts = normalizedFacts(payload);
+  await assertBankFileAccountNumber(facts);
   const preferred = payload.preferred === true || String(payload.preferred) === "true";
   const result = await runFinancialOperation(async (session) => {
     if (preferred) {
@@ -156,6 +158,7 @@ export async function updateEmployeeReimbursementBankAccount({ accountId, payloa
   });
   const changed = ["bank", "currency", "accountHolderName", "accountNumber", "cci"].some((field) => String(current[field] || "") !== String(facts[field] || ""));
   if (!changed) return bankPayload(current, user);
+  await assertBankFileAccountNumber(facts);
 
   const replacement = await runFinancialOperation(async (session) => {
     const wasPreferred = current.preferred;
@@ -270,12 +273,21 @@ export async function reviewEmployeeReimbursementBankAccount({ accountId, payloa
   return bankPayload(account, user);
 }
 
-// The bank decision stands even if releasing an advance fails; that advance stays with Treasury.
+// The bank decision stands even if updating an advance fails; that advance stays with Treasury.
+// Advances waiting for an account are released, and unpaid ones (nothing scheduled or in a bank
+// file) switch to the employee's current verified account.
 async function releaseWaitingAdvances(account, user, req) {
+  const scope = { userId: account.user?._id || account.user, currency: account.currency, user, req };
   try {
-    await releaseAdvancesWaitingForBank({ userId: account.user?._id || account.user, currency: account.currency, user, req });
+    await releaseAdvancesWaitingForBank(scope);
   } catch (error) {
     console.error("Releasing advances waiting for a bank account failed", error?.message || error);
+  }
+  try {
+    const { refreshUnpaidAdvanceDestinations } = await import("./advanceDestinationService.js");
+    await refreshUnpaidAdvanceDestinations(scope);
+  } catch (error) {
+    console.error("Updating unpaid advances to the verified bank account failed", error?.message || error);
   }
 }
 

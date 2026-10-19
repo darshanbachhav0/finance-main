@@ -55,6 +55,8 @@ assert.match(treasuryQueue, /advancesDue: "true"/, "Pay now lists only the advan
 assert.match(treasuryQueue, /t\("Pay now"\)/);
 assert.match(treasuryQueue, /offCycle && !advancesOnly/, "no reason asked for a file of advances");
 assert.match(treasuryQueue, /disabled=\{processing \|\| reasonMissing\}/, "Generate file follows the same reason rule");
+assert.match(treasuryQueue, /label: "Use current bank account", icon: RefreshCw, hidden: readOnly \|\| !isAdvanceRow\(row\) \|\| row\.accountsPayable\?\.status !== "OPEN"/, "only an unpaid advance can switch to the current account");
+assert.match(treasuryQueue, /\/treasury\/payables\/\$\{payableIdOf\(row\)\}\/use-current-bank-account/);
 assert.doesNotMatch(treasuryQueue, /offCycle && !paymentDateReason\.trim\(\)/, "no second, stricter reason check");
 assert.match(treasuryQueue, /paymentPayload=\{\{ payableIds: selected, currency, accountSelections: fileAccountSelections \}\}/, "the readiness check gets the selection the file uses");
 assert.match(treasuryQueue, /accountSelections: fileAccountSelections\s*\}\);/, "the file sends no account for employee advances");

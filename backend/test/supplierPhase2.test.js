@@ -320,7 +320,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     await t.test("13-17. multiple active accounts, pending start, preferred policy, CCI, and authorized verification", async () => {
       const supplier = await completeSupplier();
       const first = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BCP", accountType: "CURRENT", accountNumber: "191005500001", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
-      const second = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BBVA", accountType: "CURRENT", accountNumber: "001105500002", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
+      const second = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BBVA", accountType: "CURRENT", accountNumber: "00110550000000000002", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
       assert.equal(first.account.verificationStatus, "PENDING");
       assert.equal(await SupplierBankAccount.countDocuments({ supplier: supplier._id, active: true }), 2);
       await setPreferredSupplierBankAccount({ supplierId: supplier._id, accountId: first.account._id, user: users.accounting, req });

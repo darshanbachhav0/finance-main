@@ -135,5 +135,12 @@ export default {
   "Pay now": "Pagar ahora",
   "{count} advances to pay today are selected. Generate the bank file dated today.": "{count} anticipos por pagar hoy están seleccionados. Genera el archivo bancario con fecha de hoy.",
   "Advances are paid the same working day; no reason is needed.": "Los anticipos se pagan el mismo día hábil; no hace falta un motivo.",
-  "Advance to render: paid the same working day, outside the 15th/30th cycle.": "Anticipo a rendir: se paga el mismo día hábil, fuera del ciclo del 15 y 30."
+  "Advance to render: paid the same working day, outside the 15th/30th cycle.": "Anticipo a rendir: se paga el mismo día hábil, fuera del ciclo del 15 y 30.",
+  "Use current bank account": "Usar la cuenta bancaria actual",
+  "The advance now pays to the employee's current verified bank account.": "El anticipo ahora se paga a la cuenta bancaria verificada actual del colaborador.",
+  "The advance already uses the employee's current verified bank account.": "El anticipo ya usa la cuenta bancaria verificada actual del colaborador.",
+  "Only an advance can switch to the employee's current bank account.": "Solo un anticipo puede cambiar a la cuenta bancaria actual del colaborador.",
+  "This advance is already scheduled or in a bank file; its bank account can no longer change here.": "Este anticipo ya está programado o en un archivo bancario; su cuenta bancaria ya no puede cambiar aquí.",
+  "The employee has no verified bank account in this currency. Accounting verifies it in Reimbursement Banking.": "El colaborador no tiene una cuenta bancaria verificada en esta moneda. Contabilidad la verifica en Cuentas bancarias de reembolso.",
+  "A BBVA account number must contain exactly 20 digits.": "Un número de cuenta BBVA debe tener exactamente 20 dígitos."
 };
