@@ -17,6 +17,11 @@ export async function resumeDraftRecord(endpoint, id, identify, open, onError) {
   } catch (err) { onError(err.message); }
 }
 
+// Draft sessions outlive the form that opened them (they are kept by key), so every new draft
+// takes a generation no earlier visit to the form has used, and never reopens an old session.
+let lastGeneration = 0;
+const nextGeneration = () => ++lastGeneration;
+
 export function useDraftResume(scope, open) {
   const location = useLocation();
   const seen = useRef("");
@@ -161,19 +166,25 @@ export default function useWorkDraft({ scope, recordId = "new", title, value, re
   // reopening the latest saved draft into the form that is closing.
   function startBlank() {
     copiedFrom.current = null;
-    setGeneration(n => n + 1);
+    setGeneration(nextGeneration());
   }
   function separateCopy() {
     copiedFrom.current = session;
     session.closed = true; // Only detach this client; keep the original saved draft.
-    setGeneration(n => n + 1);
+    setGeneration(nextGeneration());
   }
   async function startAnother() {
     if (!await flushDraft(session)) return;
     current.current.restore(session.initial);
     copiedFrom.current = null;
     session.closed = true;
-    setGeneration(n => n + 1);
+    setGeneration(nextGeneration());
   }
-  return { ready, restoration, status: session.status, error: session.error, updatedAt: session.updatedAt, flush: () => flushDraft(session), retry: () => session.status === "load-error" ? load(true) : flushDraft(session), reload: () => load(true), complete, discard, separateCopy, startAnother: recordId === "new" ? startAnother : null, session };
+  // The form is opened for new work: a new draft starts from the form as the caller resets it in
+  // the same update, and the draft shown before (or the latest one) stays in Continue your work.
+  function startNew() {
+    copiedFrom.current = null;
+    setGeneration(nextGeneration());
+  }
+  return { ready, restoration, status: session.status, error: session.error, updatedAt: session.updatedAt, flush: () => flushDraft(session), retry: () => session.status === "load-error" ? load(true) : flushDraft(session), reload: () => load(true), complete, discard, separateCopy, startAnother: recordId === "new" ? startAnother : null, startNew, session };
 }

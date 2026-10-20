@@ -192,15 +192,20 @@ export default function Suppliers() {
   const lookupSequence =
     useRef(0);
 
+  // "Supplier not found? Propose it" on a request (?mode=new) opens a new proposal, never the
+  // unfinished one shown before (it stays in Continue your work). The RUC of the request's
+  // invoice (?ruc=) is entered for the user, so it is checked and SUNAT fills the form.
+  const fromRequest = useRef(searchParams.get("mode") === "new");
+  const proposedRuc = useRef(/^\d{11}$/.test(searchParams.get("ruc") || "") ? searchParams.get("ruc") : "");
+
   useEffect(
     () => {
       if (
-        searchParams.get(
-          "mode"
-        ) === "new" &&
+        fromRequest.current &&
         canPropose
       ) {
         startCreate();
+        supplierDraft.startNew();
       }
     },
     []
@@ -671,6 +676,22 @@ export default function Suppliers() {
     }
     return () => { active = false; };
   }, [supplierDraft.restoration, supplierDraft.ready]);
+  // Entered once the new draft is open, as if typed: the duplicate check and SUNAT lookup follow.
+  useEffect(() => {
+    if (!supplierDraft.ready || drawer.mode !== "create" || !proposedRuc.current) return;
+    changeIdentifier(proposedRuc.current);
+    proposedRuc.current = "";
+  }, [supplierDraft.ready, drawer.mode]);
+  // As on a new request, the address then names the proposal's saved draft, so a reload reopens
+  // it instead of starting another. history.replaceState leaves the page as it is.
+  useEffect(() => {
+    if (!fromRequest.current || drawer.mode !== "create" || !supplierDraft.ready || !supplierDraft.session.revision) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("workDraft") === supplierDraft.session.id) return;
+    params.delete("mode"); params.delete("ruc");
+    params.set("workDraft", supplierDraft.session.id); params.set("workScope", "supplier"); params.set("workRecord", "new");
+    window.history.replaceState(window.history.state, "", `${location.pathname}?${params}`);
+  }, [drawer.mode, supplierDraft.ready, supplierDraft.session.revision]);
   // Retry only temporary failures, with no overlapping calls or updates after RUC/drawer changes.
   useEffect(() => {
     if (!drawer.open || drawer.mode !== "create" || !lookup.padron?.retryable || lookup.padron?.ruc !== identifier || !/^\d{11}$/.test(identifier)) return;
@@ -756,6 +777,12 @@ export default function Suppliers() {
     setLookup(
       freshLookupState()
     );
+  }
+
+  // Back to the RUC step; what was filled belonged to the previous identifier.
+  function searchAnotherIdentifier() {
+    setEntry(null);
+    changeIdentifier("");
   }
 
   /*
@@ -1508,7 +1535,7 @@ export default function Suppliers() {
         }
       >
         {drawer.open && ["create", "edit"].includes(drawer.mode) && <DraftPanel busy={saving} draft={supplierDraft} onDiscard={() => setDrawer({ open: false, mode: "view" })} />}
-        {drawer.mode === "create" && lookup.checkedAt && <p className="section-note">{t("SUNAT lookup last checked")}: {formatDateTime(lookup.checkedAt)}</p>}
+        {drawer.mode === "create" && lookup.checkedAt && <p className="section-note">{t("SUNAT lookup last checked")}: {formatDateTime(lookup.checkedAt)}{lookup.checked && !lookup.result && <> · <button type="button" className="text-button" disabled={saving || !supplierDraft.ready} onClick={searchAnotherIdentifier}>{t("Use another RUC")}</button></>}</p>}
         <fieldset className="work-draft-fields" disabled={saving || (["create", "edit"].includes(drawer.mode) && (!supplierDraft.ready || supplierDraft.status === "conflict"))}>
         {
           drawer.mode ===
@@ -1723,18 +1750,7 @@ export default function Suppliers() {
                   type="button"
                   className="secondary-button"
                   onClick={
-                    () => {
-                      lookupSequence.current +=
-                        1;
-
-                      setIdentifier(
-                        ""
-                      );
-
-                      setLookup(
-                        freshLookupState()
-                      );
-                    }
+                    searchAnotherIdentifier
                   }
                 >
                   {t(

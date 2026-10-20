@@ -15,6 +15,7 @@ export default {
   "Legal representatives of {ruc} - {name}": "Representantes legales de {ruc} - {name}",
   "This is what the taxpayer declared to SUNAT (Consulta RUC). It does not replace the supplier's supporting legal documents.": "Esto es lo que el contribuyente declaró ante SUNAT (Consulta RUC). No reemplaza la documentación legal de sustento del proveedor.",
   "Passport": "Pasaporte",
+  "Use another RUC": "Usar otro RUC",
   // Declarations
   "Not declared": "No declarado",
   // Bank and documents
