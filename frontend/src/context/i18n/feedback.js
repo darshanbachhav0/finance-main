@@ -5,7 +5,6 @@ export default {
   "Back to suppliers": "Volver a proveedores",
   "Supplier record": "Ficha del proveedor",
   "No supplier (Track C)": "Sin proveedor (Vía C)",
-  "Creates next months' drafts from this request; each one needs its own documents and approval.": "Crea los borradores de los próximos meses a partir de esta solicitud; cada uno necesita sus propios documentos y aprobación.",
   // Invoice check: each value that differs from the invoice XML or factura PDF.
   "Supplier RUC/DNI": "RUC/DNI del proveedor",
   "Voucher number": "Número de comprobante",

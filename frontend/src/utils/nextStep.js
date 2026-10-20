@@ -24,7 +24,8 @@ const TEAM_WORKSPACE = {
   Treasury: (request) => ({ label: "Open Payments", href: `/treasury?request=${request._id}` })
 };
 
-export function nextStepFor({ request, user, permissions = {}, related = {}, missingDocuments = 0, invoiceCorrection = false, ownAdvance = false, journey = null } = {}) {
+// supplierApproval: the request's supplier still waiting for its proposer's jefe (approval options).
+export function nextStepFor({ request, user, permissions = {}, related = {}, missingDocuments = 0, invoiceCorrection = false, ownAdvance = false, journey = null, supplierApproval = null } = {}) {
   if (!request || !user) return null;
   const role = user.role;
   const status = canonicalRequestStatus(request.status);
@@ -79,6 +80,14 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
     if (["OBSERVADO", "DEVUELTO"].includes(status)) return turn("correctRequest", "Correct your request and send it again", "Read the comment in History, fix what was asked, then submit it again.", { tone: "warning", action: edit, more: { label: "Read the comments", open: { tab: "Approvals" } } });
     if (missingDocuments) return turn("addDocuments", "Add the required documents", "Complete the required documents before submitting.", { action: { label: "Open documents", open: { tab: "Documents", target: DOCUMENTS } }, more: edit });
     return turn("submit", "Submit for approval", "Your request is ready for your submission review.", { action: { label: "Submit", run: "submit" }, more: edit });
+  }
+  // The jefe verifies a new supplier with the request: both are approved together, or the request
+  // goes back while the supplier is missing something.
+  if (permissions.canApprove && supplierApproval?.yours) {
+    const params = { supplier: supplierApproval.supplier?.name || "" };
+    return supplierApproval.ready
+      ? turn("approve", "Approve the new supplier and this request", "{supplier} is a new supplier. Check its details and documents, then approve both, or send the request back.", { params, action: { label: "Approve supplier and request", run: "approve" }, more: { label: "Other options", open: { target: "request-actions" } } })
+      : turn("approve", "Send this request back", "{supplier} is a new supplier and cannot be approved yet. Send the request back so the requester completes it.", { params, tone: "warning", action: { label: "Send back", run: "observe" }, more: { label: "See what is missing", open: { target: "request-actions" } } });
   }
   if (permissions.canApprove) return turn("approve", "Approve or reject this request", "Review the supporting documents and record your decision.", { action: { label: "Approve", run: "approve" }, more: { label: "Other options", open: { target: "request-actions" } } });
   if (permissions.canIssueOrder) return turn("issueOrder", "Issue the purchase order", "Review the approved purchase and issue the order.", { action: { label: "Issue order", run: "order" } });

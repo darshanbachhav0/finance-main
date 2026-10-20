@@ -6,7 +6,6 @@ import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import { configurationRoles, settingsRoles } from "./utils/navigationAccess.js";
 
-const Operations = lazy(() => import("./pages/Operations.jsx"));
 const SettingsHub = lazy(() => import("./pages/SettingsHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
@@ -67,7 +66,6 @@ export default function App() {
           <Route path="settings" element={<ProtectedRoute roles={settingsRoles} permissions={["bank-format:certify"]} />}><Route index element={<SettingsHub />} /></Route>
           {/* Former hub pages: their links now live in the menu and on Settings. */}
           <Route path="administration" element={<Navigate to="/settings" replace />} />
-          <Route path="operations" element={<ProtectedRoute roles={internalRoles} />}><Route index element={<Operations />} /></Route>
           <Route path="requests" element={<ProtectedRoute roles={readers} />}><Route index element={<RequestsList />} /></Route>
           <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} permissions={["request:create"]} />}>

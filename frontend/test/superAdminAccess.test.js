@@ -7,17 +7,17 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const menu = (user) => navigationForUser(user).map(([, path]) => path);
 
 // 1. The console is the Super Admin's only; it opens the Admin's workspaces read-only, never the
-//    pages whose purpose is to act (new request, approvals, work review, uploads, my team, leave).
+//    pages whose purpose is to act (new request, approvals, uploads, my team, leave).
 for (const path of superAdminConsolePaths) {
   assert.equal(canAccessNavigation("SuperAdmin", path), true, path);
   assert.equal(canAccessNavigation("Admin", path), false, `Admin has no ${path}`);
 }
 const superAdmin = menu({ role: "SuperAdmin", hasTeam: true });
 for (const path of ["/super-admin", "/requests", "/treasury", "/accounting/payables", "/budget", "/reports", "/suppliers", "/settings"]) assert.ok(superAdmin.includes(path), `Super Admin menu has ${path}`);
-for (const path of ["/", "/requests/new", "/approvals", "/operations", "/batch-invoices", "/reimbursement-bank", "/my-team"]) {
+for (const path of ["/", "/requests/new", "/approvals", "/batch-invoices", "/reimbursement-bank", "/my-team"]) {
   assert.ok(!superAdmin.includes(path), `Super Admin menu has no ${path}`);
 }
-for (const path of ["/requests/new", "/approvals", "/operations", "/batch-invoices", "/my-team"]) assert.equal(canAccessNavigation("SuperAdmin", path, { role: "SuperAdmin", hasTeam: true }), false, path);
+for (const path of ["/requests/new", "/approvals", "/batch-invoices", "/my-team"]) assert.equal(canAccessNavigation("SuperAdmin", path, { role: "SuperAdmin", hasTeam: true }), false, path);
 assert.deepEqual(pageTrail("/super-admin/audit", { role: "SuperAdmin" }).map((item) => item.label), ["Platform overview", "Audit log"], "the trail starts at the console");
 
 // 2. Read-only: writes are stopped in the browser except the console and personal settings, the

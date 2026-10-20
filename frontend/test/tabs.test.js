@@ -13,7 +13,7 @@ assert.match(tabs, /tabIndex=\{selected \? 0 : -1\}/, "only the selected tab is 
 for (const key of ["ArrowRight", "ArrowLeft", "Home", "End"]) assert.ok(tabs.includes(key), `${key} moves between tabs`);
 assert.match(tabs, /className="tab-count"/, "tabs can show a count");
 
-for (const page of ["AccountingEntries", "BudgetControl", "Operations", "RequestDetail", "TreasuryQueue"]) {
+for (const page of ["AccountingEntries", "BudgetControl", "RequestDetail", "TreasuryQueue"]) {
   const source = read(`../src/pages/${page}.jsx`);
   assert.match(source, /<Tabs /, `${page} uses the shared tabs`);
   assert.doesNotMatch(source, /<nav className="focus-tabs"/, `${page} has no hand-built tab row`);

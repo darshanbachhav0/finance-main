@@ -46,7 +46,6 @@ export const navigationAccess = Object.freeze({
   "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", SUPER_ADMIN],
   "/my-team": internalRoles,
   "/requests/new": ["Admin", "Solicitor"],
-  "/operations": internalRoles,
   "/settings": settingsRoles,
   "/treasury/history": ["Admin", "Treasury", SUPER_ADMIN],
   "/approvals": internalRoles,
@@ -94,7 +93,6 @@ export const pageLabels = Object.freeze({
   "/requests/new": "New request",
   "/approvals": "Approvals",
   "/my-team": "My Team",
-  "/operations": "Work review",
   "/batch-invoices": "A2 Batch Invoices",
   "/accounting/invoice-observations": "Invoice Observations",
   "/accounting/payables": "Accounts Payable",
@@ -179,7 +177,7 @@ export function approvesRequests(user, pendingApprovals = 0) {
 export const navigationSections = Object.freeze([
   ["Super Admin", superAdminConsolePaths],
   ["Overview", ["/"]],
-  ["My work", ["/requests", "/requests/new", "/approvals", "/my-team", "/operations"]],
+  ["My work", ["/requests", "/requests/new", "/approvals", "/my-team"]],
   ["Invoices and payables", ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/reimbursement-bank"]],
   ["Treasury", ["/treasury", "/treasury/history"]],
   ["Accounting", ["/accounting", "/accounting/periods", "/accounting/sire"]],
@@ -197,9 +195,9 @@ const roleMenus = {
   AreaDirector: ["/", "/approvals", "/requests"],
   ViceRector: ["/", "/approvals", "/requests"],
   Procurement: ["/", "/requests", "/suppliers", "/reports"],
-  Accounting: ["/", "/accounting/payables", "/accounting/bank-files", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire", "/operations"],
+  Accounting: ["/", "/accounting/payables", "/accounting/bank-files", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire"],
   // Treasury also runs the budget (the former Budget role).
-  Treasury: ["/", "/treasury", "/treasury/history", "/budget", "/operations"],
+  Treasury: ["/", "/treasury", "/treasury/history", "/budget"],
   // Management also decides budget exceptions and budget changes above the approval threshold.
   Management: ["/", "/approvals", "/budget", "/reports", "/management-view"],
   // Portal only: no internal Reports, dashboards or request data.

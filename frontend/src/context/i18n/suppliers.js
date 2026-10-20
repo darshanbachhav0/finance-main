@@ -30,6 +30,23 @@ export default {
   "Compliance model declaration answered": "Declaración de modelo de cumplimiento respondida",
   "Done": "Listo",
   "Pending - your jefe needs it to approve": "Pendiente: tu jefe lo necesita para aprobar",
+  // A new supplier verified by the jefe with the request
+  "New supplier: approving this request also approves it": "Proveedor nuevo: al aprobar esta solicitud también lo apruebas",
+  "The new supplier cannot be approved yet": "El proveedor nuevo aún no se puede aprobar",
+  "The supplier is still waiting for approval": "El proveedor aún está pendiente de aprobación",
+  "Review the supplier": "Revisar el proveedor",
+  "Check its details and documents. It gets its supplier code (PRV) when you approve.": "Revisa sus datos y documentos. Recibe su código de proveedor (PRV) cuando lo apruebes.",
+  "Send the request back so the requester completes it:": "Devuelve la solicitud para que el solicitante lo complete:",
+  "{name} approves it. The request can be finalized once the supplier is approved.": "Lo aprueba {name}. La solicitud se puede finalizar cuando el proveedor esté aprobado.",
+  "An Admin approves it. The request can be finalized once the supplier is approved.": "Lo aprueba un administrador. La solicitud se puede finalizar cuando el proveedor esté aprobado.",
+  "Approve supplier and request": "Aprobar proveedor y solicitud",
+  "Approve the supplier and this request?": "¿Aprobar el proveedor y esta solicitud?",
+  "Approve the supplier and send the request to your jefe?": "¿Aprobar el proveedor y enviar la solicitud a tu jefe?",
+  "The supplier is approved for use (it gets its PRV code) and your decision on the request is recorded.": "El proveedor queda aprobado para su uso (recibe su código PRV) y se registra tu decisión sobre la solicitud.",
+  "This request's supplier is also waiting for your approval. Open the request, review the supplier and approve both.": "El proveedor de esta solicitud también espera tu aprobación. Abre la solicitud, revisa el proveedor y aprueba ambos.",
+  "The supplier cannot be approved yet. Send the request back so the requester completes the supplier.": "El proveedor aún no se puede aprobar. Devuelve la solicitud para que el solicitante complete el proveedor.",
+  "The supplier is still waiting for its proposer's jefe. The request can be finalized once the supplier is approved.": "El proveedor aún espera la aprobación del jefe de quien lo propuso. La solicitud se puede finalizar cuando el proveedor esté aprobado.",
+  SUPPLIER_APPROVAL_REQUIRED: "EL PROVEEDOR REQUIERE TU APROBACIÓN",
   // Validation
   "Legal name is required.": "La razón social es obligatoria.",
   "Registration justification is required.": "La justificación del registro es obligatoria."

@@ -388,8 +388,12 @@ Two distinct concepts, split into separate enums (`SOURCE_BANKS` / `BENEFICIARY_
 ## 7. Suppliers
 
 `backend/src/services/supplierService.js`. Proposal (RUC/DNI-unique — a near-duplicate *legal name*
-with a different RUC is surfaced as an advisory warning, never a hard block) → Finance compliance
-review → homologation (assigns the permanent `PRV-####` code). Homologation now expires after a
+with a different RUC is surfaced as an advisory warning, never a hard block) → approval by the
+proposer's jefe, which homologates it (assigns the permanent `PRV-####` code). A request may be sent
+with a supplier still waiting for that approval: the jefe approves the supplier together with the
+request (`approveSupplier: true` on `POST /approvals/:id/approve`, shown on the approval screens),
+a supplier that is not ready yet sends the request back, and no approval completes while the
+supplier still waits. Rejected, inactive or observed suppliers still block sending. Homologation now expires after a
 configurable validity window (default 12 months, `FinanceConfiguration` key
 `SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS`) and is automatically reset to pending on a material
 fiscal/legal field change or on reactivating a previously inactive supplier — a bank-account change

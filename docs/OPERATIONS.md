@@ -279,10 +279,7 @@ The operations worker (`OPERATIONS_WORKER_ENABLED`, on in production) runs every
   of `WEEKLY_REPORT_ROLES` (Bcc). Reports > "Weekly report (Excel)" downloads the same workbook at any
   time (`GET /api/reports/weekly.xlsx`).
 
-Bank statement matching (Work review > Statement matching) reconciles **exact** matches straight
-away - one paid payable with the same currency, amount, operation number and a payment date within
-3 days - through the same claim and reconciliation controls as a manual confirmation. Partial,
-ambiguous and unmatched rows are left for a person.
+Treasury reconciles paid payables in Payments > Reconciliation.
 
 Excel imports (`POST /api/imports/:kind`, checked first with nothing saved, then imported):
 `budget-plans` (Treasury / Admin: new annual plans per Cost Center), `suppliers` (Admin / Accounting /

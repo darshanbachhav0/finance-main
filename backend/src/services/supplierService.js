@@ -1485,6 +1485,32 @@ export function assertSupplierUsable(supplier) {
   throw new AppError(422, "An active approved supplier is required.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
 }
 
+// A request may be sent with a supplier still waiting for its proposer's jefe: the jefe verifies the
+// supplier while deciding the request. A rejected, inactive or observed supplier still blocks.
+export function assertSupplierSubmittable(supplier) {
+  if (awaitsApproval(supplier)) return;
+  assertSupplierUsable(supplier);
+}
+
+// Where a request's supplier stands for the person deciding the request: null once it is usable (or
+// cannot be approved at all), otherwise who approves it, whether that is this user, and what the
+// approval still needs.
+export async function supplierApprovalForRequest(supplierOrId, user) {
+  if (!idOf(supplierOrId)) return null;
+  const supplier = await Supplier.findById(idOf(supplierOrId));
+  if (!supplier || !awaitsApproval(supplier)) return null;
+  const approval = await supplierApproverFor(supplier.proposedBy);
+  const readiness = await evaluateSupplierHomologation(supplier);
+  return {
+    supplier: { _id: supplier._id, name: supplierName(supplier), rucDni: supplier.rucDni },
+    yours: decidesSupplierApproval(supplier, user, approval),
+    approver: approval.approver ? { _id: approval.approver._id, name: approval.approver.name } : null,
+    adminFallback: approval.adminFallback,
+    ready: readiness.valid,
+    issues: readiness.issues.map(({ code, field, message }) => ({ code, field, message }))
+  };
+}
+
 export async function getActiveBankAccount(supplierId, { bank, currency } = {}) {
   const query = { supplier: supplierId, active: true };
   if (bank) query.bank = String(bank).toUpperCase();

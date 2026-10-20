@@ -13,6 +13,7 @@
     "test:search-select-ui": "node test/searchSelectResponsive.browser.mjs",
     "test:supplier-ruc-ui": "node test/supplierRuc.browser.mjs",
     "test:supplier-proposal-ui": "node test/supplierProposalFromRequest.browser.mjs",
+    "test:approval-supplier-ui": "node test/approvalPendingSupplier.browser.mjs",
     "test:request-item-ui": "node test/requestItemAmounts.browser.mjs",
     "test:notification-bell-ui": "node test/notificationBell.browser.mjs",
     "test:budget-experience-ui": "node test/budgetExperience.browser.mjs",
