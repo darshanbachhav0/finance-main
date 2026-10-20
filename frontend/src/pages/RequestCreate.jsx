@@ -447,6 +447,10 @@ export default function RequestCreate() {
     if (isEditing || !draft.ready) return;
     if (window.location.search !== draftSearch) window.history.replaceState(window.history.state, "", `${location.pathname}${draftSearch}`);
   }, [isEditing, draft.ready, draftSearch]);
+  // "Supplier not found": a new supplier proposal that returns here. When the invoice read on this
+  // form is from an unregistered supplier, its RUC goes along and is looked up in SUNAT.
+  const invoiceRuc = !invoiceCheck?.supplier && /^\d{11}$/.test(invoiceCheck?.invoice?.ruc || "") ? invoiceCheck.invoice.ruc : "";
+  const supplierProposalPath = `/suppliers?${new URLSearchParams({ mode: "new", ...(invoiceRuc && { ruc: invoiceRuc }), returnTo: isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}` })}`;
   // "New request" clicked while a request is open: that draft stays in Continue your work and a
   // blank request starts.
   const ownNavigation = useRef(false);
@@ -997,7 +1001,7 @@ export default function RequestCreate() {
       onAmountChange={changeQuickAmount}
       masters={masters}
       suppliers={eligibleSuppliers}
-      supplierProposalPath={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`}
+      supplierProposalPath={supplierProposalPath}
       invoiceCheck={invoiceCheck}
       onInvoiceFile={(file) => { clearErrors(["invoice"]); readInvoice(file, { fill: true }); }}
       quotations={quotations}
@@ -1026,7 +1030,7 @@ export default function RequestCreate() {
       <div className="wizard-workspace">
         <MotionSurface changeKey={step} directional>
         {stepId === "need" && <div className="wizard-step request-form-blocks">
-          {form.flowType !== "C" && <InvoiceDropZone check={invoiceCheck} onFile={(file) => readInvoice(file, { fill: true })} supplierProposalPath={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`} />}
+          {form.flowType !== "C" && <InvoiceDropZone check={invoiceCheck} onFile={(file) => readInvoice(file, { fill: true })} supplierProposalPath={supplierProposalPath} />}
           {form.flowType === "A1" && mode === "full" && invoiceCheck?.status === "done" && <div className="inline-alert alert-info"><FileCheck2 size={18} /><div><strong>{t("You already have the invoice")}</strong><span>{t("If no quotation or purchase order is needed, Track B (direct payment) is faster: the invoice is checked now and the request goes to payment once approved.")}</span></div><button type="button" className="secondary-button" onClick={() => { setForm((current) => ({ ...current, flowType: "B" })); attachInvoiceFile(invoiceCheck.file); }}>{t("Switch to Track B")}</button></div>}
 
           <RequestFormBlock {...blockInfo.need} status={blockStatuses.need}>
@@ -1125,7 +1129,7 @@ export default function RequestCreate() {
             {quotations.some(quotationHasData) && <QuotationComparison quotations={quotations.filter(quotationHasData)} suppliers={masters.suppliers} />}
             <label className={`field${errors.supplierSelectionReason ? " field-error" : ""}`}><span>{t("Supplier selection reason")} {quotationPolicy.enabled && new Set(quotations.map((item) => item.supplier).filter(Boolean)).size > 1 ? "*" : ""}</span><textarea rows="3" value={form.supplierSelectionReason} onChange={(event) => { setForm((current) => ({ ...current, supplierSelectionReason: event.target.value })); if (event.target.value.trim()) setFieldError("supplierSelectionReason", ""); }} onBlur={() => quotationPolicy.enabled && new Set(quotations.map((item) => item.supplier).filter(Boolean)).size > 1 && setFieldError("supplierSelectionReason", requiredError(form.supplierSelectionReason, "Supplier selection reason is required."))} placeholder={t("Explain price, delivery, technical suitability, exclusivity, or commercial conditions.")} />{errors.supplierSelectionReason && <small className="field-error-text">{t(errors.supplierSelectionReason)}</small>}</label>
           </div>}
-          <Link className="inline-link" to={`/suppliers?mode=new&returnTo=${encodeURIComponent(isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}`)}`}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
+          <Link className="inline-link" to={supplierProposalPath}>{t("Supplier not found? Open the official supplier proposal flow")}</Link>
         </div>}
 
         {stepId === "documents" && <div className="wizard-step"><div className="section-heading"><div><h3>{t("Supporting documents")}</h3><p>{t("Quotation evidence is attached to each supplier above; other configured evidence is uploaded here.")}</p></div></div><div className="document-requirement required"><FileText size={20} /><div><strong>{t("Mandatory document checklist")}</strong><p>{formPolicy.documentRequirements.length ? formPolicy.documentRequirements.map((rule) => isEitherOf(rule) ? t(rule.labelKey) : `${t(rule.labelKey)} x ${rule.minCount}`).join(" - ") : t("No additional configured evidence for this classification.")}</p></div></div><button type="button" className="text-button" aria-expanded={showOptionalDocuments} onClick={() => setShowOptionalDocuments(value => !value)}>{t(showOptionalDocuments ? "Hide optional documents" : "Additional documents")}</button><div className="document-grid">{documentDefinitions.map((document) => {

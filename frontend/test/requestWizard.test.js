@@ -24,6 +24,12 @@ assert.match(page, /goToStep\(checkedSteps\[firstInvalid\]\);\n\s*showProblems\(
 
 // Supplier step: one "supplier not found" link; quotations offer only eligible suppliers.
 assert.equal(page.match(/Supplier not found\? Open the official supplier proposal flow/g).length, 1);
+// Every "propose the supplier" link opens a new proposal carrying the RUC of an invoice read here
+// whose supplier is not registered, so the supplier page looks it up in SUNAT straight away.
+assert.match(page, /const invoiceRuc = !invoiceCheck\?\.supplier && \/\^\\d\{11\}\$\/\.test\(invoiceCheck\?\.invoice\?\.ruc \|\| ""\) \? invoiceCheck\.invoice\.ruc : "";/);
+assert.match(page, /const supplierProposalPath = `\/suppliers\?\$\{new URLSearchParams\(\{ mode: "new", \.\.\.\(invoiceRuc && \{ ruc: invoiceRuc \}\), returnTo:/);
+assert.equal(page.match(/\/suppliers\?mode=new/g), null, "no link builds its own proposal address");
+assert.equal(page.match(/(?:to|supplierProposalPath)=\{supplierProposalPath\}/g).length, 3);
 assert.match(page, /<SearchSelect label="Supplier" value=\{quotation\.supplier\} options=\{eligibleSuppliers\}/);
 assert.match(page, /aria-label=\{t\("Remove quotation"\)\}/);
 
