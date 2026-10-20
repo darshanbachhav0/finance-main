@@ -1,4 +1,4 @@
-import { Building2, HandCoins, ListChecks, Paperclip, Plus, Save, Send, ShoppingCart, Trash2, UserRound, Wallet, Zap } from "lucide-react";
+import { AlertTriangle, Building2, HandCoins, ListChecks, Paperclip, Plus, Save, Send, ShoppingCart, Trash2, UserRound, Wallet, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
@@ -38,7 +38,7 @@ function Question({ number, title, children }) {
 // not ask stays available in the full form, which keeps every answer given here.
 export default function QuickRequestForm({
   form, onFormChange, quick, onQuickChange, totals, lines, simpleAmount, onAmountChange,
-  masters, suppliers, supplierProposalPath, invoiceCheck, onInvoiceFile,
+  masters, suppliers, supplierProposalPath, invoiceCheck, invoiceFromOtherRuc = "", onInvoiceFile,
   quotations = [], quotationFiles = {}, onQuoteFile, onQuoteChange, onAddQuote, onRemoveQuote, compareSuppliers = false,
   extraDocuments, files, onDocumentFiles, costCenterLabel, onCostCenterChange, period,
   errors, error, saving, disabled, onSaveDraft, onSubmit, onFullForm
@@ -146,6 +146,7 @@ export default function QuickRequestForm({
 
         {supplierPayee && <div className="quick-supplier">
           <SearchSelect label="Supplier" value={form.supplier} options={suppliers} onChange={(supplier) => onFormChange({ supplier })} getOptionLabel={supplierLabel} error={errors.supplier} required searchPlaceholder="Search name or RUC/DNI..." />
+          {invoiceFromOtherRuc && !errors.supplier && <p className="inline-alert alert-warning" role="alert"><AlertTriangle size={16} aria-hidden="true" /><span>{t("This invoice was issued by RUC {ruc}, not by the selected supplier. Choose the supplier that issued it.").replace("{ruc}", invoiceFromOtherRuc)}</span></p>}
           <Link className="inline-link" to={supplierProposalPath}>{t("Supplier not found? Propose it")}</Link>
         </div>}
 

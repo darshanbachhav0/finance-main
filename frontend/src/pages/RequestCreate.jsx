@@ -611,6 +611,11 @@ export default function RequestCreate() {
 
   // A1 and B are sent with a quote, the invoice, or both.
   const invoiceAttached = ["xml", "pdf", "feeReceipt"].some((key) => files[key]?.length) || existingAttachments.some((item) => ["XML", "PDF", "FEE_RECEIPT"].includes(item.kind));
+  // The invoice read on this form was issued by another RUC than the selected supplier: once
+  // approved it could not be registered against the order, so the request is not sent like this.
+  const invoiceIssuerRuc = String(invoiceCheck?.invoice?.ruc || "").replace(/[^0-9]/g, "");
+  const selectedSupplierRuc = String(selectedSupplier?.normalizedIdentifier || selectedSupplier?.rucDni || "").replace(/[^0-9]/g, "");
+  const invoiceFromOtherRuc = form.flowType !== "C" && invoiceAttached && Boolean(invoiceIssuerRuc && selectedSupplierRuc) && invoiceIssuerRuc !== selectedSupplierRuc ? invoiceIssuerRuc : "";
   const quotedWithEvidence = quotations.filter((quotation) => quotationFiles[quotation.clientId] && !quotation.attachment).length;
 
   function validationForStep(id, submitting) {
@@ -673,6 +678,7 @@ export default function RequestCreate() {
         // A reason is asked only when there was a choice between suppliers.
         if (new Set(quotations.map((item) => item.supplier).filter(Boolean)).size > 1 && !form.supplierSelectionReason.trim()) next.supplierSelectionReason = "Supplier selection reason is required.";
       }
+      if (submitting && invoiceFromOtherRuc) next.supplier = "The attached invoice was issued by another RUC. Select the supplier that issued it (propose it if it is not registered), or attach this supplier's invoice.";
       // A saved request always names its supplier, so "Save draft" needs it as well.
       if (!form.supplier && form.flowType !== "C") {
         if (!quotationPolicy.enabled || invoiceOnly) next.supplier = "Select a supplier.";
@@ -930,6 +936,7 @@ export default function RequestCreate() {
     if (form.flowType === "A1" && !String(form.businessJustification || "").trim()) problems.businessJustification = "Tell us why it is needed.";
     if (form.flowType !== "C") {
       if (!form.supplier) problems.supplier = "Select the supplier.";
+      else if (invoiceFromOtherRuc) problems.supplier = "The attached invoice was issued by another RUC. Select the supplier that issued it (propose it if it is not registered), or attach this supplier's invoice.";
       if (!quotations.some(quoteEvidence) && !invoiceAttached) problems.quote = "Attach a quote or the invoice (at least one).";
       quotations.slice(1).forEach((quotation, position) => {
         const index = position + 1;
@@ -1003,6 +1010,7 @@ export default function RequestCreate() {
       suppliers={eligibleSuppliers}
       supplierProposalPath={supplierProposalPath}
       invoiceCheck={invoiceCheck}
+      invoiceFromOtherRuc={invoiceFromOtherRuc}
       onInvoiceFile={(file) => { clearErrors(["invoice"]); readInvoice(file, { fill: true }); }}
       quotations={quotations}
       quotationFiles={quotationFiles}

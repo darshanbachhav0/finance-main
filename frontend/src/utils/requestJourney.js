@@ -1,6 +1,6 @@
 import { businessDaysBetween, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
-import { waitsForBankAccount } from "./plainStatus.js";
+import { requesterReplacesInvoice, waitsForBankAccount } from "./plainStatus.js";
 
 // "Where is my request?": the milestones of the request's own track, who has it now and when the
 // payment is expected - in plain words, from the data the request page already loads.
@@ -78,6 +78,10 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
   if (status === "APROBADO") return { text: "Approved. The budget is being committed.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status)) return { text: mine ? "Returned to you for corrections. Fix it and submit it again." : "Returned to the requester for corrections.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Treasury"), since, tone: "attention" };
+  // An invoice from another supplier, or one already registered, waits for the requester; only a
+  // SUNAT check that could not be completed waits for Accounting.
+  if (requesterReplacesInvoice(request) && request.observation.code === "RUC_MISMATCH") return { text: mine ? "Waiting for the right invoice: the one uploaded is from another supplier." : "Waiting for the requester's right invoice: the one uploaded is from another supplier.", holder: requester, since, tone: "attention" };
+  if (requesterReplacesInvoice(request)) return { text: mine ? "Waiting for the right invoice: the one uploaded is already registered." : "Waiting for the requester's right invoice: the one uploaded is already registered.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_SUNAT") return { text: "The invoice needs attention: SUNAT could not verify it yet.", holder: team("Accounting"), since, tone: "attention" };
   if (status === "OBSERVADO_MONTO_EXCEDIDO") return { text: "The invoice is above what the purchase order allows.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_CARGA_MASIVA") return { text: "A batch of invoices needs attention.", holder: team("Accounting"), since, tone: "attention" };

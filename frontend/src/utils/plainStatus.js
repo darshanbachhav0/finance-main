@@ -17,9 +17,6 @@ export const PLAIN_STATUSES = Object.freeze({
   CANCELLED: { label: "Cancelled", tone: "danger", statuses: ["ANULADO"] }
 });
 
-// The four main steps, in order, for the progress line.
-export const PLAIN_STEPS = Object.freeze(["DRAFT", "WAITING", "IN_PROCESS", "PAID"]);
-
 // Status filter options for "My requests": each plain status filters its workflow statuses.
 export const plainStatusFilterOptions = Object.entries(PLAIN_STATUSES).map(([, item]) => ({ value: item.statuses.join(","), label: item.label }));
 
@@ -32,6 +29,11 @@ const advanceOpen = (request) => request?.flowType === "C" && request?.requestTy
 
 // "What we need from you": one sentence, and whether the requester has something to do.
 // An approved advance waiting for the employee's verified bank account before it can be paid.
+// An invoice the requester has to replace: issued by another supplier than the order's, or already
+// registered. Any other invoice observation is Accounting's to resolve.
+export const REQUESTER_INVOICE_PROBLEMS = Object.freeze(["RUC_MISMATCH", "DUPLICATE_VOUCHER"]);
+export const requesterReplacesInvoice = (request) => canonicalRequestStatus(request?.status) === "OBSERVADO_SUNAT" && REQUESTER_INVOICE_PROBLEMS.includes(request?.observation?.code);
+
 export const waitsForBankAccount = (request) => canonicalRequestStatus(request?.status) === "APROBADO"
   && request?.observation?.code === "REIMBURSEMENT_BANK_REQUIRED" && !request.observation.resolvedAt;
 
@@ -47,6 +49,9 @@ export function plainNextStep(request) {
   if (waitsForBankAccount(request)) return request.observation.resolver === "ACCOUNTING"
     ? { text: "Nothing. Accounting is verifying your bank account; then the advance is paid.", yours: false }
     : { text: "Register your bank account in {currency} under My bank account. The advance is paid once Accounting verifies it.", params: { currency: request.currency || "PEN" }, yours: true };
+  if (requesterReplacesInvoice(request)) return request.observation.code === "RUC_MISMATCH"
+    ? { text: "Upload the right invoice: the one uploaded is from another supplier.", yours: true }
+    : { text: "Upload the right invoice: the one uploaded is already registered.", yours: true };
   if (key === "IN_PROCESS") return { text: "Nothing. Finance is processing it.", yours: false };
   if (key === "PAID") return { text: "Nothing. It is paid.", yours: false };
   return { text: "Nothing. It will not continue.", yours: false };

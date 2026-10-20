@@ -1,5 +1,5 @@
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
-import { waitsForBankAccount } from "./plainStatus.js";
+import { REQUESTER_INVOICE_PROBLEMS, waitsForBankAccount } from "./plainStatus.js";
 
 // "Your turn" at the top of a request: the one thing the person looking at it has to do now, in
 // plain words, with the button that does it (run), opens the exact place on the page (open) or
@@ -8,6 +8,7 @@ import { waitsForBankAccount } from "./plainStatus.js";
 // keys; Spanish lives in context/i18n/simple.js.
 
 const DOCUMENTS = "request-section-documents-and-fiscal-validation";
+const REGISTER_INVOICE = { A1: "request-section-register-a1-invoice-and-conformity", B: "request-section-register-the-invoice" };
 const FINANCE = ["Admin", "Accounting"];
 const PAYERS = ["Admin", "Treasury"];
 const SETTLERS = ["Admin", "Accounting", "Treasury"];
@@ -17,6 +18,24 @@ const TO_PAY = ["OPEN", "SCHEDULED"];
 const turn = (key, title, text, extra = {}) => ({ key, mine: true, title, text, ...extra });
 const note = (key, text, extra = {}) => ({ key, mine: false, text, ...extra });
 const idOf = (value) => String(value?._id || value || "");
+
+// An invoice the requester has to replace, said in full: which invoice, whose RUC and whose order.
+// Other invoice observations keep the generic wording and show their detail on the page.
+function invoiceProblem(request, related) {
+  const code = request.observation?.code;
+  if (!REQUESTER_INVOICE_PROBLEMS.includes(code)) return null;
+  const voucher = [...(related.sunatVouchers || [])].reverse().find((item) => item.validationStatus !== "VALID") || {};
+  const supplier = request.supplier || {};
+  return {
+    code,
+    params: {
+      invoice: voucher.seriesNumber || "",
+      found: voucher.rucIssuer || "",
+      supplier: supplier.legalName || supplier.name || request.supplierSnapshot?.legalName || "",
+      expected: supplier.rucDni || supplier.normalizedIdentifier || request.supplierSnapshot?.identifier || ""
+    }
+  };
+}
 
 // Where a team's work on a request is done, when nothing more specific applies.
 const TEAM_WORKSPACE = {
@@ -35,7 +54,23 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
   const name = request.requester?.name || request.solicitor?.name || "";
 
   if (invoiceCorrection) {
-    return permissions.canRegisterInvoice || owner || role === "Admin"
+    const fixes = permissions.canRegisterInvoice || owner || role === "Admin";
+    const upload = { label: "Upload the correct invoice", open: { tab: "Documents", target: REGISTER_INVOICE[request.flowType] || DOCUMENTS } };
+    const problem = invoiceProblem(request, related);
+    if (problem?.code === "RUC_MISMATCH") {
+      const known = problem.params.invoice && problem.params.found;
+      return fixes
+        ? turn("correctInvoice", "The invoice is from another supplier", known
+          ? "Invoice {invoice} was issued by RUC {found}, but this purchase order is for {supplier} (RUC {expected}). Upload {supplier}'s invoice. If you really bought from RUC {found}, the request has the wrong supplier: ask Accounting to annul it, then repeat it with that supplier."
+          : "The invoice was issued by another RUC, but this purchase order is for {supplier} (RUC {expected}). Upload {supplier}'s invoice, or ask Accounting to annul the request if the supplier is wrong.", { params: problem.params, tone: "warning", action: upload })
+        : note("correctInvoice", "The invoice is from another supplier than the purchase order. The requester uploads the right one.");
+    }
+    if (problem?.code === "DUPLICATE_VOUCHER") {
+      return fixes
+        ? turn("correctInvoice", "This invoice is already registered", problem.params.invoice ? "Invoice {invoice} is already in the system. Upload the invoice for this purchase." : "This invoice is already in the system. Upload the invoice for this purchase.", { params: problem.params, tone: "warning", action: upload })
+        : note("correctInvoice", "The invoice uploaded is already registered. The requester uploads the one for this purchase.");
+    }
+    return fixes
       ? turn("correctInvoice", "Correct the invoice documents", "Correct the invoice documents. Existing approvals and the issued order remain valid; do not submit the request for approval again.", { action: { label: "Open documents", open: { tab: "Documents", target: DOCUMENTS } } })
       : note("correctInvoice", "The requester is correcting the invoice documents. Existing approvals and the issued order remain valid.");
   }
