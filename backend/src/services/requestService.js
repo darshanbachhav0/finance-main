@@ -36,7 +36,7 @@ import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { assertSupplierSubmittable } from "./supplierService.js";
 import { transitionRequest, canTransition } from "./workflowService.js";
-import { INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
+import { INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, parseInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
 import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
@@ -507,6 +507,22 @@ function normalizeTrackFields(request) {
   }
 }
 
+// An A1 sent with its factura PDF (no XML, which is checked in full) is checked for its issuer: an
+// invoice from another RUC could not be registered against the order once it is approved. A PDF
+// that cannot be read is checked when the invoice is registered.
+async function assertInvoiceIssuedBySupplier(request, supplier) {
+  if (!supplier || (request.attachments || []).some((attachment) => attachment.kind === "XML")) return;
+  const pdf = [...(request.attachments || [])].reverse().find((attachment) => attachment.kind === "PDF" && attachment.path);
+  if (!pdf) return;
+  const expectedRuc = String(supplier.normalizedIdentifier || supplier.rucDni || "").replace(/\D/g, "");
+  const buyerRuc = String(process.env.SIRE_TAXPAYER_RUC || "").replace(/\D/g, "") || undefined;
+  let invoiceRuc;
+  try { invoiceRuc = (await parseInvoiceEvidence(pdf.path, { expectedRuc, buyerRuc })).data?.ruc; } catch { return; }
+  if (invoiceRuc && expectedRuc && invoiceRuc !== expectedRuc) {
+    throw new AppError(422, "The attached invoice was issued by another RUC than the selected supplier. Select the supplier that issued it, or attach this supplier's invoice.", { field: "supplier", invoiceRuc, supplierRuc: expectedRuc }, ERROR_CODES.SUPPLIER_INVOICE_MISMATCH);
+  }
+}
+
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
   const officialRequest = isOfficialCapexOpexRequest(request);
@@ -588,6 +604,7 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       // A supplier still waiting for its proposer's jefe does not hold the request back: the jefe
       // verifies it while deciding the request, and no approval completes before it is approved.
       assertSupplierSubmittable(supplier);
+      await assertInvoiceIssuedBySupplier(request, supplier);
     } else {
       assertSupplierSubmittable(supplier);
     }

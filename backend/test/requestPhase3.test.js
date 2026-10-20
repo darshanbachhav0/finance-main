@@ -29,6 +29,7 @@ import {
 } from "../src/services/requestService.js";
 import { assertSupplierSubmittable, assertSupplierUsable } from "../src/services/supplierService.js";
 import { ERROR_CODES, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { invoicePdf } from "./fiscalFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
@@ -319,6 +320,23 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       assert.equal(submitted.supplier.homologationStatus, "HOMOLOGATED");
       assert.equal(submitted.quotations[0].supplierSnapshot.legalName, suppliers[0].legalName);
       assert.equal(submitted.quotations[2].supplierSnapshot.legalName, suppliers[1].legalName, "a pending supplier may still be quoted without being recommended");
+    });
+
+    await t.test("an A1 sent with its factura PDF must carry the selected supplier's invoice", async () => {
+      const facturaFrom = async (ruc) => {
+        const file = path.join(os.tmpdir(), `factura-${ruc}-${process.pid}-${Date.now()}.pdf`);
+        await fs.writeFile(file, invoicePdf({ ruc, series: "E001", number: "273", issueDate: "2026-08-12", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 }));
+        return { kind: "PDF", originalName: "factura.pdf", filename: "factura.pdf", path: file, url: "/uploads/requests/x/factura.pdf", mimetype: "application/pdf", size: 100, uploadedBy: solicitor._id };
+      };
+      // After approval this invoice could not be registered against the order, so it is refused now.
+      const otherIssuer = await officialDocument();
+      otherIssuer.attachments.push(await facturaFrom("20610378669"));
+      await otherIssuer.save();
+      await assert.rejects(() => submitFinancialRequest({ id: otherIssuer._id, user: solicitor, req }), (error) => error.code === "SUPPLIER_INVOICE_MISMATCH" && error.details.invoiceRuc === "20610378669" && error.details.field === "supplier");
+      const ownInvoice = await officialDocument();
+      ownInvoice.attachments.push(await facturaFrom(suppliers[5].rucDni));
+      await ownInvoice.save();
+      assert.equal((await submitFinancialRequest({ id: ownInvoice._id, user: solicitor, req })).status, REQUEST_STATUS.PENDING_APPROVAL);
     });
 
     await t.test("budget preview uses current Budget dimensions, ignores fake status and never creates a commitment", async () => {

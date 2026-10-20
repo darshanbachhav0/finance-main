@@ -71,8 +71,7 @@ import RequestJourney from "../components/RequestJourney.jsx";
 import NextStepCard from "../components/NextStepCard.jsx";
 import { nextStepFor } from "../utils/nextStep.js";
 import { journeySummary } from "../utils/requestJourney.js";
-import PlainStatus from "../components/PlainStatus.jsx";
-import { usesPlainStatuses } from "../utils/plainStatus.js";
+import { REQUESTER_INVOICE_PROBLEMS, usesPlainStatuses } from "../utils/plainStatus.js";
 import RenditionCountdown from "../components/RenditionCountdown.jsx";
 import RequestComments from "../components/RequestComments.jsx";
 import SupplierToVerify from "../components/SupplierToVerify.jsx";
@@ -569,7 +568,8 @@ export default function RequestDetail() {
 
       <Message type="error">{error}</Message>
       {step?.mine && <NextStepCard step={step} request={request} processing={processing} onRun={runStep} onOpen={openStep} onReload={load} />}
-      {!simpleAdvance && <ReadinessPanel requestId={id} revision={request.updatedAt} />}
+      {/* The readiness checklist is Finance's; a requester's "Your turn" card already says what is needed. */}
+      {!simpleAdvance && !usesPlainStatuses(user) && <ReadinessPanel requestId={id} revision={request.updatedAt} />}
 
       <dl className="request-overview">
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
@@ -579,10 +579,12 @@ export default function RequestDetail() {
       <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} viewerRole={user.role} viewerName={user.name} />
       {simpleAdvance ? <AdvanceRenditionCard request={request} onOpen={openReceipts} /> : <RenditionCountdown request={request} mine={isOwner} onOpen={openReceipts} />}
       {step && !step.mine && <NextStepCard step={step} request={request} />}
-      {invoiceCorrection && request.observation?.detail && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
+      {/* An invoice from another supplier, or already registered, is explained in full by the card above. */}
+      {invoiceCorrection && request.observation?.detail && (approvedExceptionAfterObservation || !REQUESTER_INVOICE_PROBLEMS.includes(request.observation.code)) && <Message type={approvedExceptionAfterObservation ? "warning" : "error"}>{t(approvedExceptionAfterObservation
         ? "Accounting has recorded a manual SUNAT exception. Invoice posting is still pending. Open Documents and retry with the same invoice files; any remaining blocker will be shown."
         : request.observation.detail)}</Message>}
-      {simpleAdvance ? null : usesPlainStatuses(user) ? <div className="stage-row" role="group" aria-label={t("Current status")}><PlainStatus request={request} steps /></div> : <div className="stage-row" role="group" aria-label={t("Current status")}>
+      {/* Requesters follow the journey above; the detailed stage row is Finance's. */}
+      {simpleAdvance || usesPlainStatuses(user) ? null : <div className="stage-row" role="group" aria-label={t("Current status")}>
         <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
         {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}

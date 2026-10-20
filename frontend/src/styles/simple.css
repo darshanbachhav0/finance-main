@@ -52,12 +52,6 @@
 .plain-status { display: grid; gap: var(--space-1); justify-items: start; }
 .plain-next { display: inline-flex; align-items: center; gap: 4px; color: var(--gray-600); font-size: var(--font-xs); }
 .plain-next.is-yours { color: var(--amber-700); font-weight: 700; }
-.plain-steps { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin: var(--space-1) 0 0; padding: 0; list-style: none; color: var(--gray-500); font-size: var(--font-sm); }
-.plain-steps li::before { content: "\25CB"; margin-right: 4px; }
-.plain-steps li.is-done { color: var(--green-700); }
-.plain-steps li.is-done::before { content: "\2713"; }
-.plain-steps li.is-current { color: var(--gray-950); font-weight: 700; }
-.plain-steps li.is-current::before { content: "\25CF"; color: var(--uma-primary); }
 
 /* ---- One-page approval (from the email) ---- */
 .approval-decision { display: grid; gap: var(--space-4); max-width: 720px; }

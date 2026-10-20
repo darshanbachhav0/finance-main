@@ -100,3 +100,29 @@ assert.match(source("../src/components/RequestJourney.jsx"), /t\("With you \(\{n
 for (const key of ["reconciliation", "closeReady", "renditionBalance", "advanceRecovery"]) assert.ok(TASK_SENTENCES[key], `${key} has a sentence`);
 
 console.log("PASS next step: each role's turn, the rendition review on the card, payment steps, page wiring");
+
+// 7. An invoice from another supplier than the order: one clear card, the journey and the list
+//    agree that the requester uploads the right invoice; no duplicate status blocks on the page.
+{
+  const { journeySummary } = await import("../src/utils/requestJourney.js");
+  const { plainNextStep } = await import("../src/utils/plainStatus.js");
+  const owner = { _id: "camila", role: "Solicitor" };
+  const observed = { _id: "r9", flowType: "A1", status: "OBSERVADO_SUNAT", requester: { _id: "camila", name: "Camila" }, supplier: { legalName: "Comercial Andina S.A.C.", rucDni: "20123456789" }, observation: { code: "RUC_MISMATCH", detail: "The XML issuer RUC does not match the approved supplier." } };
+  const related = { sunatVouchers: [{ seriesNumber: "E001-273", rucIssuer: "20610378669", validationStatus: "OBSERVED" }] };
+  const card = nextStepFor({ request: observed, user: owner, permissions: { canRegisterInvoice: true }, related, invoiceCorrection: true });
+  assert.equal(card.title, "The invoice is from another supplier");
+  assert.deepEqual(card.params, { invoice: "E001-273", found: "20610378669", supplier: "Comercial Andina S.A.C.", expected: "20123456789" });
+  assert.equal(card.action.open.target, "request-section-register-a1-invoice-and-conformity", "the button opens the invoice upload itself");
+  assert.equal(card.tone, "warning");
+  assert.equal(nextStepFor({ request: observed, user: { _id: "jefe", role: "Solicitor" }, related, invoiceCorrection: true }).mine, false);
+  assert.equal(nextStepFor({ request: { ...observed, observation: { code: "DUPLICATE_VOUCHER" } }, user: owner, permissions: { canRegisterInvoice: true }, related, invoiceCorrection: true }).title, "This invoice is already registered");
+  assert.equal(nextStepFor({ request: { ...observed, observation: { code: "OBSERVADO_SUNAT" } }, user: owner, permissions: { canRegisterInvoice: true }, related, invoiceCorrection: true }).title, "Correct the invoice documents", "a SUNAT check keeps the generic card");
+  const journey = journeySummary(observed, { viewerId: "camila" });
+  assert.equal(journey.holder.name, "Camila", "with the requester, not Accounting");
+  assert.match(journey.text, /another supplier/);
+  assert.equal(journeySummary({ ...observed, observation: { code: "OBSERVADO_SUNAT" } }, { viewerId: "camila" }).holder.team, true, "SUNAT checks stay with Accounting");
+  assert.deepEqual(plainNextStep(observed), { text: "Upload the right invoice: the one uploaded is from another supplier.", yours: true });
+  assert.match(detail, /!REQUESTER_INVOICE_PROBLEMS\.includes\(request\.observation\.code\)\) && <Message/, "the card replaces the red message");
+  assert.doesNotMatch(detail, /<PlainStatus/, "the journey is the requester's only status block");
+  assert.match(detail, /!simpleAdvance && !usesPlainStatuses\(user\) && <ReadinessPanel/, "the readiness checklist is Finance's");
+}
