@@ -240,6 +240,15 @@ export default function Suppliers() {
     ]
   );
 
+  // A link to one section of the record (Treasury links to #supplier-section-banking-information)
+  // opens it there, once per record.
+  const scrolledToSection = useRef("");
+  useEffect(() => {
+    if (!location.hash || loadingDetail || detail?._id !== recordId || scrolledToSection.current === recordId) return;
+    scrolledToSection.current = recordId;
+    requestAnimationFrame(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" }));
+  }, [location.hash, loadingDetail, detail?._id, recordId]);
+
   /*
    * After 11 RUC digits have been entered, automatically:
    *

@@ -48,6 +48,7 @@ import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestTypes } from "../utils/options.js";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
+import { PAYMENT_BLOCK_TEXT, paymentBlockFor } from "../utils/paymentBlock.js";
 import "../styles/treasury.css";
 import { todayIso } from "../utils/dateInput.js";
 const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
@@ -555,7 +556,12 @@ export default function TreasuryQueue({ historyOnly = false }) {
       const accounts = matchingAccounts(row);
       const payableId = String(payableIdOf(row));
       const locked = row.destinationLocked || row.paymentDestination;
-      if (!accounts.length) return <span className="blocked-inline"><AlertTriangle size={14} />{t("No eligible matching account")}</span>;
+      if (!accounts.length) {
+        // Why it cannot be selected, and the supplier record where it is fixed.
+        const block = paymentBlockFor(row, currency);
+        const reason = block && Object.entries(block.params).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, value), t(PAYMENT_BLOCK_TEXT[block.code]));
+        return <div className="payment-block"><span className="blocked-inline"><AlertTriangle size={14} />{t("No eligible matching account")}</span>{reason && <small>{reason}</small>}{block?.href && <Link to={block.href} onClick={(event) => event.stopPropagation()}>{t("Open the supplier's bank accounts")}</Link>}</div>;
+      }
       if (locked) {
         const account = accounts[0];
         return <div className="payment-destination-summary compact"><LockKeyhole size={14} /><div><strong>{destinationBank(row)} · {account.currency}</strong><span>{account.cciMasked || account.cci || account.accountNumberMasked || account.accountNumber}</span><small>{t("Payment destination snapshot")}</small></div></div>;

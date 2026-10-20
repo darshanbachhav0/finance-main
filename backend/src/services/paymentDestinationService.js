@@ -73,6 +73,26 @@ export async function listEligibleSupplierPaymentAccounts({ supplierId, bank, cu
   return accounts.filter((account) => isEligibleSupplierPaymentAccount(account, { bank, currency }));
 }
 
+// Why a supplier CXP cannot go into a bank file in its currency, read from all the supplier's
+// accounts (any status): the account closest to usable says what has to happen next. Only codes and
+// currencies leave here, never account numbers. null when an account is eligible.
+export function supplierPaymentBlock(accounts = [], currency) {
+  if (accounts.some((account) => isEligibleSupplierPaymentAccount(account, { currency }))) return null;
+  const active = accounts.filter((account) => account.active);
+  const current = active.filter((account) => account.accountType === "CURRENT");
+  const inCurrency = current.filter((account) => account.currency === currency);
+  const awaitsReview = (account) => account.verificationStatus === "PENDING" || (account.verificationStatus === "VERIFIED" && account.ownershipResult === "NOT_REVIEWED");
+  if (inCurrency.some(awaitsReview)) return { code: "PENDING_VERIFICATION", currency };
+  if (inCurrency.some((account) => account.verificationStatus === "OBSERVED")) return { code: "OBSERVED", currency };
+  // Rejected, or verified but not in the supplier's name (ownership MISMATCH).
+  if (inCurrency.length) return { code: "REJECTED", currency };
+  const others = [...new Set(current.map((account) => account.currency))];
+  if (others.length) return { code: "OTHER_CURRENCY", currency, others: others.join(", ") };
+  if (active.length) return { code: "DETRACTION_ONLY", currency };
+  if (accounts.length) return { code: "INACTIVE", currency };
+  return { code: "NO_ACCOUNT", currency };
+}
+
 function assertSnapshotBatchMatch(snapshot, bank, currency) {
   if ((bank && snapshot.bank !== bank) || snapshot.currency !== currency) {
     throw new AppError(
