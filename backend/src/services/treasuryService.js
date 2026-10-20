@@ -195,7 +195,7 @@ export function resolvePaymentSchedule({ paymentDate, reason, now = new Date(), 
   return { paymentDate: date, cycleDate, override: onCycle ? null : { reason: overrideReason, cycleDate } };
 }
 
-function paymentCycleOf(accountsPayable, now = new Date()) {
+export function paymentCycleOf(accountsPayable, now = new Date()) {
   // scheduledFor is stored as the UTC midnight of the chosen calendar date.
   if (accountsPayable.scheduledFor) return new Date(accountsPayable.scheduledFor).toISOString().slice(0, 10);
   // An advance is paid on its pay date; one not paid yet is still owed today.

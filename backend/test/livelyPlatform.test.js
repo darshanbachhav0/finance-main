@@ -34,6 +34,17 @@ test("payments are expected on their scheduled day, else on the next payment cyc
   assert.deepEqual(expectedPaymentDate({ scheduledFor: new Date("2026-10-30T00:00:00Z") }, now), { date: "2026-10-30", estimated: false });
   assert.deepEqual(expectedPaymentDate({}, now), { date: "2026-10-15", estimated: true });
   assert.deepEqual(expectedPaymentDate({}, new Date("2026-10-16T15:00:00Z")), { date: "2026-10-30", estimated: true });
+  // A scheduled day that passed is never promised again (seen on 20 Oct for a payment of 15 Oct).
+  const later = new Date("2026-10-20T15:00:00Z");
+  const missed = new Date("2026-10-15T00:00:00Z");
+  assert.deepEqual(expectedPaymentDate({ status: "SCHEDULED", scheduledFor: missed }, later), { date: "2026-10-30", estimated: true }, "not paid on its day: the next run");
+  assert.deepEqual(expectedPaymentDate({ status: "PARTIALLY_PAID", scheduledFor: missed }, later), { date: "2026-10-30", estimated: true }, "the rest of a partial payment");
+  assert.equal(expectedPaymentDate({ status: "PAYMENT_FILE_CREATED", scheduledFor: missed }, later), null, "in the bank file of 15 Oct: no new date until Treasury confirms it");
+  assert.deepEqual(expectedPaymentDate({ status: "SCHEDULED", scheduledFor: new Date("2026-10-20T00:00:00Z") }, later), { date: "2026-10-20", estimated: false }, "today is not past");
+  // Unscheduled: the run Treasury's queue puts it in.
+  assert.deepEqual(expectedPaymentDate({ dueDate: new Date("2026-11-20T05:00:00Z") }, later), { date: "2026-11-30", estimated: true }, "credit terms: not before the due date");
+  assert.deepEqual(expectedPaymentDate({ dueDate: new Date("2026-10-01T05:00:00Z") }, later), { date: "2026-10-30", estimated: true }, "overdue: the next run");
+  assert.deepEqual(expectedPaymentDate({ flowType: "C", voucher: { voucherType: "ANTICIPO" } }, later), { date: "2026-10-20", estimated: true }, "an advance is paid the same day");
 });
 
 test("rendition reminders fire at 3 working days, at 1 and once overdue", () => {
@@ -137,6 +148,18 @@ test("lively platform services against the database", { timeout: 60000 }, async 
       assert.deepEqual({ ...mine.payments.next, requestId: String(mine.payments.next.requestId) }, { requestId: String(openRequest), requestNumber: mine.payments.next.requestNumber, amount: 118, currency: "PEN", date: "2026-10-30", estimated: false });
       const director = await personalDashboard(approver, { now });
       assert.deepEqual(director.approvals, { decidedThisMonth: 1, averageHours: 3 });
+
+      // Seen on 20 Oct: the payment scheduled for 15 Oct was not paid, so 15 Oct is not "next".
+      const late = await makeUser("Solicitor", "Luis Late");
+      const lateRequest = await insertRequest({ status: "PROGRAMADO", requester: late._id });
+      const sentRequest = await insertRequest({ status: "TXT_GENERADO", requester: late._id });
+      await AccountsPayable.collection.insertMany([
+        { request: lateRequest, status: "SCHEDULED", outstandingAmount: 236, originalAmount: 236, penEquivalent: 236, currency: "PEN", scheduledFor: new Date("2026-10-15T00:00:00Z"), updatedAt: now },
+        { request: sentRequest, status: "PAYMENT_FILE_CREATED", outstandingAmount: 59, originalAmount: 59, penEquivalent: 59, currency: "PEN", scheduledFor: new Date("2026-10-15T00:00:00Z"), updatedAt: now }
+      ]);
+      const after = await personalDashboard(late, { now: new Date("2026-10-20T15:00:00Z") });
+      assert.deepEqual({ request: String(after.payments.next.requestId), date: after.payments.next.date, estimated: after.payments.next.estimated }, { request: String(lateRequest), date: "2026-10-30", estimated: true });
+      assert.equal(after.payments.upcomingCount, 1, "the one already in a bank file waits for Treasury's confirmation, with no date");
     });
 
     await t.test("rendition reminders are sent once per stage", async () => {
