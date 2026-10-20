@@ -37,6 +37,7 @@ import {
 } from "../src/services/treasuryService.js";
 import { findSpotCategory, listSpotCategories, setSupplierDetractionAccount, updateSpotCategory } from "../src/services/detractionService.js";
 import { verifySupplierBankAccount } from "../src/services/supplierService.js";
+import { supplierPaymentBlock } from "../src/services/paymentDestinationService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
 import { nextPaymentCycleDate } from "../../shared/businessCalendar.mjs";
 import { AP_STATUS, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
@@ -488,9 +489,51 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       await reconcilePayment({ requestId: request._id, payload: { bankReference: "EST-USD", statementAmount: 50 }, user: treasury, req });
       assert.equal((await FinancialRequest.findById(request._id)).status, REQUEST_STATUS.RECONCILED);
     });
+
+    await t.test("a CXP without an eligible account says why in the queue, without account numbers", async () => {
+      const rowFor = async (supplier, ap) => (await listTreasuryQueue({ supplier: String(supplier._id) })).data.find((row) => String(row._id) === String(ap._id));
+      const { supplier: none } = await makeSupplier({ withAccount: false });
+      const { ap: noneAp } = await makePayable({ supplier: none });
+      assert.deepEqual((await rowFor(none, noneAp)).paymentBlock, { code: "NO_ACCOUNT", currency: "PEN" });
+
+      const { supplier: waiting } = await makeSupplier({ withAccount: false });
+      await SupplierBankAccount.create({ supplier: waiting._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191077770101", cci: "00219100077770001001", active: true, createdBy: admin._id });
+      const { ap: waitingAp } = await makePayable({ supplier: waiting });
+      const blocked = await rowFor(waiting, waitingAp);
+      assert.deepEqual(blocked.paymentBlock, { code: "PENDING_VERIFICATION", currency: "PEN" });
+      assert.deepEqual(blocked.eligibleBankAccounts, []);
+      assert.doesNotMatch(JSON.stringify(blocked.paymentBlock), /191077770101|00219100077770001001/);
+
+      const { supplier: dollars } = await makeSupplier({ currency: "USD" });
+      const { ap: penAp } = await makePayable({ supplier: dollars });
+      assert.deepEqual((await rowFor(dollars, penAp)).paymentBlock, { code: "OTHER_CURRENCY", currency: "PEN", others: "USD" });
+
+      const { supplier: ready } = await makeSupplier();
+      const { ap: readyAp } = await makePayable({ supplier: ready });
+      const payable = await rowFor(ready, readyAp);
+      assert.equal(payable.paymentBlock, null);
+      assert.equal(payable.eligibleBankAccounts.length, 1, "the eligible account is still offered");
+    });
   } finally {
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
     await Promise.all(cleanupPaths.map((target) => fs.rm(target, { recursive: true, force: true }).catch(() => undefined)));
   }
+});
+
+test("supplierPaymentBlock: the account closest to usable says what has to happen next", () => {
+  const account = (patch = {}) => ({ active: true, accountType: "CURRENT", currency: "PEN", verificationStatus: "PENDING", ownershipResult: "NOT_REVIEWED", ...patch });
+  const block = (accounts) => supplierPaymentBlock(accounts, "PEN")?.code ?? null;
+  assert.equal(block([account({ verificationStatus: "VERIFIED", ownershipResult: "MATCH" })]), null);
+  assert.equal(block([account({ verificationStatus: "LEGACY_ACCEPTED" })]), null);
+  assert.equal(block([]), "NO_ACCOUNT");
+  assert.equal(block([account()]), "PENDING_VERIFICATION");
+  assert.equal(block([account({ verificationStatus: "VERIFIED", ownershipResult: "NOT_REVIEWED" })]), "PENDING_VERIFICATION", "verified without the ownership review");
+  assert.equal(block([account({ verificationStatus: "OBSERVED" })]), "OBSERVED");
+  assert.equal(block([account({ verificationStatus: "OBSERVED" }), account()]), "PENDING_VERIFICATION", "a pending account is one review away");
+  assert.equal(block([account({ verificationStatus: "REJECTED" })]), "REJECTED");
+  assert.equal(block([account({ verificationStatus: "VERIFIED", ownershipResult: "MISMATCH" })]), "REJECTED", "not in the supplier's name");
+  assert.deepEqual(supplierPaymentBlock([account({ currency: "USD", verificationStatus: "VERIFIED", ownershipResult: "MATCH" })], "PEN"), { code: "OTHER_CURRENCY", currency: "PEN", others: "USD" });
+  assert.equal(block([account({ accountType: "DETRACTION", bank: "BANCO_NACION" })]), "DETRACTION_ONLY");
+  assert.equal(block([account({ active: false, verificationStatus: "VERIFIED", ownershipResult: "MATCH" })]), "INACTIVE");
 });

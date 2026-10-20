@@ -26,9 +26,11 @@ import { notificationText, notifyRoles, notifyUser, resolveNotification } from "
 import {
   bouncedDestinationStillVerified,
   flagBouncedDestination,
+  isEligibleSupplierPaymentAccount,
   listEligibleSupplierPaymentAccounts,
   refreshEmployeeDestination,
   resolvePaymentDestination,
+  supplierPaymentBlock,
   usesEmployeeReimbursementDestination
 } from "./paymentDestinationService.js";
 import { ensureDetraction, pendingDetractionAmount, resolveSupplierDetractionAccount } from "./detractionService.js";
@@ -488,6 +490,10 @@ export async function listTreasuryQueue(queryParams) {
     countMissingPaymentDestinations(query, queryParams.beneficiaryBank ? String(queryParams.beneficiaryBank).toUpperCase() : undefined)
   ]);
   const now = new Date();
+  // Every account of the suppliers on this page, in one query: the eligible ones are offered, and
+  // the rest say why a CXP is blocked (supplierPaymentBlock).
+  const supplierIds = [...new Set(records.map((accountsPayable) => accountsPayable.supplier?._id).filter(Boolean).map(String))];
+  const supplierAccounts = supplierIds.length ? await SupplierBankAccount.find({ supplier: { $in: supplierIds } }).sort({ preferred: -1, validFrom: -1, createdAt: -1 }) : [];
   const data = await Promise.all(records.map(async (accountsPayable) => {
     // Preview only (not persisted): the SPOT result is frozen when Treasury schedules the CXP.
     const detraction = accountsPayable.detraction?.status
@@ -515,7 +521,10 @@ export async function listTreasuryQueue(queryParams) {
       };
       return { ...request, requestId: request._id, _id: object._id, accountsPayable: object, supplier: object.supplier, activeBankAccounts: [], eligibleBankAccounts: [], paymentDestination, destinationLocked: true };
     }
-    const accounts = accountsPayable.supplier ? await listEligibleSupplierPaymentAccounts({ supplierId: accountsPayable.supplier._id, currency: object.currency }) : [];
+    const supplierId = accountsPayable.supplier ? String(accountsPayable.supplier._id) : "";
+    const own = supplierAccounts.filter((account) => String(account.supplier) === supplierId);
+    const accounts = own.filter((account) => isEligibleSupplierPaymentAccount(account, { currency: object.currency }));
+    const paymentBlock = frozen ? null : supplierId ? supplierPaymentBlock(own, object.currency) : { code: "NO_EMPLOYEE_ACCOUNT", currency: object.currency };
     return {
       ...request,
       requestId: request._id,
@@ -525,7 +534,8 @@ export async function listTreasuryQueue(queryParams) {
       activeBankAccounts: accounts,
       eligibleBankAccounts: accounts,
       paymentDestination: frozen,
-      destinationLocked: Boolean(frozen && object.status === AP_STATUS.SCHEDULED)
+      destinationLocked: Boolean(frozen && object.status === AP_STATUS.SCHEDULED),
+      paymentBlock
     };
   }));
   return {
