@@ -126,7 +126,10 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
   }
   if (permissions.canApprove) return turn("approve", "Approve or reject this request", "Review the supporting documents and record your decision.", { action: { label: "Approve", run: "approve" }, more: { label: "Other options", open: { target: "request-actions" } } });
   if (permissions.canIssueOrder) return turn("issueOrder", "Issue the purchase order", "Review the approved purchase and issue the order.", { action: { label: "Issue order", run: "order" } });
-  if (permissions.canRegisterInvoice) {
+  // Only while the request waits for its first invoice. An A1 order may still receive more invoices
+  // after one is booked (the Documents tab keeps the upload), but that is nobody's turn.
+  const awaitsInvoice = status === "COMPROMISO_PRESUPUESTAL" && (request.flowType === "B" ? !request.xmlValidation?.validated : Boolean(request.purchaseOrder));
+  if (permissions.canRegisterInvoice && awaitsInvoice) {
     return turn("registerInvoice", "Register the supplier's invoice", "Upload the invoice XML or its PDF. Accounting books it and Treasury pays it.", { action: { label: "Register the invoice", open: { tab: "Documents", target: request.flowType === "B" ? "request-section-register-the-invoice" : "request-section-register-a1-invoice-and-conformity" } } });
   }
 

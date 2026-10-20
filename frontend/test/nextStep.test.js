@@ -65,6 +65,21 @@ assert.equal(jefeTurn(waitingSupplier({ yours: false })).action.label, "Approve"
 assert.equal(nextStepFor({ request: { ...draft, status: "APROBADO" }, user: treasury, permissions: { canCommitBudget: true } }).action.run, "budget");
 assert.equal(nextStepFor({ request: { ...draft, status: "COMPROMISO_PRESUPUESTAL" }, user: { _id: "p", role: "Procurement" }, permissions: { canIssueOrder: true } }).action.run, "order");
 assert.equal(nextStepFor({ request: { ...draft, flowType: "B", status: "COMPROMISO_PRESUPUESTAL" }, user: camila, permissions: { canRegisterInvoice: true } }).action.open.target, "request-section-register-the-invoice");
+// A1: the invoice is the requester's turn once the order is issued, and only until one is booked.
+// The permission stays after booking (one order may receive several invoices); the card does not.
+const ordered = { ...draft, status: "COMPROMISO_PRESUPUESTAL", purchaseOrder: { _id: "po1", poNumber: "OC-2026-00041" } };
+const firstInvoice = nextStepFor({ request: ordered, user: camila, permissions: { canRegisterInvoice: true } });
+assert.equal(firstInvoice.key, "registerInvoice");
+assert.equal(firstInvoice.action.open.target, "request-section-register-a1-invoice-and-conformity");
+assert.notEqual(nextStepFor({ request: { ...ordered, purchaseOrder: undefined }, user: camila, permissions: { canRegisterInvoice: true } })?.key, "registerInvoice", "no order yet");
+const withTreasury = { text: "Booked by Accounting. Treasury pays it on the next payment day.", holder: { name: "Treasury", team: true } };
+for (const status of ["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PROVISIONADO_CXP", "PAGADO"]) {
+  assert.equal(nextStepFor({ request: { ...ordered, status }, user: camila, permissions: { canRegisterInvoice: true }, journey: withTreasury }), null, `${status}: the booked invoice is not asked for again`);
+  assert.notEqual(nextStepFor({ request: { ...ordered, status }, user: accounting, permissions: { canRegisterInvoice: true }, journey: withTreasury })?.key, "registerInvoice", `${status}: nor from Accounting`);
+}
+// Track B: its invoice is asked for until it is validated, as before.
+assert.equal(nextStepFor({ request: { ...draft, flowType: "B", status: "COMPROMISO_PRESUPUESTAL", xmlValidation: { validated: false } }, user: camila, permissions: { canRegisterInvoice: true } }).key, "registerInvoice");
+assert.equal(nextStepFor({ request: { ...draft, flowType: "B", status: "COMPROMISO_PRESUPUESTAL", xmlValidation: { validated: true } }, user: camila, permissions: { canRegisterInvoice: true } }), null);
 // With the viewer's team and nothing more specific: the team's own screen.
 const team = nextStepFor({ request: { ...draft, flowType: "B", status: "COMPROMISO_PRESUPUESTAL" }, user: accounting, journey: { text: "Approved and budgeted. Accounting books the invoice next.", holder: { name: "Accounting", team: true } } });
 assert.equal(team.key, "teamTurn");
