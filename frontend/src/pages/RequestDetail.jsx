@@ -75,6 +75,7 @@ import PlainStatus from "../components/PlainStatus.jsx";
 import { usesPlainStatuses } from "../utils/plainStatus.js";
 import RenditionCountdown from "../components/RenditionCountdown.jsx";
 import RequestComments from "../components/RequestComments.jsx";
+import SupplierToVerify from "../components/SupplierToVerify.jsx";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import { celebrate } from "../utils/celebrate.js";
 
@@ -266,17 +267,21 @@ export default function RequestDetail() {
   const activeApprovalStep = useMemo(() => approvalSteps.find((step) => step.required !== false && step.status === "PENDING") || null, [approvalSteps]);
   const isChainApprovalStep = activeApprovalStep?.source === "MANAGER_CHAIN";
   // The server decides whether "Send to my jefe" is possible: only while the current
-  // approver has an active jefe who is not on leave (GET /approvals/:id/options).
+  // approver has an active jefe who is not on leave (GET /approvals/:id/options). The same options
+  // name a supplier that still waits for approval: its jefe approves it with the request.
   const [approvalOptions, setApprovalOptions] = useState(null);
   useEffect(() => {
     let active = true;
     setApprovalOptions(null);
-    if (!permissions.canApprove || !isChainApprovalStep) return undefined;
+    if (!permissions.canApprove) return undefined;
     api.get(`/approvals/${id}/options`).then((response) => { if (active) setApprovalOptions(response.data.data || null); }).catch(() => { if (active) setApprovalOptions(null); });
     return () => { active = false; };
-  }, [id, permissions.canApprove, isChainApprovalStep, activeApprovalStep?._id]);
+  }, [id, permissions.canApprove, activeApprovalStep?._id]);
   const canForwardChain = isChainApprovalStep && Boolean(approvalOptions?.canForward);
   const forwardToName = approvalOptions?.forwardTo?.name || "";
+  const supplierApproval = approvalOptions?.supplierApproval || null;
+  const approvesSupplier = Boolean(supplierApproval?.yours);
+  const supplierBlocksApproval = approvesSupplier && !supplierApproval.ready;
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
@@ -314,7 +319,7 @@ export default function RequestDetail() {
     try {
       let decided;
       if (["approve", "observe", "return", "reject"].includes(type)) {
-        decided = await api.post(`/approvals/${id}/${type}`, type === "approve" && typeof forward === "boolean" ? { comments, forward } : { comments });
+        decided = await api.post(`/approvals/${id}/${type}`, type === "approve" ? { comments, ...(typeof forward === "boolean" && { forward }), ...(approvesSupplier && { approveSupplier: true }) } : { comments });
       }
       if (type === "budget") await api.post(`/budget/requests/${id}/commit`);
       if (type === "order") await api.post(`/requests/${id}/procurement-order`);
@@ -451,7 +456,15 @@ export default function RequestDetail() {
         details: [details, { label: "Result", value: "Status changes to RECHAZADO." }]
       }
     };
-    setConfirm({ type, forward, ...actions[type] });
+    const confirmation = actions[type];
+    if (type === "approve" && approvesSupplier) {
+      Object.assign(confirmation, {
+        title: forward ? "Approve the supplier and send the request to your jefe?" : "Approve the supplier and this request?",
+        description: "The supplier is approved for use (it gets its PRV code) and your decision on the request is recorded.",
+        details: [details, { label: "Supplier", value: `${supplierApproval.supplier.name} · RUC ${supplierApproval.supplier.rucDni}` }, ...confirmation.details.slice(1)]
+      });
+    }
+    setConfirm({ type, forward, ...confirmation });
   }
 
   if (loading && !request) return <WorkspaceSkeleton label="Loading request..." />;
@@ -491,8 +504,6 @@ export default function RequestDetail() {
     inputLabel: "Closing comments",
     details: [{ label: "Request", value: request.requestNumber }, { label: "Result", value: "Status changes from CONCILIADO to CERRADO." }]
   });
-  // The requester of an OPEX A1/B request can turn it into next months' drafts (Work review).
-  const canPrepareRecurring = ["Admin", "Solicitor"].includes(user.role) && request.requestType === "OPEX" && ["A1", "B"].includes(request.flowType) && String(request.requester?._id || request.requester) === String(user._id);
   const isOwner = String(request.requester?._id || request.requester) === String(user._id);
   // The employee's own paid advance: one card saying what to do, the receipts, and the history.
   // Invoice validation, document phases and the accounting detail stay with Finance.
@@ -501,7 +512,7 @@ export default function RequestDetail() {
   const openReceipts = () => { setActiveTab("Documents"); window.requestAnimationFrame(() => document.getElementById("official-rendition")?.scrollIntoView({ behavior: "smooth", block: "start" })); };
   // "Your turn": what the viewer has to do now, with the button that does it (utils/nextStep.js).
   const journey = journeySummary(request, { activeStep: activeApprovalStep, orderApplies: related.procurementReadiness?.applicable !== false, viewerId: user._id });
-  const step = nextStepFor({ request, user, permissions, related, missingDocuments: missingDocuments.length, invoiceCorrection, ownAdvance: simpleAdvance, journey });
+  const step = nextStepFor({ request, user, permissions, related, missingDocuments: missingDocuments.length, invoiceCorrection, ownAdvance: simpleAdvance, journey, supplierApproval });
   // A step's place on the page: its tab, then the section itself, briefly highlighted.
   const openStep = ({ tab, target } = {}) => {
     if (tab) setActiveTab(tab);
@@ -516,6 +527,7 @@ export default function RequestDetail() {
   };
   const runStep = (run) => ({
     approve: () => (isChainApprovalStep ? decision("approve", false) : decision("approve")),
+    observe: () => decision("observe"),
     budget: confirmCommitBudget,
     submit: submitRequest,
     order: confirmIssueOrder,
@@ -525,8 +537,8 @@ export default function RequestDetail() {
   // navigation. It reuses the action panel's handlers; the full panel stays at #request-actions.
   const stickyAction = permissions.canApprove
     ? (isChainApprovalStep
-      ? { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button" }
-      : { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve") })
+      ? { label: approvesSupplier ? "Approve supplier and request" : "Approve", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button", disabled: supplierBlocksApproval }
+      : { label: approvesSupplier ? "Approve supplier and request" : "Approve", icon: CheckCircle2, onClick: () => decision("approve"), disabled: supplierBlocksApproval })
     : permissions.canCommitBudget ? { label: "Commit budget", icon: CheckCircle2, onClick: confirmCommitBudget }
     : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
     : permissions.canIssueOrder ? { label: "Issue order", icon: ShoppingCart, onClick: confirmIssueOrder }
@@ -988,7 +1000,7 @@ export default function RequestDetail() {
         </div>
 
         <aside className="request-detail-side" id="request-actions">
-          {(canRepeat || canPrepareRecurring || permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
+          {(canRepeat || permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
               <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
               {permissions.canWithdraw && (
@@ -1008,12 +1020,13 @@ export default function RequestDetail() {
               )}
               {/* Three decisions: Approve, Send back, Reject. In a manager chain, "send it to my jefe"
                   stays available as a link under them. */}
+              {permissions.canApprove && <SupplierToVerify approval={supplierApproval} />}
               {permissions.canApprove && (
                 <div className="action-buttons">
-                  <button type="button" className="primary-button approve-button" onClick={() => decision("approve", isChainApprovalStep ? false : undefined)}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>
+                  <button type="button" className="primary-button approve-button" disabled={supplierBlocksApproval} onClick={() => decision("approve", isChainApprovalStep ? false : undefined)}><CheckCircle2 size={16} /><span>{t(approvesSupplier ? "Approve supplier and request" : "Approve")}</span></button>
                   {(permissions.canObserve || permissions.canReturn) && <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Send back")}</span></button>}
                   {permissions.canReject && <button type="button" className="danger-button subtle" onClick={() => decision("reject")}><XCircle size={16} /><span>{t("Reject")}</span></button>}
-                  {isChainApprovalStep && canForwardChain && <button type="button" className="text-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Approve and send it to my jefe")}</span></button>}
+                  {isChainApprovalStep && canForwardChain && !supplierBlocksApproval && <button type="button" className="text-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Approve and send it to my jefe")}</span></button>}
                 </div>
               )}
               {permissions.canCommitBudget && (
@@ -1039,12 +1052,6 @@ export default function RequestDetail() {
                   <div className="action-item-buttons"><Link className="secondary-button" to={`/requests/new?from=${id}`}><Copy size={16} /><span>{t("Repeat")}</span></Link></div>
                 </div>
               ))}
-              {canPrepareRecurring && (
-                <div className="action-item">
-                  <div><strong>{t("Prepare recurring drafts")}</strong><span>{t("Creates next months' drafts from this request; each one needs its own documents and approval.")}</span></div>
-                  <div className="action-item-buttons"><Link className="secondary-button" to={`/operations?source=${id}`}><span>{t("Prepare recurring drafts")}</span></Link></div>
-                </div>
-              )}
               {(permissions.canVoid || permissions.deletable) && <div className="action-panel-danger">
               {permissions.deletable && (
                 <button

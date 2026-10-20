@@ -1302,7 +1302,7 @@ const phase2SupplierSpanish = {
   "Only the proposer's jefe approves, observes or rejects a supplier.": "Solo el jefe de quien lo propuso aprueba, observa o rechaza un proveedor.",
   "Comments are required when a supplier is observed or rejected.": "Los comentarios son obligatorios cuando un proveedor se observa o se rechaza.",
   "Supplier homologation requirements are incomplete.": "Los requisitos para aprobar el proveedor están incompletos.",
-  "Select the supplier linked to this request. A new supplier can be saved in a draft; the request is sent once the proposer's jefe approves the supplier.": "Selecciona el proveedor vinculado a esta solicitud. Un proveedor nuevo puede guardarse en un borrador; la solicitud se envía cuando el jefe de quien lo propuso apruebe el proveedor.",
+  "Select the supplier linked to this request. A new supplier can be used right away: your jefe verifies it when approving this request.": "Selecciona el proveedor vinculado a esta solicitud. Puedes usar un proveedor nuevo de inmediato: tu jefe lo verifica al aprobar esta solicitud.",
   "The supplier declared sanctions or relevant State proceedings. Review this before approving the supplier.": "El proveedor declaró sanciones o procesos relevantes con el Estado. Revísalo antes de aprobar el proveedor.",
   "The supplier declared that no compliance/prevention model is available. Review this before approving the supplier.": "El proveedor declaró que no cuenta con modelo de cumplimiento o prevención. Revísalo antes de aprobar el proveedor.",
   TAXPAYER_NOT_ACTIVE: "CONTRIBUYENTE NO ACTIVO",

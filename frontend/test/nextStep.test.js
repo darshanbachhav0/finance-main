@@ -56,6 +56,12 @@ assert.equal(nextStepFor({ request: draft, user: camila, permissions: { modifiab
 assert.equal(nextStepFor({ request: draft, user: camila, permissions: { modifiable: true }, missingDocuments: 2 }).key, "addDocuments");
 assert.equal(nextStepFor({ request: { ...draft, status: "OBSERVADO" }, user: camila, permissions: { modifiable: true } }).action.href, "/requests/r2/edit");
 assert.equal(nextStepFor({ request: { ...draft, status: "PENDIENTE_APROBACION" }, user: { _id: "jefe", role: "AreaDirector" }, permissions: { canApprove: true } }).action.run, "approve");
+// A new supplier waiting for this jefe: approved with the request, or the request goes back.
+const waitingSupplier = (extra) => ({ supplier: { _id: "s1", name: "Proveedor Nuevo", rucDni: "20600000005" }, yours: true, ready: true, issues: [], ...extra });
+const jefeTurn = (supplierApproval) => nextStepFor({ request: { ...draft, status: "PENDIENTE_APROBACION" }, user: { _id: "jefe", role: "Solicitor" }, permissions: { canApprove: true }, supplierApproval });
+assert.deepEqual([jefeTurn(waitingSupplier()).action.label, jefeTurn(waitingSupplier()).action.run, jefeTurn(waitingSupplier()).params.supplier], ["Approve supplier and request", "approve", "Proveedor Nuevo"]);
+assert.deepEqual([jefeTurn(waitingSupplier({ ready: false })).action.run, jefeTurn(waitingSupplier({ ready: false })).tone], ["observe", "warning"]);
+assert.equal(jefeTurn(waitingSupplier({ yours: false })).action.label, "Approve", "someone else's supplier: the plain decision");
 assert.equal(nextStepFor({ request: { ...draft, status: "APROBADO" }, user: treasury, permissions: { canCommitBudget: true } }).action.run, "budget");
 assert.equal(nextStepFor({ request: { ...draft, status: "COMPROMISO_PRESUPUESTAL" }, user: { _id: "p", role: "Procurement" }, permissions: { canIssueOrder: true } }).action.run, "order");
 assert.equal(nextStepFor({ request: { ...draft, flowType: "B", status: "COMPROMISO_PRESUPUESTAL" }, user: camila, permissions: { canRegisterInvoice: true } }).action.open.target, "request-section-register-the-invoice");
@@ -82,7 +88,7 @@ assert.equal(open.checks[0].amount, 10);
 // 6. Page wiring: the card is the first thing on the page; the journey says "With you".
 const detail = source("../src/pages/RequestDetail.jsx");
 assert.match(detail, /<Message type="error">\{error\}<\/Message>\s*\{step\?\.mine && <NextStepCard step=\{step\} request=\{request\} processing=\{processing\} onRun=\{runStep\} onOpen=\{openStep\} onReload=\{load\} \/>\}/);
-assert.match(detail, /const step = nextStepFor\(\{ request, user, permissions, related, missingDocuments: missingDocuments\.length, invoiceCorrection, ownAdvance: simpleAdvance, journey \}\)/);
+assert.match(detail, /const step = nextStepFor\(\{ request, user, permissions, related, missingDocuments: missingDocuments\.length, invoiceCorrection, ownAdvance: simpleAdvance, journey, supplierApproval \}\)/);
 assert.match(detail, /viewerRole=\{user\.role\} viewerName=\{user\.name\}/);
 assert.doesNotMatch(detail, /nextAction/, "one source for the next step");
 assert.match(source("../src/components/NextStepCard.jsx"), /<RenditionReviewPanel request=\{request\} onReload=\{onReload\} \/>/);

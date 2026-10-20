@@ -13,14 +13,14 @@ for (const role of authenticatedRoles) {
   assert.deepEqual([...flat].sort(), navigationForUser({ role, hasTeam: true, hasPendingApprovals: true }).map(([, path]) => path).sort(), `${role} keeps every menu entry`);
 }
 const accounting = grouped({ role: "Accounting" });
-assert.deepEqual(accounting.map((group) => group.label), ["Overview", "My work", "Invoices and payables", "Accounting", "Master Data"]);
+assert.deepEqual(accounting.map((group) => group.label), ["Overview", "Invoices and payables", "Accounting", "Master Data"]);
 assert.deepEqual(accounting.find((group) => group.label === "Invoices and payables").items.map((item) => item.path), ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files"]);
 // Accounting verifies bank files; Treasury downloads them afterwards and has no verification page.
 assert.ok(!navigationForUser({ role: "Treasury" }).some(([, path]) => path === "/accounting/bank-files"));
 assert.deepEqual(accounting.find((group) => group.label === "Accounting").items.map((item) => item.path), ["/accounting", "/accounting/periods", "/accounting/sire"]);
 // A permission-granted page lands in its section, not at the end of the list.
 const treasuryRequester = grouped({ role: "Treasury", permissions: ["request:create"] });
-assert.deepEqual(treasuryRequester.find((group) => group.label === "My work").items.map((item) => item.path), ["/requests", "/requests/new", "/operations"]);
+assert.deepEqual(treasuryRequester.find((group) => group.label === "My work").items.map((item) => item.path), ["/requests", "/requests/new"]);
 assert.equal(treasuryRequester[1].label, "My work", "My work comes right after Overview");
 
 // Settings is one menu entry; a single settings page is linked directly.
@@ -37,7 +37,9 @@ assert.equal(settingsPagesFor({ role: "Admin" }).length, settingsPaths.length, "
 
 // Admin works from the menu, not from a hub page.
 const admin = menu({ role: "Admin" });
-for (const path of ["/requests", "/approvals", "/accounting/payables", "/treasury", "/accounting", "/budget", "/reports", "/suppliers", "/settings", "/operations"]) assert.ok(admin.includes(path), `Admin menu has ${path}`);
+for (const path of ["/requests", "/approvals", "/accounting/payables", "/treasury", "/accounting", "/budget", "/reports", "/suppliers", "/settings"]) assert.ok(admin.includes(path), `Admin menu has ${path}`);
+// Work review (/operations) was removed from every menu.
+for (const role of authenticatedRoles) assert.ok(!menu({ role, hasTeam: true, hasPendingApprovals: true }).includes("/operations"), `${role} has no Work review`);
 assert.ok(!admin.includes("/administration") && !admin.includes("/accounting/invoices"), "the old hub pages are gone");
 for (const path of Object.keys(pageLabels)) assert.ok(navigationSections.some(([, paths]) => paths.includes(path)), `${path} belongs to a menu section`);
 

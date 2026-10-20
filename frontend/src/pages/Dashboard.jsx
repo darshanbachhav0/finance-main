@@ -19,7 +19,6 @@ import FinancialProgressSummary from "../components/FinancialProgressSummary.jsx
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { navigationForUser } from "../utils/navigationAccess.js";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
 import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
 import { todayIso } from "../utils/dateInput.js";
@@ -51,8 +50,6 @@ export default function Dashboard() {
   const { user, readOnly } = useAuth();
   const navigate = useNavigate();
   const [personal, setPersonal] = useState(null);
-  // Work review gets a header button only when the menu does not already list it.
-  const workReviewInMenu = navigationForUser(user).some(([, path]) => path === "/operations");
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -127,7 +124,7 @@ export default function Dashboard() {
 
   return (
     <section>
-      <PageHeader title={greeting} description={daySummary} actions={<>{!workReviewInMenu && <Link className="secondary-button" to="/operations">{t("Work review")}</Link>}<span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
+      <PageHeader title={greeting} description={daySummary} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
 
       {loading && !summary && (

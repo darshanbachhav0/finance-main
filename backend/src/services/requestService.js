@@ -34,7 +34,7 @@ import { notifyRoles, notifyApprovalStep, resolveApprovalNotifications, resolveN
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
-import { assertSupplierUsable } from "./supplierService.js";
+import { assertSupplierSubmittable } from "./supplierService.js";
 import { transitionRequest, canTransition } from "./workflowService.js";
 import { INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
@@ -585,10 +585,11 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       }
     } else if (request.flowType === FLOW_TYPE.A1) {
       if (officialRequest) assertOfficialRequestFields(request);
-      // Every track uses a supplier only once the proposer's jefe has approved it.
-      assertSupplierUsable(supplier);
+      // A supplier still waiting for its proposer's jefe does not hold the request back: the jefe
+      // verifies it while deciding the request, and no approval completes before it is approved.
+      assertSupplierSubmittable(supplier);
     } else {
-      assertSupplierUsable(supplier);
+      assertSupplierSubmittable(supplier);
     }
     // A1 / B: "a quote or the invoice" first (the clearer message when neither is there), then
     // the quotations that were added, checked in full.

@@ -138,7 +138,7 @@ test("Super Admin: sign-in with authenticator, administrator accounts, oversight
     });
 
     await t.test("reads what an Admin reads, never writes to a process", async () => {
-      for (const route of ["/requests", "/users", "/suppliers", "/accounting-periods", "/treasury/queue", "/accounting/bank-files", "/approvals/inbox", "/reports/management", "/operations/health"]) {
+      for (const route of ["/requests", "/users", "/suppliers", "/accounting-periods", "/treasury/queue", "/accounting/bank-files", "/approvals/inbox", "/reports/management"]) {
         assert.equal((await call(route, { token: superToken })).status, 200, route);
       }
       const users = await call("/users", { token: superToken });

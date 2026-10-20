@@ -2,7 +2,6 @@
 // pagination and record links. Keys are the English UI strings passed to t().
 export default {
   "View": "Ver",
-  "Previous": "Anterior",
   "Next": "Siguiente",
   "Normal": "Normal",
   "On credit": "A crédito",

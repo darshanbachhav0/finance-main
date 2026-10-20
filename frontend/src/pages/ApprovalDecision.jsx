@@ -6,6 +6,7 @@ import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
+import SupplierToVerify from "../components/SupplierToVerify.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
@@ -49,8 +50,8 @@ export default function ApprovalDecision() {
         const data = response.data.data;
         setRequest(data);
         setRelated(response.data.related || {});
-        const step = [...(data.approvalRouteSnapshot || [])].find((item) => item.status === "PENDING");
-        if ((data.allowedActions || []).includes("APPROVE") && step?.source === "MANAGER_CHAIN") {
+        // The options name the chain's next jefe and a supplier that still waits for approval.
+        if ((data.allowedActions || []).includes("APPROVE")) {
           const optionsResponse = await api.get(`/approvals/${id}/options`).catch(() => null);
           if (active) setOptions(optionsResponse?.data?.data || null);
         }
@@ -64,7 +65,10 @@ export default function ApprovalDecision() {
   if (!request) return <section><Message type="error">{error || "Request not found."}</Message><Link className="secondary-button" to="/approvals"><Inbox size={16} /><span>{t("Approval Inbox")}</span></Link></section>;
 
   const actions = new Set(request.allowedActions || []);
-  const available = { approve: actions.has("APPROVE"), observe: actions.has("OBSERVE") || actions.has("RETURN"), reject: actions.has("REJECT") };
+  // The jefe approves a waiting supplier with the request; one that is not ready yet is sent back.
+  const supplierApproval = options?.supplierApproval || null;
+  const approvesSupplier = Boolean(supplierApproval?.yours);
+  const available = { approve: actions.has("APPROVE") && !(approvesSupplier && !supplierApproval.ready), observe: actions.has("OBSERVE") || actions.has("RETURN"), reject: actions.has("REJECT") };
   const canDecide = Object.values(available).some(Boolean);
   const steps = [...(request.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   const pending = steps.find((step) => step.status === "PENDING");
@@ -86,7 +90,7 @@ export default function ApprovalDecision() {
     try {
       // "observe" sends it back to the requester: one action for both former Observe and Return.
       const type = choice === "observe" && !actions.has("OBSERVE") ? "return" : choice;
-      const body = choice === "approve" && chain ? { comments, forward: Boolean(forward && options?.canForward) } : { comments };
+      const body = choice === "approve" ? { comments, ...(chain && { forward: Boolean(forward && options?.canForward) }), ...(approvesSupplier && { approveSupplier: true }) } : { comments };
       const response = await api.post(`/approvals/${id}/${type}`, body);
       const finished = choice === "approve" && response.data.data?.status && response.data.data.status !== "PENDIENTE_APROBACION";
       if (finished) celebrate("Request approved");
@@ -123,6 +127,8 @@ export default function ApprovalDecision() {
         <ul>{attachments.map((item) => <li key={item._id || item.url}><FileText size={16} aria-hidden="true" /><span>{item.originalName || t(item.kind)}</span><ProtectedAssetButton className="icon-button quiet" resourcePath={item.url} fileName={item.originalName} preview title="View document" ariaLabel={`${t("View document")}: ${item.originalName || ""}`}><Eye size={15} aria-hidden="true" /></ProtectedAssetButton></li>)}</ul>
       </div>}
 
+      {canDecide && !done && <SupplierToVerify approval={supplierApproval} />}
+
       {approvedBefore.length > 0 && <p className="muted-text">{t("Already approved by")}: {approvedBefore.map((step) => step.approverSnapshot?.name || t(step.approvalLevel)).join(", ")}</p>}
 
       <Message type="error">{error}</Message>
@@ -136,7 +142,7 @@ export default function ApprovalDecision() {
         </div>
       </div> : canDecide ? <div className="approval-actions">
         <div className="approval-choice" role="group" aria-label={t("Your decision")}>
-          {Object.entries(DECISIONS).filter(([key]) => available[key]).map(([key, item]) => { const Icon = item.icon; return <button key={key} type="button" className={`${item.className}${choice === key ? " is-chosen" : ""}`} aria-pressed={choice === key} onClick={() => { setChoice(key); setError(""); }}><Icon size={18} /><span>{t(item.label)}</span></button>; })}
+          {Object.entries(DECISIONS).filter(([key]) => available[key]).map(([key, item]) => { const Icon = item.icon; return <button key={key} type="button" className={`${item.className}${choice === key ? " is-chosen" : ""}`} aria-pressed={choice === key} onClick={() => { setChoice(key); setError(""); }}><Icon size={18} /><span>{t(key === "approve" && approvesSupplier ? "Approve supplier and request" : item.label)}</span></button>; })}
         </div>
         {choice && <div className="approval-confirm">
           <label className="field"><span>{t(DECISIONS[choice].input)}{choice !== "approve" ? " *" : ""}</span><textarea rows="3" value={comments} onChange={(event) => setComments(event.target.value)} /></label>

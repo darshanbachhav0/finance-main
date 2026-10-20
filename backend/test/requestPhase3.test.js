@@ -27,7 +27,7 @@ import {
   submitFinancialRequest,
   titleFromDescription
 } from "../src/services/requestService.js";
-import { assertSupplierUsable } from "../src/services/supplierService.js";
+import { assertSupplierSubmittable, assertSupplierUsable } from "../src/services/supplierService.js";
 import { ERROR_CODES, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
@@ -296,14 +296,20 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       assert.equal(submitted.quotations.length, 1);
     });
 
-    await t.test("an A1 request is sent only with a supplier the proposer's jefe has approved", async () => {
+    await t.test("an A1 request may be sent with a supplier still waiting for the proposer's jefe, not an observed, rejected or inactive one", async () => {
       assert.throws(() => assertSupplierUsable(suppliers[1]), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED");
       assert.throws(() => assertSupplierUsable(suppliers[2]), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED");
       assert.throws(() => assertSupplierUsable(suppliers[3]), (error) => error.code === "SUPPLIER_REJECTED");
       assert.throws(() => assertSupplierUsable(suppliers[4]), (error) => error.code === "SUPPLIER_INACTIVE");
       assert.doesNotThrow(() => assertSupplierUsable(suppliers[0]));
+      // The jefe verifies a waiting supplier while deciding the request.
+      assert.doesNotThrow(() => assertSupplierSubmittable(suppliers[1]));
+      for (const blocked of suppliers.slice(2, 5)) assert.throws(() => assertSupplierSubmittable(blocked));
       const pending = await officialDocument({ supplier: suppliers[1]._id, quotations: quoted.map((supplier, index) => ({ supplier: supplier._id, amount: 118 + index, currency: "PEN", recommended: index === 2 })) });
-      await assert.rejects(() => submitFinancialRequest({ id: pending._id, user: solicitor, req }), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED" && /waiting for the approval/.test(error.message));
+      const sent = await submitFinancialRequest({ id: pending._id, user: solicitor, req });
+      assert.equal(sent.status, REQUEST_STATUS.PENDING_APPROVAL);
+      const observed = await officialDocument({ supplier: suppliers[2]._id, quotations: quoted.map((supplier, index) => ({ supplier: index === 2 ? suppliers[2]._id : supplier._id, amount: 118 + index, currency: "PEN", recommended: index === 2 })) });
+      await assert.rejects(() => submitFinancialRequest({ id: observed._id, user: solicitor, req }), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED" && /observed/.test(error.message));
     });
 
     await t.test("a complete request with an approved supplier submits for approval and carries server supplier snapshots", async () => {
