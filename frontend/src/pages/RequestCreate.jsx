@@ -42,7 +42,10 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import QuotationComparison from "../components/QuotationComparison.jsx";
 import RequestReview from "../components/RequestReview.jsx";
 import BudgetRemainingSummary from "../components/BudgetRemainingSummary.jsx";
-import { normalizePaymentTerms } from "../../../shared/paymentTerms.mjs";
+import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
+import { supplierCreditDays } from "../../../shared/invoiceFinance.mjs";
+import SupplierPaymentCondition from "../components/SupplierPaymentCondition.jsx";
+import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import WorkflowStepper from "../components/WorkflowStepper.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
@@ -143,7 +146,8 @@ function initialForm() {
     nonApprovalRisk: "",
     observations: "",
     description: "",
-    supplierSelectionReason: ""
+    supplierSelectionReason: "",
+    supplierPaymentTerms: normalizePaymentTerms()
   };
 }
 
@@ -324,7 +328,8 @@ export default function RequestCreate() {
             nonApprovalRisk: request.nonApprovalRisk || "",
             observations: request.observations || "",
             description: request.description || "",
-            supplierSelectionReason: request.supplierSelectionReason || ""
+            supplierSelectionReason: request.supplierSelectionReason || "",
+            supplierPaymentTerms: request.supplierPaymentTerms || normalizePaymentTerms()
           });
           const capexDetails = request.capexDetails || {};
           setCapex({
@@ -576,7 +581,9 @@ export default function RequestCreate() {
   function selectSupplier(supplierId, supplier) {
     if (supplier) mergeSuppliers([supplier]);
     clearErrors(["supplier", "paymentAccount", "invoice"]);
-    setForm((current) => ({ ...current, supplier: supplierId || "", paymentAccount: "" }));
+    const known = supplier || masters.suppliers.find(item => item._id === supplierId);
+    const days = supplierCreditDays(known?.paymentTerms);
+    setForm((current) => ({ ...current, supplier: supplierId || "", paymentAccount: "", supplierPaymentTerms: normalizePaymentTerms(days > 0 ? { paymentCondition: "CREDIT", creditDays: days, creditStart: "INVOICE" } : {}) }));
     setNewAccount(null);
   }
 
@@ -784,6 +791,9 @@ export default function RequestCreate() {
       if (!form.expenseNature) next.expenseNature = "This field is required.";
       if (!requestPriorities.includes(form.priority)) next.priority = "Choose the priority.";
       if (!requestFrequencies.includes(form.frequency)) next.frequency = "Choose how often it is needed.";
+      if (payee === "supplier" && !quotations.some(q => q.recommended && q.paymentCondition)) {
+        for (const problem of validatePaymentTerms({ ...(form.supplierPaymentTerms || {}), amount: totals.total })) next[`supplierPaymentTerms.${problem.field}`] = problem.message;
+      }
       ["requesterCostCenter", "issueDate", "accountingPeriod", "currency"].forEach((field) => {
         if (!String(form[field] || "").trim()) next[field] = "This field is required.";
       });
@@ -876,7 +886,7 @@ export default function RequestCreate() {
     setSaving(true);
     setError("");
     const data = new FormData();
-    const { paymentAccount, ...formFields } = form;
+    const { paymentAccount, supplierPaymentTerms, ...formFields } = form;
     const payloadForm = {
       ...formFields,
       requestType: requestTypeForFlow(form.flowType, form.requestType),
@@ -885,6 +895,7 @@ export default function RequestCreate() {
     };
     Object.entries(payloadForm).forEach(([key, value]) => data.append(key, value ?? ""));
     data.append("paymentAccount", payee === "supplier" ? paymentAccount || "" : "");
+    if (payee === "supplier") data.append("supplierPaymentTerms", JSON.stringify(supplierPaymentTerms || {}));
     const receipt = invoicePayload();
     if (receipt) data.append("invoiceDetails", JSON.stringify(receipt));
     data.append("capexDetails", JSON.stringify(form.requestType === "CAPEX" ? {
@@ -989,6 +1000,7 @@ export default function RequestCreate() {
                 <div><strong>{supplierName(selectedSupplier)}</strong><span>{[selectedSupplier.supplierCode, `RUC ${selectedSupplier.rucDni}`].filter(Boolean).join(" · ")}</span></div>
                 <StatusBadge status={supplierStatus(selectedSupplier)} />
               </div>
+              <small>Días de crédito: {supplierCreditDays(selectedSupplier.paymentTerms) ?? "Sin especificar"}</small>
               {supplierStatus(selectedSupplier) === "PENDING_VALIDATION" && <p className="section-note">{t("This supplier is waiting for approval: your jefe approves it together with this request.")}</p>}
 
               <fieldset className={`account-choices${errors.paymentAccount ? " field-error" : ""}`}>
@@ -1028,10 +1040,12 @@ export default function RequestCreate() {
               <div className="form-grid three-column-form">
                 <label className="field"><span>{t("Receipt number")}</span><input value={invoiceDetails.number} onChange={(event) => changeInvoiceDetail({ number: event.target.value })} placeholder={RECEIPT_NUMBER_EXAMPLE} /></label>
                 <label className={fieldClass("invoice.issueDate")}><span>{t("Receipt issue date")} *</span><DateInput max={todayIso()} value={invoiceDetails.issueDate} onChange={(event) => changeInvoiceDetail({ issueDate: event.target.value })} onBlur={() => validateField("invoice.issueDate")} aria-invalid={Boolean(errors["invoice.issueDate"])} />{fieldError("invoice.issueDate")}</label>
+                <details className="form-span-two" open={errors["invoice.ruc"] ? true : undefined}><summary>{t("Additional details")}</summary><div className="form-grid two-column-form">
                 <label className={fieldClass("invoice.ruc")}><span>{t("Supplier RUC")}</span><input inputMode="numeric" maxLength="11" value={invoiceDetails.ruc} onChange={(event) => changeInvoiceDetail({ ruc: digits(event.target.value) })} onBlur={() => validateField("invoice.ruc", "invoice")} />{fieldError("invoice.ruc")}</label>
                 <label className="field form-span-two"><span>{t("Legal name")}</span><input value={invoiceDetails.supplierName} onChange={(event) => changeInvoiceDetail({ supplierName: event.target.value })} /></label>
                 <label className="field"><span>{t("Currency")}</span><select value={invoiceDetails.currency} onChange={(event) => changeInvoiceDetail({ currency: event.target.value })}><option value="">-</option>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
                 <label className="field"><span>{t("IGV")}</span><input type="number" min="0" step="0.01" inputMode="decimal" value={invoiceDetails.igvAmount} onChange={(event) => changeInvoiceDetail({ igvAmount: event.target.value })} /></label>
+                </div></details>
                 <label className="field"><span>{t("Receipt total")}</span><input type="number" min="0" step="0.01" inputMode="decimal" value={invoiceDetails.totalAmount} onChange={(event) => changeInvoiceDetail({ totalAmount: event.target.value })} /></label>
               </div>
               {invoiceDetails.currency && invoiceDetails.currency !== form.currency && <div className="inline-alert alert-warning"><AlertTriangle size={16} aria-hidden="true" /><span>{t("The receipt is in {receipt} and the request in {request}.").replace("{receipt}", invoiceDetails.currency).replace("{request}", form.currency)}</span><button type="button" className="secondary-button" onClick={() => changeForm({ currency: invoiceDetails.currency })}>{t("Use {currency}").replace("{currency}", invoiceDetails.currency)}</button></div>}
@@ -1149,6 +1163,12 @@ export default function RequestCreate() {
             <BudgetRemainingSummary payload={budgetPayload} preview={budgetPreview} loading={budgetLoading} onRefresh={() => setBudgetRefresh(value => value + 1)} />
           </WizardSection>
 
+          {payee === "supplier" && <div className="wizard-section">
+            {quotations.some(q => q.recommended && q.paymentCondition)
+              ? <PaymentTermsSummary terms={quotations.find(q => q.recommended)} />
+              : <SupplierPaymentCondition value={form.supplierPaymentTerms} onChange={value => changeForm({ supplierPaymentTerms: value })} amount={totals.total} currency={form.currency} />}
+            {Object.entries(errors).filter(([key]) => key.startsWith("supplierPaymentTerms.")).map(([key, message]) => <small key={key} className="field-error-text">{t(message)}</small>)}
+          </div>}
           {form.requestType === "CAPEX" && <details className="official-subsection capex-details" open={capexOpen || undefined}><summary><strong>{t("CAPEX financial information")}</strong><small>{t(capexOpen ? "Planning information is recorded only; no depreciation or NPV calculation is generated." : "Optional for this amount: Budget or Accounting can complete it.")}</small></summary><div className="form-grid three-column-form">
             <label className="field"><span>{t("Project / PEP")}</span><select value={capex.projectId} onChange={(event) => { const project = masters.projects.find((item) => item._id === event.target.value); setCapex((current) => ({ ...current, projectId: event.target.value, projectPep: project?.code || current.projectPep })); }}><option value="">{t("No project")}</option>{masters.projects.map((project) => <option key={project._id} value={project._id}>{project.code} - {project.name}</option>)}</select></label>
             <label className="field"><span>{t("Fixed asset category")}</span><select value={capex.assetCategory} onChange={(event) => setCapex((current) => ({ ...current, assetCategory: event.target.value }))}><option value="">{t("Select")}</option>{["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"].map((value) => <option key={value} value={value}>{t(value)}</option>)}</select></label>
@@ -1187,7 +1207,7 @@ export default function RequestCreate() {
 
         </MotionSurface>
       <div className="wizard-error"><Message type="error">{error}</Message></div>
-      <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => goToStep(stepIds[Math.max(0, step - 1)])}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving || !draft.ready || draft.status === "conflict"} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{stepId !== "review" ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving || !draft.ready || draft.status === "conflict"} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Send for approval")}</span></button>}</div></footer>
+      <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => goToStep(stepIds[Math.max(0, step - 1)])}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving || !draft.ready || draft.status === "conflict"} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{stepId !== "review" ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving || !draft.ready || draft.status === "conflict"} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit request")}</span></button>}</div></footer>
       </div>
     </div>
     </DraftPanel>

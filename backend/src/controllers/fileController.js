@@ -12,7 +12,7 @@ function safeDownloadName(value, fallback) {
 
 export const downloadStoredFile = asyncHandler(async (req, res) => {
   const asset = resolveStoredAsset(req.query.path);
-  const access = await assertStoredAssetAccess(asset, req.user);
+  const access = await assertStoredAssetAccess(asset, req.user, { requestId: req.query.request });
   let content;
   try { content = await readAsset(asset.absolutePath); } catch (error) {
     if (error.code !== "ENOENT") throw error;

@@ -42,7 +42,7 @@ export function resolveStoredAsset(resourcePath) {
   return { ...definition, segments, absolutePath };
 }
 
-export async function assertStoredAssetAccess(asset, user) {
+export async function assertStoredAssetAccess(asset, user, { requestId } = {}) {
   if (asset.kind === "uploads" && asset.segments[0] === "requests") {
     // The approval route is loaded too: a chain approver who can open the request can open its files.
     const request = await FinancialRequest.findById(asset.segments[1]).select("requester solicitor status approvalRouteSnapshot.approverUser");
@@ -50,6 +50,15 @@ export async function assertStoredAssetAccess(asset, user) {
     return;
   }
   if (asset.kind === "uploads" && asset.segments[0] === "suppliers") {
+    // Supplier evidence may be inspected from its request by the assigned approver,
+    // without granting access to unrelated suppliers or their files.
+    if (requestId) {
+      const request = await FinancialRequest.findById(requestId).select("supplier requester solicitor status requesterArea requestingArea approvalRouteSnapshot.approverUser");
+      const assigned = request?.approvalRouteSnapshot?.some(step => String(step.approverUser) === String(user._id));
+      const areas = [user.area, ...(user.approvalAreas || [])];
+      const poolApprover = [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR].includes(user.role) && (areas.includes("*") || areas.includes(request?.requesterArea || request?.requestingArea));
+      if (request && String(request.supplier) === asset.segments[1] && canViewRequest(request, user) && (assigned || poolApprover)) return;
+    }
     if (!canViewSuppliers(user)) throw forbidden();
     if (!SUPPLIER_WORK_ROLES.includes(user.role) && !hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
       // The proposer while the proposal is open, and the jefe who decides on it while it waits.

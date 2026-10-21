@@ -21,7 +21,8 @@ import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { flowTypes, requestPriorityLabels, requestTypes } from "../utils/options.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
-import { formatCurrency, formatDateTime } from "../utils/formatters.js";
+import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
+import RequestDocumentsDrawer from "../components/RequestDocumentsDrawer.jsx";
 
 // Mirrors MAX_BULK_APPROVALS in backend/src/services/approvalService.js.
 const BULK_APPROVAL_LIMIT = 50;
@@ -30,6 +31,7 @@ export default function ApprovalInbox() {
   const { t, language } = useLanguage();
   const { notify } = useToast();
   const [quickViewId, setQuickViewId] = useState(null);
+  const [documentsId, setDocumentsId] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [actionError, setActionError] = useState("");
   const [processing, setProcessing] = useState(false);
@@ -303,6 +305,8 @@ export default function ApprovalInbox() {
             { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
             { key: "approvalDueAt", type: "date", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? formatDateTime(row.approvalDueAt) : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", type: "money", sortKey: "totalPENEquivalent", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
+            { key: "scheduledPaymentDate", primary: true, label: "Scheduled payment date", sortable: false, render: row => row.scheduledPaymentDate ? formatDate(row.scheduledPaymentDate, language) : "Por programar" },
+            { key: "documents", primary: true, label: "Documents", sortable: false, render: row => <button type="button" className="text-button" onClick={() => setDocumentsId(row._id)}>Ver documentos</button> },
             { key: "decision", primary: true, label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions decision-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{canSendBack(row) && <button type="button" className="secondary-button decision-button" title={t("Send back")} onClick={() => sendBack(row)}><MessageSquareWarning size={17} /><span>{t("Send back")}</span></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} aria-label={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />
@@ -325,6 +329,7 @@ export default function ApprovalInbox() {
       <SupplierApprovalDecisions queue={supplierDecisions} />
       <BudgetExceptionDecisions queue={exceptionDecisions} />
       <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
+      <RequestDocumentsDrawer requestId={documentsId} onClose={() => setDocumentsId(null)} />
       <ConfirmDialog open={Boolean(confirm)} {...confirm} loading={processing} onClose={() => !processing && setConfirm(null)} onConfirm={decide} />
       <ConfirmDialog open={Boolean(bulkConfirm)} {...bulkConfirm} tone="success" inputLabel="Approval comments (shared by every request)" loading={processing} onClose={() => !processing && setBulkConfirm(null)} onConfirm={bulkApprove} />
     </section>

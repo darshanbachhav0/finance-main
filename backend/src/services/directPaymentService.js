@@ -218,7 +218,6 @@ export async function provisionDirectPayment({ request, user, req, session, pref
     sunatVoucher,
     user,
     paymentPriority: "PRIORITY",
-    dueDate: new Date(),
     session
   });
   sunatVoucher.accountsPayable = accountsPayable._id;

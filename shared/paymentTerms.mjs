@@ -39,7 +39,10 @@ export function validatePaymentTerms(value = {}, { requireComplete = true } = {}
     else if (!numeric(value[field]) || !valid(Number(value[field]))) add(field, message);
   };
   if (condition === "ADVANCE_AND_BALANCE") {
-    checkNumber("advancePercentage", (n) => n > 0 && n < 100 && Math.abs(n * 100 - Math.round(n * 100)) < 1e-8, "Enter an advance greater than 0 and less than 100, with at most two decimal places.");
+    if (!blank(value.plannedAdvanceAmount)) {
+      checkNumber("plannedAdvanceAmount", n => n > 0 && n <= Number.MAX_SAFE_INTEGER / 100 && Math.abs(n * 100 - Math.round(n * 100)) < 1e-6 &&
+        (blank(value.amount) || n < Number(value.amount)), "The planned advance must be positive and less than the outstanding amount.");
+    } else checkNumber("advancePercentage", (n) => n > 0 && n < 100 && Math.abs(n * 100 - Math.round(n * 100)) < 1e-8, "Enter an advance greater than 0 and less than 100, with at most two decimal places.");
     if ((!blank(value.balanceTiming) || requireComplete) && !has(BALANCE_TIMINGS, value.balanceTiming)) add("balanceTiming", "Select when the balance is payable.");
     if (value.balanceTiming === "OTHER") checkText("balanceTimingNotes", true);
   }
@@ -52,14 +55,17 @@ export function validatePaymentTerms(value = {}, { requireComplete = true } = {}
 }
 
 // Never trust a client-supplied balance percentage or retain inactive fields.
-export function normalizePaymentTerms(value = {}) {
+export function normalizePaymentTerms(value = {}, amount = value.amount ?? value.quotationAmount) {
   const condition = value.paymentCondition || null;
   const split = condition === "ADVANCE_AND_BALANCE";
-  const advance = condition === "100%_ADVANCE" ? 100 : condition === "100%_ON_DELIVERY" ? 0 : split ? number(value.advancePercentage) : null;
+  const planned = split && !blank(value.plannedAdvanceAmount) ? number(value.plannedAdvanceAmount) : null;
+  const advance = planned != null && Number(amount) > 0 ? Number((planned / Number(amount) * 100).toFixed(6))
+    : condition === "100%_ADVANCE" ? 100 : condition === "100%_ON_DELIVERY" ? 0 : split ? number(value.advancePercentage) : null;
   return {
     paymentCondition: condition,
     paymentConditions: condition ? "" : text(value.paymentConditions),
     advancePercentage: advance,
+    ...(planned != null ? { plannedAdvanceAmount: planned } : {}),
     balancePercentage: advance === null ? null : Number((100 - advance).toFixed(2)),
     balanceTiming: split ? value.balanceTiming || null : null,
     balanceTimingNotes: split && value.balanceTiming === "OTHER" ? text(value.balanceTimingNotes) : "",
@@ -72,8 +78,8 @@ export function normalizePaymentTerms(value = {}) {
 
 export function paymentBreakdown(value = {}, amount = value.amount) {
   if (!["100%_ADVANCE", "100%_ON_DELIVERY", "ADVANCE_AND_BALANCE"].includes(value.paymentCondition) || blank(amount) || !numeric(amount) || Number(amount) < 0) return null;
-  if (validatePaymentTerms(value, { requireComplete: false }).some((error) => error.field === "advancePercentage")) return null;
-  const { advancePercentage, balancePercentage } = normalizePaymentTerms(value);
+  if (validatePaymentTerms({ ...value, amount }, { requireComplete: false }).some((error) => ["advancePercentage", "plannedAdvanceAmount"].includes(error.field))) return null;
+  const { advancePercentage, balancePercentage, plannedAdvanceAmount } = normalizePaymentTerms(value, amount);
   if (advancePercentage === null) return null;
   // Round once to cents, then subtract the advance so both amounts sum exactly.
   const match = String(amount).match(/^(\d+)(?:\.(\d*))?$/);
@@ -82,7 +88,8 @@ export function paymentBreakdown(value = {}, amount = value.amount) {
   const cents = BigInt(match[1]) * 100n + BigInt(fraction.slice(0, 2)) + (Number(fraction[2]) >= 5 ? 1n : 0n);
   if (cents > BigInt(Number.MAX_SAFE_INTEGER)) return null;
   const basisPoints = BigInt(Math.round(advancePercentage * 100));
-  const advanceCents = (cents * basisPoints + 5000n) / 10000n;
+  const advanceCents = plannedAdvanceAmount != null ? BigInt(Math.round(plannedAdvanceAmount * 100)) : (cents * basisPoints + 5000n) / 10000n;
+  if (advanceCents > cents) return null;
   return {
     advancePercentage,
     balancePercentage,

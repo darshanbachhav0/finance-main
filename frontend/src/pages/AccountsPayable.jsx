@@ -211,7 +211,7 @@ export default function AccountsPayable() {
         onClose={() => setSelected(null)}
         footer={selected && <PayableActions row={selected} onNote={openNote} onCancel={openCancel} canNote={canNote(selected)} showCancel={showCancel(selected)} />}
       >
-        {selected && <PayableDetail payable={selected} />}
+        {selected && <PayableDetail payable={selected} onUpdated={() => payableTable.reload()} />}
       </Drawer>
 
       <Drawer

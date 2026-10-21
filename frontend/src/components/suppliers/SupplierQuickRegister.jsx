@@ -6,6 +6,8 @@ import { bankAccountPayload, bankAccountProblems, emptyBankAccount } from "../..
 import Message from "../Message.jsx";
 import StatusBadge from "../StatusBadge.jsx";
 import BankAccountFields from "./BankAccountFields.jsx";
+import CreditDaysField from "./CreditDaysField.jsx";
+import { supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
 
 // Registering a supplier without leaving the request (step 1, "Datos de proveedor"): the RUC is
 // checked against the registry first (an existing supplier is used, another area's is asked for),
@@ -23,6 +25,7 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
   const [justification, setJustification] = useState(need ? t("Supplier for: {need}").replace("{need}", need.split(/\r?\n/)[0].slice(0, 160)) : "");
   const [accounts, setAccounts] = useState([emptyBankAccount("", currency)]);
   const [certificate, setCertificate] = useState(null);
+  const [paymentTerms, setPaymentTerms] = useState({ option: "", days: "" });
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -81,6 +84,7 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     if (!/^(\d{8}|\d{11})$/.test(digits(ruc))) problems.ruc = "Enter a valid 11-digit RUC or supported 8-digit DNI.";
     if (!legalName.trim()) problems.legalName = "Legal name is required.";
     if (!justification.trim()) problems.justification = "Say why UMA needs this supplier.";
+    if (paymentTerms.option && (supplierCreditDays(paymentTerms) === null || (paymentTerms.option === "CUSTOM" && Number(paymentTerms.days) <= 0))) problems.creditDays = "Ingrese días de crédito enteros y válidos.";
     accounts.forEach((account, index) => {
       for (const [field, message] of Object.entries(bankAccountProblems(account))) problems[`accounts.${index}.${field}`] = message;
     });
@@ -98,6 +102,7 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     data.append("name", legalName.trim());
     data.append("proposalJustification", justification.trim());
     data.append("currency", accounts[0].accountCurrency || currency);
+    if (paymentTerms.option) data.append("paymentTerms", JSON.stringify(paymentTerms));
     if (profile.personType) data.append("personType", profile.personType);
     if (profile.fiscalAddress) data.append("fiscalAddress", profile.fiscalAddress);
     if (profile.commercialName) data.append("commercialName", profile.commercialName);
@@ -146,6 +151,8 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
           <label className={`field form-span-two${errors.justification ? " field-error" : ""}`}><span>{t("Reason for registering the supplier")} *</span><textarea rows="2" value={justification} onChange={(event) => setJustification(event.target.value)} aria-invalid={Boolean(errors.justification)} />{errors.justification && <small className="field-error-text">{t(errors.justification)}</small>}</label>
         </div>
 
+        <CreditDaysField value={paymentTerms} onChange={setPaymentTerms} />
+        {errors.creditDays && <small className="field-error-text">{errors.creditDays}</small>}
         <div className="bank-account-list">
           {accounts.map((account, index) => <div className="bank-account-card" key={account.clientId}>
             <div className="bank-account-card-head"><strong>{t("Bank account {number}").replace("{number}", index + 1)}</strong>{accounts.length > 1 && <button type="button" className="icon-button quiet danger" onClick={() => setAccounts((current) => current.filter((_, position) => position !== index))} aria-label={`${t("Remove account")} ${index + 1}`} title={t("Remove account")}><Trash2 size={15} aria-hidden="true" /></button>}</div>

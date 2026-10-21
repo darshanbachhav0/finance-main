@@ -8,6 +8,7 @@ import { dniError, identifierError, requiredError } from "../../utils/fieldValid
 import { homologationChecklist, supplierStepProblems, supplierStepsFor } from "../../utils/supplierProposal.js";
 import { bankAccountLabel, bankAccountPayload, emptyBankAccount } from "../../utils/bankAccounts.js";
 import BankAccountFields from "./BankAccountFields.jsx";
+import CreditDaysField from "./CreditDaysField.jsx";
 import "../../styles/supplierForm.css";
 
 // Checked when the field is left; Continue and Submit check the whole step (utils/supplierProposal.js).
@@ -47,6 +48,7 @@ function initialValues(supplier, identifier, padronLookup) {
     commercialContact: { ...emptyContact, ...(supplier?.commercialContact || {}) },
     operationsContact: { ...emptyContact, ...(supplier?.operationsContact || {}) },
     currency: supplier?.currency || "PEN",
+    paymentTerms: supplier?.paymentTerms || { option: "", days: "" },
     goodsServicesProfile: supplier?.goodsServicesProfile || "",
     deliveryMethod: supplier?.delivery?.method || "CENTRAL_WAREHOUSE",
     deliveryOther: supplier?.delivery?.other || "",
@@ -259,6 +261,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
     const payload = new FormData();
     for (const field of ["rucDni", "legalName", "commercialName", "personType", "fiscalAddress", "website", "legalRepresentative", "currency", "goodsServicesProfile", "proposalJustification"]) payload.append(field, form[field]);
     payload.append("name", form.legalName);
+    payload.append("paymentTerms", JSON.stringify(form.paymentTerms?.option ? form.paymentTerms : {}));
     payload.append("location", JSON.stringify({ district: form.district, province: form.province, department: form.department, ubigeo: form.ubigeo }));
     payload.append("legalRepresentativeDocument", JSON.stringify({ type: form.representativeDocumentType, number: form.representativeDocumentNumber }));
     payload.append("commercialContact", JSON.stringify(form.commercialContact));
@@ -333,7 +336,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
         <Section icon={Truck} title="Commercial Conditions">
           <div className="form-grid supplier-form-grid">
             <label className="field"><span>{t("Billing Currency")}</span><select value={form.currency} onChange={(event) => setValue("currency", event.target.value)}><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
-            <p className="field-span-2 section-note">{t("Payment terms are entered in each supplier quotation and carried into the selected purchase.")}</p>
+            <CreditDaysField value={form.paymentTerms} onChange={value => setValue("paymentTerms", value)} />
             <label className="field field-span-2"><span>{t("Goods / services profile")}</span><textarea rows="2" value={form.goodsServicesProfile} onChange={(event) => setValue("goodsServicesProfile", event.target.value)} /></label>
             <label className="field"><span>{t("Delivery Method")}</span><select value={form.deliveryMethod} onChange={(event) => setValue("deliveryMethod", event.target.value)}><option value="CENTRAL_WAREHOUSE">{t("CENTRAL_WAREHOUSE")}</option><option value="DESTINATION_SITE">{t("DESTINATION_SITE")}</option><option value="OTHER">{t("OTHER")}</option></select></label>
             {form.deliveryMethod === "OTHER" && <label className={fieldClass("deliveryOther")}><span>{t("Other delivery method")} *</span><input value={form.deliveryOther} onChange={(event) => setValue("deliveryOther", event.target.value)} aria-invalid={Boolean(fieldErrors.deliveryOther)} />{fieldMessage("deliveryOther")}</label>}

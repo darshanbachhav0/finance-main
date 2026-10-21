@@ -46,12 +46,27 @@ import {
 } from "../utils/constants.js";
 import { canApproveStage, hasPermission, observationOwner } from "../utils/permissions.js";
 import { allowedRequestActions } from "./requestActionPolicy.js";
+import AccountsPayable from "../models/AccountsPayable.js";
+import { scheduledPaymentDate } from "../../../shared/invoiceFinance.mjs";
 
 const activeApprovalStatuses = [
   REQUEST_STATUS.PENDING_APPROVAL,
   REQUEST_STATUS.DIRECTOR_APPROVED,
   REQUEST_STATUS.VICE_RECTOR_APPROVED
 ];
+
+// Load scheduled dates for a page in one query. A due date is never a payment plan.
+async function attachScheduledPaymentDates(rows) {
+  if (!rows.length) return rows;
+  const payables = await AccountsPayable.find({ request: { $in: rows.map(row => row._id) }, status: { $nin: ["CANCELLED", "PAID"] } })
+    .select("request scheduledFor plannedPaymentDate").lean();
+  const dates = new Map();
+  for (const payable of payables) {
+    const date = scheduledPaymentDate(payable), id = String(payable.request);
+    if (date && (!dates.has(id) || new Date(date) < new Date(dates.get(id)))) dates.set(id, date);
+  }
+  return rows.map(row => ({ ...row, scheduledPaymentDate: dates.get(String(row._id)) || null }));
+}
 
 // Another required step still follows this one, so approving it does not complete the route.
 function laterOpenStep(request, step) {
@@ -198,7 +213,7 @@ export async function listApprovalInbox(queryParams, user) {
     return object;
   }));
   return {
-    ...paginatedPayload(data, total, page, pageSize),
+    ...paginatedPayload(await attachScheduledPaymentDates(data), total, page, pageSize),
     summary: { total, amount: summaryRows[0]?.amount || 0, oldestCreatedAt: summaryRows[0]?.oldestCreatedAt || null }
   };
 }

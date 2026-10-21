@@ -27,6 +27,7 @@ import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/cons
 import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
 import { limaDateKey, limaToday } from "../../../shared/businessCalendar.mjs";
+import { isJefe, jefeDashboard, jefeInvoices } from "../services/jefeDashboardService.js";
 
 function currentPeriod() {
   return limaToday().slice(0, 7);
@@ -441,7 +442,12 @@ export async function platformWorkload(viewer) {
 export const getBudgetExceptionDecisions = asyncHandler(async (req, res) => res.json(await listBudgetExceptionDecisionQueue(req.user)));
 
 export const getDashboardSummary = asyncHandler(async (req, res) => {
+  if (await isJefe(req.user)) {
+    return res.json({ role: req.user.role, jefe: await jefeDashboard(req.user), lastUpdated: new Date().toISOString() });
+  }
   const [common, tasks] = await Promise.all([commonSummary(req.user), buildTasks(req.user)]);
   const details = await roleDetails(req.user, common);
   res.json({ role: req.user.role, ...common, tasks, ...details, lastUpdated: new Date().toISOString() });
 });
+
+export const getJefeInvoices = asyncHandler(async (req, res) => res.json(await jefeInvoices(req.user, req.query)));

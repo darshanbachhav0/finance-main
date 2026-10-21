@@ -40,6 +40,8 @@
 .priority-control label[data-level="baja"]::before { background: var(--green-700); }
 .priority-control label.active { color: var(--gray-950); background: var(--surface-panel); box-shadow: var(--shadow-sm); }
 .priority-control label:has(input:focus-visible) { outline: 2px solid var(--uma-primary); outline-offset: 2px; }
+/* The generic field-input width must not expand visually hidden radio controls. */
+.field .priority-control input[type="radio"].sr-only { width: 1px; min-width: 0; height: 1px; min-height: 0; padding: 0; border: 0; }
 
 /* Step 1 inline supplier registration. */
 .supplier-quick-register { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--surface-panel); }

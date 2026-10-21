@@ -15,7 +15,12 @@ import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/pay
 export function selectedQuotationPaymentTerms(request) {
   const supplierId = String(request.supplier?._id || request.supplier || "");
   const selected = (request.quotations || []).filter((quotation) => quotation.recommended);
-  if (!selected.length) return undefined;
+  if (!selected.length) {
+    if (!request.supplierPaymentTerms?.paymentCondition) return undefined;
+    const errors = validatePaymentTerms(request.supplierPaymentTerms);
+    if (errors.length) throw new AppError(422, "Review the request payment terms.", { errors });
+    return { ...normalizePaymentTerms(request.supplierPaymentTerms), quotationAmount: request.totalAmount, quotationCurrency: request.currency };
+  }
   if (selected.length !== 1 || String(selected[0].supplier?._id || selected[0].supplier || "") !== supplierId) {
     throw new AppError(422, "The selected quotation must match the order supplier.", undefined, ERROR_CODES.VALIDATION_ERROR);
   }

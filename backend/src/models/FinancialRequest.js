@@ -373,6 +373,9 @@ const financialRequestSchema = new mongoose.Schema(
     description: { type: String, required: true, trim: true },
     quotations: { type: [quotationSchema], default: [] },
     supplierSelectionReason: { type: String, trim: true, default: "" },
+    // Planned supplier terms only. Confirmed employee advances remain in Track C.
+    supplierPaymentTerms: { type: new mongoose.Schema(paymentTermFields, { _id: false }).pre("validate", validateAndNormalizePaymentTerms), default: undefined },
+    supplierCreditDaysSnapshot: { type: Number, min: 0 },
     quotationException: {
       authorized: { type: Boolean, default: false },
       authorizedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

@@ -16,6 +16,7 @@ const ApprovalInbox = lazy(() => import("./pages/ApprovalInbox.jsx"));
 const ApprovalDecision = lazy(() => import("./pages/ApprovalDecision.jsx"));
 const CostCenters = lazy(() => import("./pages/CostCenters.jsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
+const DepartmentInvoices = lazy(() => import("./pages/DepartmentInvoices.jsx"));
 const ExchangeRates = lazy(() => import("./pages/ExchangeRates.jsx"));
 const ExpenseTypes = lazy(() => import("./pages/ExpenseTypes.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
@@ -67,6 +68,7 @@ export default function App() {
           {/* Former hub pages: their links now live in the menu and on Settings. */}
           <Route path="administration" element={<Navigate to="/settings" replace />} />
           <Route path="requests" element={<ProtectedRoute roles={readers} />}><Route index element={<RequestsList />} /></Route>
+          <Route path="requests/invoices" element={<ProtectedRoute roles={readers} />}><Route index element={<DepartmentInvoices />} /></Route>
           <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} permissions={["request:create"]} />}>
             <Route index element={<RequestCreate />} />

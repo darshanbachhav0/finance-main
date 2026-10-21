@@ -575,7 +575,7 @@ export default function RequestDetail() {
         <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
       </dl>
-      <RequestSummaryFacts request={request} vouchers={related.sunatVouchers} />
+      <RequestSummaryFacts request={request} vouchers={related.sunatVouchers} payables={related.accountsPayable} />
       <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} viewerRole={user.role} viewerName={user.name} />
       {simpleAdvance ? <AdvanceRenditionCard request={request} onOpen={openReceipts} /> : <RenditionCountdown request={request} mine={isOwner} onOpen={openReceipts} />}
       {step && !step.mine && <NextStepCard step={step} request={request} />}
@@ -923,6 +923,8 @@ export default function RequestDetail() {
                     { key: "originalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.originalAmount, row.currency, language) },
                     { key: "paymentTermsSnapshot", label: "Payment Terms", render: (row) => <PaymentTermsSummary terms={row.paymentTermsSnapshot} showAmounts={false} /> },
                     { key: "dueDate", label: "Due date", render: (row) => formatDate(row.dueDate, language) },
+                    { key: "scheduledPaymentDate", primary: true, label: "Scheduled payment date", render: row => row.scheduledFor || row.plannedPaymentDate ? formatDate(row.scheduledFor || row.plannedPaymentDate, language) : "Por programar" },
+                    { key: "paidDate", primary: true, label: "Actual payment date", render: row => formatDate(row.paidDate, language) },
                     { key: "paymentPriority", label: "Priority", render: (row) => row.paymentPriority === "PRIORITY" ? <span className="priority-pill">{t("Priority")}</span> : t("Normal") },
                     { key: "paymentBatch", label: "Bank batch", render: (row) => row.paymentBatch?.batchNumber || "-" },
                     { key: "destination", label: "Payment Destination Snapshot", render: (row) => row.bankAccountSnapshot?.bank ? `${row.bankAccountSnapshot.bank} · ${row.bankAccountSnapshot.sourceType || "SUPPLIER"}` : "-" },

@@ -4,6 +4,9 @@ import StatusBadge from "../StatusBadge.jsx";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../../utils/formatters.js";
 import { netTransfer, supplierLabel, voucherLabel } from "../../utils/payables.js";
+import { scheduledPaymentDate, invoiceStatus, supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
+import InvoiceCreditEditor from "./InvoiceCreditEditor.jsx";
+import { useEffect, useState } from "react";
 
 function Group({ title, children }) {
   const { t } = useLanguage();
@@ -17,7 +20,9 @@ function Field({ label, children }) {
 
 // The CXP record, grouped: what is owed, the document, how and when it is paid, accounting,
 // then exceptions and history.
-export default function PayableDetail({ payable: row }) {
+export default function PayableDetail({ payable, onUpdated }) {
+  const [row, setRow] = useState(payable);
+  useEffect(() => setRow(payable), [payable]);
   const { t, language } = useLanguage();
   const money = (currency, value) => formatCurrency(value, currency || "PEN", language);
   const manualException = row.sunatValidation?.manualException || (row.sunatVoucher?.manualOverride?.reason ? { reason: row.sunatVoucher.manualOverride.reason, approvedAt: row.sunatVoucher.manualOverride.overriddenAt, evidenceReference: row.sunatVoucher.manualOverride.evidenceReference } : null);
@@ -39,6 +44,7 @@ export default function PayableDetail({ payable: row }) {
       <Field label="PEN equivalent">{money("PEN", row.penEquivalent)}</Field>
       {row.invoiceAmount !== undefined && row.adjustments?.length > 0 && <Field label="Original invoice amount">{money(row.currency, row.invoiceAmount)}</Field>}
     </Group>
+    <InvoiceCreditEditor payable={row} onUpdated={updated => { setRow(current => ({ ...current, dueDate: updated.dueDate, paymentTermsSnapshot: updated.paymentTermsSnapshot, history: updated.history })); onUpdated?.(updated); }} />
 
     {detraction && <Group title="Detraction (SPOT)">
       <Field label="Status"><StatusBadge status={detraction.status} /></Field>
@@ -52,6 +58,9 @@ export default function PayableDetail({ payable: row }) {
     <Group title="Document">
       <Field label="Supplier">{supplierLabel(row)}</Field>
       <Field label="Voucher">{voucherLabel(row)}</Field>
+      <Field label="Invoice issue date">{formatDate(row.voucher?.documentDate, language)}</Field>
+      <Field label="Credit days">{row.paymentTermsSnapshot?.creditDays ?? supplierCreditDays(row.paymentTermsSnapshot) ?? "Sin especificar"}</Field>
+      <Field label="Invoice status">{invoiceStatus(row)}</Field>
       <Field label="SUNAT validation"><StatusBadge status={row.sunatVoucher?.sunatStatus || row.sunatVoucher?.validationStatus || "NOT_REQUIRED"} /></Field>
       <Field label="Track"><StatusBadge status={row.flowType || row.request?.flowType} /></Field>
       <Field label="Mass upload batch">{row.sourceBatch?.batchCode}</Field>
@@ -61,6 +70,8 @@ export default function PayableDetail({ payable: row }) {
     {manualException && <div className="alert-strip warning"><AlertTriangle size={18} /><div><strong>{t("Manual SUNAT exception")}</strong><p>{manualException.reason}</p><p>{t("Approved by Accounting on")} {formatDateTime(manualException.approvedAt, language)}{manualException.evidenceReference ? ` · ${t("Evidence")}: ${manualException.evidenceReference}` : ""}</p></div></div>}
 
     <Group title="Payment">
+      <Field label="Scheduled payment date">{scheduledPaymentDate(row) ? formatDate(scheduledPaymentDate(row), language) : "Por programar"}</Field>
+      <Field label="Actual payment date">{formatDate(row.paidDate, language)}</Field>
       <Field label="Priority"><StatusBadge status={row.paymentPriority || "NORMAL"} /></Field>
       <Field label="Payment Terms"><PaymentTermsSummary terms={row.paymentTermsSnapshot} showAmounts={false} /></Field>
       <Field label="Payment destination">{row.bankAccountSnapshot?.bank ? `${row.bankAccountSnapshot.bank} · ${t(row.bankAccountSnapshot.sourceType || "SUPPLIER")}` : null}</Field>

@@ -18,12 +18,15 @@ import { listBankFiles, rejectBankFileAction, reviewBankFileChecks, verifyBankFi
 import { authorize, authorizePermission, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
 import { PERMISSIONS, ROLES } from "../utils/constants.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+import { updateInvoiceCredit } from "../services/invoiceCreditService.js";
 
 const router = Router();
 
 router.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
 router.get("/entries", listEntries);
 router.get("/accounts-payable", listAccountsPayable);
+router.patch("/accounts-payable/:id/credit-terms", asyncHandler(async (req, res) => res.json({ data: await updateInvoiceCredit({ id: req.params.id, payload: req.body, user: req.user, req }) })));
 router.post("/accounts-payable/:id/cancel", cancelPayable);
 router.get("/pending", listPendingAccounting);
 router.get("/sunat-observations", listSunatObservations);

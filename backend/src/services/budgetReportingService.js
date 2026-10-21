@@ -75,7 +75,10 @@ export async function budgetAllocationRows(filters = {}) {
 async function transitionalUsageGroups(filters = {}, groupBy = null) {
   const period = budgetPeriodFilter(filters.period);
   const match = { status: { $nin: ["RELEASED", "DEFERRED"] }, ...(period ? { period } : {}) };
-  const lineMatch = { "lines.mode": "TRANSITIONAL", ...(filters.costCenter && mongoose.isValidObjectId(filters.costCenter) ? { "lines.costCenter": new mongoose.Types.ObjectId(String(filters.costCenter)) } : {}) };
+  const centers = filters.costCenter?.$in;
+  const lineMatch = { "lines.mode": "TRANSITIONAL", ...(Array.isArray(centers)
+    ? { "lines.costCenter": { $in: centers.map(id => new mongoose.Types.ObjectId(String(id))) } }
+    : filters.costCenter && mongoose.isValidObjectId(filters.costCenter) ? { "lines.costCenter": new mongoose.Types.ObjectId(String(filters.costCenter)) } : {}) };
   const groups = await BudgetCommitment.aggregate([
     { $match: match }, { $unwind: "$lines" }, { $match: lineMatch },
     { $group: { _id: groupBy, amount: { $sum: "$lines.amount" }, executed: { $sum: { $ifNull: ["$lines.executedAmount", 0] } }, paid: { $sum: { $ifNull: ["$lines.paidAmount", 0] } } } }

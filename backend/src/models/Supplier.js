@@ -113,7 +113,7 @@ const supplierSchema = new mongoose.Schema(
     goodsServicesProfile: { type: String, trim: true, default: "" },
     paymentTerms: {
       option: { type: String, enum: SUPPLIER_PAYMENT_TERM_OPTIONS },
-      days: { type: Number, min: 0 },
+      days: { type: Number, min: 0, validate: { validator: Number.isSafeInteger, message: "Credit days must be a whole number." } },
       comments: { type: String, trim: true, default: "" }
     },
     delivery: {
@@ -209,6 +209,9 @@ supplierSchema.pre("validate", function normalizeSupplier() {
   this.fiscalAddress ||= this.taxAddress;
   if (this.paymentTerms?.option === "CREDIT_30") this.paymentTerms.days = 30;
   if (this.paymentTerms?.option === "CREDIT_45") this.paymentTerms.days = 45;
+  if (this.paymentTerms?.option === "CASH") this.paymentTerms.days = 0;
+  if (this.paymentTerms?.option === "CREDIT_15") this.paymentTerms.days = 15;
+  if (this.paymentTerms?.option === "CREDIT_60") this.paymentTerms.days = 60;
   if (this.paymentTerms?.option === "CUSTOM" && !(this.paymentTerms.days > 0)) {
     this.invalidate("paymentTerms.days", "Custom payment terms require a positive number of days.");
   }

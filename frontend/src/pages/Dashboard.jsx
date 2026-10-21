@@ -1,15 +1,15 @@
 import ContinueWork from "../components/ContinueWork.jsx";
 import BudgetGauge from "../components/BudgetGauge.jsx";
 import PersonalStats from "../components/PersonalStats.jsx";
+import JefeDashboard from "../components/JefeDashboard.jsx";
 import { greetingName, greetingTemplate, pendingTaskCount } from "../utils/greeting.js";
 import { startTour, tourDone } from "../utils/tour.js";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import MyTasks from "../components/MyTasks.jsx";
 import { CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/client.js";
-import AnalyticsChart from "../components/AnalyticsChart.jsx";
 import DataTable from "../components/DataTable.jsx";
 import Message from "../components/Message.jsx";
 import PageHeader from "../components/PageHeader.jsx";
@@ -22,6 +22,8 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
 import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
 import { todayIso } from "../utils/dateInput.js";
+
+const AnalyticsChart = lazy(() => import("../components/AnalyticsChart.jsx"));
 
 const descriptions = {
   Admin: "System activity, workflow health, users, and master-data readiness.",
@@ -58,10 +60,8 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const [response, mine] = await Promise.all([
-        api.get("/dashboard/summary"),
-        api.get("/dashboard/me").catch(() => null)
-      ]);
+      const response = await api.get("/dashboard/summary");
+      const mine = response.data.jefe ? null : await api.get("/dashboard/me").catch(() => null);
       setSummary(response.data);
       setPersonal(mine?.data?.data || null);
     } catch (err) {
@@ -83,13 +83,13 @@ export default function Dashboard() {
 
   // The first visit offers the short tour once the greeting and tasks it points at are on screen.
   useEffect(() => {
-    if (summary && !readOnly && !tourDone(user._id)) startTour();
+    if (summary && !summary.jefe && !readOnly && !tourDone(user._id)) startTour();
   }, [Boolean(summary)]);
 
   const taskCount = pendingTaskCount(summary?.tasks?.items);
   const greeting = t(greetingTemplate()).replace("{name}", greetingName(user.name));
   const nextPayment = personal?.payments?.next;
-  const daySummary = !summary ? t(descriptions[user.role] || descriptions.Admin) : [
+  const daySummary = summary?.jefe ? "Presupuesto y solicitudes de tu departamento." : !summary ? t(descriptions[user.role] || descriptions.Admin) : [
     taskCount === 0 ? t("You are all caught up.") : t(taskCount === 1 ? "1 thing needs your attention today." : "{count} things need your attention today.").replace("{count}", formatNumber(taskCount, language)),
     nextPayment ? t(nextPayment.estimated ? "Your next payment is expected on {date}." : "Your next payment is on {date}.").replace("{date}", formatDate(`${nextPayment.date}T12:00:00Z`, language)) : ""
   ].filter(Boolean).join(" ");
@@ -129,12 +129,13 @@ export default function Dashboard() {
 
       {loading && !summary && (
         <div className="dashboard-loading" role="status" aria-label={t("Loading dashboard...")}>
-          <div className="stats-grid">{Array.from({ length: 5 }).map((_, index) => <div className="stat-card" key={index}><span className="skeleton skeleton-line" /><span className="skeleton skeleton-value" /></div>)}</div>
+          <div className="stats-grid">{Array.from({ length: 4 }).map((_, index) => <div className="stat-card" key={index}><span className="skeleton skeleton-line" /><span className="skeleton skeleton-value" /></div>)}</div>
           <div className="workspace-panel"><span className="skeleton skeleton-block" /></div>
         </div>
       )}
 
-      {summary && (
+      {summary?.jefe && <JefeDashboard data={summary.jefe} />}
+      {summary && !summary.jefe && (
         <>
           {/* The role's to-do list replaces the generic welcome banner; its tasks also cover the
               former "Items need attention" warnings (missing exchange-rate dates). */}

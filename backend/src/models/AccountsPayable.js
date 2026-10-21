@@ -86,7 +86,7 @@ const accountsPayableSchema = new mongoose.Schema(
     budgetPaidAt: Date,
     paymentTermsSnapshot: {
       ...paymentTermFields,
-      source: { type: String, enum: ["PURCHASE_ORDER", "QUOTATION", "SUPPLIER_DEFAULT"] },
+      source: { type: String, enum: ["PURCHASE_ORDER", "QUOTATION", "SUPPLIER_DEFAULT", "REQUEST", "INVOICE_OVERRIDE"] },
       sourceQuotation: mongoose.Schema.Types.ObjectId,
       quotationAmount: Number,
       quotationCurrency: { type: String, enum: CURRENCY },

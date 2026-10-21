@@ -8,6 +8,7 @@ export default function ProtectedAssetButton({
   resourcePath,
   fileName,
   preview = false,
+  requestId,
   className = "asset-button-link",
   title,
   ariaLabel,
@@ -24,7 +25,7 @@ export default function ProtectedAssetButton({
     setLoading(true);
     try {
       const response = await api.get("/files/download", {
-        params: { path: resourcePath, name: fileName, disposition: preview ? "inline" : "attachment" },
+        params: { path: resourcePath, name: fileName, disposition: preview ? "inline" : "attachment", ...(requestId ? { request: requestId } : {}) },
         responseType: "blob"
       });
       const objectUrl = URL.createObjectURL(response.data);

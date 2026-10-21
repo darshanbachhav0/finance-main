@@ -63,6 +63,7 @@ import { multiplyMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
 import { plainClone } from "../utils/plainClone.js";
+import { supplierCreditDays } from "../../../shared/invoiceFinance.mjs";
 
 export const requestPopulate = [
   { path: "supplier" },
@@ -113,6 +114,15 @@ const attachmentKinds = Object.freeze({
   returnReceipt: "RETURN_RECEIPT",
   cciLetter: "CCI_LETTER"
 });
+
+export function parseSupplierPaymentTerms(value) {
+  const terms = parseJson(value, "supplierPaymentTerms");
+  if (!terms) return undefined;
+  if (typeof terms !== "object" || Array.isArray(terms)) throw new AppError(422, "Invalid supplier payment terms.");
+  const errors = validatePaymentTerms(terms, { requireComplete: false });
+  if (errors.length) throw new AppError(422, "Review the supplier payment terms.", { errors }, ERROR_CODES.VALIDATION_ERROR);
+  return normalizePaymentTerms(terms);
+}
 
 function parseBoolean(value) {
   return value === true || value === "true" || value === "1";
@@ -506,7 +516,9 @@ function officialAuditSnapshot(request) {
     opexDetails: request.opexDetails,
     quotationCount: request.quotations?.length || 0,
     recommendedSupplier: recommended?.supplier?._id || recommended?.supplier,
-    supplierSelectionReason: request.supplierSelectionReason
+    supplierSelectionReason: request.supplierSelectionReason,
+    ...(request.supplierPaymentTerms ? { supplierPaymentTerms: request.supplierPaymentTerms.toObject() } : {}),
+    ...(request.supplierCreditDaysSnapshot != null ? { supplierCreditDaysSnapshot: request.supplierCreditDaysSnapshot } : {})
   };
 }
 
@@ -551,6 +563,7 @@ function applyEditableFields(request, payload) {
   if (payload.frequency !== undefined) request.frequency = parseFrequency(payload.frequency) || "ONE_OFF";
   if (payload.paymentAccount !== undefined) request.$locals.paymentAccountId = payload.paymentAccount || null;
   if (payload.invoiceDetails !== undefined) request.invoiceDetails = parseInvoiceDetails(payload.invoiceDetails);
+  if (payload.supplierPaymentTerms !== undefined) request.supplierPaymentTerms = parseSupplierPaymentTerms(payload.supplierPaymentTerms);
   if (payload.requesterCostCenter !== undefined) request.requesterCostCenter = payload.requesterCostCenter?._id || payload.requesterCostCenter;
   if (payload.capexDetails !== undefined) request.capexDetails = parseCapexDetails(payload.capexDetails);
   if (payload.opexDetails !== undefined) request.opexDetails = parseOpexDetails(payload.opexDetails);
@@ -590,6 +603,8 @@ function normalizeTrackFields(request) {
     request.opexDetails = {};
     request.paymentAccount = undefined;
     request.invoiceDetails = undefined;
+    request.supplierPaymentTerms = undefined;
+    request.supplierCreditDaysSnapshot = undefined;
   }
 
   // A1 and B carry the supplier's quotations; the other tracks have none.
@@ -641,6 +656,13 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   if (request.flowType !== FLOW_TYPE.C && !supplier) throw new AppError(404, "Supplier not found.", { supplier: request.supplier }, ERROR_CODES.NOT_FOUND);
   await assertSuppliersOnRequesterList(request, supplier, user);
   if (supplier) request.supplierSnapshot = supplierSnapshot(supplier);
+  if (supplier && (request.isNew || request.isModified("supplier") || request.supplierCreditDaysSnapshot == null)) {
+    request.supplierCreditDaysSnapshot = supplierCreditDays(supplier.paymentTerms) ?? undefined;
+  }
+  if (validateSubmission && request.supplierPaymentTerms?.paymentCondition) {
+    const errors = validatePaymentTerms(request.supplierPaymentTerms);
+    if (errors.length) throw new AppError(422, "Review the supplier payment terms.", { errors }, ERROR_CODES.VALIDATION_ERROR);
+  }
   await applyPaymentAccount(request, supplier);
   linkQuotationEvidence(request);
   await applyQuotationSnapshots(request);
@@ -961,6 +983,7 @@ export async function createFinancialRequest({ payload, files, user, req }) {
     frequency: parseFrequency(payload.frequency),
     observations: payload.observations,
     invoiceDetails: parseInvoiceDetails(payload.invoiceDetails),
+    supplierPaymentTerms: parseSupplierPaymentTerms(payload.supplierPaymentTerms),
     requester: user._id,
     solicitor: user._id,
     requesterArea: user.area,
@@ -996,7 +1019,7 @@ export async function createFinancialRequest({ payload, files, user, req }) {
     request.approvalHistory.push(workflowEvent({ action: "CREATED", to: REQUEST_STATUS.DRAFT, user, req, comments: "Draft created.", request }));
     await request.save();
     saved = true;
-    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "CREATED", user, req, module: "REQUESTS", newValues: { status: request.status } });
+    await recordAudit({ entityType: "FinancialRequest", entity: request, action: "CREATED", user, req, module: "REQUESTS", newValues: { status: request.status, ...officialAuditSnapshot(request) } });
     if (submit) await submitPreparedRequest(request, { user, req, comments: payload.comments });
     await request.populate(requestPopulate);
     return request;
