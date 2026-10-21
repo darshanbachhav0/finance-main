@@ -16,6 +16,13 @@
 .sunat-representatives { margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); }
 .sunat-representatives > summary { font-weight: 650; }
 
+.supplier-sunat-evidence { margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); }
+.supplier-sunat-evidence > p { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-2); font-size: var(--font-sm); }
+.supplier-sunat-evidence.is-valid > p { color: var(--green-700); }
+.supplier-sunat-evidence.needs-review > p { color: var(--amber-700); }
+.supplier-sunat-evidence summary { color: var(--gray-600); font-size: var(--font-xs); cursor: pointer; }
+.supplier-sunat-evidence dd { overflow-wrap: anywhere; }
+
 /* Declarations: a radio group drawn as the existing segmented control. */
 .segmented-control label { display: inline-flex; align-items: center; min-height: 30px; padding: 5px 10px; border-radius: var(--radius-xs); color: var(--gray-600); font-size: var(--font-xs); font-weight: 700; cursor: pointer; }
 .segmented-control label.active { color: #fff; background: var(--uma-primary); }

@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "playwright";
-import { lookupSunatLegalRepresentatives, closeSunatRepresentativesBrowser } from "../../backend/src/services/sunatConsultaRucRepresentativesService.js";
+import { lookupSunatLegalRepresentatives, lookupSunatTaxpayerProfile, closeSunatRepresentativesBrowser } from "../../backend/src/services/sunatConsultaRucRepresentativesService.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = fileURLToPath(new URL("../../.tmp/supplier-ruc-ui/", import.meta.url));
@@ -26,13 +26,13 @@ const second = { ...first, documentNumber: "00000002", fullName: "Segunda repres
 try {
   await mkdir(output, { recursive: true });
   await server.listen();
-  browser = await launch({ headless: true });
+  browser = await launch({ headless: true, executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
   // Instrument only the service browser, checking options before it can launch.
   chromium.launch = async (options) => {
     assert.equal(options.headless, true, "The service must never open a desktop window");
     assert.equal(options.channel, "chromium");
     launches++;
-    serviceBrowser = await launch(options);
+    serviceBrowser = await launch({ ...options, executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
     const newContext = serviceBrowser.newContext.bind(serviceBrowser);
     serviceBrowser.newContext = async (options) => {
       assert.equal(options.userAgent, "UMA-Finance/1.0 (SUNAT public RUC lookup)");
@@ -48,7 +48,11 @@ try {
           searches++;
           const ruc = url.searchParams.get("search1");
           body = ruc.endsWith("03") ? `<p>${ruc} CAPTCHA: verificación requerida</p>`
-            : `<p>${ruc}</p><a href="representatives?ruc=${ruc}">Representantes Legales</a>`;
+            : `<div class="list-group-item"><div class="row"><div><h4>Número de RUC:</h4></div><div><h4>${ruc} - ${company}</h4></div></div></div>
+              <div class="list-group-item"><div class="row"><div><h4>Fecha de Inscripción:</h4></div><div><p>01/02/2020</p></div><div><h4>Fecha de Inicio de Actividades:</h4></div><div><p>15/02/2020</p></div></div></div>
+              <div class="list-group-item"><div><h4>Estado del Contribuyente:</h4></div><div><p>ACTIVO</p></div></div>
+              <div class="list-group-item"><div><h4>Condición del Contribuyente:</h4></div><div><p>HABIDO</p></div></div>
+              <a href="representatives?ruc=${ruc}">Representantes Legales</a>`;
         } else if (url.pathname.endsWith("/representatives")) {
           const ruc = url.searchParams.get("ruc");
           const people = ruc.endsWith("02") ? [first, second] : [first];
@@ -66,6 +70,7 @@ try {
 
   const user = { _id: "ruc-test", name: "Supplier Tester", role: "Admin", area: "Administration" };
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.setDefaultTimeout(12000);
   page.on("pageerror", error => runtimeErrors.push(error.message));
   await page.route(url => url.pathname.startsWith("/api/"), async route => {
     assert.equal(route.request().method(), "GET", "The suite must not write supplier records");
@@ -92,15 +97,15 @@ try {
     else if (path === "/dashboard/tasks") body = {};
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });
-  await mockWorkDrafts(page);
+  const drafts = await mockWorkDrafts(page);
   await page.addInitScript(user => {
     localStorage.setItem("erp_token", "isolated-ruc-test");
     localStorage.setItem("erp_user", JSON.stringify(user));
     localStorage.setItem("erp_language", "en");
   }, user);
   const openSupplier = async ruc => {
-    await page.goto("http://127.0.0.1:5188/suppliers");
-    await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
+    drafts.clear();
+    await page.goto("http://127.0.0.1:5188/suppliers?mode=new");
     await page.getByLabel("RUC / identifier", { exact: true }).fill(ruc);
     await page.getByLabel("Legal Name", { exact: false }).waitFor();
     await page.waitForFunction(company => [...document.querySelectorAll("label")].find(label => label.textContent.includes("Legal Name"))?.querySelector("input")?.value === company, company);
@@ -111,11 +116,11 @@ try {
     assert.equal(await page.getByLabel("Payment comments", { exact: true }).count(), 0);
     // The proposal is a stepped form: identification first, conditions on the next step.
     await page.getByRole("button", { name: "Identification" }).waitFor();
-    assert.equal(await page.getByText("Payment terms are entered in each supplier quotation and carried into the selected purchase.", { exact: true }).isVisible(), false);
+    assert.equal(await page.getByLabel("Días de crédito", { exact: true }).isVisible(), false);
   };
 
   await openSupplier("20600000001");
-  await page.getByText("The single SUNAT representative was automatically copied into the Legal Representative fields below.").waitFor();
+  await page.getByText("SUNAT returned one representative. Review the name and document below.").waitFor();
   assert.equal(await page.getByLabel("Legal Representative", { exact: true }).inputValue(), first.fullName);
   assert.equal(await page.getByLabel("Representative document number", { exact: true }).inputValue(), first.documentNumber);
   assert.equal(page.context().pages().length, 1, "Supplier entry opens no tabs or popups");
@@ -123,10 +128,16 @@ try {
   const cached = await lookupSunatLegalRepresentatives("20600000001", company);
   assert.equal(cached.cached, true);
   assert.equal(searches, 1, "Repeated RUC lookup reuses the cached result");
+  const profile = await lookupSunatTaxpayerProfile("20600000001");
+  assert.equal(profile.data.taxpayerStatus, "ACTIVO");
+  assert.equal(profile.data.domicileCondition, "HABIDO");
+  assert.equal(profile.data.registrationDate, "2020-02-01");
+  assert.equal(profile.data.activityStartDate, "2020-02-15");
+  assert.equal(searches, 1, "The representative lookup also preserves the taxpayer profile from the same visit");
   await page.screenshot({ path: `${output}/autofill.png`, fullPage: true });
   // Continue checks the identification step (filled by SUNAT) and opens contacts and conditions.
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByText("Payment terms are entered in each supplier quotation and carried into the selected purchase.", { exact: true }).waitFor();
+  await page.getByLabel("Días de crédito", { exact: true }).waitFor();
   const optionalContact = page.locator(".optional-section");
   assert.equal(await optionalContact.getAttribute("open"), null);
   await optionalContact.locator("summary").focus();
@@ -142,8 +153,8 @@ try {
   await optionalContact.getByLabel("Email", { exact: true }).fill("");
 
   // A deliberately blocked Padrón request must not hold the entire form hostage.
-  await page.goto("http://127.0.0.1:5188/suppliers");
-  await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
+  drafts.clear();
+  await page.goto("http://127.0.0.1:5188/suppliers?mode=new");
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000006");
   await page.getByText("Loading SUNAT details in the background", { exact: true }).waitFor();
   await page.getByLabel("Legal Name", { exact: false }).fill("User-entered company name");
@@ -157,14 +168,14 @@ try {
   assert.equal(await page.getByLabel("Legal Name", { exact: false }).inputValue(), "User-entered company name");
   assert.equal(await page.getByLabel("Fiscal Address", { exact: true }).inputValue(), "User-entered address");
 
-  await page.goto("http://127.0.0.1:5188/suppliers");
-  await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
+  drafts.clear();
+  await page.goto("http://127.0.0.1:5188/suppliers?mode=new");
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000007");
   await page.getByText("Existing supplier fixture", { exact: true }).waitFor();
   assert.equal(await page.getByLabel("Legal Name", { exact: false }).count(), 0, "Duplicates must not open a proposal form");
 
-  await page.goto("http://127.0.0.1:5188/suppliers");
-  await page.getByRole("button", { name: "New supplier", exact: true }).first().click();
+  drafts.clear();
+  await page.goto("http://127.0.0.1:5188/suppliers?mode=new");
   await page.getByLabel("RUC / identifier", { exact: true }).fill("20600000008");
   await page.getByText("Duplicate check unavailable", { exact: true }).waitFor();
   const checksAfterFailure = duplicateChecks;

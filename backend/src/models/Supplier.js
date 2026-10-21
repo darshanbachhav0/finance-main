@@ -101,8 +101,16 @@ const supplierSchema = new mongoose.Schema(
     website: { type: String, trim: true, default: "" },
     legalRepresentative: { type: String, trim: true },
     legalRepresentativeDocument: {
-      type: { type: String, enum: ["DNI", "CE"] },
+      type: { type: String, enum: ["DNI", "CE", "PASAPORTE", "RUC"] },
       number: { type: String, trim: true, default: "" }
+    },
+    // Public SUNAT evidence, recorded by the server independently of the selected contact.
+    sunatRepresentatives: {
+      ruc: String,
+      legalName: String,
+      source: String,
+      queriedAt: Date,
+      entries: { type: [{ _id: false, documentType: String, documentNumber: String, fullName: String, position: String, dateFrom: String }], default: undefined }
     },
     email: { type: String, trim: true, lowercase: true },
     phone: { type: String, trim: true },
@@ -141,6 +149,15 @@ const supplierSchema = new mongoose.Schema(
       returnedLegalName: { type: String, trim: true, default: "" },
       identifierMatch: { type: String, enum: ["MATCH", "MISMATCH", "NOT_VERIFIED"], default: "NOT_VERIFIED" },
       legalNameMatch: { type: String, enum: ["MATCH", "MISMATCH", "NOT_VERIFIED"], default: "NOT_VERIFIED" },
+      sunat: {
+        taxpayerStatus: String,
+        domicileCondition: String,
+        registrationDate: String,
+        activityStartDate: String,
+        deregistrationDate: String,
+        queriedAt: Date,
+        datasetDate: String
+      },
       validatedAt: Date,
       validatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       comments: { type: String, trim: true, default: "" }

@@ -13,6 +13,8 @@ import { paginatedPayload, parsePagination, parseSort, escapedRegex } from "./qu
 import { nextSupplierCode } from "./sequenceService.js";
 import { sunatService } from "./sunatService.js";
 import { getSupplierAutomaticPrefill } from "./supplierPadronLookupService.js";
+import { cachedSunatLegalRepresentatives, lookupSunatLegalRepresentatives } from "./sunatConsultaRucRepresentativesService.js";
+import { representativeDocumentType, sunatCalendarDate } from "../../../shared/supplierSunat.mjs";
 import { runFinancialOperation } from "./transactionService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { AppError } from "../utils/AppError.js";
@@ -149,6 +151,7 @@ const protectedSupplierFields = Object.freeze([
   "reviewedBy",
   "reviewedAt",
   "taxpayerValidation",
+  "sunatRepresentatives",
   "verifiedBy",
   "verifiedAt",
   "verificationStatus",
@@ -856,6 +859,14 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
         console.warn("[SUPPLIER] Automatic taxpayer review pending:", error.code || error.name);
       }
     }
+    // Manual integration mode can still preserve the public evidence retrieved by the form.
+    if (identifier.length === 11 && (sunatService.status().variant === "PADRON" || cachedSunatLegalRepresentatives(identifier, supplier.legalName))) {
+      try { await recordSupplierSunatRepresentatives(supplier, user, req); }
+      catch (error) {
+        warnings.push({ code: "SUNAT_REPRESENTATIVES_PENDING", message: "Supplier saved. SUNAT legal representatives could not be retrieved; complete the representative manually." });
+        console.warn("[SUPPLIER] SUNAT representatives pending:", error.code || error.name);
+      }
+    }
     // The saved proposal never depends on the notification; the approver also sees it in their tasks.
     try { await notifySupplierApprover(supplier); }
     catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
@@ -1168,6 +1179,7 @@ async function recordSupplierTaxpayerResult({ supplier, result, provider, user, 
     returnedLegalName,
     identifierMatch,
     legalNameMatch,
+    sunat: result.sunat,
     validatedAt: new Date(),
     validatedBy: user._id,
     comments: String(result.comments || payload.comments || "").trim()
@@ -1192,6 +1204,7 @@ async function recordSupplierTaxpayerResult({ supplier, result, provider, user, 
       status: supplier.taxpayerValidation.status,
       providerMode: supplier.taxpayerValidation.providerMode,
       source: supplier.taxpayerValidation.source,
+      sunat: supplier.toObject().taxpayerValidation?.sunat,
       identifierMatch,
       legalNameMatch
     }
@@ -1217,8 +1230,45 @@ export function automaticTaxpayerResult(lookup) {
     returnedIdentifier: data.rucDni || lookup.ruc,
     returnedLegalName: data.legalName || "",
     source: lookup.source,
+    sunat: {
+      taxpayerStatus: data.taxpayerStatus || "",
+      domicileCondition: data.domicileCondition || "",
+      registrationDate: sunatCalendarDate(data.registrationDate),
+      activityStartDate: sunatCalendarDate(data.activityStartDate),
+      deregistrationDate: sunatCalendarDate(data.deregistrationDate),
+      queriedAt: lookup.queriedAt || undefined,
+      datasetDate: sunatCalendarDate(lookup.datasetDate)
+    },
     comments: `Automatic taxpayer review. Source: ${lookup.source}. Status: ${data.taxpayerStatus || "UNKNOWN"}. Condition: ${data.domicileCondition || "UNKNOWN"}. Evidence date: ${lookup.datasetDate || lookup.queriedAt || "unavailable"}.`
   };
+}
+
+// Reuses the public lookup cache when the form already retrieved the representatives.
+// Never trust browser-submitted source/status/date fields as SUNAT evidence.
+export async function recordSupplierSunatRepresentatives(supplier, user, req, lookup = lookupSunatLegalRepresentatives) {
+  const ruc = supplier.normalizedIdentifier || supplier.rucDni;
+  const result = await lookup(ruc, supplier.legalName || supplier.name);
+  if (result?.officialSource !== true || result.source !== "SUNAT_CONSULTA_RUC_BROWSER" || result.ruc !== ruc) {
+    throw new AppError(503, "Official SUNAT representative evidence does not match this RUC.");
+  }
+  const evidence = {
+    ruc, legalName: result.legalName, source: result.source, queriedAt: result.queriedAt,
+    entries: (result.representatives || []).map(person => ({
+      documentType: person.documentType, documentNumber: person.documentNumber,
+      fullName: person.fullName, position: person.position, dateFrom: sunatCalendarDate(person.dateFrom)
+    }))
+  };
+  supplier.sunatRepresentatives = evidence;
+  if (evidence.entries.length === 1 && !supplier.legalRepresentative && !supplier.legalRepresentativeDocument?.number) {
+    const person = evidence.entries[0], type = representativeDocumentType(person.documentType);
+    if (type) {
+      supplier.legalRepresentative = person.fullName;
+      supplier.legalRepresentativeDocument = { type, number: person.documentNumber };
+    }
+  }
+  await supplier.save();
+  await recordAudit({ entityType: "Supplier", entity: supplier, action: "SUNAT_REPRESENTATIVES_RECORDED", module: "SUPPLIERS", user, req, newValues: evidence });
+  return supplier;
 }
 
 export function supplierDeclarationWarnings(supplier) {

@@ -611,7 +611,7 @@ export default function RequestCreate() {
     const registered = payableAccounts(supplier);
     const first = registered.find((account) => account.currency === form.currency) || registered[registered.length - 1];
     if (first) setForm((current) => ({ ...current, supplier: supplier._id, paymentAccount: first._id, currency: linesAreEmpty && !invoiceDetails.currency ? first.currency : current.currency }));
-    notify(t("Supplier {code} registered. Your jefe approves it with this request.").replace("{code}", supplier.supplierCode || supplierName(supplier)), "success");
+    notify(t("Supplier {code} registered. Accounting reviews its documentation.").replace("{code}", supplier.supplierCode || supplierName(supplier)), "success");
     warnings.filter((warning) => warning.message).forEach((warning) => notify(warning.message, "info"));
   }
 

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { consultaProfileFromFields, profileTimeoutMs } from "../src/services/sunatConsultaRucRepresentativesService.js";
 import { getSupplierAutomaticPrefill, classifyConsultaFailure } from "../src/services/supplierPadronLookupService.js";
+import { sunatCalendarDate, representativeDocumentType } from "../../shared/supplierSunat.mjs";
 const ruc = "20550807123";
 const fields = { "NUMERO DE RUC": `${ruc} - TEST UNIVERSITY`, "NOMBRE COMERCIAL": "-", "DOMICILIO FISCAL": "TEST ADDRESS", "ESTADO DEL CONTRIBUYENTE": "ACTIVO", "CONDICION DEL CONTRIBUYENTE": "HABIDO" };
 test("Consulta RUC returns only evidenced supplier fields and rejects mismatched identities", () => {
@@ -30,8 +31,24 @@ test("Website outage falls back to Padron and preserves its evidence and missing
 test("Consulta RUC keeps inactive status separate from its closure date", () => {
  const result = consultaProfileFromFields(ruc, {...fields, "ESTADO DEL CONTRIBUYENTE": "BAJA DE OFICIO Fecha de Baja: 31/03/2014"});
  assert.equal(result.data.taxpayerStatus, "BAJA DE OFICIO");
+ assert.equal(result.data.deregistrationDate, "2014-03-31");
  assert.equal(result.data.active, false);
  assert.equal(result.data.eligibleForHomologation, false);
+});
+
+test("Important SUNAT dates are calendar dates; absent or impossible dates are not invented", () => {
+ const profile = consultaProfileFromFields(ruc, { ...fields, "FECHA DE INSCRIPCION": "29/02/2024", "FECHA DE INICIO DE ACTIVIDADES": "01/03/2024" });
+ assert.equal(profile.data.registrationDate, "2024-02-29");
+ assert.equal(profile.data.activityStartDate, "2024-03-01");
+ assert.equal(profile.data.deregistrationDate, "");
+ assert.equal(consultaProfileFromFields(ruc, fields).data.registrationDate, "");
+ for (const value of ["31/02/2026", "29/02/2023", "00/12/2026", "2026-13-01", "-", "PENDIENTE", "2026-01-01T00:00:00Z"]) assert.equal(sunatCalendarDate(value), "");
+ assert.equal(sunatCalendarDate("31/12/2026"), "2026-12-31");
+ assert.equal(representativeDocumentType("DOC. NACIONAL DE IDENTIDAD"), "DNI");
+ assert.equal(representativeDocumentType("CARNÉ DE EXTRANJERÍA"), "CE");
+ assert.equal(representativeDocumentType("Pasaporte"), "PASAPORTE");
+ assert.equal(representativeDocumentType("RUC"), "RUC");
+ assert.equal(representativeDocumentType("Otro"), "");
 });
 
 test("Deployment failures stay actionable without leaking internal paths", async () => {

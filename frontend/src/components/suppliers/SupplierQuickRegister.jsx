@@ -8,12 +8,15 @@ import StatusBadge from "../StatusBadge.jsx";
 import BankAccountFields from "./BankAccountFields.jsx";
 import CreditDaysField from "./CreditDaysField.jsx";
 import { supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
+import { representativeDocumentType } from "../../../../shared/supplierSunat.mjs";
+import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
+import { dniError } from "../../utils/fieldValidation.js";
 
 // Registering a supplier without leaving the request (step 1, "Datos de proveedor"): the RUC is
 // checked against the registry first (an existing supplier is used, another area's is asked for),
 // SUNAT fills the legal name, and the requester adds the reason and the bank accounts. The supplier
-// gets its PRV code now; the requester's jefe approves it together with the request. The full
-// proposal (contacts, representative, delivery) stays on the Suppliers page.
+// gets its PRV code now; Accounting reviews its evidence independently of request approvals.
+// Contacts and delivery stay in the full proposal on the Suppliers page.
 const digits = (value) => String(value || "").replace(/\D/g, "");
 
 export default function SupplierQuickRegister({ initialRuc = "", need = "", currency = "PEN", onRegistered, onUseExisting, onCancel }) {
@@ -22,6 +25,8 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
   const [check, setCheck] = useState({ status: "idle" });
   const [sunat, setSunat] = useState(null);
   const [legalName, setLegalName] = useState("");
+  const [representative, setRepresentative] = useState({ fullName: "", documentType: "DNI", documentNumber: "" });
+  const [representativeLookup, setRepresentativeLookup] = useState({ status: "idle" });
   const [justification, setJustification] = useState(need ? t("Supplier for: {need}").replace("{need}", need.split(/\r?\n/)[0].slice(0, 160)) : "");
   const [accounts, setAccounts] = useState([emptyBankAccount("", currency)]);
   const [certificate, setCertificate] = useState(null);
@@ -31,12 +36,23 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
   const [saving, setSaving] = useState(false);
   const [accessAsked, setAccessAsked] = useState(false);
   const typedName = useRef(false);
+  const typedRepresentative = useRef(false);
+  const autoHolder = useRef("");
 
   // The RUC is looked up as soon as it is complete: registered (use it), another area's (ask for
   // it) or new (SUNAT fills the legal name while the rest is typed).
   useEffect(() => {
     const value = digits(ruc);
     setAccessAsked(false);
+    setSunat(null);
+    setRepresentativeLookup({ status: "idle" });
+    setRepresentative({ fullName: "", documentType: "DNI", documentNumber: "" });
+    typedRepresentative.current = false;
+    typedName.current = false;
+    setLegalName("");
+    const previousHolder = autoHolder.current;
+    autoHolder.current = "";
+    if (previousHolder) setAccounts(current => current.map(account => account.accountHolderName === previousHolder ? { ...account, accountHolderName: "" } : account));
     if (!/^(\d{8}|\d{11})$/.test(value)) { setCheck({ status: "idle" }); setSunat(null); return undefined; }
     let active = true;
     setCheck({ status: "checking" });
@@ -48,16 +64,31 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
       setSunat({ status: "loading" });
       api.get(`/suppliers/padron/${value}`, { timeout: 35000 }).then((lookup) => {
         if (!active) return;
-        setSunat({ status: lookup.data?.found ? "found" : "missing", data: lookup.data?.data });
+        setSunat({ status: lookup.data?.found ? "found" : "missing", data: lookup.data?.data, lookup: lookup.data });
         const name = lookup.data?.data?.legalName;
         if (name && !typedName.current) {
           setLegalName(name);
           setAccounts((current) => current.map((account) => account.accountHolderName ? account : { ...account, accountHolderName: name }));
+          autoHolder.current = name;
         }
+        if (!lookup.data?.found || !name) return;
+        setRepresentativeLookup({ status: "loading" });
+        api.get(`/suppliers/consulta-ruc/${value}/representatives`, { params: { legalName: name }, timeout: 35000 }).then(response => {
+          if (!active) return;
+          if (response.data?.ruc !== value) { setRepresentativeLookup({ status: "unavailable" }); return; }
+          setRepresentativeLookup({ status: "found", data: response.data });
+          const people = response.data?.representatives || [];
+          if (people.length === 1 && !typedRepresentative.current) setRepresentative({ ...people[0], documentType: representativeDocumentType(people[0].documentType) });
+        }).catch(() => active && setRepresentativeLookup({ status: "unavailable" }));
       }).catch(() => active && setSunat({ status: "unavailable" }));
     }).catch((err) => active && setCheck({ status: "error", error: err.message }));
     return () => { active = false; };
   }, [ruc]);
+
+  function editRepresentative(patch) {
+    typedRepresentative.current = true;
+    setRepresentative(current => ({ ...current, ...patch }));
+  }
 
   function setAccount(index, patch) {
     setErrors((current) => {
@@ -84,6 +115,8 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     if (!/^(\d{8}|\d{11})$/.test(digits(ruc))) problems.ruc = "Enter a valid 11-digit RUC or supported 8-digit DNI.";
     if (!legalName.trim()) problems.legalName = "Legal name is required.";
     if (!justification.trim()) problems.justification = "Say why UMA needs this supplier.";
+    const documentError = representative.documentType === "DNI" ? dniError(representative.documentNumber, { required: false }) : "";
+    if (documentError) problems.representativeDocument = documentError;
     if (paymentTerms.option && (supplierCreditDays(paymentTerms) === null || (paymentTerms.option === "CUSTOM" && Number(paymentTerms.days) <= 0))) problems.creditDays = "Ingrese días de crédito enteros y válidos.";
     accounts.forEach((account, index) => {
       for (const [field, message] of Object.entries(bankAccountProblems(account))) problems[`accounts.${index}.${field}`] = message;
@@ -100,6 +133,8 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     data.append("rucDni", digits(ruc));
     data.append("legalName", legalName.trim());
     data.append("name", legalName.trim());
+    data.append("legalRepresentative", representative.fullName.trim());
+    if (representative.documentNumber) data.append("legalRepresentativeDocument", JSON.stringify({ type: representative.documentType, number: representative.documentNumber.trim() }));
     data.append("proposalJustification", justification.trim());
     data.append("currency", accounts[0].accountCurrency || currency);
     if (paymentTerms.option) data.append("paymentTerms", JSON.stringify(paymentTerms));
@@ -128,7 +163,7 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     <section className="supplier-quick-register" aria-labelledby="supplier-quick-register-title">
       <header>
         <UserPlus size={18} aria-hidden="true" />
-        <div><h4 id="supplier-quick-register-title">{t("Register a new supplier")}</h4><small>{t("It gets its PRV code now; your jefe approves it with this request.")}</small></div>
+        <div><h4 id="supplier-quick-register-title">{t("Register a new supplier")}</h4><small>{t("Accounting reviews suppliers")}</small></div>
         <button type="button" className="icon-button quiet" onClick={onCancel} aria-label={t("Close")} title={t("Close")}><X size={16} aria-hidden="true" /></button>
       </header>
 
@@ -144,10 +179,21 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
 
       {status === "new" && <>
         {sunat?.status === "loading" && <p className="muted-text"><Loader2 size={14} className="spin" aria-hidden="true" /> {t("Looking up the RUC in SUNAT...")}</p>}
-        {sunat?.status === "found" && <p className="muted-text"><CheckCircle2 size={14} aria-hidden="true" /> {t("Name and address filled from SUNAT.")}</p>}
+        {sunat?.status === "found" && <SupplierSunatEvidence lookup={sunat.lookup} />}
         {["missing", "unavailable"].includes(sunat?.status) && <p className="muted-text">{t("SUNAT did not answer: type the legal name as it appears on the RUC.")}</p>}
         <div className="form-grid two-column-form">
           <label className={`field form-span-two${errors.legalName ? " field-error" : ""}`}><span>{t("Legal name")} *</span><input value={legalName} onChange={(event) => { typedName.current = true; setLegalName(event.target.value); }} aria-invalid={Boolean(errors.legalName)} />{errors.legalName && <small className="field-error-text">{t(errors.legalName)}</small>}</label>
+          {representativeLookup.status === "loading" && <p className="field-hint form-span-two" role="status">{t("Checking SUNAT legal representatives...")}</p>}
+          {representativeLookup.status === "unavailable" && <p className="field-hint form-span-two" role="status">{t("SUNAT representative lookup temporarily unavailable")}</p>}
+          {representativeLookup.status === "found" && !(representativeLookup.data?.representatives?.length) && <p className="field-hint form-span-two">{t("SUNAT Consulta RUC did not return legal representatives for this RUC.")}</p>}
+          {(representativeLookup.data?.representatives?.length || 0) > 1 && <label className="field form-span-two"><span>{t("Select a SUNAT representative")}</span><select value={representativeLookup.data.representatives.findIndex(person => person.fullName === representative.fullName && person.documentNumber === representative.documentNumber)} onChange={event => {
+            const person = representativeLookup.data.representatives[Number(event.target.value)];
+            if (person) editRepresentative({ ...person, documentType: representativeDocumentType(person.documentType) });
+          }}><option value="-1">{t("Select")}</option>{representativeLookup.data.representatives.map((person, index) => <option key={`${person.documentType}-${person.documentNumber}-${index}`} value={index}>{person.fullName} · {person.position} · {person.documentNumber}</option>)}</select></label>}
+          <label className="field form-span-two"><span>{t("Legal Representative")}</span><input value={representative.fullName} onChange={event => editRepresentative({ fullName: event.target.value })} /></label>
+          <label className="field"><span>{t("Representative document type")}</span><select value={representative.documentType} onChange={event => editRepresentative({ documentType: event.target.value })}><option value="">{t("Select")}</option><option value="DNI">DNI</option><option value="CE">CE</option><option value="PASAPORTE">{t("Passport")}</option><option value="RUC">RUC</option></select></label>
+          <label className={`field${errors.representativeDocument ? " field-error" : ""}`}><span>{t("Representative document number")}</span><input value={representative.documentNumber} onChange={event => editRepresentative({ documentNumber: event.target.value })} inputMode={representative.documentType === "DNI" ? "numeric" : undefined} aria-invalid={Boolean(errors.representativeDocument)} />{errors.representativeDocument && <small className="field-error-text">{t(errors.representativeDocument)}</small>}</label>
+          <div className="form-span-two"><SunatRepresentativeNote representative={representativeLookup.data?.representatives?.find(person => person.fullName === representative.fullName && person.documentNumber === representative.documentNumber)} queriedAt={representativeLookup.data?.queriedAt} /></div>
           <label className={`field form-span-two${errors.justification ? " field-error" : ""}`}><span>{t("Reason for registering the supplier")} *</span><textarea rows="2" value={justification} onChange={(event) => setJustification(event.target.value)} aria-invalid={Boolean(errors.justification)} />{errors.justification && <small className="field-error-text">{t(errors.justification)}</small>}</label>
         </div>
 

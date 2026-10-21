@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
+import { sunatCalendarDate } from "../../../shared/supplierSunat.mjs";
 
 const __filename =
   fileURLToPath(
@@ -914,15 +915,15 @@ async function lookupInternal(
     });
 
   let deadlineExpired = false;
-  const deadline = profileOnly ? setTimeout(() => {
+  const deadline = setTimeout(() => {
     deadlineExpired = true;
     void context.close().catch(() => {});
-  }, profileTimeoutMs()) : null;
+  }, profileTimeoutMs());
   let page;
 
   try {
     // Rendering assets are unnecessary for extracting public taxpayer text.
-    await context.route("**/*", route => ["image", "font", "media"].includes(route.request().resourceType()) ? route.abort() : route.continue());
+    await context.route("**/*", route => ["image", "font", "media"].includes(route.request().resourceType()) ? route.abort() : route.fallback());
     page =
       await context.newPage();
 
@@ -1023,13 +1024,7 @@ async function lookupInternal(
     }
 
     {
-      const fields = await page.evaluate(() => Object.fromEntries(
-        Array.from(document.querySelectorAll(".list-group-item")).map(row => {
-          const text = (row.innerText || "").replace(/\s+/g, " ").trim();
-          const split = text.indexOf(":");
-          return split < 0 ? ["", ""] : [text.slice(0, split).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim(), text.slice(split + 1).trim()];
-        }).filter(([key]) => key)
-      ));
+      const fields = await extractConsultaFields(page);
       // Both operations visit the same company page. Preserve that verified
       // profile even if the separate representative page later fails.
       try {
@@ -1098,6 +1093,8 @@ async function lookupInternal(
         legalName
       );
 
+    if (heading.ruc !== ruc) throw new Error("SUNAT returned representatives for a different RUC.");
+
     console.log(
       `[SUNAT REPRESENTATIVES] Found ${representatives.length} representative(s) for ${ruc}.`
     );
@@ -1134,12 +1131,34 @@ async function lookupInternal(
           : "SUNAT Consulta RUC loaded correctly but did not return legal representatives."
     };
   } catch (error) {
-    if (deadlineExpired) throw new Error("Consulta RUC profile lookup timed out.");
+    if (deadlineExpired) throw new Error("Consulta RUC lookup timed out.");
     throw error;
   } finally {
     clearTimeout(deadline);
     await context.close().catch(() => {});
   }
+}
+
+export async function extractConsultaFields(page) {
+  return page.evaluate(() => {
+    const clean = value => String(value || "").replace(/\s+/g, " ").trim();
+    const key = value => clean(value).replace(/:$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const entries = [];
+    for (const row of document.querySelectorAll(".list-group-item")) {
+      // SUNAT puts registration and start dates in two label/value pairs in one row.
+      const headings = [...row.querySelectorAll("h4")].filter(heading => /:\s*$/.test(heading.textContent));
+      if (headings.length) {
+        for (const heading of headings) {
+          const value = heading.parentElement.nextElementSibling;
+          if (value && ![...value.querySelectorAll("h4")].some(heading => /:\s*$/.test(heading.textContent))) entries.push([key(heading.textContent), clean(value.innerText || value.textContent)]);
+        }
+      } else {
+        const text = clean(row.innerText || row.textContent), split = text.indexOf(":");
+        if (split >= 0) entries.push([key(text.slice(0, split)), text.slice(split + 1).trim()]);
+      }
+    }
+    return Object.fromEntries(entries);
+  });
 }
 
 export function consultaProfileFromFields(ruc, fields) {
@@ -1148,11 +1167,15 @@ export function consultaProfileFromFields(ruc, fields) {
   if (!match || match[1] !== ruc) throw new Error("SUNAT returned an unrecognized or mismatched RUC profile.");
   const taxpayerStatus = (fields["ESTADO DEL CONTRIBUYENTE"] || "NO_INFORMADO").split(/\s+Fecha de Baja\s*:/i)[0].trim();
   const domicileCondition = fields["CONDICION DEL CONTRIBUYENTE"] || "NO_INFORMADO";
+  const closure = fields["FECHA DE BAJA"] || fields["ESTADO DEL CONTRIBUYENTE"]?.match(/Fecha de Baja\s*:\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
   return { found: true, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt: new Date().toISOString(),
     data: { rucDni: ruc, legalName: match[2].trim(), commercialName: fields["NOMBRE COMERCIAL"] === "-" ? "" : fields["NOMBRE COMERCIAL"] || "",
       personType: ruc.startsWith("20") ? "LEGAL_ENTITY" : ruc.startsWith("10") ? "NATURAL_PERSON_WITH_BUSINESS" : "",
       fiscalAddress: fields["DOMICILIO FISCAL"] || "", location: { department: fields["DEPARTAMENTO"] || "", province: fields["PROVINCIA"] || "", district: fields["DISTRITO"] || "", ubigeo: fields["UBIGEO"] || "" },
       taxpayerStatus, domicileCondition, active: taxpayerStatus === "ACTIVO", habido: domicileCondition === "HABIDO",
+      registrationDate: sunatCalendarDate(fields["FECHA DE INSCRIPCION"]),
+      activityStartDate: sunatCalendarDate(fields["FECHA DE INICIO DE ACTIVIDADES"]),
+      deregistrationDate: sunatCalendarDate(closure),
       eligibleForHomologation: taxpayerStatus === "ACTIVO" && domicileCondition === "HABIDO", accountHolderName: match[2].trim() },
     message: "Supplier information loaded from SUNAT Consulta RUC." };
 }
@@ -1326,6 +1349,10 @@ export async function lookupSunatLegalRepresentatives(
   );
 
   return promise;
+}
+
+export function cachedSunatLegalRepresentatives(ruc, legalName) {
+  return getCached(cacheKey(normalizeRuc(ruc), cleanText(legalName)));
 }
 
 export async function closeSunatRepresentativesBrowser() {

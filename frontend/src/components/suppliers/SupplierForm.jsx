@@ -9,6 +9,8 @@ import { homologationChecklist, supplierStepProblems, supplierStepsFor } from ".
 import { bankAccountLabel, bankAccountPayload, emptyBankAccount } from "../../utils/bankAccounts.js";
 import BankAccountFields from "./BankAccountFields.jsx";
 import CreditDaysField from "./CreditDaysField.jsx";
+import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
+import { representativeDocumentType } from "../../../../shared/supplierSunat.mjs";
 import "../../styles/supplierForm.css";
 
 // Checked when the field is left; Continue and Submit check the whole step (utils/supplierProposal.js).
@@ -23,10 +25,7 @@ const STEP_LABELS = { identity: "Identification", conditions: "Contacts and cond
 const emptyContact = { name: "", position: "", phone: "", email: "" };
 
 function normalizeRepresentativeDocumentType(value) {
-  const normalized = String(value || "").trim().toUpperCase();
-  if (normalized === "DNI") return "DNI";
-  if (normalized === "CE" || normalized.includes("EXTRANJER")) return "CE";
-  return normalized || "DNI";
+  return representativeDocumentType(value);
 }
 
 function initialValues(supplier, identifier, padronLookup) {
@@ -103,7 +102,7 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
   const taxpayer = padronLookup?.loading
     ? { tone: "info", icon: RefreshCw, spin: true, title: "Loading SUNAT details in the background", text: t("You can continue filling the form. Available SUNAT data will fill untouched fields automatically.") }
     : padronLookup?.found
-      ? { tone: padronData?.eligibleForHomologation ? "success" : "warning", icon: padronData?.eligibleForHomologation ? CheckCircle2 : AlertTriangle, title: padronLookup.source === "SUNAT_CONSULTA_RUC" ? "SUNAT Consulta RUC data loaded automatically" : "SUNAT Padrón data loaded automatically", text: [padronData?.legalName || legalName, `${t("Status")}: ${padronData?.taxpayerStatus || "-"}`, `${t("Domicile condition")}: ${padronData?.domicileCondition || "-"}`, padronData?.location?.ubigeo && `${t("SUNAT UBIGEO")}: ${padronData.location.ubigeo}`, padronLookup.datasetDate && `${t("Dataset")}: ${padronLookup.datasetDate}`, padronLookup.fallback && t("Consulta RUC unavailable. Official Padrón fallback used.")].filter(Boolean).join(" · ") }
+      ? { tone: padronData?.eligibleForHomologation ? "success" : "warning", icon: padronData?.eligibleForHomologation ? CheckCircle2 : AlertTriangle, title: padronLookup.source === "SUNAT_CONSULTA_RUC" ? "SUNAT Consulta RUC data loaded automatically" : "SUNAT Padrón data loaded automatically", text: padronData?.legalName || legalName }
       : padronLookup
         ? { tone: "warning", icon: AlertTriangle, title: padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : "RUC not found in the current SUNAT Padrón", text: padronLookup.message ? t(padronLookup.message) : t("Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.") }
         : null;
@@ -113,7 +112,7 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
       ? { tone: "warning", icon: AlertTriangle, title: "SUNAT representative lookup temporarily unavailable", text: `${representativeLookup.error} ${t("The Padrón validation above remains valid and supplier creation can continue.")}` }
       : representativeLookup?.data
         ? representatives.length === 1
-          ? { tone: "success", icon: CheckCircle2, title: "SUNAT legal representatives", text: t("The single SUNAT representative was automatically copied into the Legal Representative fields below.") }
+          ? { tone: "success", icon: CheckCircle2, title: "SUNAT legal representatives", text: t("SUNAT returned one representative. Review the name and document below.") }
           : representatives.length > 1
             ? { tone: "info", icon: Users, title: "SUNAT legal representatives", text: t("SUNAT reports multiple representatives. Select the person UMA wants to record as the primary representative; the system will not guess automatically.") }
             : { tone: "warning", icon: AlertTriangle, title: "SUNAT legal representatives", text: t("SUNAT Consulta RUC did not return legal representatives for this RUC.") }
@@ -175,7 +174,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       if (current.legalRepresentative || current.representativeDocumentNumber) return current;
       return { ...current, legalRepresentative: representative.fullName || "", representativeDocumentType: normalizeRepresentativeDocumentType(representative.documentType), representativeDocumentNumber: representative.documentNumber || "" };
     });
-  }, [supplier, representativeLookup?.data?.queriedAt]);
+  }, [supplier, representativeLookup?.data]);
 
   function setValue(field, value) {
     editedFields.current.add(field);
@@ -285,7 +284,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       <p className="supplier-form-legend">{t("* Required to submit.")}</p>
 
       <div {...pane("identity")}>
-        {!supplier && <SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} />}
+        {!supplier && <><SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} /><SupplierSunatEvidence lookup={padronLookup} /></>}
         {!supplier && legalRepresentatives.length > 0 && (
           <details className="sunat-representatives" open={legalRepresentatives.length > 1 || undefined}>
             <summary>{t("Legal representatives of {ruc} - {name}").replace("{ruc}", representativeLookup.data.ruc || "").replace("{name}", representativeLookup.data.legalName || form.legalName)} ({legalRepresentatives.length})</summary>
@@ -320,9 +319,10 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
             <label className="field"><span>{t("SUNAT UBIGEO")}</span><input value={form.ubigeo} onChange={(event) => setValue("ubigeo", event.target.value)} inputMode="numeric" maxLength="6" /></label>
             <label className="field"><span>{t("Website")}</span><input type="url" value={form.website} onChange={(event) => setValue("website", event.target.value)} placeholder="https://" /></label>
             <label className="field field-span-2"><span>{t("Legal Representative")}</span><input value={form.legalRepresentative} onChange={(event) => setValue("legalRepresentative", event.target.value)} /></label>
-            <label className="field"><span>{t("Representative document type")}</span><select value={form.representativeDocumentType} onChange={(event) => setValue("representativeDocumentType", event.target.value)}><option value="DNI">DNI</option><option value="CE">CE</option><option value="PASAPORTE">{t("Passport")}</option></select></label>
+            <label className="field"><span>{t("Representative document type")}</span><select value={form.representativeDocumentType} onChange={(event) => setValue("representativeDocumentType", event.target.value)}><option value="">{t("Select")}</option><option value="DNI">DNI</option><option value="CE">CE</option><option value="PASAPORTE">{t("Passport")}</option><option value="RUC">RUC</option></select></label>
             <label className={fieldClass("representativeDocumentNumber")}><span>{t("Representative document number")}</span><input value={form.representativeDocumentNumber} onChange={(event) => setValue("representativeDocumentNumber", event.target.value)} inputMode={form.representativeDocumentType === "DNI" ? "numeric" : undefined} onBlur={() => checkField("representativeDocumentNumber")} aria-invalid={Boolean(fieldErrors.representativeDocumentNumber)} />{fieldMessage("representativeDocumentNumber")}</label>
           </div>
+          <SunatRepresentativeNote representative={legalRepresentatives.find(person => person.fullName === form.legalRepresentative && person.documentNumber === form.representativeDocumentNumber)} queriedAt={representativeLookup?.data?.queriedAt} />
         </Section>
       </div>
 
@@ -361,7 +361,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
 
       <div {...pane("review")}>
         <section className="supplier-form-section supplier-review">
-          <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("The supplier gets its PRV code when you register it; your jefe approves it before it can be paid.")}</small></div></header>
+          <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("Accounting reviews suppliers")}</small></div></header>
           <dl className="supplier-detail-grid">
             <div><dt>{t("RUC / identifier")}</dt><dd>{form.rucDni || "-"}</dd></div>
             <div><dt>{t("Legal Name")}</dt><dd><strong>{form.legalName || "-"}</strong></dd></div>

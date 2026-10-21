@@ -33,6 +33,7 @@ import StatusBadge from "../StatusBadge.jsx";
 import BankAccountFields from "./BankAccountFields.jsx";
 import { bankAccountPayload, bankAccountProblems, emptyBankAccount } from "../../utils/bankAccounts.js";
 import { bankDisplayName } from "../../../../shared/peruBanks.mjs";
+import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
 
 function displayDate(value, language) {
   if (!value) return "-";
@@ -238,6 +239,7 @@ export default function SupplierDetail({
           <Detail label="Proposed At" value={displayDate(supplier.proposedAt || supplier.createdAt, language)} />
           <Detail label="Registration justification" value={supplier.proposalJustification} />
         </DetailGrid>
+        <SunatRepresentativeNote representative={supplier.sunatRepresentatives?.ruc === supplier.rucDni ? supplier.sunatRepresentatives.entries?.find(person => person.fullName === supplier.legalRepresentative && person.documentNumber === supplier.legalRepresentativeDocument?.number) : null} queriedAt={supplier.sunatRepresentatives?.queriedAt} />
       </Section>
 
       <Section
@@ -350,10 +352,11 @@ export default function SupplierDetail({
       </Section>}
 
       <Section icon={ShieldCheck} title="Taxpayer Validation" status={provider.configured ? `${t("Provider")}: ${t(provider.state)}` : "SUNAT integration not configured"}>
+        {supplier.taxpayerValidation?.returnedIdentifier === supplier.rucDni && supplier.taxpayerValidation?.sunat?.taxpayerStatus && <SupplierSunatEvidence lookup={{ found: true, source: supplier.taxpayerValidation.source, data: supplier.taxpayerValidation.sunat, queriedAt: supplier.taxpayerValidation.sunat.queriedAt, datasetDate: supplier.taxpayerValidation.sunat.datasetDate }} />}
         {supplier.taxpayerValidation?.status === "VALID" && !permissions.canValidateTaxpayer && <p className="cell-note">{t("Verified supplier")}</p>}
         <DetailGrid>
-          <Detail label="Validation source" value={supplier.taxpayerValidation?.source || provider.state} />
-          <Detail label="Taxpayer Status" value={t(supplier.taxpayerStatus || "PENDING")} />
+          {!supplier.taxpayerValidation?.sunat?.taxpayerStatus && <Detail label="Validation source" value={supplier.taxpayerValidation?.source || provider.state} />}
+          <Detail label="UMA validation result" value={t(supplier.taxpayerValidation?.status || "NOT_VERIFIED")} />
           <Detail label="Identifier Match" value={t(supplier.taxpayerValidation?.identifierMatch || "NOT_VERIFIED")} />
           <Detail label="Legal Name Match" value={t(supplier.taxpayerValidation?.legalNameMatch || "NOT_VERIFIED")} />
           <Detail label="Validated At" value={displayDate(supplier.taxpayerValidation?.validatedAt, language)} />

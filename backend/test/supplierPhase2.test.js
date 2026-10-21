@@ -25,6 +25,7 @@ import {
   updateSupplierProposal,
   validateSupplierTaxpayer,
   validateAutomaticSupplierTaxpayer,
+  recordSupplierSunatRepresentatives,
   verifySupplierBankAccount
 } from "../src/services/supplierService.js";
 import { ROLES } from "../src/utils/constants.js";
@@ -367,12 +368,17 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     await t.test("automatic official taxpayer validation is persisted, audited, and requires matching identity", async () => {
       const supplier = await completeSupplier({ taxpayerStatus: "PENDING", compliance: { taxpayerActive: false } });
       const profile = { found: true, officialSource: true, source: "SUNAT_CONSULTA_RUC", queriedAt: new Date().toISOString(),
-        data: { rucDni: supplier.rucDni, legalName: supplier.legalName, active: true, habido: true, taxpayerStatus: "ACTIVO", domicileCondition: "HABIDO" } };
+        data: { rucDni: supplier.rucDni, legalName: supplier.legalName, active: true, habido: true, taxpayerStatus: "ACTIVO", domicileCondition: "HABIDO", registrationDate: "2020-01-01", activityStartDate: "2020-02-01" } };
       await validateAutomaticSupplierTaxpayer(supplier, users.accounting, req, async () => profile);
       const saved = await Supplier.findById(supplier._id);
       assert.equal(saved.taxpayerStatus, "ACTIVE");
       assert.equal(saved.taxpayerValidation.source, "SUNAT_CONSULTA_RUC");
       assert.equal(saved.taxpayerValidation.identifierMatch, "MATCH");
+      assert.equal(saved.taxpayerValidation.sunat.taxpayerStatus, "ACTIVO");
+      assert.equal(saved.taxpayerValidation.sunat.domicileCondition, "HABIDO");
+      assert.equal(saved.taxpayerValidation.sunat.registrationDate, "2020-01-01");
+      assert.equal(saved.taxpayerValidation.sunat.activityStartDate, "2020-02-01");
+      assert.equal(saved.taxpayerValidation.sunat.queriedAt.toISOString(), profile.queriedAt);
       assert.ok(await AuditLog.exists({ entityId: supplier._id, action: "TAXPAYER_VALIDATION_RECORDED" }));
       await validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => ({ ...profile, data: { ...profile.data, legalName: "OTHER COMPANY" } }));
       assert.equal(saved.compliance.taxpayerActive, false);
@@ -385,6 +391,30 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       await validateAutomaticSupplierTaxpayer(saved, users.accounting, req, async () => ({ ...profile, source: "SUNAT_PUBLIC_PADRON_RUC", datasetDate: "2026-10-01" }));
       assert.equal(saved.taxpayerStatus, "ACTIVE");
       assert.match(saved.taxpayerValidation.comments, /2026-10-01/);
+    });
+
+    await t.test("SUNAT representatives are persisted with provenance; selection and manual corrections are preserved", async () => {
+      const supplier = await completeSupplier({ legalRepresentative: "", legalRepresentativeDocument: { type: "DNI", number: "" } });
+      const one = { documentType: "DOC. NACIONAL DE IDENTIDAD", documentNumber: "01234567", fullName: "ANA REPRESENTANTE", position: "GERENTE GENERAL", dateFrom: "15/01/2024" };
+      const result = { ruc: supplier.rucDni, legalName: supplier.legalName, officialSource: true, source: "SUNAT_CONSULTA_RUC_BROWSER", queriedAt: new Date().toISOString(), representatives: [one] };
+      await recordSupplierSunatRepresentatives(supplier, users.accounting, req, async () => result);
+      const saved = await Supplier.findById(supplier._id);
+      assert.equal(saved.legalRepresentative, one.fullName);
+      assert.equal(saved.legalRepresentativeDocument.type, "DNI");
+      assert.equal(saved.legalRepresentativeDocument.number, "01234567");
+      assert.equal(saved.sunatRepresentatives.entries[0].dateFrom, "2024-01-15");
+      assert.equal(saved.sunatRepresentatives.queriedAt.toISOString(), result.queriedAt);
+      assert.ok(await AuditLog.exists({ entityId: supplier._id, action: "SUNAT_REPRESENTATIVES_RECORDED" }));
+      saved.legalRepresentative = "CORREGIDO MANUALMENTE";
+      await recordSupplierSunatRepresentatives(saved, users.accounting, req, async () => result);
+      assert.equal(saved.legalRepresentative, "CORREGIDO MANUALMENTE");
+      saved.legalRepresentative = "";
+      saved.legalRepresentativeDocument = { type: "DNI", number: "" };
+      await recordSupplierSunatRepresentatives(saved, users.accounting, req, async () => ({ ...result, representatives: [one, { ...one, fullName: "OTRO REPRESENTANTE" }] }));
+      assert.equal(saved.legalRepresentative, "");
+      assert.equal(saved.sunatRepresentatives.entries.length, 2);
+      await assert.rejects(recordSupplierSunatRepresentatives(saved, users.accounting, req, async () => ({ ...result, ruc: "20123456789" })), /does not match/);
+      await assert.rejects(createSupplierProposal({ payload: { rucDni: nextRuc(), legalName: "UNTRUSTED", proposalJustification: "test", sunatRepresentatives: result }, user: users.solicitor, req }), /server-controlled/);
     });
 
     await t.test("23. manual, mock and not-configured taxpayer validation report their real source", async () => {
