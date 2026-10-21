@@ -78,6 +78,10 @@ const supplierSchema = new mongoose.Schema(
     supplierCode: { type: String, trim: true, uppercase: true, unique: true, sparse: true, match: /^PRV-\d{4,}$/ },
     proposedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     proposedAt: Date,
+    // The areas (User.area) whose requesters see this supplier in their list. Empty: shared with
+    // every area. A requester's proposal starts in their own area; Accounting and Admin share it
+    // with more areas (services/supplierVisibilityService.js).
+    departments: { type: [{ type: String, trim: true }], default: [] },
     proposalJustification: { type: String, trim: true, default: "" },
     identifierType: { type: String, enum: ["RUC", "DNI"], required: true, default: "RUC" },
     personType: { type: String, enum: SUPPLIER_PERSON_TYPES },
@@ -220,5 +224,6 @@ supplierSchema.pre("save", async function protectAssignedSupplierCode() {
 
 supplierSchema.index({ active: 1, homologationStatus: 1, name: 1 });
 supplierSchema.index({ proposedBy: 1, homologationStatus: 1, createdAt: -1 });
+supplierSchema.index({ departments: 1, legalName: 1 });
 
 export default mongoose.model("Supplier", supplierSchema);

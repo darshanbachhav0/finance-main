@@ -95,6 +95,9 @@ export default {
   "{supplier} was rejected by {name}: {comments}": "{supplier} fue rechazado por {name}: {comments}",
   "Supplier bank account to verify": "Cuenta bancaria de proveedor por verificar",
   "{supplier} was approved for use. Verify its bank account so Treasury can pay it.": "{supplier} fue aprobado para su uso. Verifica su cuenta bancaria para que Tesorería pueda pagarle.",
+  "Share a supplier with an area": "Compartir un proveedor con un área",
+  "{name} ({area}) needs supplier {supplier}. Share it with their area if it is correct.": "{name} ({area}) necesita al proveedor {supplier}. Compártelo con su área si corresponde.",
+  "{name} needs supplier {supplier}, but their profile has no area. Assign their area in Users first.": "{name} necesita al proveedor {supplier}, pero su perfil no tiene un área. Asígnale primero su área en Usuarios.",
 
   // Renditions
   "Rendition ready for review": "Rendición lista para revisión",

@@ -15,7 +15,8 @@ export async function bbvaAccountNumberLength(currency = "PEN") {
 }
 
 export async function assertBankFileAccountNumber({ bank, currency = "PEN", accountNumber, accountType = "CURRENT" }) {
-  if (String(bank || "").toUpperCase() !== "BBVA" || accountType !== "CURRENT") return;
+  // Current and savings accounts at BBVA are both written by their 20-digit number.
+  if (String(bank || "").toUpperCase() !== "BBVA" || !["CURRENT", "SAVINGS"].includes(accountType)) return;
   const required = await bbvaAccountNumberLength(currency);
   const digits = String(accountNumber || "");
   if (digits.length !== required || /^0+$/.test(digits)) {

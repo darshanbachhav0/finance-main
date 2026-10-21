@@ -24,6 +24,7 @@ import commonSpanish from "./i18n/common.js";
 import superAdminSpanish from "./i18n/superadmin.js";
 import livelySpanish from "./i18n/lively.js";
 import simpleSpanish from "./i18n/simple.js";
+import requestWizardSpanish from "./i18n/requestWizard.js";
 import { umaCopy, umaSpanish } from "../utils/umaPresentation.js";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
@@ -1369,7 +1370,7 @@ const phase3RequestSpanish = {
   "Reconciliation status": "Estado de conciliación",
   "Calculated by the server as quantity multiplied by unit price.": "Calculado por el servidor como cantidad por precio unitario.",
   "Commercial information and validated accounting dimensions on the same lines.": "Información comercial y dimensiones contables validadas en las mismas líneas.",
-  "Supplier quotations": "Cotizaciones de proveedores",
+  "Supplier quotations": "Datos de proveedor",
   "Select a supplier.": "Selecciona un proveedor.",
   "Quotation comparison is optional for this classification.": "La comparación de cotizaciones es opcional para esta clasificación.",
   "The configured policy requires {count} different suppliers with evidence.": "La política configurada exige {count} proveedores distintos con sustento.",
@@ -1586,10 +1587,10 @@ const phase5WorkflowSpanish = {
   "Treasury Account Selection": "Selección de cuenta de Tesorería",
   "Treasury account selection": "Selección de cuenta de Tesorería",
   "Preferred account": "Cuenta preferida",
-  "Only verified eligible current accounts are listed.": "Solo se muestran cuentas corrientes elegibles y verificadas.",
+  "Only verified eligible accounts are listed.": "Solo se muestran cuentas elegibles y verificadas.",
   "No eligible matching account": "No hay una cuenta elegible coincidente",
   "One bank file contains one bank and one currency. Treasury can select only server-validated payment destinations.": "Un archivo bancario contiene un banco y una moneda. Tesorería solo puede seleccionar destinos validados por el servidor.",
-  "A payment needs a verified eligible current account, or the immutable employee reimbursement destination, before file generation.": "Antes de generar el archivo, el pago necesita una cuenta corriente elegible y verificada o el destino inmutable de reembolso del colaborador.",
+  "A payment needs a verified eligible account, or the immutable employee reimbursement destination, before file generation.": "Antes de generar el archivo, el pago necesita una cuenta elegible y verificada o el destino inmutable de reembolso del colaborador.",
   "Ready for Procurement": "Listo para compras",
   "Supplier Homologation Required": "Se requiere homologación del proveedor",
   "Supplier Homologation Pending": "Homologación del proveedor pendiente",
@@ -1758,7 +1759,7 @@ const quotationPaymentSpanish = {
   "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...uxhomeSpanish, ...uxsearchSpanish, ...uxbulkSpanish, ...uxformsSpanish, ...uxlistsSpanish, ...uxshellSpanish, ...rowactionsSpanish, ...notificationsSpanish, ...navigationSpanish, ...feedbackSpanish, ...suppliersSpanish, ...commonSpanish, ...superAdminSpanish, ...livelySpanish, ...simpleSpanish };
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...uxhomeSpanish, ...uxsearchSpanish, ...uxbulkSpanish, ...uxformsSpanish, ...uxlistsSpanish, ...uxshellSpanish, ...rowactionsSpanish, ...notificationsSpanish, ...navigationSpanish, ...feedbackSpanish, ...suppliersSpanish, ...commonSpanish, ...superAdminSpanish, ...livelySpanish, ...simpleSpanish, ...requestWizardSpanish };
 Object.assign(spanishDictionary, {
   "Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed.": "Generar una instrucción BBVA de ancho fijo. El pago queda pendiente hasta confirmar la ejecución bancaria.",
   "BBVA confirmed configuration (JSON)": "Configuración BBVA confirmada (JSON)",

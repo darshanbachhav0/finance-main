@@ -36,6 +36,8 @@ const employeeReimbursementBankAccountSchema = new mongoose.Schema(
 employeeReimbursementBankAccountSchema.pre("validate", function normalizeBankData() {
   this.accountNumber = assertValidBankAccountNumber(this.accountNumber);
   this.cci = assertValidCci(this.cci, { required: false });
+  // An employee's own account is chosen from the SBS list; "Otro" is for suppliers only.
+  if (this.bank === "OTHER") this.invalidate("bank", "Choose the bank from the list.");
   if (this.validTo && this.validFrom && this.validTo < this.validFrom) {
     this.invalidate("validTo", "Valid-to date cannot be earlier than valid-from date.");
   }

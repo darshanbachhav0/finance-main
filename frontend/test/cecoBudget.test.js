@@ -23,7 +23,7 @@ assert.deepEqual(splitAnnualBudget("120000", { floors: [0, 0, 0, 0, 0, 0, 0, 0, 
 
 // 3. The request form says the request is charged to the requester's own CECO.
 const create = source("../src/pages/RequestCreate.jsx");
-assert.match(create, /const ownCostCenter = masters\.costCenters\.find\(\(item\) => item\._id === supplierId\(user\.costCenter\)\);/);
+assert.match(create, /const ownCostCenter = masters\.costCenters\.find\(\(item\) => item\._id === idOf\(user\.costCenter\)\);/);
 assert.match(create, /<small className="field-hint">\{ownCostCenterHint\}<\/small>/);
 
 // 4. A rendition waiting for the budget: Treasury reviews the exception, Accounting approves again.

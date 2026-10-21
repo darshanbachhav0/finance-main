@@ -117,11 +117,14 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
         supplier: objectIds[1],
         bank: "BCP",
         currency: "PEN",
-        accountType: "SAVINGS",
+        accountType: "BROKERAGE",
         accountNumber: "123",
         cci: "00212345678901234567"
       });
       assert.ok(invalidBank.validateSync()?.errors.accountType);
+      // Savings accounts (cuenta de ahorros) are a supported type next to current accounts.
+      const savings = new SupplierBankAccount({ supplier: objectIds[1], bank: "BCP", currency: "PEN", accountType: "SAVINGS", accountNumber: "123", cci: "00212345678901234567" });
+      assert.equal(savings.validateSync()?.errors?.accountType, undefined);
     });
 
     await t.test("commercial totals use the existing decimal-safe money helpers", async () => {

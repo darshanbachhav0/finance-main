@@ -17,3 +17,14 @@ export function presentCount(rule, attachments = [], chosen = {}) {
 // A1 and B: a quote or the invoice, at least one (backend documentRuleService.QUOTE_OR_INVOICE).
 // Quotations count through their own cards, the invoice through its XML / factura PDF.
 export const isQuoteOrInvoice = (rule) => rule?.kind === "QUOTE_OR_INVOICE";
+
+// The documents a configured submission rule asks for besides the quote or the invoice (which the
+// "Comprobante" step collects): each one gets its own upload. "At least one supporting document"
+// is offered as one upload of any file.
+export function extraSubmissionDocuments(requirements = [], definitions = [], { invoiceAttached = false, flowType } = {}) {
+  return requirements
+    .filter((rule) => rule.kind !== "QUOTATION" && !isQuoteOrInvoice(rule))
+    .filter((rule) => !(flowType === "B" && invoiceAttached && ["XML", "PDF"].some((kind) => coversKind(rule, kind))))
+    .map((rule) => ({ rule, definition: isAnyDocument(rule) ? definitions.find((item) => item.kind === "SUPPORTING") : definitions.find((item) => coversKind(rule, item.kind)) }))
+    .filter((item) => item.definition);
+}

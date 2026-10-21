@@ -1,4 +1,5 @@
 import AuditLog from "../models/AuditLog.js";
+import Notification from "../models/Notification.js";
 import { assertBankFileAccountNumber } from "./bankFileAccountRules.js";
 import { resolveSupplierBankReview } from "./bankNotificationService.js";
 import Supplier from "../models/Supplier.js";
@@ -18,10 +19,23 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
 import { actsAsSupplierProposer, hasPermission } from "../utils/permissions.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
+import { bankDisplayName, cciBankProblem, peruBank } from "../../../shared/peruBanks.mjs";
+import {
+  assertCanOpenSupplier,
+  canSeeSupplier,
+  isDepartmentScoped,
+  normalizeDepartment,
+  sanitizeDepartments,
+  supplierVisibilityQuery,
+  userDepartment
+} from "./supplierVisibilityService.js";
 
 const FINANCE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
 const EDITABLE_PROPOSAL_STATUSES = Object.freeze(["PENDING_VALIDATION", "OBSERVED"]);
-const REQUIRED_DOCUMENT_KINDS = Object.freeze(["RUC_FILE", "BANK_CERTIFICATE", "LEGAL_REP_ID"]);
+// The RUC file, legal representative ID and bank certificate are optional supporting documents:
+// the proposal form no longer asks for them, so they no longer hold back the jefe's approval.
+const SUPPORTING_DOCUMENT_KINDS = Object.freeze(["RUC_FILE", "BANK_CERTIFICATE", "LEGAL_REP_ID"]);
+const NEW_ACCOUNT_TYPES = Object.freeze(["CURRENT", "SAVINGS", "DETRACTION"]);
 
 // NOTE: backend/src/utils/constants.js is locked to a concurrent change in this worktree, so this key
 // cannot yet be registered in FINANCE_CONFIGURATION_KEYS (and backend/src/seed/seed.js cannot yet seed a
@@ -481,6 +495,8 @@ function supplierPermissions(supplier, user, approval = null) {
     canValidateTaxpayer: finance && editable,
     canVerifyBanking: finance,
     canDeactivate: finance && supplier.homologationStatus !== "INACTIVE",
+    // Which areas see the supplier in their list.
+    canManageDepartments: finance,
     // An expired homologation is decided again even though its status still reads HOMOLOGATED.
     canApprove: decidesSupplierApproval(supplier, user, approval),
     canViewFullBankData: canViewFullBankData(supplier, user, approval)
@@ -522,7 +538,17 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
     "Bank verification, ownership and preferred-account fields are Finance-controlled."
   );
   const bank = String(payload.bank || payload.bankName || "").trim().toUpperCase();
-  const accountType = payload.accountType || "CURRENT";
+  const accountType = String(payload.accountType || "CURRENT").trim().toUpperCase();
+  if (!NEW_ACCOUNT_TYPES.includes(accountType)) {
+    throw new AppError(422, "Choose a savings account or a current account.", { field: "accountType", accountType }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (bank && !peruBank(bank)) {
+    throw new AppError(422, "Choose the bank from the list, or Other if it is not there.", { field: "bank", bank }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const bankOtherName = bank === "OTHER" ? String(payload.bankOtherName || "").trim() : "";
+  if (bank === "OTHER" && !bankOtherName) {
+    throw new AppError(422, "Enter the name of the bank.", { field: "bankOtherName" }, ERROR_CODES.VALIDATION_ERROR);
+  }
   if (accountType === "DETRACTION" && bank !== "BANCO_NACION") {
     throw new AppError(
       422,
@@ -532,8 +558,14 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
     );
   }
   const accountNumber = assertValidBankAccountNumber(payload.accountNumber || payload.bankAccount);
-  const cci = assertValidCci(payload.cci, { required: requireCci });
-  const currency = payload.accountCurrency || payload.currency || supplier.currency || "PEN";
+  // A bank outside the list is paid by CCI, so its CCI is always needed.
+  const cci = assertValidCci(payload.cci, { required: requireCci || bank === "OTHER" });
+  const cciProblem = cciBankProblem(bank, cci);
+  if (cciProblem) throw new AppError(422, cciProblem, { field: "cci", bank }, ERROR_CODES.VALIDATION_ERROR);
+  const currency = String(payload.accountCurrency || payload.currency || supplier.currency || "PEN").trim().toUpperCase();
+  if (!["PEN", "USD"].includes(currency)) {
+    throw new AppError(422, "The account currency must be soles (PEN) or dollars (USD).", { field: "accountCurrency", currency }, ERROR_CODES.VALIDATION_ERROR);
+  }
   await assertBankFileAccountNumber({ bank, currency, accountNumber, accountType });
   const accountHolderName = String(payload.accountHolderName || supplier.legalName || supplier.name || "").trim();
   if (!bank || !accountHolderName) {
@@ -554,6 +586,7 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
   const account = await SupplierBankAccount.create({
     supplier: supplier._id,
     bank,
+    bankOtherName,
     currency,
     accountType,
     accountHolderName,
@@ -595,7 +628,7 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
       user,
       req,
       module: "SUPPLIERS",
-      newValues: { accountId: account._id, bank, currency, accountType, verificationStatus: "PENDING", warnings }
+      newValues: { accountId: account._id, bank, bankName: bankDisplayName(bank, bankOtherName), currency, accountType, verificationStatus: "PENDING", warnings }
     });
   }
   return { account, warnings };
@@ -625,6 +658,16 @@ export async function lookupSupplierByIdentifier(identifier, user) {
     .populate("proposedBy", "name email role");
   if (!supplier) return { found: false, normalizedIdentifier: normalized };
   const value = supplier.toObject();
+  // Another area's supplier: the requester learns it exists (so it is not proposed twice) and can
+  // ask Accounting to share it, without opening its record.
+  if (!canSeeSupplier(supplier, user)) {
+    return {
+      found: true,
+      restricted: true,
+      normalizedIdentifier: normalized,
+      data: { _id: value._id, supplierCode: value.supplierCode, rucDni: value.rucDni, legalName: value.legalName || value.name, homologationStatus: value.homologationStatus, otherDepartment: true }
+    };
+  }
   const approval = awaitsApproval(supplier) ? await supplierApproverFor(supplier.proposedBy) : null;
   return {
     found: true,
@@ -657,6 +700,8 @@ export async function getSupplierDetailPayload(supplierId, user) {
     .populate("similarNameWarning.possibleDuplicateOf", "legalName name rucDni supplierCode");
   if (!supplier) throw new AppError(404, "Supplier not found.", { supplierId }, ERROR_CODES.NOT_FOUND);
   const approval = awaitsApproval(supplier) ? await supplierApproverFor(supplier.proposedBy) : null;
+  // The jefe deciding the proposal opens it whatever its area.
+  if (!decidesSupplierApproval(supplier, user, approval)) await assertCanOpenSupplier(supplier, user);
   const [accounts, audit] = await Promise.all([
     SupplierBankAccount.find({ supplier: supplier._id })
       .populate("verifiedBy", "name email role")
@@ -689,14 +734,20 @@ export async function getSupplierDetailPayload(supplierId, user) {
 }
 
 export async function listSuppliersPage(queryParams, user) {
-  const query = {};
+  // A requester's list is their area's suppliers, the shared ones and their own proposals.
+  // The proposals a jefe decides are listed whatever their area.
+  const query = { $and: [queryParams.awaitingMyApproval === "true" ? {} : supplierVisibilityQuery(user)] };
+  if (queryParams.department && !isDepartmentScoped(user)) {
+    const department = normalizeDepartment(queryParams.department);
+    query.$and.push(department === "__shared" ? { $or: [{ departments: { $exists: false } }, { departments: { $size: 0 } }] } : { departments: new RegExp(`^${escapedRegex(department)}$`, "i") });
+  }
   if (queryParams.homologationStatus) query.homologationStatus = queryParams.homologationStatus;
   if (queryParams.jefeApprovalDecision) query["jefeApproval.decision"] = queryParams.jefeApprovalDecision;
   if (queryParams.active !== undefined) query.active = queryParams.active === "true";
   if (queryParams.awaitingMyApproval === "true") query._id = { $in: (await suppliersAwaitingApprovalBy(user)).map((supplier) => supplier._id) };
   if (queryParams.search) {
     const search = new RegExp(escapedRegex(queryParams.search), "i");
-    query.$or = [{ supplierCode: search }, { rucDni: search }, { normalizedIdentifier: search }, { name: search }, { commercialName: search }, { legalName: search }];
+    query.$and.push({ $or: [{ supplierCode: search }, { rucDni: search }, { normalizedIdentifier: search }, { name: search }, { commercialName: search }, { legalName: search }] });
   }
   const { page, pageSize, skip } = parsePagination(queryParams);
   const sort = parseSort(queryParams, ["supplierCode", "name", "commercialName", "legalName", "rucDni", "createdAt", "homologationStatus"], { legalName: 1, name: 1 });
@@ -718,7 +769,7 @@ export async function listSuppliersPage(queryParams, user) {
     map.get(key).push(account);
     return map;
   }, new Map());
-  return paginatedPayload(data.map((supplier) => {
+  const payload = paginatedPayload(data.map((supplier) => {
     const accounts = bySupplier.get(String(supplier._id)) || [];
     const approval = approvals.get(String(supplier._id)) || null;
     const reveal = canViewFullBankData(supplier, user, approval);
@@ -732,6 +783,10 @@ export async function listSuppliersPage(queryParams, user) {
       riskyDeclarations: supplierDeclarationWarnings(supplier)
     };
   }), total, page, pageSize);
+  // Which list the requester is looking at: their area's, or only the shared suppliers when their
+  // profile has no area yet (an Admin assigns it in Users).
+  payload.scope = isDepartmentScoped(user) ? { scoped: true, department: userDepartment(user) } : { scoped: false };
+  return payload;
 }
 
 export async function createSupplierProposal({ payload, files = {}, user, req }) {
@@ -746,13 +801,25 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
   }
   const duplicate = await Supplier.findOne({ $or: [{ normalizedIdentifier: identifier }, { rucDni: identifier }] });
   if (duplicate) {
+    const otherDepartment = !canSeeSupplier(duplicate, user);
     throw new AppError(
       409,
-      "A supplier with this RUC/DNI already exists. Open the existing onboarding record instead.",
-      { supplier: duplicate._id, homologationStatus: duplicate.homologationStatus },
+      otherDepartment
+        ? "This supplier is already registered for another area. Ask Accounting or an Admin to share it with your area."
+        : "A supplier with this RUC/DNI already exists. Open the existing onboarding record instead.",
+      { supplier: duplicate._id, supplierCode: duplicate.supplierCode, homologationStatus: duplicate.homologationStatus, otherDepartment },
       ERROR_CODES.DUPLICATE_SUPPLIER
     );
   }
+  const bankAccounts = parseStructuredValue(payload.bankAccounts, "bankAccounts");
+  if (bankAccounts !== undefined && !Array.isArray(bankAccounts)) {
+    throw new AppError(422, "bankAccounts must be a list.", { field: "bankAccounts" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  // A requester's proposal belongs to their own area; Accounting and Admin choose the areas (none:
+  // shared with every area).
+  const departments = isDepartmentScoped(user)
+    ? [userDepartment(user)].filter(Boolean)
+    : payload.departments !== undefined ? sanitizeDepartments(payload.departments) : [];
   const supplier = new Supplier({
     identifierType: identifier.length === 8 ? "DNI" : "RUC",
     rucDni: identifier,
@@ -762,6 +829,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     name: payload.name || payload.legalName,
     proposedBy: user._id,
     proposedAt: new Date(),
+    departments,
     taxpayerStatus: "PENDING",
     complianceStatus: "PENDING",
     homologationStatus: "PENDING_VALIDATION",
@@ -779,10 +847,21 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     const uploadedDocuments = mapUploadedDocuments(persistedFiles, user._id);
     supplier.documents.push(...uploadedDocuments);
     await supplier.save();
-    let bankResult = { warnings: [] };
-    if (payload.bankName || payload.bank || payload.bankAccount || payload.accountNumber) {
-      bankResult = await createBankAccountRecord({ supplier, payload, user, req });
+    const bankResult = { warnings: [], accounts: [] };
+    // One account from the single-account fields, or several (e.g. one in soles and one in dollars).
+    const accountPayloads = bankAccounts?.length
+      ? bankAccounts.map((account) => ({ ...account, accountNumber: account.accountNumber || account.bankAccount }))
+      : payload.bankName || payload.bank || payload.bankAccount || payload.accountNumber ? [payload] : [];
+    for (const accountPayload of accountPayloads) {
+      const result = await createBankAccountRecord({ supplier, payload: accountPayload, user, req });
+      bankResult.accounts.push(result.account);
+      bankResult.warnings.push(...(result.warnings || []));
     }
+    // The PRV code is taken once everything above is stored, from the one supplier counter: every
+    // registration is numbered in order and a refused proposal never uses a number.
+    const supplierCode = await nextSupplierCode();
+    await Supplier.updateOne({ _id: supplier._id, $or: [{ supplierCode: { $exists: false } }, { supplierCode: null }] }, { $set: { supplierCode } });
+    supplier.supplierCode = supplierCode;
     await recordAudit({
       entityType: "Supplier",
       entity: supplier,
@@ -790,8 +869,9 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       user,
       req,
       module: "SUPPLIERS",
-      newValues: { identifier, legalName: supplier.legalName, proposalJustification: supplier.proposalJustification }
+      newValues: { identifier, supplierCode, legalName: supplier.legalName, proposalJustification: supplier.proposalJustification, departments }
     });
+    await recordAudit({ entityType: "Supplier", entity: supplier, action: "PRV_ASSIGNED", user, req, module: "SUPPLIERS", newValues: { supplierCode } });
     if (similarNameWarning) {
       await recordAudit({
         entityType: "Supplier",
@@ -826,7 +906,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     // The saved proposal never depends on the notification; the approver also sees it in their tasks.
     try { await notifySupplierApprover(supplier); }
     catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
-    return { supplier, warnings };
+    return { supplier, warnings, bankAccounts: bankResult.accounts.map((account) => serializeBankAccount(account, true)) };
   } catch (error) {
     await cleanupUploadedFiles(persistedFiles);
     await SupplierBankAccount.deleteMany({ supplier: supplier._id }).catch(() => undefined);
@@ -1218,16 +1298,10 @@ export async function evaluateSupplierHomologation(supplierOrId) {
   if (!supplier.legalRepresentativeDocument?.type || !supplier.legalRepresentativeDocument?.number) {
     add("LEGAL_REPRESENTATIVE_DOCUMENT_MISSING", "legalRepresentativeDocument", "RCO-FOR-002 E13:G13", "Legal representative document type and number are required.");
   }
+  // The supporting documents (RUC file, representative ID, bank certificate) and the compliance
+  // declarations were taken out of the proposal form, so they no longer block the approval. Ones
+  // already on file still show, and a risky declared answer still warns the jefe.
   const documentKinds = new Set((supplier.documents || []).map((item) => item.kind));
-  for (const kind of REQUIRED_DOCUMENT_KINDS) {
-    if (!documentKinds.has(kind)) add(`MISSING_${kind}`, "documents", "RCO-FOR-002 A5:G6", `${kind} is required for homologation.`);
-  }
-  if (supplier.declarations?.stateSanctions?.answer === "NOT_DECLARED" || !supplier.declarations?.stateSanctions?.answer) {
-    add("STATE_SANCTIONS_DECLARATION_INCOMPLETE", "declarations.stateSanctions", "RCO-FOR-002 A34:G34", "The State sanctions declaration must be completed.");
-  }
-  if (supplier.declarations?.complianceModel?.answer === "NOT_DECLARED" || !supplier.declarations?.complianceModel?.answer) {
-    add("COMPLIANCE_MODEL_DECLARATION_INCOMPLETE", "declarations.complianceModel", "RCO-FOR-002 A35:G35", "The compliance/prevention-model declaration must be completed.");
-  }
   // The jefe's approval needs no Accounting review. A SUNAT check that already ran still counts: an
   // identity that does not match, or a taxpayer SUNAT reports as not active or not habido, blocks it.
   const identifierMismatch = supplier.taxpayerValidation?.identifierMatch === "MISMATCH";
@@ -1255,7 +1329,7 @@ export async function evaluateSupplierHomologation(supplierOrId) {
     issues,
     warnings: supplierDeclarationWarnings(supplier),
     summary: {
-      requiredDocumentsPresent: REQUIRED_DOCUMENT_KINDS.every((kind) => documentKinds.has(kind)),
+      supportingDocumentsPresent: SUPPORTING_DOCUMENT_KINDS.filter((kind) => documentKinds.has(kind)),
       activeBankAccountCount: accounts.length,
       acceptableBankAccountCount: acceptableAccounts.length,
       jefeApproval: supplier.jefeApproval?.decision || "PENDING"
@@ -1683,4 +1757,58 @@ export async function reactivateSupplier({ supplierId, user, req }) {
   try { await notifySupplierApprover(supplier); }
   catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
   return supplier;
+}
+
+// ---- Suppliers by area. Accounting and Admin decide which areas see a supplier (none: every area).
+export async function updateSupplierDepartments({ supplierId, departments, user, req }) {
+  assertFinanceUser(user, "Only Accounting or Admin can choose which areas see a supplier.");
+  const supplier = await loadSupplier(supplierId);
+  const next = sanitizeDepartments(departments);
+  const previous = [...(supplier.departments || [])];
+  supplier.departments = next;
+  await supplier.save();
+  await recordAudit({
+    entityType: "Supplier",
+    entity: supplier,
+    action: "DEPARTMENTS_UPDATED",
+    user,
+    req,
+    module: "SUPPLIERS",
+    oldValues: { departments: previous },
+    newValues: { departments: next }
+  });
+  // Requests to share it are answered by this change.
+  await Notification.updateMany({ eventKey: { $regex: `^supplier:${supplier._id}:access-request:` }, resolvedAt: null }, { $set: { resolvedAt: new Date() } });
+  return supplier;
+}
+
+// A requester who needs another area's supplier asks for it: Accounting and Admin get a task to
+// share it with the requester's area. Nothing is shared until one of them does it.
+export async function requestSupplierAccess({ supplierId, user, req, reason = "" }) {
+  const supplier = await loadSupplier(supplierId);
+  if (canSeeSupplier(supplier, user)) return { alreadyVisible: true, supplier: { _id: supplier._id, supplierCode: supplier.supplierCode } };
+  const area = userDepartment(user);
+  await notifyRoles({
+    roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
+    eventKey: `supplier:${supplier._id}:access-request:${user._id}`,
+    type: "SUPPLIER_ACCESS_REQUEST",
+    title: notificationText("Share a supplier with an area"),
+    message: area
+      ? notificationText("{name} ({area}) needs supplier {supplier}. Share it with their area if it is correct.", { name: user.name, area, supplier: `${supplier.supplierCode || ""} ${supplierName(supplier)}`.trim() })
+      : notificationText("{name} needs supplier {supplier}, but their profile has no area. Assign their area in Users first.", { name: user.name, supplier: `${supplier.supplierCode || ""} ${supplierName(supplier)}`.trim() }),
+    path: `/suppliers/${supplier._id}`,
+    entityType: "Supplier",
+    entityId: supplier._id
+  });
+  await recordAudit({
+    entityType: "Supplier",
+    entity: supplier,
+    action: "ACCESS_REQUESTED",
+    user,
+    req,
+    module: "SUPPLIERS",
+    comments: String(reason || "").trim().slice(0, 500),
+    newValues: { area }
+  });
+  return { requested: true, supplier: { _id: supplier._id, supplierCode: supplier.supplierCode } };
 }

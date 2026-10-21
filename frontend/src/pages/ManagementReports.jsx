@@ -16,6 +16,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime, formatNumber } from "../utils/formatters.js";
+import { todayIso } from "../utils/dateInput.js";
 import { reportDownloadRoles } from "../utils/navigationAccess.js";
 
 const emptyFilters = Object.freeze({ period: "", dateFrom: "", dateTo: "", currency: "", requestType: "", area: "", costCenter: "", project: "" });
@@ -97,7 +98,7 @@ export default function ManagementReports() {
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `reporte-semanal-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.download = `reporte-semanal-${todayIso()}.xlsx`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {

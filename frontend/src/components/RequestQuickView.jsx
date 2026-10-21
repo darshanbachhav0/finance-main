@@ -8,6 +8,7 @@ import Drawer from "./Drawer.jsx";
 import Message from "./Message.jsx";
 import FinancialProgressSummary from "./FinancialProgressSummary.jsx";
 import { formatCurrency } from "../utils/formatters.js";
+import RequestSummaryFacts from "./RequestSummaryFacts.jsx";
 
 export default function RequestQuickView({ requestId, onClose }) {
   const { t, language } = useLanguage();
@@ -53,6 +54,7 @@ export default function RequestQuickView({ requestId, onClose }) {
             <FinancialProgressSummary request={request} financialProgress={financialProgress} compact />
             <RequestStageIndicator request={request} financialProgress={financialProgress} />
           </div>
+          <RequestSummaryFacts request={request} />
         </div>
       )}
     </Drawer>

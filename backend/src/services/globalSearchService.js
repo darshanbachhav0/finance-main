@@ -2,6 +2,7 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import Supplier from "../models/Supplier.js";
+import { supplierVisibilityQuery } from "./supplierVisibilityService.js";
 import User from "../models/User.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import { escapedRegex } from "./queryService.js";
@@ -86,8 +87,9 @@ async function searchRequests(term, search, user) {
   }));
 }
 
-async function searchSuppliers(term, search) {
-  const rows = await Supplier.find({ $or: [{ supplierCode: search }, { rucDni: search }, { normalizedIdentifier: search }, { legalName: search }, { commercialName: search }, { name: search }] })
+async function searchSuppliers(term, search, user) {
+  // A requester finds their area's suppliers, the shared ones and their own proposals.
+  const rows = await Supplier.find({ $and: [supplierVisibilityQuery(user), { $or: [{ supplierCode: search }, { rucDni: search }, { normalizedIdentifier: search }, { legalName: search }, { commercialName: search }, { name: search }] }] })
     .select("supplierCode rucDni legalName commercialName name homologationStatus active")
     .sort({ legalName: 1, name: 1 })
     .limit(SEARCH_GROUP_LIMIT)

@@ -1,3 +1,5 @@
+import { PERU_BANK_CODES } from "../../../shared/peruBanks.mjs";
+
 export const ROLES = Object.freeze({
   ADMIN: "Admin",
   SOLICITOR: "Solicitor",
@@ -201,6 +203,8 @@ export const EXPENSE_NATURE = Object.freeze({
 
 export const EXPENSE_NATURES = Object.freeze(Object.values(EXPENSE_NATURE));
 export const REQUEST_PRIORITIES = Object.freeze(["BAJA", "MEDIA", "ALTA"]);
+// Sorting by priority sorts by this rank (the stored codes are not in order alphabetically).
+export const REQUEST_PRIORITY_RANK = Object.freeze({ BAJA: 1, MEDIA: 2, ALTA: 3 });
 
 export const APPROVAL_STAGES = Object.freeze({
   AREA_DIRECTOR: "AREA_DIRECTOR",
@@ -314,12 +318,16 @@ export const CURRENCY = Object.freeze(["PEN", "USD"]);
 // *source*/generator bank must not overstate it. A supplier or employee's *beneficiary* account
 // can sit at any of these banks (via CCI interbank transfer), which is a separate, broader list.
 export const SOURCE_BANKS = Object.freeze(["BBVA"]);
-export const BENEFICIARY_BANKS = Object.freeze(["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"]);
+// The SBS list of banks in shared/peruBanks.mjs, plus OTHER ("Otro / No disponible").
+export const BENEFICIARY_BANKS = PERU_BANK_CODES;
 
 export const SUPPLIER_PERSON_TYPES = Object.freeze(["LEGAL_ENTITY", "NATURAL_PERSON_WITH_BUSINESS"]);
 export const SUPPLIER_HOMOLOGATION_STATUSES = Object.freeze(["PENDING_VALIDATION", "HOMOLOGATED", "OBSERVED", "REJECTED", "INACTIVE"]);
 export const SUPPLIER_OPERATIONAL_STATUSES = Object.freeze(["PENDING_VALIDATION", "ACTIVE", "OBSERVED", "REJECTED", "INACTIVE"]);
-export const SUPPLIER_ACCOUNT_TYPES = Object.freeze(["CURRENT", "DETRACTION"]);
+export const SUPPLIER_ACCOUNT_TYPES = Object.freeze(["CURRENT", "SAVINGS", "DETRACTION"]);
+// Accounts a payment can be transferred to: cuenta corriente or cuenta de ahorros. A DETRACTION
+// (Banco de la Nación SPOT) account only receives the detracción deposit.
+export const PAYABLE_ACCOUNT_TYPES = Object.freeze(["CURRENT", "SAVINGS"]);
 export const BANK_ACCOUNT_VERIFICATION_STATUSES = Object.freeze(["PENDING", "VERIFIED", "OBSERVED", "REJECTED", "LEGACY_ACCEPTED"]);
 export const BANK_ACCOUNT_OWNERSHIP_RESULTS = Object.freeze(["NOT_REVIEWED", "MATCH", "MISMATCH", "MANUAL_ACCEPTED"]);
 export const SUPPLIER_DECLARATION_ANSWERS = Object.freeze(["YES", "NO", "NOT_DECLARED"]);
@@ -337,6 +345,8 @@ export const VOUCHER_VALIDATION_STATUSES = Object.freeze(["PENDING", "VALID", "O
 
 export const CAPEX_ASSET_CATEGORIES = Object.freeze(["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]);
 export const OPEX_EXPENSE_FREQUENCIES = Object.freeze(["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);
+// How often the need recurs (every track). Recorded only: nothing is repeated or paid automatically.
+export const REQUEST_FREQUENCIES = OPEX_EXPENSE_FREQUENCIES;
 export const PAYBACK_UNITS = Object.freeze(["MONTHS", "YEARS"]);
 
 // A required approval step is satisfied once it is APPROVED, or SKIPPED because a manager-chain
@@ -418,6 +428,8 @@ export const ERROR_CODES = Object.freeze({
   SUPPLIER_INACTIVE: "SUPPLIER_INACTIVE",
   SUPPLIER_NOT_HOMOLOGATED: "SUPPLIER_NOT_HOMOLOGATED",
   DUPLICATE_SUPPLIER: "DUPLICATE_SUPPLIER",
+  // The supplier belongs to another area's list; Accounting or Admin can share it with the user's area.
+  SUPPLIER_OTHER_DEPARTMENT: "SUPPLIER_OTHER_DEPARTMENT",
   DUPLICATE_VOUCHER: "DUPLICATE_VOUCHER",
   PURCHASE_ORDER_AMOUNT_EXCEEDED: "PURCHASE_ORDER_AMOUNT_EXCEEDED",
   PURCHASE_ORDER_EXHAUSTED: "PURCHASE_ORDER_EXHAUSTED",

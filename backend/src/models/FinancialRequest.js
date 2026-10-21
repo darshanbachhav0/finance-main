@@ -8,6 +8,7 @@ import {
   APPROVAL_STAGES,
   CAPEX_ASSET_CATEGORIES,
   CANONICAL_REQUEST_STATUSES,
+  BENEFICIARY_BANKS,
   CURRENCY,
   EXPENSE_NATURE,
   EXPENSE_NATURES,
@@ -20,7 +21,9 @@ import {
   PAYBACK_UNITS,
   RENDITION_LINE_TYPES,
   RENDITION_RECEIPT_TYPES,
+  REQUEST_FREQUENCIES,
   REQUEST_PRIORITIES,
+  REQUEST_PRIORITY_RANK,
   REQUEST_STATUS,
   REQUEST_TYPES
 } from "../utils/constants.js";
@@ -281,6 +284,37 @@ const financialRequestSchema = new mongoose.Schema(
     requestType: { type: String, enum: REQUEST_TYPES, required: true, set: (value) => LEGACY_REQUEST_TYPE_MAP[value] || value },
     expenseNature: { type: String, enum: EXPENSE_NATURES, default: EXPENSE_NATURE.SERVICES, set: (value) => LEGACY_EXPENSE_NATURE_MAP[value] || value },
     priority: { type: String, enum: REQUEST_PRIORITIES, default: "MEDIA" },
+    // Kept with priority so lists sort Alta > Media > Baja.
+    priorityRank: { type: Number, min: 1, max: 3, default: REQUEST_PRIORITY_RANK.MEDIA },
+    // How often the need recurs. Recorded only: no request or payment is ever repeated from it.
+    frequency: { type: String, enum: REQUEST_FREQUENCIES, default: "ONE_OFF" },
+    observations: { type: String, trim: true, default: "" },
+    // The supplier account the requester says the supplier is paid into, and its currency. Only the
+    // bank, type, currency and last digits are copied; the number stays in SupplierBankAccount.
+    // Treasury pays it when Accounting has verified it (services/paymentDestinationService.js).
+    paymentAccount: {
+      account: { type: mongoose.Schema.Types.ObjectId, ref: "SupplierBankAccount" },
+      bank: { type: String, enum: BENEFICIARY_BANKS },
+      bankOtherName: { type: String, trim: true },
+      currency: { type: String, enum: CURRENCY },
+      accountType: { type: String, enum: ["CURRENT", "SAVINGS"] },
+      accountLast4: { type: String, trim: true }
+    },
+    // The supplier's comprobante as read (XML / PDF) or typed on the request and checked by the
+    // requester. PENDING: not issued yet when the request was made. It is not the registered
+    // invoice: Accounting still validates the voucher itself (SunatVoucher) before any payment.
+    invoiceDetails: {
+      status: { type: String, enum: ["PENDING", "ATTACHED"] },
+      source: { type: String, enum: ["XML", "PDF", "MANUAL"] },
+      documentType: { type: String, trim: true },
+      number: { type: String, trim: true },
+      issueDate: Date,
+      ruc: { type: String, trim: true },
+      supplierName: { type: String, trim: true },
+      currency: { type: String, enum: CURRENCY },
+      totalAmount: { type: Number, min: 0 },
+      igvAmount: { type: Number, min: 0 }
+    },
     project: { type: String, trim: true },
     title: { type: String, trim: true, default: "" },
     detailedDescription: { type: String, trim: true, default: "" },
@@ -555,7 +589,16 @@ const financialRequestSchema = new mongoose.Schema(
 );
 
 financialRequestSchema.pre("validate", async function beforeValidate() {
-  if (!this.requestNumber) this.requestNumber = await nextRequestNumber(this.issueDate || new Date());
+  // The number is taken when the request is saved: a check that only validates (and may still
+  // refuse the request) leaves the sequence untouched, so saved requests are numbered in order.
+  if (!this.requestNumber && !this.$locals.deferRequestNumber) this.requestNumber = await nextRequestNumber(this.issueDate || new Date());
+  this.priorityRank = REQUEST_PRIORITY_RANK[this.priority] || REQUEST_PRIORITY_RANK.MEDIA;
+  // Requests from before the frequency field kept it in opexDetails; OPEX keeps both in step.
+  if (this.$isDefault("frequency") && this.opexDetails?.expenseFrequency) this.frequency = this.opexDetails.expenseFrequency;
+  if (this.requestType === "OPEX" && this.frequency) {
+    this.opexDetails ||= {};
+    this.opexDetails.expenseFrequency = this.frequency;
+  }
   if (this.requestType === "ENTREGA_RENDIR") this.flowType = FLOW_TYPE.C;
   if (!this.requester) this.requester = this.solicitor;
   if (!this.solicitor) this.solicitor = this.requester;
@@ -651,6 +694,7 @@ financialRequestSchema.pre("save", async function protectAssignedRenditionNumber
 
 financialRequestSchema.index({ accountingPeriod: 1, status: 1, createdAt: -1 });
 financialRequestSchema.index({ flowType: 1, status: 1, createdAt: -1 });
+financialRequestSchema.index({ priorityRank: -1, createdAt: -1 });
 financialRequestSchema.index({ requester: 1, createdAt: -1 });
 financialRequestSchema.index({ solicitor: 1, createdAt: -1 });
 financialRequestSchema.index({ supplier: 1, createdAt: -1 });

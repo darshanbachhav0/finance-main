@@ -1,11 +1,13 @@
-import { AlertTriangle, Building2, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, FileCheck2, Landmark, RefreshCw, Save, ShieldCheck, Truck, UserCheck, Users, X } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, Landmark, Plus, RefreshCw, Save, Trash2, Truck, UserCheck, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import Message from "../Message.jsx";
 import OptionalSection from "../OptionalSection.jsx";
 import WorkflowStepper from "../WorkflowStepper.jsx";
 import { dniError, identifierError, requiredError } from "../../utils/fieldValidation.js";
-import { SUPPLIER_DOCUMENTS, homologationChecklist, supplierStepProblems, supplierStepsFor } from "../../utils/supplierProposal.js";
+import { homologationChecklist, supplierStepProblems, supplierStepsFor } from "../../utils/supplierProposal.js";
+import { bankAccountLabel, bankAccountPayload, emptyBankAccount } from "../../utils/bankAccounts.js";
+import BankAccountFields from "./BankAccountFields.jsx";
 import "../../styles/supplierForm.css";
 
 // Checked when the field is left; Continue and Submit check the whole step (utils/supplierProposal.js).
@@ -16,7 +18,7 @@ const blurChecks = {
   proposalJustification: (values) => requiredError(values.proposalJustification)
 };
 
-const STEP_LABELS = { identity: "Identification", conditions: "Contacts and conditions", bank: "Bank account", compliance: "Declarations and documents", review: "Review and submit" };
+const STEP_LABELS = { identity: "Identification", conditions: "Contacts and conditions", bank: "Bank accounts", review: "Review and submit" };
 const emptyContact = { name: "", position: "", phone: "", email: "" };
 
 function normalizeRepresentativeDocumentType(value) {
@@ -49,27 +51,26 @@ function initialValues(supplier, identifier, padronLookup) {
     deliveryMethod: supplier?.delivery?.method || "CENTRAL_WAREHOUSE",
     deliveryOther: supplier?.delivery?.other || "",
     proposalJustification: supplier?.proposalJustification || "",
-    stateSanctionsAnswer: supplier?.declarations?.stateSanctions?.answer || "NOT_DECLARED",
-    stateSanctionsComments: supplier?.declarations?.stateSanctions?.comments || "",
-    complianceModelAnswer: supplier?.declarations?.complianceModel?.answer || "NOT_DECLARED",
-    complianceModelComments: supplier?.declarations?.complianceModel?.comments || "",
-    bank: "",
-    accountType: "CURRENT",
-    accountNumber: "",
-    cci: "",
-    accountCurrency: supplier?.currency || "PEN",
-    accountHolderName: supplier?.legalName || supplier?.name || padron?.accountHolderName || padron?.legalName || ""
+    // A supplier may be paid into more than one account (e.g. one in soles and one in dollars).
+    bankAccounts: [emptyBankAccount(supplier?.legalName || supplier?.name || padron?.accountHolderName || padron?.legalName || "", supplier?.currency || "PEN")]
   };
 }
 
-function Section({ icon: Icon, title, status, homologation = false, children }) {
+// Drafts saved before several accounts were possible kept one account in flat fields.
+function restoredForm(saved) {
+  if (!saved || Array.isArray(saved.bankAccounts)) return saved;
+  const { bank = "", accountType, accountNumber = "", cci = "", accountCurrency = "PEN", accountHolderName = "", ...rest } = saved;
+  return { ...rest, bankAccounts: [{ ...emptyBankAccount(accountHolderName, accountCurrency), bank, accountType: accountType === "CURRENT" ? "CURRENT" : "SAVINGS", accountNumber, cci }] };
+}
+
+function Section({ icon: Icon, title, status, children }) {
   const { t } = useLanguage();
   return (
     <section className="supplier-form-section">
       <header>
         <span className="section-icon"><Icon size={17} aria-hidden="true" /></span>
         <div>
-          <h3>{t(title)}{homologation && <span className="homologation-tag">{t("Needed for homologation")}</span>}</h3>
+          <h3>{t(title)}</h3>
           {status && <small>{t(status)}</small>}
         </div>
       </header>
@@ -87,25 +88,6 @@ function ContactFields({ legend, value, onChange }) {
       <label className="field"><span>{t("Position")}</span><input value={value.position} onChange={(event) => onChange("position", event.target.value)} /></label>
       <label className="field"><span>{t("Mobile phone")}</span><input value={value.phone} onChange={(event) => onChange("phone", event.target.value)} inputMode="tel" /></label>
       <label className="field"><span>{t("Email")}</span><input type="email" value={value.email} onChange={(event) => onChange("email", event.target.value)} /></label>
-    </fieldset>
-  );
-}
-
-// One radio group per declaration (YES / NO / not declared yet).
-function DeclarationField({ name, question, answer, comments, onAnswer, onComments }) {
-  const { t } = useLanguage();
-  return (
-    <fieldset className="declaration-field">
-      <legend>{t(question)}</legend>
-      <div className="segmented-control" role="radiogroup" aria-label={t(question)}>
-        {[["YES", "Yes"], ["NO", "No"], ["NOT_DECLARED", "Not declared"]].map(([value, label]) => (
-          <label key={value} className={answer === value ? "active" : ""}>
-            <input type="radio" className="sr-only" name={name} value={value} checked={answer === value} onChange={() => onAnswer(value)} />
-            <span>{t(label)}</span>
-          </label>
-        ))}
-      </div>
-      <label className="field"><span>{t("Declaration comments")}</span><textarea rows="2" value={comments} onChange={(event) => onComments(event.target.value)} /></label>
     </fieldset>
   );
 }
@@ -146,14 +128,12 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
 
 export default function SupplierForm({ supplier, identifier, padronLookup = null, representativeLookup = null, includeInitialBank = false, loading = false, draftValue = null, onDraftChange, onSubmit, onCancel }) {
   const { t } = useLanguage();
-  const [form, setForm] = useState(() => draftValue?.form || initialValues(supplier, identifier, padronLookup));
-  const [files, setFiles] = useState(draftValue?.files || {});
+  const [form, setForm] = useState(() => restoredForm(draftValue?.form) || initialValues(supplier, identifier, padronLookup));
   const steps = supplierStepsFor({ includeInitialBank });
   const [step, setStep] = useState(() => steps.includes(draftValue?.step) ? draftValue.step : "identity");
   const [completed, setCompleted] = useState([]);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
-  const [fileInputKeys, setFileInputKeys] = useState({});
   const formRef = useRef(null);
   const stepIndex = steps.indexOf(step);
 
@@ -165,16 +145,19 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
 
   const padronData = padronLookup?.found ? padronLookup.data : null;
   const editedFields = useRef(new Set(draftValue?.form ? Object.keys(draftValue.form) : []));
-  useEffect(() => { onDraftChange?.({ form, files, step }); }, [form, files, step]);
+  useEffect(() => { onDraftChange?.({ form, step }); }, [form, step]);
 
   useEffect(() => {
     if (supplier || !padronLookup?.found) return;
     const values = initialValues(null, identifier, padronLookup);
     setForm((current) => {
       const next = { ...current };
-      for (const field of ["legalName", "commercialName", "personType", "fiscalAddress", "district", "province", "department", "ubigeo", "accountHolderName"]) {
+      for (const field of ["legalName", "commercialName", "personType", "fiscalAddress", "district", "province", "department", "ubigeo"]) {
         if (!editedFields.current.has(field) && !current[field] && values[field]) next[field] = values[field];
       }
+      // The account holder is the supplier itself unless someone typed another name.
+      const holder = values.bankAccounts[0].accountHolderName;
+      if (holder) next.bankAccounts = (current.bankAccounts || []).map((account) => account.accountHolderName ? account : { ...account, accountHolderName: holder });
       return next;
     });
   }, [supplier, identifier, padronLookup]);
@@ -214,10 +197,30 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
     setForm((current) => ({ ...current, legalRepresentative: representative.fullName || "", representativeDocumentType: normalizeRepresentativeDocumentType(representative.documentType), representativeDocumentNumber: representative.documentNumber || "" }));
   }
 
-  function setFile(field, file) {
-    setFiles((current) => ({ ...current, [field]: file || undefined }));
-    if (!file) setFileInputKeys((current) => ({ ...current, [field]: (current[field] || 0) + 1 }));
+  function setAccount(index, patch) {
+    setFieldErrors((current) => {
+      const next = { ...current };
+      Object.keys(patch).forEach((field) => { delete next[`bankAccounts.${index}.${field}`]; });
+      return next;
+    });
+    setForm((current) => ({ ...current, bankAccounts: current.bankAccounts.map((account, position) => position === index ? { ...account, ...patch } : account) }));
   }
+
+  function addAccount() {
+    // The second account is usually the other currency (soles and dollars).
+    setForm((current) => {
+      const used = new Set(current.bankAccounts.map((account) => account.accountCurrency));
+      const holder = current.bankAccounts[0]?.accountHolderName || current.legalName;
+      return { ...current, bankAccounts: [...current.bankAccounts, emptyBankAccount(holder, used.has("PEN") && !used.has("USD") ? "USD" : "PEN")] };
+    });
+  }
+
+  function removeAccount(index) {
+    setFieldErrors({});
+    setForm((current) => ({ ...current, bankAccounts: current.bankAccounts.length > 1 ? current.bankAccounts.filter((_, position) => position !== index) : [emptyBankAccount(current.legalName, current.currency)] }));
+  }
+
+  const accountErrors = (index) => Object.fromEntries(Object.entries(fieldErrors).filter(([key, value]) => value && key.startsWith(`bankAccounts.${index}.`)).map(([key, value]) => [key.split(".")[2], value]));
 
   // Field messages plus one summary next to the buttons; focus goes to the first problem.
   function showProblems(problems, target) {
@@ -225,7 +228,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
     setError(Object.values(problems).map((message) => t(message)).join(" "));
     setStep(target);
     window.requestAnimationFrame(() => {
-      const field = formRef.current?.querySelector(`[data-step="${target}"] .field-error input, [data-step="${target}"] .field-error select, [data-step="${target}"] .field-error textarea`);
+      const field = formRef.current?.querySelector(`[data-step="${target}"] .field-error input, [data-step="${target}"] .field-error select, [data-step="${target}"] .field-error textarea, [data-step="${target}"] .field-error button`);
       field?.focus();
       field?.scrollIntoView({ block: "center", behavior: "smooth" });
     });
@@ -261,25 +264,22 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
     payload.append("commercialContact", JSON.stringify(form.commercialContact));
     payload.append("operationsContact", JSON.stringify(form.operationsContact));
     payload.append("delivery", JSON.stringify({ method: form.deliveryMethod, other: form.deliveryOther }));
-    payload.append("declarations", JSON.stringify({ stateSanctions: { answer: form.stateSanctionsAnswer, comments: form.stateSanctionsComments }, complianceModel: { answer: form.complianceModelAnswer, comments: form.complianceModelComments } }));
-    // The initial bank account is only sent with a bank selected (Continue refuses typed
-    // account details without one, so nothing is dropped silently).
-    if (includeInitialBank && form.bank) {
-      for (const [key, value] of Object.entries({ bankName: form.bank, accountType: form.accountType, bankAccount: form.accountNumber, cci: form.cci, accountHolderName: form.accountHolderName, accountCurrency: form.accountCurrency })) payload.append(key, value);
-    }
-    for (const [field, file] of Object.entries(files)) if (file) payload.append(field, file);
+    // Every account with a bank chosen is sent (Continue refuses an account started without one,
+    // so nothing is dropped silently).
+    const accounts = includeInitialBank ? form.bankAccounts.filter((account) => account.bank).map(bankAccountPayload) : [];
+    if (accounts.length) payload.append("bankAccounts", JSON.stringify(accounts));
     setError("");
     await onSubmit(payload);
   }
 
-  const documentKinds = new Set((supplier?.documents || []).map((item) => item.kind));
-  const checklist = homologationChecklist(form, { documentKinds, files });
+  const checklist = homologationChecklist(form);
+  const accounts = form.bankAccounts.filter((account) => account.bank);
   const pane = (id) => ({ "data-step": id, hidden: step !== id });
 
   return (
     <form ref={formRef} className="supplier-official-form" onSubmit={submit} noValidate>
       <WorkflowStepper steps={steps.map((id) => STEP_LABELS[id])} current={stepIndex} completedSteps={completed.map((id) => steps.indexOf(id))} maxAccessible={steps.length - 1} onSelect={(index) => goTo(steps[index])} />
-      <p className="supplier-form-legend">{t("* Required to submit.")} <span className="homologation-tag">{t("Needed for homologation")}</span> {t("Your jefe cannot approve the supplier without it; you can submit first and complete it later.")}</p>
+      <p className="supplier-form-legend">{t("* Required to submit.")}</p>
 
       <div {...pane("identity")}>
         {!supplier && <SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} />}
@@ -343,56 +343,32 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       </div>
 
       {includeInitialBank && <div {...pane("bank")}>
-        <Section icon={Landmark} title="Initial Banking Information" status="Optional now, but your jefe needs one to approve the supplier. Accounting verifies it before Treasury pays; you can add it after saving.">
-          <div className="form-grid supplier-form-grid">
-            <label className={fieldClass("bank")}><span>{t("Bank")}</span><select value={form.bank} onChange={(event) => setValue("bank", event.target.value)} aria-invalid={Boolean(fieldErrors.bank)}><option value="">{t("Add after saving")}</option>{["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select>{fieldMessage("bank")}</label>
-            {/* "Detraction" is intentionally not selectable here: there is no complete detraccion payment workflow for new accounts. */}
-            <label className="field"><span>{t("Account Type")}</span><select value={form.accountType} onChange={(event) => setValue("accountType", event.target.value)}><option value="CURRENT">{t("CURRENT")}</option></select></label>
-            <label className={fieldClass("accountNumber")}><span>{t("Account Number")}</span><input value={form.accountNumber} onChange={(event) => setValue("accountNumber", event.target.value)} inputMode="numeric" aria-invalid={Boolean(fieldErrors.accountNumber)} />{fieldMessage("accountNumber")}</label>
-            <label className={fieldClass("cci")}><span>{t("CCI (20 digits)")}</span><input value={form.cci} onChange={(event) => setValue("cci", event.target.value)} inputMode="numeric" maxLength="24" aria-invalid={Boolean(fieldErrors.cci)} />{fieldMessage("cci")}</label>
-            <label className="field"><span>{t("Account Currency")}</span><select value={form.accountCurrency} onChange={(event) => setValue("accountCurrency", event.target.value)}><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
-            <label className="field"><span>{t("Account Holder Name")}</span><input value={form.accountHolderName} onChange={(event) => setValue("accountHolderName", event.target.value)} /></label>
-          </div>
-        </Section>
-      </div>}
-
-      <div {...pane("compliance")}>
-        <Section icon={ShieldCheck} title="Compliance Declarations" homologation status="Both answers are required before homologation">
-          <div className="declaration-grid">
-            <DeclarationField name="stateSanctions" question="Does the company or its partners have State sanctions or relevant proceedings?" answer={form.stateSanctionsAnswer} comments={form.stateSanctionsComments} onAnswer={(value) => setValue("stateSanctionsAnswer", value)} onComments={(value) => setValue("stateSanctionsComments", value)} />
-            <DeclarationField name="complianceModel" question="Does the company have a compliance officer or prevention model?" answer={form.complianceModelAnswer} comments={form.complianceModelComments} onAnswer={(value) => setValue("complianceModelAnswer", value)} onComments={(value) => setValue("complianceModelComments", value)} />
-          </div>
-        </Section>
-        <Section icon={FileCheck2} title="Mandatory Documents" homologation status="Required for final homologation">
-          <div className="document-upload-grid">
-            {SUPPLIER_DOCUMENTS.map(([field, kind, label]) => (
-              <div className="file-field" key={field}>
-                <label htmlFor={`supplier-file-${field}`}><span>{t(label)}</span></label>
-                <small className={files[field] || documentKinds.has(kind) ? "text-success" : ""}>{files[field] ? `${t("Selected")}: ${files[field].name}` : t(documentKinds.has(kind) ? "Already uploaded" : "Not uploaded")}</small>
-                {files[field] && documentKinds.has(kind) && <small>{t("The new file replaces the uploaded one when you save.")}</small>}
-                <div className="file-field-input">
-                  <input key={fileInputKeys[field] || 0} id={`supplier-file-${field}`} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setFile(field, event.target.files?.[0])} />
-                  {files[field] && <button type="button" className="text-button" onClick={() => setFile(field, null)} aria-label={`${t("Remove")} ${t(label)}`}><X size={14} aria-hidden="true" />{t("Remove")}</button>}
-                </div>
+        <Section icon={Landmark} title="Bank accounts" status="Where the supplier is paid. Add one account per currency it is paid in. Accounting verifies each one before Treasury pays it.">
+          <div className="bank-account-list">
+            {form.bankAccounts.map((account, index) => (
+              <div className="bank-account-card" key={account.clientId || index}>
+                <div className="bank-account-card-head"><strong>{t("Account {number}").replace("{number}", index + 1)}</strong>{(form.bankAccounts.length > 1 || account.bank) && <button type="button" className="icon-button quiet danger" onClick={() => removeAccount(index)} title={t("Remove account")} aria-label={`${t("Remove account")} ${index + 1}`}><Trash2 size={15} aria-hidden="true" /></button>}</div>
+                <BankAccountFields value={account} onChange={(patch) => setAccount(index, patch)} errors={accountErrors(index)} />
               </div>
             ))}
           </div>
+          {form.bankAccounts.length < 4 && <button type="button" className="secondary-button" onClick={addAccount}><Plus size={16} aria-hidden="true" /><span>{t("Add another account (e.g. in dollars)")}</span></button>}
         </Section>
-      </div>
+      </div>}
 
       <div {...pane("review")}>
         <section className="supplier-form-section supplier-review">
-          <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("Your jefe approves the proposal; the supplier code (PRV) is assigned when they approve it.")}</small></div></header>
+          <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("The supplier gets its PRV code when you register it; your jefe approves it before it can be paid.")}</small></div></header>
           <dl className="supplier-detail-grid">
             <div><dt>{t("RUC / identifier")}</dt><dd>{form.rucDni || "-"}</dd></div>
             <div><dt>{t("Legal Name")}</dt><dd><strong>{form.legalName || "-"}</strong></dd></div>
             <div><dt>{t("Legal Representative")}</dt><dd>{form.legalRepresentative || "-"}</dd></div>
             <div><dt>{t("Commercial Contact")}</dt><dd>{[form.commercialContact.name, form.commercialContact.email].filter(Boolean).join(" · ") || "-"}</dd></div>
             <div><dt>{t("Billing Currency")}</dt><dd>{form.currency}</dd></div>
-            {includeInitialBank && <div><dt>{t("Bank account")}</dt><dd>{form.bank ? `${t(form.bank)} · ${form.cci || form.accountNumber || "-"}` : t("Add after saving")}</dd></div>}
+            {includeInitialBank && <div className="wide"><dt>{t("Bank accounts")}</dt><dd>{accounts.length ? accounts.map((account) => <span className="review-account" key={account.clientId}>{bankAccountLabel({ ...account, currency: account.accountCurrency }, t)}</span>) : t("Add after saving")}</dd></div>}
             <div className="wide"><dt>{t("Registration justification")}</dt><dd>{form.proposalJustification || "-"}</dd></div>
           </dl>
-          <h4>{t("Needed for homologation")}</h4>
+          <h4>{t("What your jefe checks")}</h4>
           <ul className="homologation-checklist">
             {checklist.map((item) => <li key={item.key} className={item.done ? "is-done" : ""}>{item.done ? <CheckCircle2 size={15} aria-hidden="true" /> : <CircleDashed size={15} aria-hidden="true" />}<span>{t(item.label)}</span><small>{t(item.done ? "Done" : "Pending - your jefe needs it to approve")}</small><button type="button" className="text-button" onClick={() => goTo(item.step)}>{t("Edit")}</button></li>)}
           </ul>

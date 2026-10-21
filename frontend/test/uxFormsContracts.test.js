@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { OPTIONAL_REQUEST_FIELDS, REQUEST_FORM_BLOCKS, blockForField, requestBlockStatuses } from "../src/utils/requestFormBlocks.js";
 import { dniError, identifierError, isValidRuc, openPeriodError, positiveAmountError, requiredError, rucError } from "../src/utils/fieldValidation.js";
 import uxformsSpanish from "../src/context/i18n/uxforms.js";
 
@@ -45,65 +44,50 @@ test("DateInput is a text field with a keyboard-accessible calendar that emits I
   assert.match(component, /const target = \{ value: nextValue, name/);
 });
 
-test("request step 1 is grouped into four blocks with a completion badge", () => {
-  assert.deepEqual(REQUEST_FORM_BLOCKS.map((block) => block.title), ["What do you need?", "Why?", "Budget", "Items and amounts"]);
-  assert.equal(uxformsSpanish["What do you need?"], "¿Qué necesitas?");
-  assert.equal(uxformsSpanish["Why?"], "¿Por qué?");
-  assert.equal(uxformsSpanish["Items and amounts"], "Ítems y montos");
-  assert.equal(uxformsSpanish["More details (optional)"], "Más datos (opcional)");
-  assert.equal(uxformsSpanish.Complete, "Completo");
-  for (const field of ["flowType", "requestType", "expenseNature", "title", "detailedDescription"]) assert.equal(blockForField(field), "need");
-  for (const field of ["businessJustification", "nonApprovalRisk"]) assert.equal(blockForField(field), "why");
-  for (const field of ["requesterCostCenter", "issueDate", "accountingPeriod", "currency"]) assert.equal(blockForField(field), "budget");
-  // An item's cost center is edited inside the items block, so its error marks that block.
-  for (const field of ["lines.0.costCenter", "lines.2.costCenter"]) assert.equal(blockForField(field), "items");
-  // Requesters never choose an accounting account (tipo de gasto): Accounting sets it at invoice time.
-  assert.doesNotMatch(source("../src/pages/RequestCreate.jsx"), /expenseType|expense-types|ExpenseType/);
-  for (const field of ["lines", "lines.0.quantity", "lines.1.unitPrice", "lines.0.itemDescription", "lines.0.totalAmount"]) assert.equal(blockForField(field), "items");
-  assert.deepEqual(OPTIONAL_REQUEST_FIELDS, ["priority", "areaCorrelative", "schoolOrDepartment"]);
-
-  assert.deepEqual(requestBlockStatuses({}), { need: "complete", why: "complete", budget: "complete", items: "complete" });
-  assert.deepEqual(requestBlockStatuses({ title: "Requirement title is required.", "lines.0.unitPrice": "Enter a valid unit price." }), { need: "incomplete", why: "complete", budget: "complete", items: "incomplete" });
-  assert.equal(requestBlockStatuses({}, { optional: ["why"], filled: { why: false } }).why, "optional");
-  assert.equal(requestBlockStatuses({}, { optional: ["why"], filled: { why: true } }).why, "complete");
-
+test("the request form is one four-step wizard: supplier, receipt, details, summary", () => {
   const page = source("../src/pages/RequestCreate.jsx");
-  for (const id of ["need", "why", "budget", "items"]) assert.match(page, new RegExp(`<RequestFormBlock \\{\\.\\.\\.blockInfo\\.${id}\\} status=\\{blockStatuses\\.${id}\\}`));
-  assert.match(page, /<details className="request-optional-fields"/);
-  const optional = page.slice(page.indexOf('<details className="request-optional-fields"'), page.indexOf("</details>", page.indexOf('<details className="request-optional-fields"')));
-  for (const field of ["form.priority", "form.areaCorrelative", "form.schoolOrDepartment"]) assert.ok(optional.includes(field), `${field} is under More details`);
-  assert.ok(page.indexOf("blockInfo.need") < page.indexOf("blockInfo.why") && page.indexOf("blockInfo.why") < page.indexOf("blockInfo.budget") && page.indexOf("blockInfo.budget") < page.indexOf("blockInfo.items"));
-  assert.match(source("../src/components/RequestFormBlock.jsx"), /CheckCircle2/);
+  assert.match(page, /const STEP_LABELS = \{ supplier: "Supplier details", invoice: "Receipt and automation", details: "Requirement details", review: "Summary and submit" \};/);
+  assert.match(page, /const stepsFor = \(flowType\) => flowType === "C" \? \["supplier", "details", "review"\] : \["supplier", "invoice", "details", "review"\];/);
+  assert.equal(uxformsSpanish["More details (optional)"], "Más datos (opcional)");
+  // Steps follow the order the work happens; each step's sections appear in that order.
+  const order = ["supplier", "invoice", "details", "review"].map((id) => page.indexOf(`{stepId === "${id}" && <div className="wizard-step">`));
+  assert.ok(order.every((index) => index > 0) && order.every((index, position) => position === 0 || index > order[position - 1]));
+  // Optional fields stay under "More details (optional)".
+  assert.match(page, /<details className="request-optional-fields">/);
+  const optional = page.slice(page.indexOf('<details className="request-optional-fields">'), page.indexOf("</details>", page.indexOf('<details className="request-optional-fields">')));
+  for (const field of ["form.observations", "form.nonApprovalRisk", "form.areaCorrelative"]) assert.ok(optional.includes(field), `${field} is under More details`);
+  // Requesters never choose an accounting account (tipo de gasto contable): Accounting sets it at invoice time.
+  assert.doesNotMatch(page, /expenseType|expense-types|ExpenseType/);
 });
 
-test("every existing request field and the submission payload are unchanged", () => {
+test("every request field still reaches the submission payload, with priority, frequency, account and receipt", () => {
   const page = source("../src/pages/RequestCreate.jsx");
-  for (const field of ["flowType", "requestType", "expenseNature", "priority", "requesterCostCenter", "schoolOrDepartment", "areaCorrelative", "issueDate", "accountingPeriod", "currency", "title", "detailedDescription", "businessJustification", "nonApprovalRisk"]) {
-    assert.match(page, new RegExp(`value=\\{form\\.${field}`), `${field} still has an input`);
+  for (const field of ["detailedDescription", "businessJustification", "nonApprovalRisk", "observations", "expenseNature", "frequency", "accountingPeriod", "areaCorrelative", "title", "supplierSelectionReason"]) {
+    assert.ok(page.includes(`value={form.${field}`), `${field} still has an input`);
   }
-  for (const field of ["projectId", "assetCategory", "usefulLifeYears", "npvAmount", "npvCurrency", "paybackValue", "paybackUnit"]) assert.match(page, new RegExp(`value=\\{capex\\.${field}\\}`));
-  assert.match(page, /value=\{opexFrequency\}/);
+  assert.match(page, /checked=\{form\.priority === value\}/, "priority is a required radio group");
+  for (const field of ["projectId", "assetCategory", "usefulLifeYears", "npvAmount", "npvCurrency", "paybackValue", "paybackUnit"]) assert.ok(page.includes(`value={capex.${field}}`), `${field} still has an input`);
   assert.match(page, /Object\.entries\(payloadForm\)\.forEach\(\(\[key, value\]\) => data\.append\(key, value \?\? ""\)\)/);
   assert.match(page, /data\.append\("lines", JSON\.stringify\(lines\.map\(requestLinePayload\)\)\)/);
-  assert.match(page, /<DateInput required value=\{form\.issueDate\} onChange=\{\(event\) => setForm\(\(current\) => \(\{ \.\.\.current, issueDate: event\.target\.value, accountingPeriod: event\.target\.value\.slice\(0, 7\) \}\)\)\}/);
+  assert.match(page, /data\.append\("paymentAccount", payee === "supplier" \? paymentAccount \|\| "" : ""\)/);
+  assert.match(page, /data\.append\("invoiceDetails", JSON\.stringify\(receipt\)\)/);
+  assert.match(page, /if \(!invoiceAttached\) return \{ status: "PENDING" \};/, "a request without a receipt says it is pending");
+  assert.match(page, /onChange=\{\(event\) => changeForm\(\{ issueDate: event\.target\.value, accountingPeriod: event\.target\.value\.slice\(0, 7\) \}\)\}/);
 });
 
 test("fields are validated when the user leaves them, and submit validation is kept", () => {
   const page = source("../src/pages/RequestCreate.jsx");
-  for (const field of ["requestType", "expenseNature", "title", "businessJustification", "nonApprovalRisk", "accountingPeriod", "currency"]) assert.match(page, new RegExp(`onBlur=\\{\\(\\) => validateField\\("${field}"`), `${field} is validated on blur`);
-  assert.match(page, /validateField\("detailedDescription", "description"\)/);
+  for (const field of ["detailedDescription", "businessJustification", "accountingPeriod", "invoice.issueDate"]) assert.ok(page.includes(`onBlur={() => validateField("${field}"`), `${field} is validated on blur`);
   assert.match(page, /validateField\("issueDate", "accountingPeriod"\)/);
-  assert.match(page, /onFieldBlur=\{field => validateField\(`lines\.\$\{index\}\.\$\{field\}`\)\}/);
-  assert.match(page, /onBlur=\{\(\) => validateQuotationAmount\(index\)\}/);
-  assert.match(page, /openPeriodError\(form\.issueDate, masters\.periods/);
+  assert.match(page, /onFieldBlur=\{\(field\) => validateField\(`lines\.\$\{index\}\.\$\{field\}`\)\}/);
   // Continue, the field checks and Submit use the same rules; Save draft is lenient.
   assert.match(page, /const validations = checkedSteps\.map\(\(item\) => validationForStep\(item, sendForApproval\)\)/);
   assert.match(page, /const nextErrors = validationForStep\(stepId, true\)/);
   const line = source("../src/components/RequestItemLine.jsx");
-  for (const field of ["itemDescription", "quantity", "unitOfMeasure", "unitPrice"]) assert.match(line, new RegExp(`onBlur=\\{blur\\("${field}"\\)\\}`));
+  for (const field of ["itemDescription", "quantity", "unitOfMeasure", "unitPrice"]) assert.ok(line.includes(`onBlur={blur("${field}")}`), `${field} is validated on blur`);
   assert.match(line, /field-error/);
   const supplier = source("../src/components/suppliers/SupplierForm.jsx");
-  for (const field of ["rucDni", "legalName", "representativeDocumentNumber", "proposalJustification"]) assert.match(supplier, new RegExp(`onBlur=\\{\\(\\) => checkField\\("${field}"\\)\\}`));
+  for (const field of ["rucDni", "legalName", "representativeDocumentNumber", "proposalJustification"]) assert.ok(supplier.includes(`onBlur={() => checkField("${field}")}`), `${field} is validated on blur`);
   assert.match(supplier, /identifierError\(values\.rucDni\)/);
   assert.match(supplier, /Enter a valid 11-digit RUC or supported 8-digit DNI\./, "submit-time identifier check is kept");
 });
@@ -145,7 +129,7 @@ test("form styles live in one labelled block at the end of the stylesheet", () =
   assert.ok(start > styles.indexOf("/* ==== design system (final layer)"));
   assert.equal(styles.indexOf("/* ==== ux: forms ====", start + 1), -1);
   const block = styles.slice(start);
-  for (const selector of [".date-input", ".date-picker-popover", ".date-picker-day", ".request-form-block", ".request-block-status", ".request-optional-fields"]) assert.ok(block.includes(selector), selector);
+  for (const selector of [".date-input", ".date-picker-popover", ".date-picker-day", ".request-optional-fields"]) assert.ok(block.includes(selector), selector);
 });
 
 for (const item of tests) {

@@ -1,0 +1,8 @@
+/* Bank account fields (components/suppliers/BankAccountFields.jsx) and the list of accounts a
+   supplier is registered with. */
+.bank-account-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.bank-account-fields legend { margin-bottom: var(--space-2); font-size: var(--font-sm); font-weight: 700; }
+.bank-account-list { display: grid; gap: var(--space-3); }
+.bank-account-card { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); background: var(--surface-panel); }
+.bank-account-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--font-sm); }
+.review-account { display: block; }

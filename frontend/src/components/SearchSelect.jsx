@@ -3,6 +3,9 @@ import { autoUpdate, flip, FloatingPortal, offset, shift, size, useFloating } fr
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
+// "credito" finds "Crédito": search ignores case and accents.
+const searchable = (text) => String(text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
 export default function SearchSelect({
   label,
   value,
@@ -15,7 +18,11 @@ export default function SearchSelect({
   error,
   hint,
   getOptionValue = (option) => option.value ?? option._id,
-  getOptionLabel = (option) => option.label ?? option.name
+  getOptionLabel = (option) => option.label ?? option.name,
+  // Called with the typed text, 300 ms after typing stops, so a long list can be searched on the
+  // server; the options passed in are still filtered locally meanwhile.
+  onSearch,
+  searching = false
 }) {
   const { t } = useLanguage();
   const id = useId();
@@ -40,7 +47,13 @@ export default function SearchSelect({
   });
 
   const selected = options.find((option) => String(getOptionValue(option)) === String(value));
-  const filtered = useMemo(() => options.filter((option) => getOptionLabel(option).toLowerCase().includes(query.toLowerCase())), [options, query, getOptionLabel]);
+  const filtered = useMemo(() => options.filter((option) => searchable(getOptionLabel(option)).includes(searchable(query))), [options, query, getOptionLabel]);
+
+  useEffect(() => {
+    if (!onSearch || !open) return undefined;
+    const timer = window.setTimeout(() => onSearch(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query, open]);
 
   useEffect(() => {
     const close = (event) => !rootRef.current?.contains(event.target) && !refs.floating.current?.contains(event.target) && setOpen(false);
@@ -164,7 +177,7 @@ export default function SearchSelect({
                     </li>
                   );
                 })}
-                {!filtered.length && <li role="presentation" className="search-select-empty">{t("No matching options")}</li>}
+                {!filtered.length && <li role="presentation" className="search-select-empty">{t(searching ? "Searching..." : "No matching options")}</li>}
               </ul>
             </div>
           </FloatingPortal>

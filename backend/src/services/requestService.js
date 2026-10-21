@@ -5,6 +5,7 @@ import { assertRequestActive, assertClosureAllowed, getFinancialProgress, getFin
 import { canonicalRequestStatus, renditionSettledForClosure, statusAliases, terminalStatusValues } from "../../../shared/workflowStatus.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
+import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import User from "../models/User.js";
 import CostCenter from "../models/CostCenter.js";
 import Project from "../models/Project.js";
@@ -35,6 +36,8 @@ import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./qu
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { assertSupplierSubmittable } from "./supplierService.js";
+import { assertSupplierSelectable, isDepartmentScoped } from "./supplierVisibilityService.js";
+import { limaToday } from "../../../shared/businessCalendar.mjs";
 import { transitionRequest, canTransition } from "./workflowService.js";
 import { INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, parseInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
@@ -47,6 +50,9 @@ import {
   ERROR_CODES,
   FINANCE_CONFIGURATION_KEYS,
   FLOW_TYPE,
+  PAYABLE_ACCOUNT_TYPES,
+  REQUEST_FREQUENCIES,
+  REQUEST_PRIORITIES,
   REQUEST_STATUS,
   REQUEST_TYPE,
   ROLES
@@ -81,7 +87,8 @@ export const requestPopulate = [
 
 export const requestListSelect = [
   "requestNumber", "issueDate", "accountingPeriod", "requester", "solicitor", "requesterArea", "requestingArea",
-  "schoolOrDepartment", "flowType", "requestType", "expenseNature", "priority", "project", "areaCorrelative", "title", "currency", "exchangeRate",
+  "schoolOrDepartment", "flowType", "requestType", "expenseNature", "priority", "priorityRank", "frequency", "project", "areaCorrelative", "title", "currency", "exchangeRate",
+  "paymentAccount", "invoiceDetails",
   "totalNet", "totalIGV", "totalAmount", "totalPENEquivalent", "supplier", "supplierSnapshot", "status",
   "description", "payment", "rendition", "approvalStage", "approvalDueAt", "approvalRouteSnapshot", "purchaseOrder", "createdAt", "updatedAt"
 ].join(" ");
@@ -265,6 +272,84 @@ function parseCapexDetails(value) {
 function parseOpexDetails(value) {
   const parsed = parseJson(value, "opexDetails") || {};
   return { expenseFrequency: parsed.expenseFrequency || undefined };
+}
+
+function parsePriority(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const priority = String(value).trim().toUpperCase();
+  if (!REQUEST_PRIORITIES.includes(priority)) throw new AppError(422, "Choose the priority: high, medium or low.", { field: "priority", value }, ERROR_CODES.VALIDATION_ERROR);
+  return priority;
+}
+
+function parseFrequency(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const frequency = String(value).trim().toUpperCase();
+  if (!REQUEST_FREQUENCIES.includes(frequency)) throw new AppError(422, "Choose how often it is needed: once, monthly, every 3 months or yearly.", { field: "frequency", value }, ERROR_CODES.VALIDATION_ERROR);
+  return frequency;
+}
+
+function optionalMoney(value, field) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) throw new AppError(422, "Enter a valid amount.", { field }, ERROR_CODES.VALIDATION_ERROR);
+  return Math.round(number * 100) / 100;
+}
+
+// The comprobante as read from its file or typed by the requester (it is checked again when
+// Accounting registers the invoice). status PENDING: it was not issued when the request was made.
+export function parseInvoiceDetails(value) {
+  const parsed = parseJson(value, "invoiceDetails");
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const status = parsed.status === "PENDING" ? "PENDING" : "ATTACHED";
+  if (status === "PENDING") return { status };
+  const issueDate = String(parsed.issueDate || "").slice(0, 10);
+  if (issueDate && !/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) throw new AppError(422, "Enter the issue date of the receipt as dd/mm/yyyy.", { field: "invoiceDetails.issueDate" }, ERROR_CODES.VALIDATION_ERROR);
+  // A receipt cannot be issued after today in Lima.
+  if (issueDate && issueDate > limaToday()) throw new AppError(422, "The receipt's issue date cannot be later than today.", { field: "invoiceDetails.issueDate", issueDate }, ERROR_CODES.VALIDATION_ERROR);
+  const ruc = String(parsed.ruc || "").replace(/\D/g, "");
+  if (ruc && !/^(\d{8}|\d{11})$/.test(ruc)) throw new AppError(422, "The receipt's RUC must have 11 digits.", { field: "invoiceDetails.ruc" }, ERROR_CODES.VALIDATION_ERROR);
+  const currency = parsed.currency ? String(parsed.currency).toUpperCase() : undefined;
+  if (currency && !["PEN", "USD"].includes(currency)) throw new AppError(422, "The receipt's currency must be PEN or USD.", { field: "invoiceDetails.currency" }, ERROR_CODES.VALIDATION_ERROR);
+  return {
+    status,
+    source: ["XML", "PDF", "MANUAL"].includes(parsed.source) ? parsed.source : "MANUAL",
+    documentType: String(parsed.documentType || "").trim().slice(0, 40) || undefined,
+    number: String(parsed.number || "").trim().slice(0, 40) || undefined,
+    issueDate: issueDate ? new Date(`${issueDate}T00:00:00.000Z`) : undefined,
+    ruc: ruc || undefined,
+    supplierName: String(parsed.supplierName || "").trim().slice(0, 200) || undefined,
+    currency,
+    totalAmount: optionalMoney(parsed.totalAmount, "invoiceDetails.totalAmount"),
+    igvAmount: optionalMoney(parsed.igvAmount, "invoiceDetails.igvAmount")
+  };
+}
+
+// The supplier account the requester chose: one of this supplier's active current or savings
+// accounts. Only its bank, type, currency and last four digits are copied to the request.
+async function applyPaymentAccount(request, supplier) {
+  const chosen = request.$locals.paymentAccountId;
+  const accountId = chosen === undefined ? request.paymentAccount?.account?._id || request.paymentAccount?.account : chosen;
+  if (!supplier || !accountId) {
+    request.paymentAccount = undefined;
+    return;
+  }
+  const account = await SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id, active: true, accountType: { $in: PAYABLE_ACCOUNT_TYPES } }).lean();
+  if (!account) {
+    // A supplier changed on the request takes none of the previous supplier's accounts with it.
+    if (chosen === undefined) {
+      request.paymentAccount = undefined;
+      return;
+    }
+    throw new AppError(422, "Choose one of the supplier's active bank accounts.", { field: "paymentAccount", paymentAccount: accountId }, ERROR_CODES.BANK_ACCOUNT_NOT_ELIGIBLE);
+  }
+  request.paymentAccount = {
+    account: account._id,
+    bank: account.bank,
+    bankOtherName: account.bankOtherName || undefined,
+    currency: account.currency,
+    accountType: account.accountType,
+    accountLast4: String(account.accountNumber || account.cci || "").slice(-4)
+  };
 }
 
 function mapAttachments(files, userId) {
@@ -453,6 +538,7 @@ function applyEditableFields(request, payload) {
     "detailedDescription",
     "businessJustification",
     "nonApprovalRisk",
+    "observations",
     "supplierSelectionReason",
     "issueDate",
     "accountingPeriod",
@@ -461,6 +547,10 @@ function applyEditableFields(request, payload) {
     "description"
   ];
   for (const field of fields) if (payload[field] !== undefined) request[field] = payload[field];
+  if (payload.priority !== undefined) request.priority = parsePriority(payload.priority) || "MEDIA";
+  if (payload.frequency !== undefined) request.frequency = parseFrequency(payload.frequency) || "ONE_OFF";
+  if (payload.paymentAccount !== undefined) request.$locals.paymentAccountId = payload.paymentAccount || null;
+  if (payload.invoiceDetails !== undefined) request.invoiceDetails = parseInvoiceDetails(payload.invoiceDetails);
   if (payload.requesterCostCenter !== undefined) request.requesterCostCenter = payload.requesterCostCenter?._id || payload.requesterCostCenter;
   if (payload.capexDetails !== undefined) request.capexDetails = parseCapexDetails(payload.capexDetails);
   if (payload.opexDetails !== undefined) request.opexDetails = parseOpexDetails(payload.opexDetails);
@@ -498,6 +588,8 @@ function normalizeTrackFields(request) {
     request.fiscalData = undefined;
     request.capexDetails = {};
     request.opexDetails = {};
+    request.paymentAccount = undefined;
+    request.invoiceDetails = undefined;
   }
 
   // A1 and B carry the supplier's quotations; the other tracks have none.
@@ -523,6 +615,18 @@ async function assertInvoiceIssuedBySupplier(request, supplier) {
   }
 }
 
+// The requester picks suppliers from their area's list (supplierVisibilityService). A supplier the
+// request already carried stays, so a draft is never locked by a later change of areas.
+async function assertSuppliersOnRequesterList(request, supplier, user) {
+  if (!isDepartmentScoped(user)) return;
+  const previous = new Set((request.$locals.previousSupplierIds || []).map(String));
+  if (supplier) assertSupplierSelectable(supplier, user, { alreadyOnRequest: previous.has(String(supplier._id)) });
+  const quoted = [...new Set((request.quotations || []).map((quotation) => String(quotation.supplier?._id || quotation.supplier || "")).filter(Boolean))]
+    .filter((id) => id !== String(supplier?._id || "") && !previous.has(id));
+  if (!quoted.length) return;
+  for (const other of await Supplier.find({ _id: { $in: quoted } }).select("departments proposedBy supplierCode")) assertSupplierSelectable(other, user);
+}
+
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
   const officialRequest = isOfficialCapexOpexRequest(request);
@@ -535,14 +639,22 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   });
   const supplier = request.flowType === FLOW_TYPE.C ? null : await Supplier.findById(request.supplier?._id || request.supplier);
   if (request.flowType !== FLOW_TYPE.C && !supplier) throw new AppError(404, "Supplier not found.", { supplier: request.supplier }, ERROR_CODES.NOT_FOUND);
+  await assertSuppliersOnRequesterList(request, supplier, user);
   if (supplier) request.supplierSnapshot = supplierSnapshot(supplier);
+  await applyPaymentAccount(request, supplier);
   linkQuotationEvidence(request);
   await applyQuotationSnapshots(request);
   request.requesterCostCenter ||= user.costCenter;
   await validateHeaderCostCenter(request, user, { required: validateSubmission });
   await applyProjectSnapshot(request);
   await applyExchangeRate(request);
-  await request.validate();
+  // Only checked here: the request number is taken when the request is actually saved.
+  request.$locals.deferRequestNumber = true;
+  try {
+    await request.validate({ pathsToSkip: ["requestNumber"] });
+  } finally {
+    delete request.$locals.deferRequestNumber;
+  }
 
   // Track B carries its invoice: the XML when there is one, otherwise the factura PDF. Other tracks
   // check an XML attached early, as before; their invoice is registered later.
@@ -563,6 +675,22 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
       fileName: xmlAttachment.originalName
     });
     request.xmlValidationHistory.push(request.xmlValidation);
+    // The comprobante's own data, as read from its file, unless the requester typed it.
+    const read = request.xmlValidation.data || {};
+    if (read.invoiceNumber && request.invoiceDetails?.source !== "MANUAL") {
+      request.invoiceDetails = {
+        status: "ATTACHED",
+        source: request.xmlValidation.source || "XML",
+        documentType: read.voucherType || read.documentTypeCode || undefined,
+        number: read.invoiceNumber,
+        issueDate: read.issueDate ? new Date(`${String(read.issueDate).slice(0, 10)}T00:00:00.000Z`) : undefined,
+        ruc: read.ruc || undefined,
+        supplierName: read.supplierName || undefined,
+        currency: read.currency || undefined,
+        totalAmount: read.totalAmount ?? undefined,
+        igvAmount: read.igvAmount ?? undefined
+      };
+    }
     if (request.flowType === FLOW_TYPE.B && request.xmlValidation.validated) {
       const data = request.xmlValidation.data || {};
       request.directPayment = {
@@ -710,7 +838,8 @@ export async function listRequestsPage(queryParams, user) {
   if (queryParams.type || queryParams.requestType) query.requestType = queryParams.type || queryParams.requestType;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.expenseNature) query.expenseNature = queryParams.expenseNature;
-  if (queryParams.priority) query.priority = queryParams.priority;
+  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => value.trim().toUpperCase()).filter(Boolean) };
+  if (queryParams.frequency) query.frequency = queryParams.frequency;
   if (queryParams.period) query.accountingPeriod = queryParams.period;
   if (queryParams.currency) query.currency = queryParams.currency;
   if (queryParams.supplier) query.supplier = queryParams.supplier;
@@ -738,7 +867,9 @@ export async function listRequestsPage(queryParams, user) {
     ] }];
   }
   const { page, pageSize, skip } = parsePagination(queryParams);
-  const sort = parseSort(queryParams, ["requestNumber", "flowType", "requestType", "expenseNature", "priority", "issueDate", "accountingPeriod", "status", "totalAmount", "totalPENEquivalent", "createdAt", "updatedAt"], { createdAt: -1 });
+  let sort = parseSort(queryParams, ["requestNumber", "flowType", "requestType", "expenseNature", "priority", "issueDate", "accountingPeriod", "status", "totalAmount", "totalPENEquivalent", "createdAt", "updatedAt"], { createdAt: -1 });
+  // Priority sorts Alta > Media > Baja (its rank), newest first within each.
+  if (sort.priority) sort = { priorityRank: sort.priority, createdAt: -1 };
   const [data, total] = await Promise.all([
     FinancialRequest.find(query).select(requestListSelect).populate(requestListPopulate).sort(sort).skip(skip).limit(pageSize),
     FinancialRequest.countDocuments(query)
@@ -826,7 +957,10 @@ export async function createFinancialRequest({ payload, files, user, req }) {
     flowType: requestedFlow,
     requestType: normalizedRequestType,
     expenseNature: payload.expenseNature,
-    priority: payload.priority,
+    priority: parsePriority(payload.priority),
+    frequency: parseFrequency(payload.frequency),
+    observations: payload.observations,
+    invoiceDetails: parseInvoiceDetails(payload.invoiceDetails),
     requester: user._id,
     solicitor: user._id,
     requesterArea: user.area,
@@ -851,6 +985,7 @@ export async function createFinancialRequest({ payload, files, user, req }) {
     lines,
     draftSavedAt: new Date()
   });
+  request.$locals.paymentAccountId = payload.paymentAccount || null;
   let persistedFiles = {};
   let saved = false;
   try {
@@ -887,6 +1022,7 @@ export async function updateFinancialRequest({ id, payload, files, user, req }) 
     accountingPeriod: request.accountingPeriod,
     officialRequest: officialAuditSnapshot(request)
   };
+  request.$locals.previousSupplierIds = [request.supplier, ...(request.quotations || []).map((quotation) => quotation.supplier)].filter(Boolean).map((id) => String(id?._id || id));
   if (payload.lines !== undefined) request.lines = parseRequestLines(payload.lines);
   applyEditableFields(request, payload);
   const removedAttachments = removeRequestAttachments(request, payload.removeAttachments);

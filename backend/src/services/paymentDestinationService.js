@@ -2,7 +2,7 @@ import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBan
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { AppError } from "../utils/AppError.js";
-import { ERROR_CODES, REQUEST_TYPE } from "../utils/constants.js";
+import { ERROR_CODES, PAYABLE_ACCOUNT_TYPES, REQUEST_TYPE } from "../utils/constants.js";
 
 const reimbursementTypes = new Set([
   REQUEST_TYPE.REEMBOLSO_CON_SUSTENTO,
@@ -12,9 +12,10 @@ const reimbursementTypes = new Set([
 
 export function isEligibleSupplierPaymentAccount(account, { bank, currency } = {}) {
   // DETRACTION accounts are never a BBVA transfer destination: the SPOT deposit to Banco de la Nacion
-  // is a separate Treasury step (recordDetractionDeposit), so only CURRENT accounts are eligible here.
-  // An account flagged after a BANK_DETAILS bounce is OBSERVED and stays ineligible until re-verified.
-  if (!account?.active || account.accountType !== "CURRENT") return false;
+  // is a separate Treasury step (recordDetractionDeposit), so only current and savings accounts are
+  // eligible here. An account flagged after a BANK_DETAILS bounce is OBSERVED and stays ineligible
+  // until re-verified.
+  if (!account?.active || !PAYABLE_ACCOUNT_TYPES.includes(account.accountType)) return false;
   if (bank && account.bank !== bank) return false;
   if (currency && account.currency !== currency) return false;
   if (account.verificationStatus === "VERIFIED") {
@@ -31,6 +32,7 @@ export function supplierPaymentSnapshot(account) {
     sourceType: "SUPPLIER",
     bankAccountId: account._id,
     bank: account.bank,
+    bankOtherName: account.bankOtherName || undefined,
     currency: account.currency,
     accountType: account.accountType,
     accountHolderName: account.accountHolderName,
@@ -65,12 +67,37 @@ export function usesEmployeeReimbursementDestination(request) {
   return reimbursementTypes.has(request.requestType) && Boolean(request.rendition?.reimbursementBankSnapshot?.profile);
 }
 
-export async function listEligibleSupplierPaymentAccounts({ supplierId, bank, currency }) {
-  const query = { supplier: supplierId, active: true, accountType: "CURRENT" };
+// The account the requester chose on the request goes first when it is eligible; then the
+// supplier's preferred account and the newest.
+export async function listEligibleSupplierPaymentAccounts({ supplierId, bank, currency, requestedAccountId }) {
+  const query = { supplier: supplierId, active: true, accountType: { $in: PAYABLE_ACCOUNT_TYPES } };
   if (bank) query.bank = bank;
   if (currency) query.currency = currency;
   const accounts = await SupplierBankAccount.find(query).sort({ preferred: -1, validFrom: -1, createdAt: -1 });
-  return accounts.filter((account) => isEligibleSupplierPaymentAccount(account, { bank, currency }));
+  const eligible = accounts.filter((account) => isEligibleSupplierPaymentAccount(account, { bank, currency }));
+  return requestedFirst(eligible, requestedAccountId);
+}
+
+export function requestedFirst(accounts, requestedAccountId) {
+  const id = String(requestedAccountId || "");
+  if (!id) return accounts;
+  return [...accounts].sort((left, right) => Number(String(right._id) === id) - Number(String(left._id) === id));
+}
+
+// The requester's chosen account against the request: what Treasury and the approvers are told.
+// MISMATCH: the account is in another currency than the request; nothing is ever converted.
+export function requestedAccountCheck(request) {
+  const chosen = request?.paymentAccount;
+  if (!chosen?.account || !chosen.currency) return null;
+  return {
+    accountId: chosen.account?._id || chosen.account,
+    bank: chosen.bank,
+    bankOtherName: chosen.bankOtherName || "",
+    currency: chosen.currency,
+    accountType: chosen.accountType,
+    accountLast4: chosen.accountLast4,
+    currencyMatches: !request.currency || chosen.currency === request.currency
+  };
 }
 
 // Why a supplier CXP cannot go into a bank file in its currency, read from all the supplier's
@@ -79,7 +106,7 @@ export async function listEligibleSupplierPaymentAccounts({ supplierId, bank, cu
 export function supplierPaymentBlock(accounts = [], currency) {
   if (accounts.some((account) => isEligibleSupplierPaymentAccount(account, { currency }))) return null;
   const active = accounts.filter((account) => account.active);
-  const current = active.filter((account) => account.accountType === "CURRENT");
+  const current = active.filter((account) => PAYABLE_ACCOUNT_TYPES.includes(account.accountType));
   const inCurrency = current.filter((account) => account.currency === currency);
   const awaitsReview = (account) => account.verificationStatus === "PENDING" || (account.verificationStatus === "VERIFIED" && account.ownershipResult === "NOT_REVIEWED");
   if (inCurrency.some(awaitsReview)) return { code: "PENDING_VERIFICATION", currency };
@@ -129,14 +156,14 @@ export async function resolvePaymentDestination({ request, accountsPayable, bank
     return { snapshot, account: null, sourceType: snapshot.sourceType };
   }
 
-  const eligible = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier._id || request.supplier, bank, currency });
+  const eligible = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier._id || request.supplier, bank, currency, requestedAccountId: request.paymentAccount?.account });
   const account = selectedAccountId
     ? eligible.find((item) => String(item._id) === String(selectedAccountId))
     : eligible[0];
   if (!account) {
     throw new AppError(
       422,
-      "No eligible verified current account matches this supplier, bank, and currency.",
+      "No eligible verified account matches this supplier, bank, and currency.",
       { supplier: request.supplier._id || request.supplier, bank, currency, selectedAccountId },
       selectedAccountId ? ERROR_CODES.BANK_ACCOUNT_NOT_ELIGIBLE : ERROR_CODES.BANK_DETAILS_MISSING
     );

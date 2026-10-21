@@ -15,6 +15,7 @@ import {
   Power,
   RefreshCw,
   Save,
+  MapPin,
   ShieldCheck,
   Star,
   UserCheck,
@@ -29,6 +30,9 @@ import { LIMA_TIME_ZONE } from "../../../../shared/businessCalendar.mjs";
 import EmptyState from "../EmptyState.jsx";
 import ProtectedAssetButton from "../ProtectedAssetButton.jsx";
 import StatusBadge from "../StatusBadge.jsx";
+import BankAccountFields from "./BankAccountFields.jsx";
+import { bankAccountPayload, bankAccountProblems, emptyBankAccount } from "../../utils/bankAccounts.js";
+import { bankDisplayName } from "../../../../shared/peruBanks.mjs";
 
 function displayDate(value, language) {
   if (!value) return "-";
@@ -84,7 +88,8 @@ export default function SupplierDetail({
   onDeactivateBank,
   onTaxValidation,
   onDecision,
-  onDeactivateSupplier
+  onDeactivateSupplier,
+  onDepartments
 }) {
   const { t, language } = useLanguage();
   const [showBankForm, setShowBankForm] = useState(false);
@@ -98,7 +103,20 @@ export default function SupplierDetail({
     });
     return () => cancelAnimationFrame(frame);
   }, [reviewAccount]);
-  const [bankForm, setBankForm] = useState({ bank: "BCP", accountType: "CURRENT", accountNumber: "", cci: "", currency: supplier.currency || "PEN", accountHolderName: supplier.legalName || supplier.name || "" });
+  const [bankForm, setBankForm] = useState(() => emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN"));
+  const [bankErrors, setBankErrors] = useState({});
+  // Areas that see this supplier in their list (none: every area). Accounting / Admin choose them.
+  const [editingAreas, setEditingAreas] = useState(false);
+  const [areaOptions, setAreaOptions] = useState([]);
+  const [areas, setAreas] = useState(supplier.departments || []);
+  useEffect(() => {
+    if (!editingAreas || areaOptions.length) return;
+    api.get("/suppliers/departments").then((response) => setAreaOptions(response.data.data || [])).catch(() => setAreaOptions([]));
+  }, [editingAreas]);
+  async function saveAreas(event) {
+    event.preventDefault();
+    if (await onDepartments?.(areas)) setEditingAreas(false);
+  }
   const [bankReview, setBankReview] = useState({ verificationStatus: "VERIFIED", ownershipResult: "MATCH", comments: "" });
   const [taxForm, setTaxForm] = useState({ valid: true, returnedIdentifier: supplier.rucDni || "", returnedLegalName: supplier.legalName || supplier.name || "", comments: "" });
   const permissions = supplier.permissions || {};
@@ -120,6 +138,7 @@ export default function SupplierDetail({
   const riskWarnings = (supplier.riskyDeclarations || readiness?.warnings || []).filter((warning) => warning.code !== "POSSIBLE_DUPLICATE_SUPPLIER_NAME");
   const documents = supplier.documents || [];
   const docKinds = new Set(documents.map((item) => item.kind));
+  const hasDeclarations = ["stateSanctions", "complianceModel"].some((key) => ["YES", "NO"].includes(supplier.declarations?.[key]?.answer));
   const provider = supplier.sunatProvider || { state: "NOT_CONFIGURED", configured: false };
   const approvalDisabledReason = readiness?.issues?.[0]?.message || "";
   // Only the proposer's jefe approves. While the supplier waits, approval names who decides it now.
@@ -134,7 +153,8 @@ export default function SupplierDetail({
     && Boolean(supplier.homologationValidUntil)
     && new Date(supplier.homologationValidUntil).getTime() < Date.now();
 
-  const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: setBankForm });
+  // Drafts saved before the bank list grew kept "currency" instead of "accountCurrency".
+  const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: (saved) => setBankForm({ ...emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN"), ...saved, accountCurrency: saved?.accountCurrency || saved?.currency || supplier.currency || "PEN" }) });
   const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canValidateTaxpayer && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
   const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canVerifyBanking && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
   useDraftResume("supplier-bank-review", id => { const account = supplier.bankAccounts?.find(row => row._id === id.split("~")[1]); if (account) setReviewAccount(account); });
@@ -143,7 +163,10 @@ export default function SupplierDetail({
   async function submitBank(event) {
     event.preventDefault();
     if (!bankDraft.ready || bankDraft.status === "conflict") return;
-    if (await onAddBank(bankForm)) { await bankDraft.complete(); setShowBankForm(false); }
+    const problems = bankAccountProblems(bankForm);
+    setBankErrors(problems);
+    if (Object.keys(problems).length) return;
+    if (await onAddBank(bankAccountPayload(bankForm))) { await bankDraft.complete(); setShowBankForm(false); setBankForm(emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN")); }
   }
 
   async function submitBankReview(event) {
@@ -163,7 +186,7 @@ export default function SupplierDetail({
       <div className="supplier-summary-strip">
         <div>
           <span>{t("ERP Supplier Code")}</span>
-          <strong>{supplier.supplierCode || t(["HOMOLOGATED", "INACTIVE"].includes(supplier.homologationStatus) ? "Pending data migration" : "Assigned after homologation")}</strong>
+          <strong>{supplier.supplierCode || t("Pending data migration")}</strong>
         </div>
         <div>
           <span>{t("Homologation Status")}</span>
@@ -186,7 +209,7 @@ export default function SupplierDetail({
       </div>
 
       <SectionNavigation className="supplier-section-nav" aria-label={t("Supplier sections")}>
-        {["Legal Identification", "Banking Information", "Mandatory Documents", "Homologation Readiness", "Jefe Approval", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
+        {["Legal Identification", "Areas", "Banking Information", "Homologation Readiness", "Jefe Approval", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
       </SectionNavigation>
       {permissions.canApprove && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier and approve, observe or reject it." : "Some requirements are missing. Observe the supplier so the proposer completes them, or reject it.")}</p></div><a className="secondary-button" href={`#${sectionId("Jefe Approval")}`}>{t("Decide")}</a></div>}
 
@@ -216,6 +239,24 @@ export default function SupplierDetail({
         </DetailGrid>
       </Section>
 
+      <Section
+        icon={MapPin}
+        title="Areas"
+        status={supplier.departments?.length ? "Only these areas see the supplier in their list" : "Shared with every area"}
+        actions={permissions.canManageDepartments && !editingAreas && <button type="button" className="secondary-button compact-button" onClick={() => { setAreas(supplier.departments || []); setEditingAreas(true); }}><Edit3 size={15} /><span>{t("Change areas")}</span></button>}
+      >
+        {!editingAreas && <div className="area-tags">{supplier.departments?.length ? supplier.departments.map((area) => <span className="area-tag" key={area}>{area}</span>) : <span className="muted-text">{t("Every area")}</span>}</div>}
+        {editingAreas && <form className="supplier-inline-form" onSubmit={saveAreas}>
+          <fieldset className="area-choices">
+            <legend>{t("Areas that see this supplier")}</legend>
+            {[...new Set([...areaOptions, ...areas])].map((area) => <label key={area} className="checkbox-row"><input type="checkbox" checked={areas.includes(area)} onChange={(event) => setAreas((current) => event.target.checked ? [...current, area] : current.filter((item) => item !== area))} /><span>{area}</span></label>)}
+            {!areaOptions.length && !areas.length && <small className="muted-text">{t("Loading areas...")}</small>}
+          </fieldset>
+          <p className="section-note">{t("With no area chosen, every area sees the supplier.")}</p>
+          <div className="inline-form-actions"><button type="button" className="secondary-button" onClick={() => setEditingAreas(false)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Save areas")}</span></button></div>
+        </form>}
+      </Section>
+
       <Section icon={Users} title="Contacts" status="Commercial and operations contacts remain separate">
         <div className="contact-summary-grid">
           <Contact title="Commercial Contact" value={supplier.commercialContact} />
@@ -240,15 +281,8 @@ export default function SupplierDetail({
       >
         {showBankForm && (
           <DraftPanel busy={loading} draft={bankDraft} onDiscard={() => setShowBankForm(false)}><form className="supplier-inline-form" onSubmit={submitBank}>
-            <div className="form-grid supplier-form-grid">
-              <label className="field"><span>{t("Bank")}</span><select value={bankForm.bank} onChange={(event) => setBankForm((current) => ({ ...current, bank: event.target.value }))}>{["BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANCO_NACION"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
-              {/* Fix 3: "Detraction" is intentionally not offered here - there is no complete detraccion payment workflow yet. Existing DETRACTION-typed accounts still display read-only below. */}
-              <label className="field"><span>{t("Account Type")}</span><select value={bankForm.accountType} onChange={(event) => setBankForm((current) => ({ ...current, accountType: event.target.value }))}><option value="CURRENT">{t("CURRENT")}</option></select></label>
-              <label className="field"><span>{t("Account Number")}</span><input required inputMode="numeric" value={bankForm.accountNumber} onChange={(event) => setBankForm((current) => ({ ...current, accountNumber: event.target.value }))} /></label>
-              <label className="field"><span>{t("CCI (20 digits)")}</span><input required inputMode="numeric" value={bankForm.cci} onChange={(event) => setBankForm((current) => ({ ...current, cci: event.target.value }))} /></label>
-              <label className="field"><span>{t("Account Currency")}</span><select value={bankForm.currency} onChange={(event) => setBankForm((current) => ({ ...current, currency: event.target.value }))}><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
-              <label className="field"><span>{t("Account Holder Name")}</span><input required value={bankForm.accountHolderName} onChange={(event) => setBankForm((current) => ({ ...current, accountHolderName: event.target.value }))} /></label>
-            </div>
+            {/* "Detraction" is not offered here: the Banco de la Nación detracciones account is kept below. */}
+            <BankAccountFields value={bankForm} onChange={(patch) => { setBankErrors((current) => { const next = { ...current }; Object.keys(patch).forEach((key) => delete next[key]); return next; }); setBankForm((current) => ({ ...current, ...patch })); }} errors={bankErrors} />
             <div className="inline-form-actions"><button type="button" className="secondary-button" onClick={() => setShowBankForm(false)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Add pending account")}</span></button></div>
           </form></DraftPanel>
         )}
@@ -256,7 +290,7 @@ export default function SupplierDetail({
         <div className="supplier-bank-list">
           {(supplier.bankAccounts || []).map((account) => (
             <article className={`supplier-bank-row${account.active ? "" : " is-inactive"}`} key={account._id}>
-              <div className="bank-main"><strong>{t(account.bank)} · {t(account.accountType)}</strong><span>{account.accountNumber || "-"}</span><small>{t("CCI")}: {account.cci || "-"}</small></div>
+              <div className="bank-main"><strong>{bankDisplayName(account.bank, account.bankOtherName)} · {t(account.accountType === "SAVINGS" ? "Savings account" : account.accountType === "CURRENT" ? "Current account" : account.accountType)}</strong><span>{account.accountNumber || "-"}</span><small>{t("CCI")}: {account.cci || "-"}</small></div>
               <div className="bank-meta"><span>{account.currency}</span><StatusBadge status={account.verificationStatus} /><StatusBadge status={account.ownershipResult} />{account.preferred && <span className="badge badge-info"><Star size={12} />{t("Preferred")}</span>}</div>
               <div className="bank-review-meta"><small>{t("Account holder")}: {account.accountHolderName || "-"}</small><small>{t("Verification source")}: {account.verificationSource || t("Not reviewed")}</small><small>{displayDate(account.verifiedAt || account.validFrom, language)}</small></div>
               {permissions.canVerifyBanking && account.active && (
@@ -280,7 +314,7 @@ export default function SupplierDetail({
         {reviewAccount && permissions.canVerifyBanking && (
           <div id="supplier-bank-review-panel" ref={bankReviewRef} tabIndex={-1} role="region" aria-label={t("Finance bank review")}>
           <DraftPanel busy={loading} draft={bankReviewDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitBankReview}>
-            <div className="inline-form-heading"><div><strong>{t("Finance bank review")}</strong><small>{reviewAccount.bank} · {reviewAccount.accountNumber}</small></div><button type="button" className="icon-button quiet" onClick={() => setReviewAccount(null)} aria-label={t("Close bank review")}><X size={16} /></button></div>
+            <div className="inline-form-heading"><div><strong>{t("Finance bank review")}</strong><small>{bankDisplayName(reviewAccount.bank, reviewAccount.bankOtherName)} · {reviewAccount.accountNumber}</small></div><button type="button" className="icon-button quiet" onClick={() => setReviewAccount(null)} aria-label={t("Close bank review")}><X size={16} /></button></div>
             <div className="form-grid supplier-form-grid">
               <label className="field"><span>{t("Verification Status")}</span><select value={bankReview.verificationStatus} onChange={(event) => setBankReview((current) => ({ ...current, verificationStatus: event.target.value }))}>{["VERIFIED", "OBSERVED", "REJECTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
               <label className="field"><span>{t("Ownership Result")}</span><select value={bankReview.ownershipResult} onChange={(event) => setBankReview((current) => ({ ...current, ownershipResult: event.target.value }))}>{["NOT_REVIEWED", "MATCH", "MISMATCH", "MANUAL_ACCEPTED"].map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
@@ -293,27 +327,26 @@ export default function SupplierDetail({
         )}
       </Section>
 
-      <Section icon={ShieldCheck} title="Compliance Declarations" status={riskWarnings.length ? "Risk flags to review before approving" : "Declarations recorded without automatic legal conclusions"}>
+      {/* The proposal form no longer asks for the compliance declarations or the three documents;
+          what an older proposal recorded is still shown. */}
+      {(hasDeclarations || riskWarnings.length > 0) && <Section icon={ShieldCheck} title="Compliance Declarations" status={riskWarnings.length ? "Risk flags to review before approving" : "Declarations recorded without automatic legal conclusions"}>
         <div className="declaration-summary-grid">
           <div><span>{t("State sanctions / proceedings")}</span><StatusBadge status={supplier.declarations?.stateSanctions?.answer || "NOT_DECLARED"} /><small>{supplier.declarations?.stateSanctions?.comments || "-"}</small></div>
           <div><span>{t("Compliance / prevention model")}</span><StatusBadge status={supplier.declarations?.complianceModel?.answer || "NOT_DECLARED"} /><small>{supplier.declarations?.complianceModel?.comments || "-"}</small></div>
         </div>
         {riskWarnings.map((warning) => <div className="inline-alert alert-warning" key={warning.code}><AlertTriangle size={16} /><div><strong>{t(warning.code)}</strong><span>{t(warning.message)}</span></div></div>)}
-      </Section>
+      </Section>}
 
-      <Section icon={FileCheck2} title="Mandatory Documents" status={`${docKinds.size}/3 ${t("document types present")}`}>
+      {documents.length > 0 && <Section icon={FileCheck2} title="Supporting documents" status="Documents uploaded with the proposal">
         <div className="supplier-document-list">
-          {["RUC_FILE", "LEGAL_REP_ID", "BANK_CERTIFICATE"].map((kind) => {
-            const items = documents.filter((item) => item.kind === kind);
-            return (
-              <div key={kind} className="supplier-document-row">
-                <div>{items.length ? <CheckCircle2 className="text-success" size={17} /> : <AlertTriangle className="text-warning" size={17} />}<span>{t(kind)}</span></div>
-                <div>{items.map((item) => <ProtectedAssetButton key={item._id} resourcePath={item.url} fileName={item.originalName} preview><Download size={15} /><span>{item.originalName}</span></ProtectedAssetButton>)}{!items.length && <small>{t("Missing")}</small>}</div>
-              </div>
-            );
-          })}
+          {["RUC_FILE", "LEGAL_REP_ID", "BANK_CERTIFICATE"].filter((kind) => docKinds.has(kind)).map((kind) => (
+            <div key={kind} className="supplier-document-row">
+              <div><CheckCircle2 className="text-success" size={17} /><span>{t(kind)}</span></div>
+              <div>{documents.filter((item) => item.kind === kind).map((item) => <ProtectedAssetButton key={item._id} resourcePath={item.url} fileName={item.originalName} preview><Download size={15} /><span>{item.originalName}</span></ProtectedAssetButton>)}</div>
+            </div>
+          ))}
         </div>
-      </Section>
+      </Section>}
 
       <Section icon={ShieldCheck} title="Taxpayer Validation" status={provider.configured ? `${t("Provider")}: ${t(provider.state)}` : "SUNAT integration not configured"}>
         <DetailGrid>
@@ -364,7 +397,7 @@ export default function SupplierDetail({
         </DetailGrid>
         {permissions.canApprove && (
           <div className="homologation-action-row">
-            <div><strong>{t("Your decision")}</strong><span>{t("Approving assigns the PRV code and lets every requester use this supplier. Accounting still verifies its bank account before Treasury pays it.")}</span></div>
+            <div><strong>{t("Your decision")}</strong><span>{t("Approving lets the supplier's areas use it on requests. Accounting still verifies its bank account before Treasury pays it.")}</span></div>
             <div className="row-actions decision-actions">
               <button type="button" className="primary-button" disabled={loading || !readiness?.valid} title={!readiness?.valid ? t(approvalDisabledReason || "Complete all required controls first.") : undefined} onClick={() => onDecision("APPROVE")}><CheckCircle2 size={16} /><span>{t("Approve supplier")}</span></button>
               <button type="button" className="secondary-button" disabled={loading} onClick={() => onDecision("OBSERVE")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>

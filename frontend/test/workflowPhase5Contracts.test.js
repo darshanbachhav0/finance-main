@@ -59,7 +59,9 @@ test("Treasury sends an explicit account selection while the server supplies the
   assert.match(treasury, /eligibleBankAccounts/);
   assert.match(treasury, /accountSelections/);
   assert.match(treasury, /bank-file.*accountSelections/s);
-  assert.match(treasury, /Only verified eligible current accounts are listed/);
+  // Current and savings accounts are both payable; the requester's chosen account comes first.
+  assert.match(treasury, /Only verified eligible accounts are listed/);
+  assert.match(treasury, /requested = eligible.find/);
   assert.doesNotMatch(treasury, /verificationStatus\s*=/);
 });
 

@@ -97,19 +97,38 @@ the actual child records before allowing it).
 
 ### 3.2 Tracks A1 / A2 / B / C
 
-Requesters do not choose a track: a new request opens a three-question form (what is needed and
-why, how much, who is paid and how) and the answers decide it — a supplier paid through an order →
-A1, a supplier paid directly → B, money for the employee → C (advance, or undocumented
-reimbursement). A1 and B take a supplier quote, the invoice or both, and more suppliers' quotes can
-be added.
-The cost center, unit, an open month, currency and priority are filled in from the profile; a
-dropped invoice XML fills the supplier and its item lines. The title defaults to the description's
-first line, the "risk if not approved" is optional, a supplier selection reason is asked only when
-two or more quotations are compared, and the CAPEX planning fields are collapsed below the
-`CAPEX_DETAILS_THRESHOLD` finance configuration (default PEN 50,000). Anything the short form does
-not ask opens the full form, which keeps every answer. Requesters see four plain statuses (Draft,
-Waiting for approval, In process, Paid, plus "Needs your changes" / Rejected / Cancelled) with one
-line saying what is needed from them; Finance roles keep the detailed statuses.
+Requesters do not choose a track. A new request is one form in four steps, in the order the work
+happens (`pages/RequestCreate.jsx`): **1. Datos de proveedor** (who is paid: a supplier of the
+requester's area — searched on the server, or registered inline with its bank accounts — and the
+supplier account it is paid into; or "Me" for an advance to render / undocumented reimbursement),
+**2. Comprobante y automatización** (the factura's XML or PDF is read automatically — RUC, number,
+issue date, currency, IGV, total — and checked or corrected by the requester; without a receipt the
+request goes with the supplier's quote and the receipt is *pending*), **3. Detalles del
+requerimiento** (description, why, purchase order or direct payment, expense type, priority
+Alta/Media/Baja, frequency, requirement date, CECO, month, amount or items, the budget check) and
+**4. Resumen y envío**. Track C has no receipt step. The answers decide the track — a supplier paid
+through an order → A1, a supplier paid directly → B, money for the employee → C. A1 and B take a
+supplier quote, the receipt or both, and more suppliers' quotes can be added. There is no separate
+"full form": the one form keeps every field (optional ones under "More details").
+The cost center, unit, an open month and the currency are filled in from the profile and the
+supplier's account; a dropped invoice fills the amounts and item lines. Petty cash and
+reimbursement are not expense types of a new request (they are Track C's). The title defaults to
+the description's first line, the "risk if not approved" is optional, a supplier selection reason
+is asked only when two or more quotations are compared, and the CAPEX planning fields are collapsed
+below the `CAPEX_DETAILS_THRESHOLD` finance configuration (default PEN 50,000). Requesters see four
+plain statuses (Draft, Waiting for approval, In process, Paid, plus "Needs your changes" / Rejected /
+Cancelled) with one line saying what is needed from them; Finance roles keep the detailed statuses.
+
+Every request records `priority` (+ `priorityRank`, so lists sort Alta > Media > Baja; it never
+skips an approval or control), `frequency` (`ONE_OFF`, `MONTHLY_RECURRING`, `EVERY_3_MONTHS`,
+`ANNUAL_RENEWAL` — recorded only, nothing is repeated or paid automatically; OPEX keeps
+`opexDetails.expenseFrequency` in step), `observations`, `paymentAccount` (the supplier account the
+requester chose: bank, type, currency and last four digits only) and `invoiceDetails` (the receipt
+as read or typed, `PENDING` when not issued yet; Accounting still validates the voucher itself).
+The request page's "Resumen de solicitud" shows the requirement date and the receipt's issue date
+(the registered voucher's, else the receipt read on the request, else "Pendiente"), in Lima time.
+Request numbers (`SOL-YYYY-#####`) are taken when the request is saved, from one atomic counter, so
+two people saving at once never share a number and a refused request takes none.
 
 - **A1 — standard procurement** (default track). Full path: submission → approval → budget
   commitment → Procurement issues a Purchase Order → invoice registered against the order (with
@@ -381,15 +400,37 @@ Two distinct concepts, split into separate enums (`SOURCE_BANKS` / `BENEFICIARY_
 - **Source bank** — which bank UMA can actually generate an outbound payment file through. Today
   that is **BBVA only** (`assertBbvaSource`); `BankFormatConfiguration` and `PaymentBatch.bank` are
   schema-restricted to it.
-- **Beneficiary bank** — where a supplier or employee's own account can be held (BCP, BBVA,
-  Interbank, Scotiabank, Banco de la Nación), paid via CCI interbank transfer regardless of the
-  source bank.
+- **Beneficiary bank** — where a supplier or employee's own account can be held, paid via CCI
+  interbank transfer regardless of the source bank. The one list is `shared/peruBanks.mjs`: the SBS
+  empresas bancarias (bulletin B-2201, Aug-2026) plus Banco de la Nación and BTG Pactual, and
+  `OTHER` ("Otro / No disponible", which needs the bank's name and its CCI). Each bank carries its
+  3-digit CCI entity code; the codes confirmed by more than one source (BCP 002, Interbank 003,
+  Scotiabank 009, BBVA 011, Banco de la Nación 018) are checked against the CCI typed, the rest are
+  hints until UMA confirms them. A supplier account is a cuenta de ahorros (`SAVINGS`) or corriente
+  (`CURRENT`), in soles or dollars; both are payable (`PAYABLE_ACCOUNT_TYPES`), `DETRACTION` never
+  is. Treasury's account choice starts with the account the requester chose on the request, and an
+  account in another currency than the payable is flagged — nothing is converted.
 
 ## 7. Suppliers
 
 `backend/src/services/supplierService.js`. Proposal (RUC/DNI-unique — a near-duplicate *legal name*
-with a different RUC is surfaced as an advisory warning, never a hard block) → approval by the
-proposer's jefe, which homologates it (assigns the permanent `PRV-####` code). A request may be sent
+with a different RUC is surfaced as an advisory warning, never a hard block; it may register one
+account per currency, e.g. soles and dollars) gets its permanent `PRV-####` code when it is
+registered, from one counter (a refused proposal takes none) → approval by the proposer's jefe,
+which homologates it. The RUC file, legal representative ID, bank certificate and the two compliance
+declarations are no longer asked by the proposal form and no longer block the approval; ones already
+on file still show, and a risky declared answer still warns the jefe.
+
+**Suppliers by area** (`supplierVisibilityService.js`). `Supplier.departments` lists the areas
+(`User.area`) whose requesters see it; empty means shared with every area. A requester (anyone
+outside Admin, Accounting, Treasury, Procurement and Super Admin) sees their area's suppliers, the
+shared ones and their own proposals — in the list, detail, RUC lookup, global search, the invoice
+reader and on a saved request (the API refuses another area's supplier with
+`SUPPLIER_OTHER_DEPARTMENT`; a supplier already on a request stays usable, and an approver on the
+request can open it). A requester's proposal starts in their own area. Accounting and Admin choose a
+supplier's areas (`PUT /suppliers/:id/departments`); a requester who needs another area's supplier
+asks for it (`POST /suppliers/:id/access-request`, a task for Accounting/Admin). A user whose area
+is empty or "General" sees only shared suppliers and is told to ask an Admin for their area. A request may be sent
 with a supplier still waiting for that approval: the jefe approves the supplier together with the
 request (`approveSupplier: true` on `POST /approvals/:id/approve`, shown on the approval screens),
 a supplier that is not ready yet sends the request back, and no approval completes while the

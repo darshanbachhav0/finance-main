@@ -29,6 +29,8 @@ import {
   isEligibleSupplierPaymentAccount,
   listEligibleSupplierPaymentAccounts,
   refreshEmployeeDestination,
+  requestedAccountCheck,
+  requestedFirst,
   resolvePaymentDestination,
   supplierPaymentBlock,
   usesEmployeeReimbursementDestination
@@ -44,7 +46,7 @@ import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { BANK_FILE_VERIFICATION, assertBankFileReleased, bankFileVerificationTaskKey } from "../utils/bankFileVerification.js";
-import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, PAYABLE_ACCOUNT_TYPES, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 
 // A payment date typed as "YYYY-MM-DD" is a Lima calendar date, not UTC midnight
 // (which would be the previous evening in Lima).
@@ -362,7 +364,7 @@ async function countMissingPaymentDestinations(query, bank) {
     { $eq: ["$supplier", "$$supplierId"] },
     { $eq: ["$currency", "$$currency"] },
     { $eq: ["$active", true] },
-    { $eq: ["$accountType", "CURRENT"] },
+    { $in: ["$accountType", PAYABLE_ACCOUNT_TYPES] },
     {
       $or: [
         { $and: [{ $eq: ["$verificationStatus", "VERIFIED"] }, { $in: ["$ownershipResult", ["MATCH", "MANUAL_ACCEPTED"]] }] },
@@ -421,7 +423,7 @@ export async function listTreasuryQueue(queryParams) {
     const supplierIds = await SupplierBankAccount.distinct("supplier", {
       bank: normalizedBank,
       active: true,
-      accountType: "CURRENT",
+      accountType: { $in: PAYABLE_ACCOUNT_TYPES },
       $or: [
         { verificationStatus: "VERIFIED", ownershipResult: { $in: ["MATCH", "MANUAL_ACCEPTED"] } },
         { verificationStatus: "LEGACY_ACCEPTED", ownershipResult: { $ne: "MISMATCH" } }
@@ -523,10 +525,15 @@ export async function listTreasuryQueue(queryParams) {
     }
     const supplierId = accountsPayable.supplier ? String(accountsPayable.supplier._id) : "";
     const own = supplierAccounts.filter((account) => String(account.supplier) === supplierId);
-    const accounts = own.filter((account) => isEligibleSupplierPaymentAccount(account, { currency: object.currency }));
+    // The account the requester chose comes first when it is eligible in the CXP's currency.
+    const accounts = requestedFirst(own.filter((account) => isEligibleSupplierPaymentAccount(account, { currency: object.currency })), request?.paymentAccount?.account);
     const paymentBlock = frozen ? null : supplierId ? supplierPaymentBlock(own, object.currency) : { code: "NO_EMPLOYEE_ACCOUNT", currency: object.currency };
+    // What the requester said: the chosen account and whether its currency matches this payable.
+    const requestedAccount = requestedAccountCheck(request);
+    if (requestedAccount) requestedAccount.currencyMatches = requestedAccount.currency === object.currency;
     return {
       ...request,
+      requestedAccount,
       requestId: request._id,
       _id: object._id,
       accountsPayable: object,
@@ -582,8 +589,8 @@ export async function getEligiblePaymentDestinations({ requestId, bank, currency
     };
     return { sourceType: selected.sourceType, locked: true, selected, accounts: [selected] };
   }
-  const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier._id, currency: currency || request.currency });
-  return { sourceType: "SUPPLIER", locked: false, selected: accounts[0] || null, accounts };
+  const accounts = await listEligibleSupplierPaymentAccounts({ supplierId: request.supplier._id, currency: currency || request.currency, requestedAccountId: request.paymentAccount?.account });
+  return { sourceType: "SUPPLIER", locked: false, selected: accounts[0] || null, accounts, requestedAccount: requestedAccountCheck(request) };
 }
 
 export async function schedulePayments({ requestIds = [], payableIds = [], bank, currency, paymentDate, paymentDateReason, accountSelections, user, req }) {

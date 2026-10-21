@@ -30,6 +30,8 @@
     "migrate:workflow-statuses": "node scripts/migrateWorkflowStatusesV2.js",
     "migrate:document-phases": "node scripts/migrateDocumentPhases.js",
     "migrate:document-phases:apply": "node scripts/migrateDocumentPhases.js --apply",
+    "migrate:platform-improvements": "node scripts/migratePlatformImprovements.js",
+    "migrate:platform-improvements:apply": "node scripts/migratePlatformImprovements.js --apply",
     "import:ceco": "node scripts/importUmaCostCenters.js",
     "import:ceco:apply": "node scripts/importUmaCostCenters.js --apply",
     "import:emails": "node scripts/importContractEmails.js",

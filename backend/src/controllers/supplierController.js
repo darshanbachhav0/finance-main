@@ -25,8 +25,14 @@ import {
   updateSupplierProposal,
   validateSupplierTaxpayer,
   verifySupplierBankAccount,
-  updateAndReviewSupplier
+  updateAndReviewSupplier,
+  updateSupplierDepartments,
+  requestSupplierAccess
 } from "../services/supplierService.js";
+
+import {
+  listSupplierDepartments
+} from "../services/supplierVisibilityService.js";
 
 export const listSuppliers =
   asyncHandler(
@@ -466,6 +472,75 @@ export const deleteSupplier =
             supplier._id,
             req.user
           )
+      });
+    }
+  );
+/*
+ * Suppliers by area: the areas a supplier can be shared with, Accounting/Admin choosing them, and a
+ * requester asking for another area's supplier.
+ */
+export const listDepartments =
+  asyncHandler(
+    async (
+      req,
+      res
+    ) => {
+      res.json({
+        data:
+          await listSupplierDepartments()
+      });
+    }
+  );
+
+export const updateDepartments =
+  asyncHandler(
+    async (
+      req,
+      res
+    ) => {
+      await updateSupplierDepartments({
+        supplierId:
+          req.params.id,
+
+        departments:
+          req.body.departments,
+
+        user:
+          req.user,
+
+        req
+      });
+
+      res.json({
+        data:
+          await getSupplierDetailPayload(
+            req.params.id,
+            req.user
+          )
+      });
+    }
+  );
+
+export const requestAccess =
+  asyncHandler(
+    async (
+      req,
+      res
+    ) => {
+      res.json({
+        data:
+          await requestSupplierAccess({
+            supplierId:
+              req.params.id,
+
+            reason:
+              req.body?.reason,
+
+            user:
+              req.user,
+
+            req
+          })
       });
     }
   );

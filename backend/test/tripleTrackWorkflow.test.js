@@ -29,9 +29,12 @@ test("A1 and B creation only allow CAPEX/OPEX while C offers an advance or an un
   // Product decision: Track C also carries REEMBOLSO_SIN_SUSTENTO; anything else defaults to an advance.
   assert.match(frontendOptions, /trackCRequestTypes = \["ENTREGA_RENDIR", "REEMBOLSO_SIN_SUSTENTO"\]/);
   assert.match(frontendOptions, /if \(flowType === "C"\) return trackCRequestTypes\.includes\(currentRequestType\) \? currentRequestType : "ENTREGA_RENDIR"/);
-  assert.match(requestCreate, /trackCRequestTypes\.map/);
+  // The form offers Track C's two choices (advance or undocumented reimbursement) and, for a
+  // supplier, the CAPEX checkbox (OPEX otherwise).
+  assert.match(requestCreate, /value="ENTREGA_RENDIR"[\s\S]*value="REEMBOLSO_SIN_SUSTENTO"/);
+  assert.match(requestCreate, /trackCRequestTypes\.includes\(form\.requestType\)/);
   assert.match(requestService, /TRACK_C_REQUEST_TYPES = new Set\(\[REQUEST_TYPE\.ENTREGA_RENDIR, REQUEST_TYPE\.REEMBOLSO_SIN_SUSTENTO\]\)/);
   assert.match(requestService, /Tracks A1 and B only allow CAPEX or OPEX as the expenditure classification\./);
-  assert.match(requestCreate, /CAPEX \/ OPEX \*/);
-  assert.match(requestCreate, /form\.flowType !== "C"/);
+  assert.match(requestCreate, /checked=\{form\.requestType === "CAPEX"\}/);
+  assert.match(requestCreate, /payee === "supplier"/);
 });

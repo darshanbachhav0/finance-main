@@ -121,6 +121,12 @@ export default function Suppliers() {
   const canPropose =
     user.role !== "ManagementViewer" && !readOnly;
 
+  // Requesters (everyone outside the supplier work roles) see their own area's list.
+  const departmentScoped =
+    !["Admin", "Accounting", "Treasury", "Procurement", "SuperAdmin"].includes(user.role);
+  const userArea =
+    ["", "general"].includes(String(user.area || "").trim().toLowerCase()) ? "" : String(user.area).trim();
+
   const suppliers =
     usePaginatedResource(
       "/suppliers",
@@ -404,6 +410,23 @@ export default function Suppliers() {
 
           width:
             "130px"
+        },
+
+        {
+          // The areas whose requesters see the supplier (none: every area).
+          key:
+            "departments",
+
+          label:
+            "Areas",
+
+          sortable:
+            false,
+
+          render:
+            (row) => row.departments?.length
+              ? row.departments.join(", ")
+              : t("Every area")
         },
 
         {
@@ -1679,7 +1702,9 @@ export default function Suppliers() {
 
                   <span>
                     {t(
-                      "Open the existing record. A duplicate will not be created."
+                      lookup.result.otherDepartment
+                        ? "It is registered for another area. Ask Accounting to share it with your area; a duplicate will not be created."
+                        : "Open the existing record. A duplicate will not be created."
                     )}
                   </span>
                 </div>
@@ -1767,6 +1792,27 @@ export default function Suppliers() {
                   )}
                 </button>
 
+                {lookup.result.otherDepartment ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={
+                    () =>
+                      mutate(
+                        () =>
+                          api.post(
+                            `/suppliers/${lookup.result._id}/access-request`
+                          ),
+
+                        "Accounting was asked to share this supplier with your area."
+                      )
+                  }
+                >
+                  {t(
+                    "Ask to share it with my area"
+                  )}
+                </button>
+                ) : (
                 <button
                   type="button"
                   className="primary-button"
@@ -1790,6 +1836,7 @@ export default function Suppliers() {
                     "Open existing supplier"
                   )}
                 </button>
+                )}
               </div>
             </div>
           )
@@ -2069,6 +2116,18 @@ export default function Suppliers() {
               onDecision={
                 requestApprovalDecision
               }
+              onDepartments={
+                (departments) =>
+                  mutate(
+                    () =>
+                      api.put(
+                        `/suppliers/${detail._id}/departments`,
+                        { departments }
+                      ),
+
+                    "Supplier areas updated."
+                  )
+              }
               onDeactivateSupplier={
                 () =>
                   confirmAction({
@@ -2192,6 +2251,20 @@ export default function Suppliers() {
             {
               suppliers.error
             }
+          </div>
+        )
+      }
+
+      {
+        // A requester's list holds their area's suppliers, the shared ones and their own proposals.
+        departmentScoped && (
+          <div
+            className={`inline-alert ${userArea ? "alert-info" : "alert-warning"}`}
+            role="status"
+          >
+            {userArea
+              ? t("You see the suppliers of your area ({area}) and the ones shared with every area. Need another area's supplier? Search its RUC when you register it and ask to share it.").replace("{area}", userArea)
+              : t("Your profile has no area yet, so you only see the suppliers shared with every area. Ask an Admin to assign your area in Users.")}
           </div>
         )
       }
