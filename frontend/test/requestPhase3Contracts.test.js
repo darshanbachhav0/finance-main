@@ -10,11 +10,10 @@ test("RCO-FOR-001 extends the existing request wizard instead of introducing a p
   const page = source("../src/pages/RequestCreate.jsx");
   assert.match(page, /export default function RequestCreate/);
   assert.doesNotMatch(page, /FinancialRequestV2|OfficialRequest|CAPEXRequest|OPEXRequest/);
-  for (const section of ["RequestFormBlock", "blockInfo.items", "Supplier quotations", "BudgetRemainingSummary", "Review and submit"]) {
+  // One wizard in four steps: supplier, receipt, details, summary.
+  for (const section of ["Supplier details", "Receipt and automation", "Requirement details", "Summary and submit", "BudgetRemainingSummary", "<RequestReview "]) {
     assert.ok(page.includes(section), `Missing ${section}`);
   }
-  const blocks = source("../src/utils/requestFormBlocks.js");
-  for (const heading of ["What do you need?", "Why?", "Budget", "Items and amounts"]) assert.ok(blocks.includes(heading), `Missing block ${heading}`);
 });
 
 test("Solicitor CECO choices come from the authorized backend endpoint and lines inherit the header", () => {
@@ -28,25 +27,23 @@ test("Solicitor CECO choices come from the authorized backend endpoint and lines
 test("CAPEX and OPEX conditional sections use the approved enums and server project snapshot identifier", () => {
   const page = source("../src/pages/RequestCreate.jsx");
   assert.match(page, /form\.requestType === "CAPEX"/);
-  assert.match(page, /form\.requestType === "OPEX"/);
-  for (const value of ["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES", "ONE_OFF", "MONTHLY_RECURRING", "ANNUAL_RENEWAL"]) assert.ok(page.includes(value));
+  // OPEX keeps its frequency in step with the request's own frequency.
+  assert.match(page, /opexDetails", JSON\.stringify\(form\.requestType === "OPEX" \? \{ expenseFrequency: form\.frequency \}/);
+  for (const value of ["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"]) assert.ok(page.includes(value));
+  assert.match(source("../src/utils/options.js"), /requestFrequencies = \["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"\]/);
   assert.match(page, /projectSnapshot: \{ id: capex\.projectId/);
   assert.doesNotMatch(page, /projectSnapshot: \{[^}]*name:/);
 });
 
 test("structured quotation comparison links one evidence file per supplier and one radio recommendation", () => {
   const page = source("../src/pages/RequestCreate.jsx");
-  assert.match(page, /quotationPolicy\.minimumCount/);
-  assert.match(page, /name="recommended-quotation"/);
+  // The first quotation is the chosen supplier's and is the recommended one; others compare.
+  assert.match(page, /recommended: Boolean\(form\.supplier\)/);
   assert.match(page, /data\.append\("quotation", file\)/);
-  assert.match(page, /Supplier not found\? Open the official supplier proposal flow/);
   assert.match(page, /\["REJECTED", "INACTIVE"\]/);
-  // The supplier picker shows where quotations are not required, or when there is no quotation
-  // (A1 / B sent with only the invoice).
-  assert.match(page, /\(!quotationPolicy\.enabled \|\| !quotations\.some\(quotationHasData\)\) && <div className="official-subsection">/);
   // The supplier is required to save the request at all (Save draft too), not only to submit it.
-  assert.match(page, /if \(!form\.supplier && form\.flowType !== "C"\) \{\s*if \(!quotationPolicy\.enabled \|\| invoiceOnly\) next\.supplier = "Select a supplier\."/);
-  assert.match(page, /current\.some\(quotationHasData\) \? current : \[\]/);
+  assert.match(page, /next\.supplier = "Select the supplier or register a new one\."/);
+  assert.match(page, /: \["supplier", "details"\];/, "a saved draft checks the supplier and the details");
 });
 
 test("budget preview uses the backend service endpoint and sends no client-owned budget decision", () => {
@@ -59,7 +56,7 @@ test("budget preview uses the backend service endpoint and sends no client-owned
 
 test("Request Detail exposes approver-visible official fields, quotations, supplier status, and budget preview", () => {
   const page = source("../src/pages/RequestDetail.jsx");
-  for (const section of ["Requirement and justification", "CAPEX financial information", "OPEX financial information", "Supplier quotations", "Recommended supplier", "Budget preview"]) assert.ok(page.includes(section), `Missing ${section}`);
+  for (const section of ["Requirement and justification", "CAPEX financial information", "Supplier quotations", "Recommended supplier", "Budget preview", "<RequestSummaryFacts"]) assert.ok(page.includes(section), `Missing ${section}`);
   assert.match(page, /related\.budgetPreview/);
   assert.match(page, /supplier\?\.homologationStatus/);
   assert.match(page, /ProtectedAssetButton/);
@@ -75,9 +72,10 @@ test("all Phase 3 labels and validation codes participate in the shared English-
 test("official request layouts collapse to one column without page-level fixed widths at 390px", () => {
   const styles = source("../src/styles/global.css");
   assert.match(styles, /@media \(max-width: 400px\)/);
-  assert.match(styles, /\.quotation-grid \{ grid-template-columns: minmax\(0, 1fr\)/);
-  assert.match(styles, /\.official-line, \.quotation-card, \.budget-preview/);
-  assert.doesNotMatch(styles, /\.quotation-card[^}]*width:\s*\d+px/);
+  // Item lines and the budget preview tighten on small screens; the earlier form's quotation cards
+  // are gone (quotes are file uploads in the receipt step).
+  assert.match(styles, /\.official-line, \.budget-preview \{ padding: 11px; \}/);
+  assert.match(source("../src/styles/requestWizard.css"), /@media \(max-width: 640px\)/);
 });
 
 for (const item of tests) {

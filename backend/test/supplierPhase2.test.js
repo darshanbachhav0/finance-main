@@ -52,7 +52,8 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     const approve = (supplier, user = users.jefe, comments = "") => decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE", comments }, user, req });
     let sequence = 20691000000;
     const nextRuc = () => String(++sequence);
-    const nextCci = () => String(++sequence).padStart(20, "0");
+    // A CCI opens with its bank's entity code (BCP 002, BBVA 011, Banco de la Nación 018).
+    const nextCci = (prefix = "002") => `${prefix}${String(++sequence).padStart(17, "0")}`;
 
     async function completeSupplier(overrides = {}) {
       return Supplier.create({
@@ -126,11 +127,13 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       return supplier;
     }
 
-    await t.test("1-2. lookup-safe duplicate prevention and pending proposal without PRV", async () => {
+    await t.test("1-2. lookup-safe duplicate prevention; a new proposal gets the next PRV code at once", async () => {
       const ruc = nextRuc();
       const payload = { rucDni: ruc, legalName: "Laboratorios Clinicos UMA SAC", proposalJustification: "Nuevo servicio para Ciencias de la Salud." };
       const created = await createSupplierProposal({ payload, files: {}, user: users.solicitor, req });
-      assert.equal(created.supplier.supplierCode, undefined);
+      // Every registration is numbered in order when it is made; approval no longer assigns it.
+      assert.match(created.supplier.supplierCode, /^PRV-\d{4,}$/);
+      assert.equal((await Supplier.findById(created.supplier._id)).supplierCode, created.supplier.supplierCode);
       assert.equal(created.supplier.homologationStatus, "PENDING_VALIDATION");
       assert.equal(created.supplier.jefeApproval.decision, "PENDING");
       assert.equal(created.supplier.active, false);
@@ -151,14 +154,18 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       );
     });
 
-    await t.test("3-4. missing official documents and declarations return structured blockers", async () => {
+    await t.test("3-4. supporting documents and declarations no longer block approval; missing identity data still does", async () => {
+      // The proposal form no longer asks for the RUC file, representative ID, bank certificate or
+      // the two compliance declarations, so their absence is not a blocker.
       const supplier = await completeSupplier({ documents: [], declarations: { stateSanctions: { answer: "NOT_DECLARED" }, complianceModel: { answer: "NOT_DECLARED" } } });
-      const result = await evaluateSupplierHomologation(supplier);
-      const codes = result.issues.map((item) => item.code);
+      const codes = (await evaluateSupplierHomologation(supplier)).issues.map((item) => item.code);
       for (const code of ["MISSING_RUC_FILE", "MISSING_LEGAL_REP_ID", "MISSING_BANK_CERTIFICATE", "STATE_SANCTIONS_DECLARATION_INCOMPLETE", "COMPLIANCE_MODEL_DECLARATION_INCOMPLETE"]) {
-        assert.ok(codes.includes(code), `Expected blocker ${code}`);
+        assert.ok(!codes.includes(code), `${code} is no longer a blocker`);
       }
-      await assert.rejects(() => approve(supplier), (error) => Array.isArray(error.details.issues));
+      const incomplete = await completeSupplier({ personType: undefined, legalRepresentative: "" });
+      const blockers = (await evaluateSupplierHomologation(incomplete)).issues.map((item) => item.code);
+      assert.ok(blockers.includes("PERSON_TYPE_MISSING") && blockers.includes("LEGAL_REPRESENTATIVE_MISSING"));
+      await assert.rejects(() => approve(incomplete), (error) => Array.isArray(error.details.issues));
     });
 
     await t.test("5. risky declarations are Finance flags and never auto approve or reject", async () => {
@@ -320,7 +327,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     await t.test("13-17. multiple active accounts, pending start, preferred policy, CCI, and authorized verification", async () => {
       const supplier = await completeSupplier();
       const first = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BCP", accountType: "CURRENT", accountNumber: "191005500001", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
-      const second = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BBVA", accountType: "CURRENT", accountNumber: "00110550000000000002", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
+      const second = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BBVA", accountType: "CURRENT", accountNumber: "00110550000000000002", cci: nextCci("011"), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
       assert.equal(first.account.verificationStatus, "PENDING");
       assert.equal(await SupplierBankAccount.countDocuments({ supplier: supplier._id, active: true }), 2);
       await setPreferredSupplierBankAccount({ supplierId: supplier._id, accountId: first.account._id, user: users.accounting, req });
@@ -358,7 +365,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
     await t.test("20-21. detraction account requires Banco de la Nacion only when explicitly selected", async () => {
       const supplier = await completeSupplier();
       await assert.rejects(() => addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BCP", accountType: "DETRACTION", accountNumber: "000008800001", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req }), /Banco de la Nacion/);
-      const accepted = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BANCO_NACION", accountType: "DETRACTION", accountNumber: "000008800002", cci: nextCci(), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
+      const accepted = await addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BANCO_NACION", accountType: "DETRACTION", accountNumber: "000008800002", cci: nextCci("018"), currency: "PEN", accountHolderName: supplier.legalName }, user: users.accounting, req });
       assert.equal(accepted.account.bank, "BANCO_NACION");
       assert.equal(accepted.account.accountType, "DETRACTION");
       assert.equal(accepted.account.verificationStatus, "PENDING");

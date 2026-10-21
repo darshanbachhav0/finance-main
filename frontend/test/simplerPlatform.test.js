@@ -30,18 +30,16 @@ assert.equal(showCapexDetails({ total: 1000, threshold: 50000, capex: {} }), fal
 assert.equal(showCapexDetails({ total: 60000, threshold: 50000, capex: {} }), true);
 assert.equal(showCapexDetails({ total: 1000, threshold: 50000, capex: { assetCategory: "IT_HARDWARE" } }), true);
 const create = read("../src/pages/RequestCreate.jsx");
-assert.match(create, /<QuickRequestForm/, "new requests open the three-question form");
-assert.match(create, /setMode\("full"\)/, "anything the simple form does not ask opens the full form");
+// One request form: no "simple" and "full" versions to choose between.
+assert.doesNotMatch(create, /QuickRequestForm|setMode\(|Use the full form|openFullForm/, "one form, no full-form switch");
+assert.match(create, /changeTrack\(\{ route: "order" \}\)/, "who is paid and how decide the track");
 assert.match(create, /capex-details/, "CAPEX planning details are collapsible");
 assert.doesNotMatch(create, /\["nonApprovalRisk", "Risk if not approved is required\."\]/, "the risk if not approved is optional");
-// A quote or the invoice, at least one: both forms ask for it and count either.
-assert.match(create, /problems\.quote = "Attach a quote or the invoice \(at least one\)\."/);
-assert.match(create, /isQuoteOrInvoice\(rule\) \? quotedWithEvidence : 0/);
+// A quote or the receipt, at least one.
+assert.match(create, /next\.quote = "Attach the receipt or the supplier's quote \(at least one\)\."/);
 assert.match(create, /quotations\.filter\(quotationHasData\)\.map/, "an empty quotation card is not sent");
-const quickForm = read("../src/components/QuickRequestForm.jsx");
-assert.match(quickForm, /name="quick-route" value="order"/);
-assert.match(quickForm, /onAddQuote/, "more quotations can be added");
-assert.match(quickForm, /<InvoiceDropZone/);
+assert.match(create, /onClick=\{addQuote\}/, "more quotations can be added");
+assert.match(create, /<InvoiceDropZone/);
 
 // 2. "Invoice in, request out": one line per factura item when they add up to its totals.
 const invoice = { netAmount: 250, igvAmount: 45, totalAmount: 295, lines: [{ description: "Toner", quantity: 2, unitCode: "NIU", netAmount: 200, igvAmount: 36, totalAmount: 236 }, { description: "Delivery", quantity: 1, unitCode: "ZZ", netAmount: 50, igvAmount: 9, totalAmount: 59 }] };

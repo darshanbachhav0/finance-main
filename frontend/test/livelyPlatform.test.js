@@ -102,9 +102,10 @@ assert.equal(parseServerEvent(": ping"), null);
 const layout = source("../src/layouts/AppLayout.jsx");
 for (const piece of ["<PaymentDayBanner", "<GuidedTour", "<WhatsNewPanel", "useLiveEvents(", "data-tour=\"navigation\"", "data-tour=\"notifications\"", "import \"../styles/lively.css\";"]) assert.ok(layout.includes(piece), `AppLayout: ${piece}`);
 const detail = source("../src/pages/RequestDetail.jsx");
-for (const piece of ["<RequestJourney", "<RenditionCountdown", "<RequestComments", "RECORD_CHANGED_EVENT", "/requests/new?from="]) assert.ok(detail.includes(piece), `RequestDetail: ${piece}`);
+for (const piece of ["<RequestJourney", "<RenditionCountdown", "<RequestComments", "RECORD_CHANGED_EVENT"]) assert.ok(detail.includes(piece), `RequestDetail: ${piece}`);
+assert.ok(!detail.includes("/requests/new?from="), "RequestDetail: Repeat this request was removed");
 const create = source("../src/pages/RequestCreate.jsx");
-for (const piece of ["<InvoiceDropZone", "<InvoiceMatchStrip", "<TrackPicker", "/requests/invoice-preview", "copiedRequestForm"]) assert.ok(create.includes(piece), `RequestCreate: ${piece}`);
+for (const piece of ["<InvoiceDropZone", "<InvoiceMatchStrip", "<SupplierQuickRegister", "/requests/invoice-preview"]) assert.ok(create.includes(piece), `RequestCreate: ${piece}`);
 assert.ok(source("../src/pages/ApprovalInbox.jsx").includes("rowSwipe={rowSwipe}"), "approvals can be swiped on phones");
 assert.ok(source("../src/pages/Dashboard.jsx").includes("<PersonalStats"), "the dashboard greets with the person's own numbers");
 

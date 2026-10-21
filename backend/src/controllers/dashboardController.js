@@ -378,7 +378,7 @@ async function roleDetails(user, common) {
     const totals = queue.reduce((result, item) => ({ ...result, [item.currency]: (result[item.currency] || 0) + item.outstandingAmount }), {});
     const supplierIds = [...new Set(queue.map((item) => String(item.supplier?._id || item.request?.supplier || "")).filter(Boolean))];
     const supplierAccounts = new Map();
-    for (const account of await SupplierBankAccount.find({ supplier: { $in: supplierIds }, active: true, accountType: "CURRENT" })) {
+    for (const account of await SupplierBankAccount.find({ supplier: { $in: supplierIds }, active: true, accountType: { $in: ["CURRENT", "SAVINGS"] } })) {
       const key = String(account.supplier);
       supplierAccounts.set(key, [...(supplierAccounts.get(key) || []), account]);
     }

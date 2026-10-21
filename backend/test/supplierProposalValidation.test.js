@@ -28,7 +28,7 @@ test("multipart supplier proposals accept unfinished person type and independent
     assert.equal(withoutBank.body.data.homologationStatus, "PENDING_VALIDATION");
     assert.equal(withoutBank.body.data.active, false);
     for (const [ruc, accountCurrency] of [["20123456782", "PEN"], ["20123456783", "USD"]]) {
-      const result = await submit(ruc, { bankName: "BCP", accountType: "CURRENT", bankAccount: "1234567890", cci: "12345678901234567890", accountHolderName: "Test supplier", accountCurrency });
+      const result = await submit(ruc, { bankName: "BCP", accountType: "CURRENT", bankAccount: "1234567890", cci: "00245678901234567890", accountHolderName: "Test supplier", accountCurrency });
       assert.equal(result.status, 201, JSON.stringify(result));
       const supplier = await Supplier.findOne({ rucDni: ruc });
       const bank = await SupplierBankAccount.findOne({ supplier: supplier._id });

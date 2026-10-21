@@ -18,10 +18,10 @@ assert.ok(isEitherOf(invoice) && !isEitherOf(conformity));
 const read = (file) => fs.readFileSync(new URL(file, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const create = read("../src/pages/RequestCreate.jsx");
 const detail = read("../src/pages/RequestDetail.jsx");
-// New request (Track B): each invoice card says the other file also does, and the step accepts either.
-assert.match(create, /ruleForKind\(formPolicy\.documentRequirements, document\.kind\)/);
-assert.match(create, /presentCount\(rule, existingAttachments/);
-assert.match(create, /Required: this or \{other\}/);
+// New request: one receipt file, its XML or its factura PDF (or a fee receipt), is the invoice.
+assert.match(create, /const INVOICE_KINDS = \["XML", "PDF", "FEE_RECEIPT"\];/);
+assert.match(create, /const invoiceAttached = invoiceFiles\.length > 0 \|\| storedInvoice\.length > 0;/);
+assert.match(create, /<InvoiceDropZone check=\{invoiceCheck\} onFile=\{readInvoice\}/);
 assert.doesNotMatch(create, /mandatory XML \+ PDF/);
 // Request page: evidence counts either file; the A1 invoice form asks for one of them.
 assert.match(detail, /presentCount\(rule, attachments\)/);

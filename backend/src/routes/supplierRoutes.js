@@ -18,7 +18,10 @@ import {
   updateSupplier,
   updateSupplierProposalFields,
   validateTaxpayer,
-  verifyBankAccount
+  verifyBankAccount,
+  listDepartments,
+  updateDepartments,
+  requestAccess
 } from "../controllers/supplierController.js";
 
 import {
@@ -65,6 +68,12 @@ router.get(
   lookupSupplier
 );
 
+// The areas a supplier can be shared with (must stay above /:id).
+router.get(
+  "/departments",
+  listDepartments
+);
+
 /*
  * These two routes MUST remain above /:id.
  */
@@ -102,6 +111,22 @@ router.patch(
   proposeSupplier,
   uploadFields,
   updateSupplierProposalFields
+);
+
+router.put(
+  "/:id/departments",
+  authorize(
+    ROLES.ADMIN,
+    ROLES.ACCOUNTING
+  ),
+  updateDepartments
+);
+
+// A requester asks Accounting / Admin to share another area's supplier with their area.
+router.post(
+  "/:id/access-request",
+  proposeSupplier,
+  requestAccess
 );
 
 router.post(

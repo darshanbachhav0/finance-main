@@ -20,10 +20,11 @@ test("RCO-FOR-002 supplier workspace uses the existing shared UI and all officia
     "Commercial Contact",
     "Operations / Logistics Contact",
     "Commercial Conditions",
-    "Compliance Declarations",
-    "Mandatory Documents"
+    "Bank accounts"
   ]) assert.ok(form.includes(section), `Missing form section ${section}`);
-  for (const section of ["Banking Information", "Jefe Approval", "ERP Supplier Code", "Audit / History", "Homologation Readiness"]) {
+  // The declarations and the three "mandatory" documents were taken out of the proposal form.
+  for (const removed of ["Compliance Declarations", "Mandatory Documents", "Needed for homologation", "DeclarationField"]) assert.ok(!form.includes(removed), `Removed from the form: ${removed}`);
+  for (const section of ["Banking Information", "Areas", "Jefe Approval", "ERP Supplier Code", "Audit / History", "Homologation Readiness"]) {
     assert.ok(detail.includes(section), `Missing detail section ${section}`);
   }
 });

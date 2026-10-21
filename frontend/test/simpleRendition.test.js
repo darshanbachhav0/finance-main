@@ -59,7 +59,8 @@ assert.match(detail, /\{ id: "General", label: "Summary"[^}]*\}, \{ id: "Documen
 assert.match(detail, /<Section skip=\{simpleAdvance\} title="Documents and fiscal validation"/, "no invoice validation or document phases for the employee's advance");
 assert.match(detail, /\{!simpleAdvance && <div hidden=\{activeTab !== "Documents"\}><FinancialValidationSummary/);
 assert.match(detail, /<SimpleRenditionForm request=\{request\} onReload=\{load\} \/>/);
-assert.match(detail, /simpleAdvance && advanceOpen \? \(\s*<details className="action-more">/, "Repeat moves to More while the advance is open");
+// "Repeat this request" was removed from the request page.
+assert.doesNotMatch(detail, /Repeat this request|\/requests\/new\?from=/, "no Repeat action");
 const form = source("../src/components/rendition/SimpleRenditionForm.jsx");
 assert.match(form, /api\.post\("\/requests\/invoice-preview"/, "a factura XML or PDF fills the row");
 assert.match(form, /data\.append\("returnReceipt", slip\)/);

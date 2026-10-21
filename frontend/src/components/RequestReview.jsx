@@ -1,10 +1,12 @@
+import { AlertTriangle } from "lucide-react";
 import StatusBadge from "./StatusBadge.jsx";
+import PriorityBadge from "./PriorityBadge.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 import { formatIsoMonth } from "../utils/dateInput.js";
-import { expenseNatureLabels, flowTypeLabels, optionLabel, trackCRequestTypeLabels } from "../utils/options.js";
+import { bankAccountLabel } from "../utils/bankAccounts.js";
+import { expenseNatureLabels, flowTypeLabels, optionLabel, requestFrequencyLabels, trackCRequestTypeLabels } from "../utils/options.js";
 
-const frequencyLabels = { ONE_OFF: "One-off", MONTHLY_RECURRING: "Monthly recurring", EVERY_3_MONTHS: "Every 3 months", ANNUAL_RENEWAL: "Annual renewal" };
 const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierStatus = (supplier) => supplier?.homologationStatus || supplier?.status || "PENDING_VALIDATION";
 
@@ -21,36 +23,59 @@ function Item({ label, wide = false, children }) {
   return <div className={wide ? "wide" : undefined}><dt>{t(label)}</dt><dd>{children || "-"}</dd></div>;
 }
 
-// The last step of the request form: everything the approver will see, grouped by the step
-// where it was entered, each with a link back to that step.
-export default function RequestReview({ form, capex, opexFrequency, lines, quotations, quotationFiles, files, existingAttachments, masters, totals, budgetPreview, selectedSupplier, onEdit }) {
+// The last step of the request form ("Resumen y envío"): everything the approver will see, in the
+// order it was entered, each part with a link back to its step so it is corrected in place.
+export default function RequestReview({ form, capex, lines, quotations, quotationFiles, files, existingAttachments, masters, totals, budgetPreview, selectedSupplier, selectedAccount, invoice, onEdit }) {
   const { t, language } = useLanguage();
   const center = (id) => masters.costCenters.find((item) => item._id === id);
   const project = masters.projects.find((item) => item._id === capex.projectId);
   const trackC = form.flowType === "C";
-  const otherDocuments = existingAttachments.filter((item) => item.kind !== "QUOTATION").length + Object.values(files).flat().length;
+  const otherDocuments = existingAttachments.filter((item) => !["QUOTATION", "XML", "PDF", "FEE_RECEIPT"].includes(item.kind)).length
+    + Object.entries(files).filter(([key]) => !["xml", "pdf", "feeReceipt"].includes(key)).flatMap(([, chosen]) => chosen).length;
+  const quotesWithFile = quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length;
+  const mismatch = selectedAccount && selectedAccount.currency !== form.currency;
 
   return <div className="review-layout">
-    <Section title="Requirement" step="need" onEdit={onEdit}>
-      <dl className="detail-grid">
-        <Item label="Operational track">{t(optionLabel(form.flowType, flowTypeLabels))}</Item>
-        <Item label={trackC ? "Track C request type" : "CAPEX / OPEX"}>{trackC ? t(trackCRequestTypeLabels[form.requestType] || form.requestType) : t(form.requestType)}</Item>
-        <Item label="Expense nature">{t(optionLabel(form.expenseNature, expenseNatureLabels))}</Item>
-        <Item label="Priority">{t(form.priority)}</Item>
-        <Item label="Title" wide>{form.title}</Item>
-        <Item label="Detailed description" wide>{form.detailedDescription || form.description}</Item>
-        <Item label="Business justification" wide>{form.businessJustification}</Item>
-        <Item label="Risk if not approved" wide>{form.nonApprovalRisk}</Item>
-      </dl>
+    <Section title={trackC ? "Beneficiary" : "Supplier details"} step="supplier" onEdit={onEdit}>
+      {trackC
+        ? <dl className="detail-grid"><Item label="Request type">{t(trackCRequestTypeLabels[form.requestType] || form.requestType)}</Item><Item label="Paid to">{t("Your verified bank account")}</Item></dl>
+        : selectedSupplier
+          ? <dl className="detail-grid">
+            <Item label="Supplier" wide><strong>{supplierName(selectedSupplier)}</strong> <StatusBadge status={supplierStatus(selectedSupplier)} /></Item>
+            <Item label="PRV Code">{selectedSupplier.supplierCode}</Item>
+            <Item label="RUC">{selectedSupplier.rucDni}</Item>
+            <Item label="Account the supplier is paid into" wide>{selectedAccount ? bankAccountLabel(selectedAccount, t) : t("No account chosen")}</Item>
+            <Item label="Payment currency">{selectedAccount?.currency || form.currency}</Item>
+          </dl>
+          : <p>{t("No supplier selected.")}</p>}
+      {mismatch && <div className="inline-alert alert-warning"><AlertTriangle size={16} aria-hidden="true" /><span>{t("The account is in {account} and the request in {request}. Nothing is converted: choose an account in {request} or change the currency.").replace("{account}", selectedAccount.currency).replaceAll("{request}", form.currency)}</span></div>}
     </Section>
 
-    <Section title="Budget" step="budget" onEdit={onEdit}>
+    {!trackC && invoice && <Section title="Receipt" step="invoice" onEdit={onEdit}>
       <dl className="detail-grid">
-        <Item label="CECO">{center(form.requesterCostCenter) ? `${center(form.requesterCostCenter).code} - ${center(form.requesterCostCenter).name}` : ""}</Item>
-        <Item label="Issue date">{formatDate(form.issueDate, language)}</Item>
+        <Item label="Receipt">{invoice.attached ? invoice.number || t("Attached") : t("Pending")}</Item>
+        <Item label="Receipt issue date">{invoice.attached && invoice.issueDate ? formatDate(invoice.issueDate, language) : t("Pending")}</Item>
+        <Item label="Receipt total">{invoice.attached && invoice.totalAmount !== "" ? formatCurrency(invoice.totalAmount, invoice.currency || form.currency, language) : "-"}</Item>
+        <Item label="IGV">{invoice.attached && invoice.igvAmount !== "" ? formatCurrency(invoice.igvAmount, invoice.currency || form.currency, language) : "-"}</Item>
+        <Item label="Quotations">{quotations.length ? `${quotesWithFile}/${quotations.length}` : "0"}</Item>
+        {quotations.length > 1 && <Item label="Supplier selection reason" wide>{form.supplierSelectionReason}</Item>}
+      </dl>
+    </Section>}
+
+    <Section title="Requirement details" step="details" onEdit={onEdit}>
+      <dl className="detail-grid">
+        <Item label="Detailed description" wide>{form.detailedDescription || form.description}</Item>
+        <Item label="Business justification" wide>{form.businessJustification}</Item>
+        <Item label="Operational track">{t(optionLabel(form.flowType, flowTypeLabels))}</Item>
+        {!trackC && <Item label="CAPEX / OPEX">{t(form.requestType)}</Item>}
+        <Item label="Expense nature">{t(optionLabel(form.expenseNature, expenseNatureLabels))}</Item>
+        <Item label="Priority"><PriorityBadge priority={form.priority} /></Item>
+        <Item label="Frequency">{t(requestFrequencyLabels[form.frequency] || form.frequency)}</Item>
+        <Item label="Requirement date">{formatDate(form.issueDate, language)}</Item>
         <Item label="Request month">{formatIsoMonth(form.accountingPeriod) || form.accountingPeriod}</Item>
-        <Item label="Currency">{form.currency}</Item>
-        {form.requestType === "OPEX" && <Item label="Expense frequency">{t(frequencyLabels[opexFrequency] || opexFrequency)}</Item>}
+        <Item label="CECO">{center(form.requesterCostCenter) ? `${center(form.requesterCostCenter).code} - ${center(form.requesterCostCenter).name}` : ""}</Item>
+        {form.observations && <Item label="Additional observations" wide>{form.observations}</Item>}
+        {form.nonApprovalRisk && <Item label="Risk if not approved" wide>{form.nonApprovalRisk}</Item>}
         {form.requestType === "CAPEX" && <>
           <Item label="Project / PEP">{project ? `${project.code} - ${project.name}` : capex.projectPep}</Item>
           <Item label="Fixed asset category">{capex.assetCategory ? t(capex.assetCategory) : ""}</Item>
@@ -58,24 +83,13 @@ export default function RequestReview({ form, capex, opexFrequency, lines, quota
           <Item label="NPV / VAN amount">{capex.npvAmount !== "" ? formatCurrency(capex.npvAmount, capex.npvCurrency, language) : ""}</Item>
           <Item label="Payback">{capex.paybackValue !== "" ? `${capex.paybackValue} ${t(capex.paybackUnit === "YEARS" ? "Years" : "Months")}` : ""}</Item>
         </>}
-        <Item label="Budget status"><StatusBadge status={budgetPreview.status} /></Item>
       </dl>
     </Section>
 
-    <Section title="Items and totals" step="budget" onEdit={onEdit}>
+    <Section title="Items and totals" step="details" onEdit={onEdit}>
       <div className="review-lines">{lines.map((line, index) => <div key={line.clientId}><span>{index + 1}</span><div><strong>{line.itemDescription || t("Accounting line")}</strong><small>{center(line.costCenter) ? `${center(line.costCenter).code} - ${center(line.costCenter).name}` : ""}</small></div><strong>{formatCurrency(line.totalAmount, form.currency, language)}</strong></div>)}</div>
-      <div className="review-total"><span>{t("Total amount")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div>
-    </Section>
-
-    {!trackC && <Section title="Recommended supplier" step="supplier" onEdit={onEdit}>
-      {selectedSupplier
-        ? <div className="recommended-summary"><div><strong>{supplierName(selectedSupplier)}</strong><span>{selectedSupplier.rucDni}{selectedSupplier.supplierCode ? ` - ${selectedSupplier.supplierCode}` : ""}</span></div><StatusBadge status={supplierStatus(selectedSupplier)} /><p>{form.supplierSelectionReason || "-"}</p></div>
-        : <p>{t("No recommended supplier selected.")}</p>}
-      {quotations.length > 0 && <p className="section-note">{t("Quotation evidence")}: {quotations.filter((item) => item.attachment || quotationFiles[item.clientId]).length}/{quotations.length}</p>}
-    </Section>}
-
-    <Section title="Supporting documents" step="documents" onEdit={onEdit}>
-      <dl className="detail-grid"><Item label="Other documents">{String(otherDocuments)}</Item></dl>
+      <div className="review-total"><span>{t("Total amount")} ({form.currency})</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div>
+      <dl className="detail-grid"><Item label="Budget status"><StatusBadge status={budgetPreview.status} /></Item><Item label="Supporting documents">{String(otherDocuments)}</Item></dl>
     </Section>
   </div>;
 }

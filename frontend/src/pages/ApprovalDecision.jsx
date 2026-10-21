@@ -12,8 +12,12 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { celebrate } from "../utils/celebrate.js";
 import { formatIsoMonth } from "../utils/dateInput.js";
-import { formatCurrency } from "../utils/formatters.js";
+import { formatCurrency, formatDate } from "../utils/formatters.js";
 import { quickTrackText } from "../utils/quickRequest.js";
+import { requestFrequencyLabels } from "../utils/options.js";
+import { bankAccountLabel } from "../utils/bankAccounts.js";
+import PriorityBadge from "../components/PriorityBadge.jsx";
+import { receiptIssueDate } from "../components/RequestSummaryFacts.jsx";
 
 // One page, made for the phone, that the approval email's "Aprobar ahora" opens (after sign-in):
 // what is asked, by whom, for how much, the documents, who approved before, and three decisions -
@@ -113,7 +117,12 @@ export default function ApprovalDecision() {
         {request.detailedDescription && request.detailedDescription !== request.title && <p>{request.detailedDescription}</p>}
         <dl>
           <div><dt>{t("Requested by")}</dt><dd>{request.requester?.name || request.solicitor?.name || "-"}{request.requesterArea ? ` · ${request.requesterArea}` : ""}</dd></div>
+          <div><dt>{t("Priority")}</dt><dd><PriorityBadge priority={request.priority} /></dd></div>
+          <div><dt>{t("Frequency")}</dt><dd>{t(requestFrequencyLabels[request.frequency || request.opexDetails?.expenseFrequency || "ONE_OFF"])}</dd></div>
           {supplier && <div><dt>{t("Supplier")}</dt><dd>{supplier}</dd></div>}
+          {request.paymentAccount?.currency && <div><dt>{t("Paid into")}</dt><dd>{bankAccountLabel(request.paymentAccount, t)}{request.paymentAccount.currency !== request.currency && <span className="text-danger"> · {t("Currency differs from the request")}</span>}</dd></div>}
+          <div><dt>{t("Requirement date")}</dt><dd>{formatDate(request.issueDate, language)}</dd></div>
+          {request.flowType !== "C" && <div><dt>{t("Receipt issue date")}</dt><dd>{receiptIssueDate(request) ? formatDate(receiptIssueDate(request), language) : t("Pending")}</dd></div>}
           {request.businessJustification && <div><dt>{t("Why is it needed?")}</dt><dd>{request.businessJustification}</dd></div>}
           {centers.length > 0 && <div><dt>{t("Charged to")}</dt><dd>{centers.join(", ")}</dd></div>}
           <div><dt>{t("Month")}</dt><dd>{formatIsoMonth(request.accountingPeriod) || request.accountingPeriod || "-"}</dd></div>

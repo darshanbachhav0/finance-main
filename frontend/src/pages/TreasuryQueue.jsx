@@ -51,6 +51,9 @@ import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.
 import { PAYMENT_BLOCK_TEXT, paymentBlockFor } from "../utils/paymentBlock.js";
 import "../styles/treasury.css";
 import { todayIso } from "../utils/dateInput.js";
+import PriorityBadge from "../components/PriorityBadge.jsx";
+import { bankAccountLabel } from "../utils/bankAccounts.js";
+import { bankDisplayName } from "../../../shared/peruBanks.mjs";
 const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 
 const amountOf = (row) => Number(row.accountsPayable?.outstandingAmount ?? row.outstandingAmount ?? row.totalAmount ?? 0);
@@ -305,7 +308,9 @@ export default function TreasuryQueue({ historyOnly = false }) {
           : null;
         const eligible = accounts.filter((account) => account.currency === currency);
         const existing = eligible.find((account) => String(account._id) === String(current[payableId]));
-        const account = locked || existing || eligible.find((item) => item.preferred) || eligible[0];
+        // The account the requester chose comes first, then the supplier's preferred one.
+        const requested = eligible.find((item) => String(item._id) === String(row.requestedAccount?.accountId || ""));
+        const account = locked || existing || requested || eligible.find((item) => item.preferred) || eligible[0];
         const accountId = account?.bankAccountId || account?.employeeBankAccountId || account?._id;
         if (accountId) next[payableId] = String(accountId);
       }
@@ -548,19 +553,23 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const reprogramLetterRequired = reprogramRow?.accountsPayable?.bouncedPayment?.reasonCategory !== "TECHNICAL";
 
   const queueColumns = [
-    { key: "requestNumber", type: "code", label: "Request", sortable: false, render: (row) => <button type="button" className="link-button" onClick={() => setQuickViewId(requestIdOf(row))}>{row.requestNumber}</button> },
+    { key: "requestNumber", type: "code", label: "Request", sortable: false, render: (row) => <div className="primary-cell"><button type="button" className="link-button" onClick={() => setQuickViewId(requestIdOf(row))}>{row.requestNumber}</button>{row.priority && <PriorityBadge priority={row.priority} />}</div> },
     { key: "supplier", type: "name", label: "Supplier", sortable: false, render: (row) => <div className="primary-cell"><strong>{row.supplier?.legalName || row.supplier?.name || row.requester?.name || t("UMA collaborator")}</strong><span>{row.accountsPayable?.voucher?.series ? `${row.accountsPayable.voucher.series}-${row.accountsPayable.voucher.number}` : row.accountsPayable?.supplierIdentifierSnapshot || "-"}</span></div> },
     { key: "flowType", type: "code", label: "Track", getValue: (row) => row.accountsPayable?.flowType || row.flowType, render: (row) => <StatusBadge status={row.accountsPayable?.flowType || row.flowType} /> },
     { key: "priority", label: "Priority", getValue: (row) => row.accountsPayable?.paymentPriority, render: (row) => <StatusBadge status={row.accountsPayable?.paymentPriority || "NORMAL"} /> },
     { key: "account", primary: true, minWidth: "220px", label: "Payment destination snapshot", sortable: false, render: (row) => {
       const accounts = matchingAccounts(row);
+      // What the requester said: the supplier's account and its currency. A currency other than
+      // the payment's is flagged; nothing is ever converted.
+      const requested = row.requestedAccount;
+      const requestedNote = requested && <small className={requested.currencyMatches ? "requested-account" : "requested-account text-danger"}>{t("Requester chose")}: {bankAccountLabel(requested, t)}{!requested.currencyMatches && ` · ${t("Currency differs from this payment")}`}</small>;
       const payableId = String(payableIdOf(row));
       const locked = row.destinationLocked || row.paymentDestination;
       if (!accounts.length) {
         // Why it cannot be selected, and the supplier record where it is fixed.
         const block = paymentBlockFor(row, currency);
         const reason = block && Object.entries(block.params).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, value), t(PAYMENT_BLOCK_TEXT[block.code]));
-        return <div className="payment-block"><span className="blocked-inline"><AlertTriangle size={14} />{t("No eligible matching account")}</span>{reason && <small>{reason}</small>}{block?.href && <Link to={block.href} onClick={(event) => event.stopPropagation()}>{t("Open the supplier's bank accounts")}</Link>}</div>;
+        return <div className="payment-block"><span className="blocked-inline"><AlertTriangle size={14} />{t("No eligible matching account")}</span>{reason && <small>{reason}</small>}{requestedNote}{block?.href && <Link to={block.href} onClick={(event) => event.stopPropagation()}>{t("Open the supplier's bank accounts")}</Link>}</div>;
       }
       if (locked) {
         const account = accounts[0];
@@ -568,7 +577,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       }
       const selectedId = accountSelections[payableId];
       const selectedAccount = accounts.find((account) => String(account._id) === String(selectedId)) || accounts[0];
-      return <label className="table-account-select" onClick={(event) => event.stopPropagation()}><span className="sr-only">{t("Treasury Account Selection")}</span><select value={selectedId || ""} onChange={(event) => setAccountSelections((current) => ({ ...current, [payableId]: event.target.value }))}>{accounts.map((account) => <option key={account._id} value={account._id}>{account.preferred ? `${t("Preferred account")} - ` : ""}{account.bank} - {account.cci || account.accountNumber}</option>)}</select><small>{selectedAccount?.preferred ? <><Star size={11} />{t("Preferred account")}</> : t("Only verified eligible current accounts are listed.")}</small></label>;
+      return <label className="table-account-select" onClick={(event) => event.stopPropagation()}><span className="sr-only">{t("Treasury Account Selection")}</span><select value={selectedId || ""} onChange={(event) => setAccountSelections((current) => ({ ...current, [payableId]: event.target.value }))}>{accounts.map((account) => <option key={account._id} value={account._id}>{String(account._id) === String(requested?.accountId || "") ? `${t("Chosen by the requester")} - ` : account.preferred ? `${t("Preferred account")} - ` : ""}{bankDisplayName(account.bank, account.bankOtherName)} · {t(account.accountType === "SAVINGS" ? "Savings account" : "Current account")} - {account.cci || account.accountNumber}</option>)}</select><small>{selectedAccount?.preferred ? <><Star size={11} />{t("Preferred account")}</> : t("Only verified eligible accounts are listed.")}</small>{requestedNote}</label>;
     } },
     { key: "status", type: "status", label: "CXP status", getValue: (row) => row.accountsPayable?.status, render: (row) => <StatusBadge status={row.accountsPayable?.status} /> },
     { key: "paymentCycle", type: "date", label: "Payment cycle", sortable: false, getValue: (row) => row.accountsPayable?.paymentCycleDate, render: (row) => row.accountsPayable?.paymentCycleDate ? <span className="primary-cell"><strong>{formatDate(`${row.accountsPayable.paymentCycleDate}T12:00:00Z`)}</strong>{row.accountsPayable?.scheduleOverride?.reason && <small>{t("Off-cycle")}: {t(row.accountsPayable.scheduleOverride.reason)}</small>}</span> : "-" },
@@ -585,7 +594,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     {linkActive && <DeepLinkNotice title="Showing the payment linked from your notification" missing={linkMissing} missingDescription="This payment is no longer pending in any Treasury stage. It may already be paid and reconciled." clearLabel="Show all payments" onClear={deepLink.clear} />}
     <div hidden={historyOnly} className="stats-grid treasury-kpis"><StatCard label="Payable queue" value={queueTable.pagination.total} tone="warning" to="/treasury?tab=prepare" actionLabel="Prepare bank file" /><StatCard label="Missing bank details" value={missingBank} tone={missingBank ? "danger" : "success"} /><StatCard label="Payment confirmation" value={confirmationTable.pagination.total} tone="warning" to="/treasury?tab=confirm" actionLabel="Confirm payments" /><StatCard label="Bounced payments" value={bouncedTable.pagination.total} tone={bouncedTable.pagination.total ? "danger" : "success"} to="/treasury?tab=returned" actionLabel="Reprogram" /></div>
 
-    {missingBank > 0 && <div className="alert-strip error"><AlertTriangle size={20} /><div><strong>{t("Some payments are blocked")}</strong><p>{t("A payment needs a verified eligible current account, or the immutable employee reimbursement destination, before file generation.")}</p></div></div>}
+    {missingBank > 0 && <div className="alert-strip error"><AlertTriangle size={20} /><div><strong>{t("Some payments are blocked")}</strong><p>{t("A payment needs a verified eligible account, or the immutable employee reimbursement destination, before file generation.")}</p></div></div>}
 
     {historyOnly
       ? <div className="focus-tabs"><Link to="/treasury">{t("Payments")}</Link></div>

@@ -77,6 +77,7 @@ import "./notificationLinks.test.js";
 import "./globalSearch.test.js";
 
 import "./dashboardTasks.test.js";
+import "./platformImprovements.test.js";
 
 import "./sessionRefresh.test.js";
 

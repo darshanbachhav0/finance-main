@@ -1,0 +1,54 @@
+/* The four-step request form (pages/RequestCreate.jsx): supplier, receipt, details, summary. */
+
+.four-step-wizard .wizard-step { display: grid; gap: var(--space-4); }
+.wizard-section { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-panel); box-shadow: var(--shadow-sm); }
+.wizard-section > header { display: flex; align-items: flex-start; gap: var(--space-3); }
+.wizard-section > header > div { flex: 1 1 auto; min-width: 0; }
+.wizard-section > header h3 { margin: 0; color: var(--gray-950); font-size: var(--font-lg); }
+.wizard-section > header p { margin: 4px 0 0; color: var(--gray-600); font-size: var(--font-sm); }
+.field-static { display: block; padding: 8px 0; color: var(--gray-900); font-size: var(--font-sm); }
+.compact-choices { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+/* Step 1: the supplier chosen and the account it is paid into. */
+.selected-supplier-card { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); background: var(--gray-50); }
+.selected-supplier-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.selected-supplier-head > div { display: grid; gap: 2px; min-width: 0; }
+.selected-supplier-head span { color: var(--gray-600); font-size: var(--font-xs); }
+.account-choices { display: grid; gap: var(--space-2); margin: 0; padding: 0; border: 0; }
+.account-choices legend { display: flex; align-items: center; gap: 6px; margin-bottom: var(--space-2); color: var(--gray-800); font-size: var(--font-sm); font-weight: 700; }
+.account-choice { position: relative; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--gray-300); border-radius: var(--radius-md); background: var(--surface-panel); cursor: pointer; }
+.account-choice > span { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+.account-choice small { color: var(--gray-600); font-size: var(--font-xs); overflow-wrap: anywhere; }
+.account-choice input { accent-color: var(--accent); }
+.account-choice.is-selected { border-color: var(--uma-primary); background: var(--accent-soft); }
+.account-choice:focus-within { outline: 2px solid var(--uma-primary); outline-offset: 2px; }
+
+/* Step 2: the receipt read automatically, checked by the requester. */
+.receipt-files { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.receipt-file { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--gray-200); border-radius: var(--radius-pill); color: var(--gray-800); background: var(--gray-50); font-size: var(--font-xs); }
+.receipt-review { display: grid; gap: var(--space-3); }
+.receipt-review-note { margin: 0; color: var(--gray-700); font-size: var(--font-xs); }
+.receipt-pending { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); border: 1px dashed var(--gray-300); border-radius: var(--radius-md); color: var(--gray-700); }
+.receipt-pending > div { display: grid; gap: 2px; }
+.receipt-pending span { font-size: var(--font-xs); }
+
+/* Step 3: priority as three buttons. */
+.priority-control label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px; border-radius: var(--radius-xs); color: var(--gray-700); font-size: var(--font-xs); font-weight: 700; cursor: pointer; }
+.priority-control label::before { width: 8px; height: 8px; border-radius: 50%; background: var(--gray-400); content: ""; }
+.priority-control label[data-level="alta"]::before { background: var(--red-700); }
+.priority-control label[data-level="media"]::before { background: var(--amber-700); }
+.priority-control label[data-level="baja"]::before { background: var(--green-700); }
+.priority-control label.active { color: var(--gray-950); background: var(--surface-panel); box-shadow: var(--shadow-sm); }
+.priority-control label:has(input:focus-visible) { outline: 2px solid var(--uma-primary); outline-offset: 2px; }
+
+/* Step 1 inline supplier registration. */
+.supplier-quick-register { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--surface-panel); }
+.supplier-quick-register > header { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--accent); }
+.supplier-quick-register > header > div { display: grid; flex: 1 1 auto; gap: 2px; color: var(--gray-900); }
+.supplier-quick-register h4 { margin: 0; font-size: var(--font-md); }
+.supplier-quick-register header small { color: var(--gray-600); font-size: var(--font-xs); }
+
+@media (max-width: 640px) {
+  .wizard-section { padding: var(--space-3); }
+  .account-choice { align-items: flex-start; flex-wrap: wrap; }
+}

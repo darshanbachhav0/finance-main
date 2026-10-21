@@ -1,3 +1,5 @@
+import { PERU_BANK_CODES } from "../../../shared/peruBanks.mjs";
+
 export const requestTypes = [
   "OPEX",
   "CAPEX",
@@ -95,9 +97,20 @@ export const expenseNatures = [
   "REIMBURSEMENT_LIQUIDATION"
 ];
 
+// The expense types a new request offers. Petty cash and reimbursement are not expense types of
+// their own: they are requested in Track C ("Me": an advance to render or a reimbursement), so
+// they stay only for older requests, filters and reports.
+export const creationExpenseNatures = expenseNatures.filter((item) => !["PETTY_CASH", "REIMBURSEMENT_LIQUIDATION"].includes(item));
+
 export const requestPriorities = ["BAJA", "MEDIA", "ALTA"];
+export const requestPriorityLabels = { ALTA: "High", MEDIA: "Medium", BAJA: "Low" };
+
+// How often the need recurs (recorded with the request; nothing is repeated automatically).
+export const requestFrequencies = ["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"];
+export const requestFrequencyLabels = { ONE_OFF: "Once", MONTHLY_RECURRING: "Monthly", EVERY_3_MONTHS: "Every 3 months", ANNUAL_RENEWAL: "Yearly" };
 export const approvalLevels = ["AREA_DIRECTOR", "VICE_RECTOR", "RECTORATE", "GENERAL_MANAGEMENT"];
-export const banks = ["BCP", "BBVA", "INTERBANK", "SCOTIABANK"];
+// Every beneficiary bank (shared/peruBanks.mjs, the SBS list).
+export const banks = PERU_BANK_CODES;
 export const roles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "ManagementViewer"];
 
 // Extra grants beyond a role's default set - an exception, not the everyday path. Only

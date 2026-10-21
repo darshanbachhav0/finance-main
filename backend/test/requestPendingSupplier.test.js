@@ -80,7 +80,7 @@ test("a request carrying a supplier that waits for its proposer's jefe", { timeo
       const incomplete = await requestWith(await waitingSupplier({ complete: false }));
       const missing = (await getApprovalDecisionOptions(incomplete._id, jefe)).supplierApproval;
       assert.equal(missing.ready, false);
-      assert.ok(missing.issues.some((issue) => issue.code === "MISSING_RUC_FILE"));
+      assert.ok(missing.issues.some((issue) => issue.code === "PERSON_TYPE_MISSING"));
       assert.equal((await getApprovalDecisionOptions(ready._id, requester)).supplierApproval, null, "only someone who can approve sees it");
     });
 

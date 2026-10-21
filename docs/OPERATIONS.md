@@ -385,6 +385,25 @@ npm run migrate:retired-roles           # dry run: what would move
 npm run migrate:retired-roles:apply     # apply
 ```
 
+**Request / supplier improvements (October 2026).** The new fields need no migration to work:
+requests saved from now on carry priority rank, frequency, the chosen account and the receipt data,
+and suppliers registered from now on get their PRV code and their requester's area. For existing
+records, from `backend` with the target `MONGODB_URI` and after a backup:
+
+```powershell
+npm run migrate:platform-improvements                                   # dry run: what would change
+npm run migrate:platform-improvements:apply                             # PRV codes, priority rank, frequency, DOC numbers
+node scripts/migratePlatformImprovements.js --apply --assign-areas      # also give suppliers their areas
+```
+
+It only fills what is missing: suppliers without a PRV code get the next codes (oldest first, after
+the highest code in use), requests get their priority rank and frequency, and generated files get a
+`DOC-YYYY-#####` number in creation order. `--assign-areas` gives each supplier without areas the
+areas of the requesters who used it and of its proposer — this changes what requesters see, so run
+it deliberately; until then every existing supplier stays shared with every area. Running it again
+changes nothing. Users whose area is empty or "General" only see shared suppliers: set their area in
+Users first.
+
 Migration reports are written under `backend/migration-reports`. Every migration script no-ops if
 its own key already exists in the `migrationruns` collection, so re-running an already-applied
 migration is always safe. Back up first; ambiguous historical records are reported for manual review

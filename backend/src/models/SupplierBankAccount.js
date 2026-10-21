@@ -17,6 +17,8 @@ const supplierBankAccountSchema = new mongoose.Schema(
   {
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier", required: true },
     bank: { type: String, enum: BENEFICIARY_BANKS, required: true },
+    // The bank's name when it is not in the list (bank OTHER, "Otro / No disponible").
+    bankOtherName: { type: String, trim: true, default: "" },
     currency: { type: String, enum: CURRENCY, required: true, default: "PEN" },
     accountType: { type: String, enum: SUPPLIER_ACCOUNT_TYPES, default: "CURRENT", required: true },
     accountHolderName: { type: String, trim: true, default: "" },
@@ -55,6 +57,10 @@ supplierBankAccountSchema.pre("validate", function normalizeBankData() {
   if (this.validTo && this.validFrom && this.validTo < this.validFrom) {
     this.invalidate("validTo", "Valid-to date cannot be earlier than valid-from date.");
   }
+  if (this.bank === "OTHER" && !this.bankOtherName) {
+    this.invalidate("bankOtherName", "Enter the name of the bank.");
+  }
+  if (this.bank !== "OTHER") this.bankOtherName = "";
   if (this.accountType === "DETRACTION" && this.bank !== "BANCO_NACION") {
     this.invalidate("bank", "Detraction accounts must use Banco de la Nacion.");
   }

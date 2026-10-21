@@ -46,6 +46,8 @@
     "migrate:org-roster:apply": "npm run migrate:org-roster:apply --workspace backend",
     "migrate:document-phases": "npm run migrate:document-phases --workspace backend",
     "migrate:document-phases:apply": "npm run migrate:document-phases:apply --workspace backend",
+    "migrate:platform-improvements": "npm run migrate:platform-improvements --workspace backend",
+    "migrate:platform-improvements:apply": "npm run migrate:platform-improvements:apply --workspace backend",
     "import:ceco": "npm run import:ceco --workspace backend",
     "import:ceco:apply": "npm run import:ceco:apply --workspace backend",
     "import:emails": "npm run import:emails --workspace backend --",

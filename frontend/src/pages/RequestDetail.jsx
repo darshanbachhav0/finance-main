@@ -12,7 +12,6 @@ import {
   BookOpenCheck,
   Check,
   CheckCircle2,
-  Copy,
   Download,
   Eye,
   FileCheck2,
@@ -62,8 +61,11 @@ import {
   expenseNatureLabels,
   flowTypeLabels,
   optionLabel,
+  requestFrequencyLabels,
   requestTypeLabels
 } from "../utils/options.js";
+import PriorityBadge from "../components/PriorityBadge.jsx";
+import RequestSummaryFacts from "../components/RequestSummaryFacts.jsx";
 
 import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
 import { invoiceMismatchLines } from "../utils/validationMessages.js";
@@ -119,7 +121,6 @@ function entityName(value, fallback = "-") {
 }
 
 // Labels for the values RequestCreate stores in opexDetails.expenseFrequency.
-const opexFrequencyLabels = { ONE_OFF: "One-off", MONTHLY_RECURRING: "Monthly recurring", EVERY_3_MONTHS: "Every 3 months", ANNUAL_RENEWAL: "Annual renewal" };
 
 // capexDetails.projectSnapshot carries code and name once the backend resolves the project.
 function capexProjectLabel(capexDetails = {}) {
@@ -547,8 +548,6 @@ export default function RequestDetail() {
     : null;
   const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && (permissions.canObserve || permissions.canReturn), permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
   const StickyIcon = stickyAction?.icon;
-  // "Repeat this request": a new draft with the same need, supplier and amounts (RequestCreate ?from=).
-  const canRepeat = ["Admin", "Solicitor"].includes(user.role) && isOwner && request.status !== "BORRADOR";
   const requestDescription = request.flowType === "C"
     ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
     : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
@@ -576,6 +575,7 @@ export default function RequestDetail() {
         <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
       </dl>
+      <RequestSummaryFacts request={request} vouchers={related.sunatVouchers} />
       <RequestJourney request={request} payables={related.accountsPayable} activeStep={activeApprovalStep} orderApplies={related.procurementReadiness?.applicable !== false} viewerId={user._id} viewerRole={user.role} viewerName={user.name} />
       {simpleAdvance ? <AdvanceRenditionCard request={request} onOpen={openReceipts} /> : <RenditionCountdown request={request} mine={isOwner} onOpen={openReceipts} />}
       {step && !step.mine && <NextStepCard step={step} request={request} />}
@@ -621,12 +621,14 @@ export default function RequestDetail() {
               <Definition label="Track">{t(flowTypeLabels[request.flowType] || request.flowType)}</Definition>
               <Definition label="Expense nature">{t(optionLabel(request.expenseNature, expenseNatureLabels))}</Definition>
               <Definition label="Area / School">{request.schoolOrDepartment || request.requesterArea || request.requestingArea || "-"}</Definition>
-              <Definition label="Issue date">{formatDate(request.issueDate, language)}</Definition>
+              <Definition label="Requirement date">{formatDate(request.issueDate, language)}</Definition>
               <Definition label="Accounting period">{request.accountingPeriod}</Definition>
-              <Definition label="Priority">{t(request.priority || "-")}</Definition>
+              <Definition label="Priority"><PriorityBadge priority={request.priority} /></Definition>
+              <Definition label="Frequency">{t(requestFrequencyLabels[request.frequency || request.opexDetails?.expenseFrequency || "ONE_OFF"])}</Definition>
               <Definition label="Currency">{request.currency}</Definition>
               <Definition label="Business justification">{request.businessJustification || request.detailedDescription || request.description || "-"}</Definition>
               <Definition label="Risk if not approved">{request.nonApprovalRisk || "-"}</Definition>
+              {request.observations && <Definition label="Additional observations">{request.observations}</Definition>}
             </DefinitionGrid>
           </Section>
 
@@ -638,14 +640,6 @@ export default function RequestDetail() {
                 <Definition label="Useful life (years)">{hasValue(request.capexDetails?.usefulLifeYears) ? request.capexDetails.usefulLifeYears : "-"}</Definition>
                 <Definition label="NPV / VAN amount">{hasValue(request.capexDetails?.npv?.amount) ? formatCurrency(request.capexDetails.npv.amount, request.capexDetails.npv.currency || request.currency, language) : "-"}</Definition>
                 <Definition label="Payback">{hasValue(request.capexDetails?.payback?.value) ? `${request.capexDetails.payback.value} ${t(request.capexDetails.payback.unit === "YEARS" ? "Years" : "Months")}` : "-"}</Definition>
-              </DefinitionGrid>
-            </Section>
-          )}
-
-          {request.requestType === "OPEX" && (
-            <Section title="OPEX financial information" description="Operating expense frequency and controlled recurrence.">
-              <DefinitionGrid>
-                <Definition label="Expense frequency">{request.opexDetails?.expenseFrequency ? t(opexFrequencyLabels[request.opexDetails.expenseFrequency] || request.opexDetails.expenseFrequency) : "-"}</Definition>
               </DefinitionGrid>
             </Section>
           )}
@@ -1002,7 +996,7 @@ export default function RequestDetail() {
         </div>
 
         <aside className="request-detail-side" id="request-actions">
-          {(canRepeat || permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
+          {(permissions.modifiable || permissions.deletable || permissions.canWithdraw || permissions.canApprove || permissions.canCommitBudget || permissions.canIssueOrder || permissions.canClose || permissions.canVoid) && (
             <div className="workspace-panel action-panel">
               <div className="section-heading"><div><h3>{t("Available actions")}</h3></div></div>
               {permissions.canWithdraw && (
@@ -1040,20 +1034,6 @@ export default function RequestDetail() {
               {permissions.canClose && (
                 <button type="button" className="primary-button" onClick={confirmClose}><CheckCircle2 size={16} /><span>{t("Close request")}</span></button>
               )}
-              {canRepeat && (simpleAdvance && advanceOpen ? (
-                <details className="action-more">
-                  <summary>{t("More")}</summary>
-                  <div className="action-item">
-                    <div><strong>{t("Repeat this request")}</strong><span>{t("Starts a new draft with the same need, supplier and amounts. Attach this time's documents.")}</span></div>
-                    <div className="action-item-buttons"><Link className="secondary-button" to={`/requests/new?from=${id}`}><Copy size={16} /><span>{t("Repeat")}</span></Link></div>
-                  </div>
-                </details>
-              ) : (
-                <div className="action-item">
-                  <div><strong>{t("Repeat this request")}</strong><span>{t("Starts a new draft with the same need, supplier and amounts. Attach this time's documents.")}</span></div>
-                  <div className="action-item-buttons"><Link className="secondary-button" to={`/requests/new?from=${id}`}><Copy size={16} /><span>{t("Repeat")}</span></Link></div>
-                </div>
-              ))}
               {(permissions.canVoid || permissions.deletable) && <div className="action-panel-danger">
               {permissions.deletable && (
                 <button

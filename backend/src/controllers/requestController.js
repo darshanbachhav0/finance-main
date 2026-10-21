@@ -93,7 +93,7 @@ export const previewRequestInvoice = asyncHandler(async (req, res) => {
   try {
     const file = req.files?.xml?.[0] || req.files?.pdf?.[0];
     if (!file) throw new AppError(422, "Upload the invoice XML or its factura PDF.", { missing: ["XML", "PDF"] }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
-    res.json({ data: await previewInvoiceForRequest(file.path) });
+    res.json({ data: await previewInvoiceForRequest(file.path, { user: req.user }) });
   } finally {
     await Promise.all(Object.values(req.files || {}).flat().map((file) => fs.rm(file.path, { force: true })));
   }

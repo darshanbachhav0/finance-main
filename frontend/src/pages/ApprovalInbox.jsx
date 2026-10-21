@@ -19,7 +19,8 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { flowTypes, requestTypes } from "../utils/options.js";
+import { flowTypes, requestPriorityLabels, requestTypes } from "../utils/options.js";
+import PriorityBadge from "../components/PriorityBadge.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 
 // Mirrors MAX_BULK_APPROVALS in backend/src/services/approvalService.js.
@@ -281,7 +282,8 @@ export default function ApprovalInbox() {
           selection={{ selected: selectedIds, onChange: setSelectedIds, isRowSelectable: (row) => hasAction(row, "APPROVE") }}
           filters={[
             { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes.filter((item) => item !== "A2") },
-            { key: "requestType", label: "types", allLabel: "All types", options: requestTypes }
+            { key: "requestType", label: "types", allLabel: "All types", options: requestTypes },
+            { key: "priority", label: "priorities", allLabel: "All priorities", options: ["ALTA", "MEDIA", "BAJA"].map((value) => ({ value, label: requestPriorityLabels[value] })) }
           ]}
           searchPlaceholder="Search request, supplier, or solicitor..."
           onRowClick={(row) => setQuickViewId(row._id)}
@@ -294,6 +296,7 @@ export default function ApprovalInbox() {
           ]}
           columns={[
             { key: "requestNumber", type: "name", primary: true, label: "Request", render: (row) => <div className="primary-cell"><Link to={`/requests/${row._id}`}>{row.requestNumber}</Link><span>{row.title || row.description || ""}</span></div> },
+            { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "MEDIA"]), render: (row) => <PriorityBadge priority={row.priority} /> },
             { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.legalName || row.supplier?.name || (row.flowType === "C" ? t("No supplier (Track C)") : "-") },
             { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => { const covering = activeStepOf(row)?.coveringForSnapshot?.name; return covering ? <span className="primary-cell"><span>{t(row.approvalStage || "AREA_DIRECTOR")}</span><small>{t("on behalf of {name}").replace("{name}", covering)}</small></span> : t(row.approvalStage || "AREA_DIRECTOR"); } },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },

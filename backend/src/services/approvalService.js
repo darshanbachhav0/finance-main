@@ -158,7 +158,7 @@ export async function listApprovalInbox(queryParams, user) {
   }
   if (queryParams.stage) query.approvalStage = queryParams.stage;
   if (queryParams.requestType) query.requestType = queryParams.requestType;
-  if (queryParams.priority) query.priority = queryParams.priority;
+  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => value.trim().toUpperCase()).filter(Boolean) };
   if (queryParams.search) {
     const search = new RegExp(escapedRegex(queryParams.search), "i");
     const [supplierIds, userIds] = await Promise.all([
@@ -178,7 +178,9 @@ export async function listApprovalInbox(queryParams, user) {
   // visibility clauses above still apply, so a link never exposes someone else's approval.
   withDeepLink(query, queryParams, { request: "_id" });
   const { page, pageSize, skip } = parsePagination(queryParams);
-  const sort = parseSort(queryParams, ["requestNumber", "requestType", "priority", "approvalStage", "status", "totalPENEquivalent", "approvalDueAt", "createdAt"], { approvalDueAt: 1, createdAt: 1 });
+  let sort = parseSort(queryParams, ["requestNumber", "requestType", "priority", "approvalStage", "status", "totalPENEquivalent", "approvalDueAt", "createdAt"], { approvalDueAt: 1, createdAt: 1 });
+  // Priority sorts Alta > Media > Baja (its rank), the oldest due first within each.
+  if (sort.priority) sort = { priorityRank: sort.priority, approvalDueAt: 1, createdAt: 1 };
   const [requests, total, summaryRows] = await Promise.all([
     FinancialRequest.find(query).select(requestListSelect).populate(requestListPopulate).sort(sort).skip(skip).limit(pageSize),
     FinancialRequest.countDocuments(query),
