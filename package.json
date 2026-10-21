@@ -54,7 +54,9 @@
     "import:emails:apply": "npm run import:emails:apply --workspace backend --",
     "sunat:padron:index": "npm run sunat:padron:index --workspace backend",
     "sunat:padron:sync": "npm run sunat:padron:sync --workspace backend",
-    "sunat:padron:sync:force": "npm run sunat:padron:sync:force --workspace backend"
+    "sunat:padron:sync:force": "npm run sunat:padron:sync:force --workspace backend",
+    "migrate:approval-optimization": "npm run migrate:approval-optimization --workspace backend",
+    "migrate:approval-optimization:apply": "npm run migrate:approval-optimization:apply --workspace backend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

@@ -32,7 +32,7 @@ import { createMassUploadBatch, processMassUploadBatch } from "../services/batch
 import { closeFinancialRequest, submitFinancialRequest } from "../services/requestService.js";
 import { defaultQuotationPolicy, hasInvoiceEvidence } from "../services/documentRuleService.js";
 import { getSunatPadronStatus } from "../services/sunatPadronService.js";
-import { ensureSpotCategories, pendingDetractionAmount } from "../services/detractionService.js";
+import { confirmAccountingDetraction, ensureSpotCategories, pendingDetractionAmount } from "../services/detractionService.js";
 import { requiresPurchaseOrder } from "../services/procurementReadinessService.js";
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
 import { reviewRendition, submitRendition } from "../services/renditionService.js";
@@ -1325,7 +1325,7 @@ async function moveToAccounting(request, users, sequence, accountNumber) {
   const account = await ExpenseType.findOne({ accountNumber }).select("_id");
   await processAccountsPayable({
     requestId: current._id,
-    payload: { ...accountingPayload(current, sequence, accountNumber), accountingAccount: account?._id },
+    payload: { ...accountingPayload(current, sequence, accountNumber), spotCategoryCode: sequence === 30020 ? "020" : "", accountingAccount: account?._id },
     user: users.accounting,
     req: fakeReq
   });
@@ -1345,6 +1345,9 @@ async function moveToBankFile(request, users, sequence, accountNumber, { payToda
     REQUEST_STATUS.RECONCILED,
     REQUEST_STATUS.CLOSED
   ].includes(current.status)) return current;
+  for (const payable of await AccountsPayable.find({ request: current._id, status: { $in: ["OPEN", "SCHEDULED"] } })) {
+    if (payable.flowType !== "C" && !payable.detraction?.confirmedAt) await confirmAccountingDetraction({ id: payable._id, categoryCode: sequence === 30020 ? "020" : "", user: users.accounting, req: fakeReq });
+  }
   await generatePaymentBatch({
     requestIds: [current._id.toString()],
     bank: "BBVA",

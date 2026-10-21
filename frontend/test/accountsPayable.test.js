@@ -11,7 +11,7 @@ const detail = read("../src/components/payables/PayableDetail.jsx");
 // view is in the URL and a notification link shows every view.
 for (const view of ["open", "due", "bounced", "paid", "all", "credits"]) assert.match(page, new RegExp(`\\["${view}", "`), `${view} tab`);
 assert.match(page, /count: id === "credits" \? creditCount : counts\[id\]/);
-assert.match(page, /fixedParams: \{ \.\.\.deepLink\.link, view: listView \}/);
+assert.match(page, /fixedParams: \{ \.\.\.deepLink\.link, view: listView,/);
 assert.match(page, /const listView = deepLink\.active \? "all"/);
 assert.match(page, /searchParams\.get\("view"\)/);
 assert.match(page, /<SupplierCreditsPanel table=\{creditTable\}/, "supplier credits are a tab, not a second table below");

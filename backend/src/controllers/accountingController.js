@@ -95,6 +95,7 @@ export const recoverCredit = asyncHandler(async (req, res) => {
 
 export const listAccountsPayable = asyncHandler(async (req, res) => {
   const query = {};
+  if (req.query.detractionReview === "true") Object.assign(query, { flowType: { $ne: "C" }, supplier: { $ne: null }, status: { $in: ["OPEN", "SCHEDULED", "PARTIALLY_PAID"] }, "detraction.confirmedAt": null, "voucher.voucherType": { $nin: ["ANTICIPO", "RECIBO", "RECIBO_HONORARIOS", "RHE", "RECIBO_POR_HONORARIOS"] } });
   if (req.query.currency) query.currency = req.query.currency;
   if (req.query.supplier) query.supplier = req.query.supplier;
   if (req.query.flowType) query.flowType = req.query.flowType;
@@ -134,6 +135,7 @@ export const listAccountsPayable = asyncHandler(async (req, res) => {
       .populate("sourceBatch", "batchCode status")
       .populate("provisionJournal paymentJournal")
       .populate("paymentBatch", "batchNumber bank currency paymentDate status")
+      .populate("detraction.confirmedBy", "name")
       .sort(sort).skip(skip).limit(pageSize),
     AccountsPayable.countDocuments(query),
     AccountsPayable.aggregate([

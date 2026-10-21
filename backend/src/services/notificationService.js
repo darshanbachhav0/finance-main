@@ -103,8 +103,9 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
   return notification;
 }
 
-export async function notifyRoles({ once = false, roles, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas }) {
+export async function notifyRoles({ once = false, roles, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas, excludeUserId }) {
   const query = { active: true, role: { $in: roles } };
+  if (excludeUserId) query._id = { $ne: excludeUserId };
   if (approvalLevel) query.approvalLevel = approvalLevel;
   if (areas?.length) query.$or = [{ area: { $in: areas } }, { approvalAreas: { $in: [...areas, "*"] } }];
   const users = await User.find(query).select("_id");
@@ -133,14 +134,14 @@ export async function resolveRequestNotifications(requestId) {
 }
 
 export async function listUserNotifications(userId, { unreadOnly = false, limit = 50 } = {}) {
-  const query = { user: userId, resolvedAt: null };
+  const query = { user: userId, resolvedAt: null, type: { $ne: "SUPPLIER_APPROVAL_PENDING" } };
   if (unreadOnly) query.readAt = null;
   const pageSize = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 50));
   return Notification.find(query).sort({ readAt: 1, createdAt: -1 }).limit(pageSize);
 }
 
 export async function countUnreadNotifications(userId) {
-  return Notification.countDocuments({ user: userId, resolvedAt: null, readAt: null });
+  return Notification.countDocuments({ user: userId, resolvedAt: null, readAt: null, type: { $ne: "SUPPLIER_APPROVAL_PENDING" } });
 }
 
 export async function markNotificationRead(id, userId) {

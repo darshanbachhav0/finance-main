@@ -20,9 +20,9 @@ assert.ok(!quickView.match(/editable[^;]+RECHAZADO/), "Rejected requests must no
 const treasury = read("../src/pages/TreasuryQueue.jsx");
 // New files are BBVA only: the source bank is stated, never an editable control.
 assert.ok(!/<(select|input)[^>]*value=\{bank\}/.test(treasury), "the source bank cannot be changed");
-assert.ok(treasury.includes("New payment files use BBVA."));
+assert.ok(treasury.includes('useState("BBVA")'));
 assert.ok(treasury.includes('const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"]'));
-assert.ok(treasury.includes("Beneficiary accounts may use another bank through CCI"));
+assert.ok(treasury.includes("Destination bank"));
 
 const approvals = read("../src/pages/ApprovalInbox.jsx");
 assert.ok(approvals.includes("row.allowedActions") && approvals.includes('hasAction(row, "APPROVE")'));

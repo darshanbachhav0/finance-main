@@ -1,3 +1,5 @@
+import PaymentBatchSummary from "../components/PaymentBatchSummary.jsx";
+import PaymentSummaryDownload from "../components/PaymentSummaryDownload.jsx";
 import { AlertTriangle, CheckCircle2, Download, Eye, FileCheck2, RefreshCw, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import api from "../api/client.js";
@@ -172,6 +174,8 @@ export default function BankFileVerification() {
             <strong>{t(verificationOf(selected) === "REJECTED" ? "Rejected by" : "Verified by")}: {(verificationOf(selected) === "REJECTED" ? selected.verification?.rejectedBy?.name : selected.verification?.verifiedBy?.name) || t(selected.verification?.legacy || !selected.verification?.status ? "Generated before verification was required" : "-")}</strong>
             {selected.verification?.reason && <p>{selected.verification.reason}</p>}
           </div></div>}
+          <PaymentBatchSummary summary={selected.summary} bank={selected.bank} currency={selected.currency} />
+          <PaymentSummaryDownload batch={selected} />
           {fileButtons(selected)}
           <div className="table-scroll bank-file-items">
             <table>

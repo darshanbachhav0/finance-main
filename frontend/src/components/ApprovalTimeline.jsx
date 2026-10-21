@@ -5,6 +5,15 @@ import { formatDateTime } from "../utils/formatters.js";
 
 export default function ApprovalTimeline({ history = [] }) {
   const { t } = useLanguage();
+  const decisionLabel = action => {
+    const translated = t(action === "CLOSED" ? "CLOSED_ACTION" : action);
+    if (translated !== action) return translated;
+    if (/APPROVED|SIGN_OFF/.test(action || "")) return t("Approved");
+    if (/REJECTED/.test(action || "")) return t("Rejected");
+    if (/OBSERVED/.test(action || "")) return t("Observed");
+    if (/RETURNED/.test(action || "")) return t("Returned");
+    return translated;
+  };
 
   if (!history.length) {
     return <EmptyState title="No workflow events yet." />;
@@ -16,7 +25,7 @@ export default function ApprovalTimeline({ history = [] }) {
         <div className="timeline-item" key={item._id || `${item.action}-${item.createdAt}`}>
           <div className="timeline-dot" />
           <div>
-            <strong>{t(item.action === "CLOSED" ? "CLOSED_ACTION" : item.action)}</strong>
+            <strong>{decisionLabel(item.action)}</strong>
             <span>
               {t(item.statusFrom || "START")} → {t(item.statusTo)}
             </span>

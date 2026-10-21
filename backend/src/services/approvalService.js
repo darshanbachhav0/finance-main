@@ -26,7 +26,7 @@ import { holdAdvanceForBankAccount, resolveBankNotices } from "./advanceBankHold
 import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notificationText, notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
-import { assertSupplierUsable, decideSupplierApproval, supplierApprovalForRequest } from "./supplierService.js";
+import { assertSupplierUsable } from "./supplierService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { requestListPopulate, requestListSelect, requestPopulate } from "./requestService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -407,7 +407,7 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
   return result;
 }
 
-export async function decideApproval({ id, action, comments, adminOverrideReason, forward, approveSupplier, user, req }) {
+export async function decideApproval({ id, action, comments, adminOverrideReason, forward, user, req }) {
   const decision = String(action || "").toUpperCase();
   if (!["APPROVE", "OBSERVE", "RETURN", "REJECT"].includes(decision)) {
     throw new AppError(422, "Unsupported approval action.", { action }, ERROR_CODES.VALIDATION_ERROR);
@@ -472,37 +472,11 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     return { request };
   }
 
-  // A supplier still waiting for its proposer's jefe was sent with the request so that jefe verifies
-  // it here: they approve it together with the request, asked for explicitly so a bulk or quick
-  // approval never approves a supplier unseen. Nobody completes the approval while it still waits.
-  const supplierApproval = request.flowType === FLOW_TYPE.C ? null : await supplierApprovalForRequest(request.supplier, user);
-  if (supplierApproval?.yours) {
-    if (approveSupplier !== true) {
-      throw new AppError(409, "This request's supplier is also waiting for your approval. Open the request, review the supplier and approve both.", { supplierApproval }, ERROR_CODES.SUPPLIER_APPROVAL_REQUIRED);
-    }
-    if (!supplierApproval.ready) {
-      throw new AppError(422, "The supplier cannot be approved yet. Send the request back so the requester completes the supplier.", { supplierApproval, errors: supplierApproval.issues.map((issue) => issue.message) }, ERROR_CODES.SUPPLIER_HOMOLOGATION_PENDING);
-    }
-  } else if (supplierApproval && (isChainStep ? !forward : !laterOpenStep(request, step))) {
-    throw new AppError(409, "The supplier is still waiting for its proposer's jefe. The request can be finalized once the supplier is approved.", { supplierApproval }, ERROR_CODES.SUPPLIER_HOMOLOGATION_PENDING);
-  }
-
   // Chain decisions resolve the next jefe / the chain approvers' authority first,
   // outside the transaction; the transaction only persists the outcome.
   const chainRoute = isChainStep
     ? (forward ? await activateNextChainStep(request, step, user) : await finalizeChainApproval(request, step, user))
     : null;
-  if (supplierApproval?.yours) {
-    const decided = await decideSupplierApproval({
-      supplierId: supplierApproval.supplier._id,
-      payload: { decision: "APPROVE", comments: comments || `Approved with request ${request.requestNumber}.` },
-      user,
-      req
-    });
-    // The budget commitment below checks the supplier the request carries.
-    request.supplier = decided.supplier;
-    request.set("supplierSnapshot.homologationStatus", decided.supplier.homologationStatus);
-  }
   const routeResult = await runFinancialOperation(async (session) => {
     if (isChainStep) {
       const route = chainRoute;
@@ -742,17 +716,12 @@ export async function approvalDecisionOptions(request) {
   };
 }
 
-// The chain options plus the request's supplier when it still waits for approval (supplierApproval):
-// the approver sees it, and what it needs, before deciding.
+// Request decisions never approve the supplier. Keep a null legacy field for older clients.
 export async function getApprovalDecisionOptions(id, user) {
   const request = await FinancialRequest.findById(id).select("requester solicitor status approvalRouteSnapshot approvalStage requesterArea requestingArea flowType supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
   if (!allowedRequestActions(request, user).includes("APPROVE")) return { ...noChainOptions, supplierApproval: null };
-  const [options, supplierApproval] = await Promise.all([
-    approvalDecisionOptions(request),
-    request.flowType === FLOW_TYPE.C ? null : supplierApprovalForRequest(request.supplier, user)
-  ]);
-  return { ...options, supplierApproval };
+  return { ...await approvalDecisionOptions(request), supplierApproval: null };
 }
 
 const REASSIGNMENT_REASONS = Object.freeze({

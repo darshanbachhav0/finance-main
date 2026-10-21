@@ -53,7 +53,7 @@ export default function AccountsPayable() {
   // A notification link shows every view, so the linked CXP is never hidden by a tab.
   const deepLink = useDeepLink(["record", "request"]);
   const listView = deepLink.active ? "all" : view === "credits" ? "open" : view;
-  const payableTable = usePaginatedResource("/accounting/accounts-payable", { fixedParams: { ...deepLink.link, view: listView }, deepLink: deepLink.active });
+  const payableTable = usePaginatedResource("/accounting/accounts-payable", { fixedParams: { ...deepLink.link, view: listView, ...(searchParams.get("detractionReview") === "true" && { detractionReview: "true" }) }, deepLink: deepLink.active });
   const creditTable = usePaginatedResource("/accounting/supplier-credits", { initialPageSize: 10 });
   const { rows, loading } = payableTable;
   const openedLink = useRef("");

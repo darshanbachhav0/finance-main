@@ -20,12 +20,15 @@ import { uploadFields } from "../middleware/upload.js";
 import { PERMISSIONS, ROLES } from "../utils/constants.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { updateInvoiceCredit } from "../services/invoiceCreditService.js";
+import { previewAccountingDetraction, confirmAccountingDetraction } from "../services/detractionService.js";
 
 const router = Router();
 
 router.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
 router.get("/entries", listEntries);
 router.get("/accounts-payable", listAccountsPayable);
+router.post("/accounts-payable/:id/detraction-preview", asyncHandler(async (req, res) => res.json({ data: await previewAccountingDetraction({ id: req.params.id, categoryCode: req.body.categoryCode }) })));
+router.post("/accounts-payable/:id/detraction-confirm", asyncHandler(async (req, res) => res.json({ data: await confirmAccountingDetraction({ id: req.params.id, categoryCode: req.body.categoryCode, user: req.user, req }) })));
 router.patch("/accounts-payable/:id/credit-terms", asyncHandler(async (req, res) => res.json({ data: await updateInvoiceCredit({ id: req.params.id, payload: req.body, user: req.user, req }) })));
 router.post("/accounts-payable/:id/cancel", cancelPayable);
 router.get("/pending", listPendingAccounting);

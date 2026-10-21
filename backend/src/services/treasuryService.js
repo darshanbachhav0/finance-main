@@ -1,3 +1,6 @@
+import CostCenter from "../models/CostCenter.js";
+import { paymentBatchSummary, paymentSummaryCsv } from "./paymentBatchSummary.js";
+import { treasuryDateFilter } from "./treasuryFilters.js";
 import { archiveAsset } from "./durableAssetService.js";
 import { assertRequestActive, assertPostingAllowed, syncFinancialProgress, getFinancialProgress } from "./financialProgressService.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
@@ -287,13 +290,15 @@ async function paymentRows({ requestIds = [], payableIds = [] }) {
   return rows;
 }
 
-async function loadPaymentItems(selection, bank, currency, accountSelections = {}) {
+async function loadPaymentItems(selection, bank, currency, accountSelections = {}, issues) {
   assertBbvaSource(bank);
   const rows = await paymentRows(selection);
   const items = [];
   for (const { request, accountsPayable } of rows) {
+    try {
     if (!request) throw new AppError(404, "The request for a selected CXP no longer exists.", undefined, ERROR_CODES.NOT_FOUND);
     assertRequestActive(request);
+    if (request.supplier?.taxpayerValidation?.revalidationRequired) throw new AppError(422, "Accounting must revalidate the supplier before payment.", undefined, "SUPPLIER_REVALIDATION_REQUIRED");
     if (![REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAYMENT_BOUNCED, REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.OBSERVED_BATCH, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED].includes(canonicalRequestStatus(request.status))) {
       throw new AppError(409, `${request.requestNumber} is not eligible for Treasury scheduling.`, { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     }
@@ -305,8 +310,10 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
     }
     await assertNoBlockingObservation(accountsPayable, { requestNumber: request.requestNumber });
     if (accountsPayable.currency !== currency) throw new AppError(422, `${request.requestNumber} CXP uses ${accountsPayable.currency}; one batch can contain only ${currency}.`, undefined, ERROR_CODES.VALIDATION_ERROR);
+    if ((request.approvalRouteSnapshot || []).some(step => step.required !== false && ["PENDING", "NOT_REACHED", "OBSERVED", "RETURNED", "REJECTED"].includes(step.status))) throw new AppError(422, `${request.requestNumber}: required approvals are incomplete.`, undefined, "APPROVALS_INCOMPLETE");
     await ensureDetraction({ request, accountsPayable });
     const amount = supplierPortionOutstanding(accountsPayable);
+    if (pendingDetractionAmount(accountsPayable) > accountsPayable.outstandingAmount) throw new AppError(422, `${request.requestNumber}: Accounting must review the detraction after the payable adjustment.`, undefined, "ACCOUNTING_DETRACTION_REQUIRED");
     if (!(amount > 0)) {
       throw new AppError(409, `${request.requestNumber}: only the SPOT detraccion deposit remains; record it instead of a bank transfer.`, { outstandingAmount: accountsPayable.outstandingAmount, detraction: accountsPayable.detraction?.amount }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     }
@@ -333,6 +340,10 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
       bankAccountSnapshot: destination.snapshot,
       priority: accountsPayable.paymentPriority || "NORMAL"
     });
+    } catch (error) {
+      if (!issues || !error.statusCode) throw error;
+      issues.push({ id: String(accountsPayable?._id || ""), message: error.message, owner: "Treasury / Accounting", code: error.code });
+    }
   }
   return items;
 }
@@ -341,7 +352,7 @@ async function scheduleLoadedItem(item, schedule, user, req, session) {
   const { request, accountsPayable, bankAccountSnapshot } = item;
   const { paymentDate, override } = schedule;
   await guardAccountingPeriod({ period: request.accountingPeriod, action: "SCHEDULE", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
-  const reschedulable = [AP_STATUS.OPEN, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status);
+  const reschedulable = [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status);
   if (reschedulable) {
     accountsPayable.scheduledFor = new Date(`${paymentDate}T00:00:00.000Z`);
     // A partially paid CXP keeps PARTIALLY_PAID until its remainder is in a new file.
@@ -413,15 +424,25 @@ async function countMissingPaymentDestinations(query, bank) {
 export async function listTreasuryQueue(queryParams) {
   // PARTIALLY_PAID stays in the queue: its unpaid remainder can go into a new payment file.
   const query = { status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PARTIALLY_PAID] } };
-  if (queryParams.status) query.status = queryParams.status;
+  if ([AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PARTIALLY_PAID].includes(queryParams.status)) query.status = queryParams.status;
   if (queryParams.currency) query.currency = queryParams.currency;
   if (queryParams.supplier) query.supplier = queryParams.supplier;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.paymentPriority) query.paymentPriority = queryParams.paymentPriority;
+  query.$and = [...(query.$and || []), ...treasuryDateFilter(queryParams)];
+  if (!query.$and.length) delete query.$and;
+  if (queryParams.department) {
+    const ids = await FinancialRequest.distinct("_id", { $or: [{ requesterArea: queryParams.department }, { requestingArea: queryParams.department }] });
+    query.$and = [...(query.$and || []), { request: { $in: ids } }];
+  }
+  if (queryParams.creditDays !== undefined && queryParams.creditDays !== "") query["paymentTermsSnapshot.creditDays"] = Number(queryParams.creditDays);
+  if (queryParams.documentValidity === "valid") query["sunatValidation.status"] = "VALID";
+  if (queryParams.documentValidity === "exception") query["sunatValidation.manualException.reason"] = { $exists: true, $ne: "" };
   if (queryParams.beneficiaryBank) {
     const normalizedBank = String(queryParams.beneficiaryBank).toUpperCase();
     const supplierIds = await SupplierBankAccount.distinct("supplier", {
       bank: normalizedBank,
+      ...(queryParams.currency && { currency: queryParams.currency }),
       active: true,
       accountType: { $in: PAYABLE_ACCOUNT_TYPES },
       $or: [
@@ -434,14 +455,18 @@ export async function listTreasuryQueue(queryParams) {
       "rendition.reimbursementBankSnapshot.bank": normalizedBank
     });
     query.$and = [...(query.$and || []), { $or: [
-      { supplier: { $in: supplierIds } },
       { "bankAccountSnapshot.bank": normalizedBank },
-      { request: { $in: employeeRequestIds } }
+      { "bankAccountSnapshot.bank": { $exists: false }, $or: [{ supplier: { $in: supplierIds } }, { request: { $in: employeeRequestIds } }] }
     ] }];
   }
+  if (queryParams.supplierSearch) {
+    const match = new RegExp(escapedRegex(queryParams.supplierSearch), "i");
+    query.supplier = { $in: await Supplier.distinct("_id", { $or: [{ name: match }, { legalName: match }, { rucDni: match }] }) };
+  }
   if (queryParams.costCenter) {
-    const requestIds = await FinancialRequest.distinct("_id", { "lines.costCenter": queryParams.costCenter });
-    query.request = { $in: requestIds };
+    const centers = /^[a-f0-9]{24}$/i.test(queryParams.costCenter) ? [queryParams.costCenter] : await CostCenter.distinct("_id", { $or: [{ code: new RegExp(escapedRegex(queryParams.costCenter), "i") }, { name: new RegExp(escapedRegex(queryParams.costCenter), "i") }] });
+    const requestIds = await FinancialRequest.distinct("_id", { "lines.costCenter": { $in: centers } });
+    query.$and = [...(query.$and || []), { request: { $in: requestIds } }];
   }
   if (queryParams.requestType) {
     const requestIds = await FinancialRequest.distinct("_id", { requestType: queryParams.requestType });
@@ -475,6 +500,18 @@ export async function listTreasuryQueue(queryParams) {
       { request: { $in: requestIds } }
     ] }];
   }
+  if (["ready", "pending"].includes(queryParams.paymentStatus)) {
+    const candidates = await AccountsPayable.find(query).select("_id currency").lean();
+    const readyIds = [];
+    for (const code of [...new Set(candidates.map(item => item.currency))]) {
+      const issues = [];
+      const ids = candidates.filter(item => item.currency === code).map(item => String(item._id));
+      if (!ids.length) continue;
+      const loaded = await loadPaymentItems({ payableIds: ids }, "BBVA", code, {}, issues);
+      readyIds.push(...loaded.map(item => item.accountsPayable._id));
+    }
+    query.$and = [...(query.$and || []), { _id: queryParams.paymentStatus === "ready" ? { $in: readyIds } : { $nin: readyIds } }];
+  }
   withDeepLink(query, queryParams);
   const { page, pageSize, skip } = parsePagination(queryParams);
   const sort = parseSort(queryParams, ["dueDate", "outstandingAmount", "currency", "createdAt", "status", "paymentPriority", "flowType"], { paymentPriority: -1, dueDate: 1, createdAt: 1 });
@@ -497,13 +534,15 @@ export async function listTreasuryQueue(queryParams) {
   const supplierIds = [...new Set(records.map((accountsPayable) => accountsPayable.supplier?._id).filter(Boolean).map(String))];
   const supplierAccounts = supplierIds.length ? await SupplierBankAccount.find({ supplier: { $in: supplierIds } }).sort({ preferred: -1, validFrom: -1, createdAt: -1 }) : [];
   const data = await Promise.all(records.map(async (accountsPayable) => {
-    // Preview only (not persisted): the SPOT result is frozen when Treasury schedules the CXP.
-    const detraction = accountsPayable.detraction?.status
-      ? accountsPayable.detraction
-      : await ensureDetraction({ request: accountsPayable.request, accountsPayable });
+    // Treasury reads Accounting's frozen calculation; it never decides invoice treatment.
+    let detraction = accountsPayable.detraction;
+    let accountingBlock = "";
+    try { detraction = await ensureDetraction({ request: accountsPayable.request, accountsPayable }); }
+    catch (error) { if (!error.statusCode) throw error; accountingBlock = error.message; }
     const object = accountsPayable.toObject();
     object.detraction = detraction?.toObject ? detraction.toObject() : detraction;
-    object.netPayableAmount = supplierPortionOutstanding(accountsPayable);
+    object.netPayableAmount = accountingBlock ? null : supplierPortionOutstanding(accountsPayable);
+    object.accountingBlock = accountingBlock;
     object.paymentCycleDate = paymentCycleOf(accountsPayable, now);
     const request = object.request;
     const frozen = object.bankAccountSnapshot?.bank ? object.bankAccountSnapshot : null;
@@ -545,6 +584,13 @@ export async function listTreasuryQueue(queryParams) {
       paymentBlock
     };
   }));
+  const eligibleIds = new Set(), eligibilityIssues = [];
+  for (const code of [...new Set(data.map(row => row.accountsPayable.currency))]) {
+    const ids = data.filter(row => row.accountsPayable.currency === code).map(row => String(row.accountsPayable._id));
+    const loaded = await loadPaymentItems({ payableIds: ids }, "BBVA", code, {}, eligibilityIssues);
+    loaded.forEach(item => eligibleIds.add(String(item.accountsPayable._id)));
+  }
+  for (const row of data) { row.paymentEligible = eligibleIds.has(String(row.accountsPayable._id)); row.ineligibleReason = eligibilityIssues.find(issue => issue.id === String(row.accountsPayable._id))?.message; }
   return {
     ...paginatedPayload(data, total, page, pageSize),
     summary: {
@@ -604,10 +650,14 @@ export async function schedulePayments({ requestIds = [], payableIds = [], bank,
   return items.map((item) => item.request);
 }
 
-export async function generatePaymentBatch({ requestIds = [], payableIds = [], bank, currency, paymentDate: requestedPaymentDate, paymentDateReason, accountSelections, user, req }) {
+async function createPaymentBatch({ generationKey, requestIds = [], payableIds = [], bank, currency, paymentDate: requestedPaymentDate, paymentDateReason, accountSelections, user, req }) {
   if ((!Array.isArray(requestIds) || !requestIds.length) && (!Array.isArray(payableIds) || !payableIds.length)) throw new AppError(422, "Select at least one payable CXP.", undefined, ERROR_CODES.VALIDATION_ERROR);
   const normalizedBank = String(bank || "").trim().toUpperCase();
   assertBbvaSource(normalizedBank);
+  if (payableIds.length) {
+    const preflight = await previewPaymentBatch({ payableIds, currency, accountSelections, paymentDate: requestedPaymentDate, paymentDateReason });
+    if (!preflight.ready) throw new AppError(422, "Correct or exclude the blocked payments before generating the TXT.", { issues: preflight.issues }, "PAYMENT_PREFLIGHT_FAILED");
+  }
   const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
   const adapter = getBankFileAdapter(normalizedBank, configuration);
   // Snapshot the certification state that applied AT GENERATION TIME. This is copied onto the
@@ -657,6 +707,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
       const [batch] = await PaymentBatch.create([{
         scheduleOverrideReason: schedule.override?.reason || "",
         batchNumber,
+        ...(generationKey && { generationKey }),
         bank: normalizedBank,
         currency,
         paymentDate,
@@ -664,6 +715,7 @@ export async function generatePaymentBatch({ requestIds = [], payableIds = [], b
           accountsPayable: item.accountsPayable._id,
           request: item.request._id,
           requestNumber: item.requestNumber,
+          voucherNumber: [item.accountsPayable.voucher?.series, item.accountsPayable.voucher?.number].filter(Boolean).join("-"),
           supplier: item.request.supplier?._id,
           supplierIdentifier: item.supplierIdentifier,
           supplierName: item.supplierName,
@@ -1178,7 +1230,7 @@ export async function cancelPaymentBatch({ batchId, payload = {}, user, req }) {
 export async function recordDetractionDeposit({ accountsPayableId, payload = {}, user, req }) {
   const accountsPayable = await AccountsPayable.findById(accountsPayableId);
   if (!accountsPayable) throw new AppError(404, "Accounts Payable record not found.", { accountsPayableId }, ERROR_CODES.NOT_FOUND);
-  if (accountsPayable.detraction?.status !== "PENDING") {
+  if (accountsPayable.detraction?.status !== "PENDING" || !accountsPayable.detraction.confirmedAt) {
     throw new AppError(409, "This CXP has no pending SPOT detraccion.", { detractionStatus: accountsPayable.detraction?.status || null }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (![AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status)) {
@@ -1200,7 +1252,7 @@ export async function recordDetractionDeposit({ accountsPayableId, payload = {},
   assertRequestActive(request);
   const operationNumber = `${DETRACTION_OPERATION_PREFIX}${constancyNumber}`;
   assertNewOperation(request, accountsPayable, operationNumber);
-  const beneficiaryAccountNumber = await resolveSupplierDetractionAccount(accountsPayable.supplier);
+  const beneficiaryAccountNumber = accountsPayable.detraction.beneficiaryAccountNumber || await resolveSupplierDetractionAccount(accountsPayable.supplier);
   if (!beneficiaryAccountNumber) {
     throw new AppError(422, "The supplier has no Banco de la Nacion detracciones account registered.", { supplier: accountsPayable.supplier }, ERROR_CODES.BANK_DETAILS_MISSING);
   }
@@ -1246,7 +1298,7 @@ export async function recordDetractionDeposit({ accountsPayableId, payload = {},
 
 export async function listDetractionQueue(queryParams = {}) {
   const { page, pageSize, skip } = parsePagination(queryParams);
-  const query = { "detraction.status": queryParams.detractionStatus || "PENDING", status: { $nin: [AP_STATUS.CANCELLED] } };
+  const query = { "detraction.confirmedAt": { $ne: null }, "detraction.status": queryParams.detractionStatus || "PENDING", status: { $nin: [AP_STATUS.CANCELLED] } };
   if (queryParams.currency) query.currency = queryParams.currency;
   withDeepLink(query, queryParams);
   const [records, total] = await Promise.all([
@@ -1332,7 +1384,7 @@ export async function listPaymentBatches(queryParams = {}) {
     PaymentBatch.find(query).populate("generatedBy", "name email role").sort(sort).skip(skip).limit(pageSize),
     PaymentBatch.countDocuments(query)
   ]);
-  return paginatedPayload(data, total, page, pageSize);
+  return paginatedPayload(data.map(batch => ({ ...batch.toObject(), summary: paymentBatchSummary(batch.items) })), total, page, pageSize);
 }
 
 export async function listPaymentConfirmationQueue(queryParams = {}) {
@@ -1511,22 +1563,66 @@ export async function certifyBankFormatConfiguration({ id, certified, certificat
 
 
 // Read-only preflight: reuse exactly the item loader and serializer used by generation.
-export async function previewPaymentBatch({ payableIds, currency, accountSelections }) {
-  if (!Array.isArray(payableIds) || !payableIds.length || payableIds.length > 100) throw new AppError(422, "Select between 1 and 100 payables.");
-  const issues = [];
-  const items = [];
+export async function previewPaymentBatch({ payableIds, currency, accountSelections, paymentDate, paymentDateReason }) {
+  if (!Array.isArray(payableIds) || !payableIds.length || payableIds.length > 5000 || payableIds.some(id => !/^[a-f0-9]{24}$/i.test(String(id)))) throw new AppError(422, "Select between 1 and 5000 valid payables.");
+  const issues = [], items = [], loaded = [];
   let adapter;
   try {
     const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
     adapter = getBankFileAdapter("BBVA", configuration);
   } catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Admin / Treasury", code: error.code }); }
-  for (const id of [...new Set(payableIds)]) {
-    try {
-      const loaded = await loadPaymentItems({ payableIds: [id], requestIds: [] }, "BBVA", currency, accountSelections);
-      // Exercise the actual fixed-width serializer as well, without saving or scheduling anything.
-      if (adapter) adapter.generateFile({ currency, items: loaded.map(item => ({ ...item, bankAccount: item.bankAccountSnapshot })) });
-      items.push({ id, ready: Boolean(adapter) });
-    } catch (error) { if (!error.statusCode) throw error; issues.push({ id, message: error.message, owner: "Treasury / Accounting", code: error.code }); }
+  const ids = [...new Set(payableIds.map(String))];
+  if (ids.length !== payableIds.length) issues.push({ message: "A payable cannot be selected twice.", owner: "Treasury" });
+  const existing = await AccountsPayable.distinct("_id", { _id: { $in: ids } });
+  const available = new Set(existing.map(String));
+  for (const id of ids) if (!available.has(id)) issues.push({ id, message: "Accounts Payable record not found.", owner: "Treasury" });
+  if (available.size) {
+    const rows = await loadPaymentItems({ payableIds: [...available] }, "BBVA", currency, accountSelections, issues);
+    for (const item of rows) {
+      try {
+        if (adapter) adapter.generateFile({ currency, items: [{ ...item, bankAccount: item.bankAccountSnapshot }] });
+        loaded.push(item); items.push({ id: String(item.accountsPayable._id), ready: Boolean(adapter) });
+      } catch (error) { if (!error.statusCode) throw error; issues.push({ id: String(item.accountsPayable._id), message: error.message, owner: "Treasury", code: error.code }); }
+    }
   }
-  return { ready: issues.length === 0, items, issues, checkedAt: new Date(), informational: true };
+  if (adapter && loaded.length) try { adapter.validateBatch(loaded.map(item => ({ ...item, bankAccount: item.bankAccountSnapshot }))); }
+  catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Treasury", code: error.code }); }
+  if (paymentDate) try { resolvePaymentSchedule({ paymentDate, reason: paymentDateReason, advancesOnly: loaded.length > 0 && loaded.every(item => isAdvancePayable(item.accountsPayable)) }); }
+  catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Treasury", code: error.code }); }
+  return { ready: issues.length === 0, items, issues, summary: paymentBatchSummary(loaded), advancesOnly: loaded.length > 0 && loaded.every(item => isAdvancePayable(item.accountsPayable)), checkedAt: new Date(), informational: true };
+}
+
+// The key is scoped to the user and retained after success, so a retry returns the same file.
+// Atomic CXP claims in createPaymentBatch additionally exclude concurrent different keys.
+export async function generatePaymentBatch(payload) {
+  if (!payload.idempotencyKey) return createPaymentBatch(payload);
+  if (!/^[a-zA-Z0-9_-]{8,100}$/.test(payload.idempotencyKey)) throw new AppError(422, "A valid generation key is required.");
+  const key = crypto.createHash("sha256").update(`${payload.user._id}:${payload.idempotencyKey}`).digest("hex");
+  const fingerprint = crypto.createHash("sha256").update(JSON.stringify([...(payload.payableIds || []).map(String).sort(), ...(payload.requestIds || []).map(String).sort(), payload.bank, payload.currency, payload.paymentDate, payload.paymentDateReason || "", Object.entries(payload.accountSelections || {}).sort()])).digest("hex");
+  const requests = AccountsPayable.db.collection("paymentgenerationrequests");
+  try { await requests.insertOne({ _id: key, fingerprint, createdAt: new Date() }); }
+  catch (error) {
+    if (error.code !== 11000) throw error;
+    const prior = await requests.findOne({ _id: key });
+    if (prior.fingerprint !== fingerprint) throw new AppError(409, "This generation key was used for a different selection.");
+    const batch = await PaymentBatch.findOne({ generationKey: key });
+    if (batch && prior.completedAt) return { batch, reused: true };
+    throw new AppError(409, "This TXT is already being generated. Retry with the same key.");
+  }
+  try {
+    const result = await createPaymentBatch({ ...payload, generationKey: key });
+    await requests.updateOne({ _id: key }, { $set: { completedAt: new Date(), batchId: result.batch._id } });
+    return result;
+  }
+  catch (error) {
+    const batch = await PaymentBatch.findOne({ generationKey: key });
+    if (!batch) await requests.deleteOne({ _id: key });
+    throw error;
+  }
+}
+
+export async function getPaymentBatchSummary(id, { csv = false } = {}) {
+  const batch = await PaymentBatch.findById(id);
+  if (!batch) throw new AppError(404, "Bank file not found.");
+  return csv ? { content: paymentSummaryCsv(batch), fileName: `${batch.batchNumber}-resumen.csv` } : { ...batch.toObject(), summary: paymentBatchSummary(batch.items) };
 }

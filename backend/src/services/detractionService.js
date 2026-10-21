@@ -5,6 +5,9 @@
 import SpotCategory from "../models/SpotCategory.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
+import AccountsPayable from "../models/AccountsPayable.js";
+import FinancialRequest from "../models/FinancialRequest.js";
+import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
 import { recordAudit } from "./auditService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, FLOW_TYPE, LEGACY_EXPENSE_NATURE_MAP, REQUEST_TYPE, ROLES } from "../utils/constants.js";
@@ -43,6 +46,7 @@ export async function findSpotCategory(code, at = new Date(), { session } = {}) 
 export async function listSpotCategories({ at, includeHistory = false } = {}) {
   await ensureSpotCategories();
   const query = includeHistory ? {} : { active: true, $or: [{ effectiveTo: null }, { effectiveTo: { $gte: at ? new Date(at) : new Date() } }] };
+  if (!includeHistory) query.effectiveFrom = { $lte: at ? new Date(at) : new Date() };
   return SpotCategory.find(query).sort({ code: 1, effectiveFrom: -1 }).lean();
 }
 
@@ -69,7 +73,7 @@ export async function updateSpotCategory({ code, payload = {}, user, req }) {
     active: payload.active === undefined ? true : Boolean(payload.active),
     sourceReference: String(payload.sourceReference || current?.sourceReference || "R.S. 183-2004/SUNAT").trim(), updatedBy: user._id
   });
-  await recordAudit({ entityType: "SpotCategory", entity: created, action: "SPOT_CATEGORY_UPDATED", user, req, module: "TREASURY",
+  await recordAudit({ entityType: "SpotCategory", entity: created, action: "SPOT_CATEGORY_UPDATED", user, req, module: "ACCOUNTING",
     oldValues: current ? { rate: current.rate, minimumAmount: current.minimumAmount, effectiveFrom: current.effectiveFrom } : undefined,
     newValues: { code, rate, minimumAmount, effectiveFrom } });
   return created;
@@ -98,12 +102,12 @@ export async function determineDetraction({ request, accountsPayable, session })
   if (!code) return notApplicable;
   const at = accountsPayable.voucher?.documentDate || request.issueDate || new Date();
   const category = await findSpotCategory(code, at, { session });
-  if (!category) return notApplicable;
+  if (!category) throw new AppError(422, "No effective SPOT category is configured for this invoice date.", { code, at }, ERROR_CODES.VALIDATION_ERROR);
   const exchangeRate = Number(accountsPayable.exchangeRate || 1);
   const baseAmountPen = roundMoney(accountsPayable.penEquivalent ?? multiplyMoney(accountsPayable.originalAmount, exchangeRate));
   const shared = {
     categoryCode: category.code, categoryDescription: category.description, rate: category.rate,
-    minimumAmount: category.minimumAmount, baseAmountPen, determinedAt: new Date()
+    minimumAmount: category.minimumAmount, baseAmountPen, categoryEffectiveFrom: category.effectiveFrom, determinedAt: new Date()
   };
   // SPOT applies to operations EXCEEDING the threshold.
   if (baseAmountPen <= category.minimumAmount) return { ...shared, status: "NOT_APPLICABLE", amount: 0, amountPen: 0 };
@@ -115,9 +119,82 @@ export async function determineDetraction({ request, accountsPayable, session })
 // Sets accountsPayable.detraction the first time Treasury handles the CXP (in memory only; the
 // caller persists it with its own save). Already-determined CXPs keep their frozen result.
 export async function ensureDetraction({ request, accountsPayable, session }) {
-  if (accountsPayable.detraction?.status) return accountsPayable.detraction;
-  accountsPayable.detraction = await determineDetraction({ request, accountsPayable, session });
+  if (accountsPayable.detraction?.status && accountsPayable.detraction.confirmedAt) return accountsPayable.detraction;
+  // Employee advances and internal reimbursements retain their existing exempt treatment.
+  const exempt = !accountsPayable.supplier || accountsPayable.flowType === FLOW_TYPE.C || NON_SPOT_REQUEST_TYPES.has(request?.requestType) || NON_SPOT_VOUCHER_TYPES.has(String(accountsPayable.voucher?.voucherType || "").toUpperCase());
+  if (!exempt) throw new AppError(422, "Accounting must confirm the invoice's SPOT treatment and net payable before Treasury prepares payment.", { accountsPayable: accountsPayable._id }, "ACCOUNTING_DETRACTION_REQUIRED");
+  accountsPayable.detraction = { status: "NOT_APPLICABLE", determinedAt: new Date() };
   return accountsPayable.detraction;
+}
+
+export async function prepareAccountingDetraction({ request, accountsPayable, user, session }) {
+  if (!SPOT_ADMIN_ROLES.includes(user?.role)) return;
+  if (accountsPayable.detraction?.confirmedAt) return;
+  if (!accountsPayable.accountingTreatment?.spotConfirmed) return;
+  const calculated = await determineDetraction({ request, accountsPayable, session });
+  const account = calculated.status === "PENDING" ? await resolveSupplierDetractionAccount(accountsPayable.supplier, { session }) : "";
+  if (calculated.status === "PENDING" && !account) return; // existing CXP screen completes preparation
+  accountsPayable.detraction = { ...calculated, beneficiaryAccountNumber: account,
+    confirmedBy: user?._id || user, confirmedAt: new Date() };
+  await recordAudit({ entityType: "AccountsPayable", entity: accountsPayable, requestId: request._id,
+    action: "DETRACTION_CONFIRMED", module: "ACCOUNTING", user, session,
+    newValues: { ...calculated, accountLast4: account.slice(-4), confirmedBy: user?._id || user } });
+}
+
+export async function previewAccountingDetraction({ id, categoryCode }) {
+  const payable = await AccountsPayable.findById(id);
+  if (!payable) throw new AppError(404, "Accounts Payable record not found.");
+  const request = await FinancialRequest.findById(payable.request);
+  if (categoryCode !== undefined) {
+    if (!/^(\d{3})?$/.test(String(categoryCode))) throw new AppError(422, "Select a configured SPOT category.");
+    payable.accountingTreatment = { ...payable.accountingTreatment?.toObject?.(), spotConfirmed: true, spotCategoryCode: String(categoryCode) };
+  }
+  const calculation = await determineDetraction({ request, accountsPayable: payable });
+  if (payable.status === "PARTIALLY_PAID" && payable.detraction?.status === "DEPOSITED") {
+    if (categoryCode !== payable.detraction.categoryCode) throw new AppError(409, "The deposited detraction and its original category must be preserved.");
+    return { calculation: payable.detraction.toObject(), netAmount: payable.outstandingAmount, bankAccountRegistered: true,
+      bankAccountLast4: String(payable.detraction.beneficiaryAccountNumber || "").slice(-4), suggestionOnly: true };
+  }
+  const account = await resolveSupplierDetractionAccount(payable.supplier);
+  return { calculation, netAmount: roundMoney(Number(payable.outstandingAmount) - (calculation.status === "PENDING" ? calculation.amount : 0)),
+    bankAccountRegistered: Boolean(account), bankAccountLast4: account.slice(-4), suggestionOnly: true };
+}
+
+export async function confirmAccountingDetraction({ id, categoryCode, user, req }) {
+  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting or Admin can confirm SPOT treatment.");
+  if (categoryCode === undefined) throw new AppError(422, "Confirm the SPOT category or explicitly select not subject to SPOT.");
+  const claims = AccountsPayable.db.collection("bbvapaymentgenerationclaims");
+  const payable = await AccountsPayable.findById(id);
+  if (!payable) throw new AppError(404, "Accounts Payable record not found.");
+  try { await claims.insertOne({ _id: payable._id, accountingReview: true, claimedAt: new Date() }); }
+  catch (error) { if (error.code === 11000) throw new AppError(409, "This CXP is being prepared for payment. Refresh before changing its treatment."); throw error; }
+  try {
+    const current = await AccountsPayable.findById(id);
+    const legacyPartial = current.status === "PARTIALLY_PAID" && !current.detraction?.confirmedAt;
+    if ((!legacyPartial && (!["OPEN", "SCHEDULED"].includes(current.status) || current.paymentBatch || current.outstandingAmount !== current.originalAmount)) || (current.detraction?.status === "DEPOSITED" && !legacyPartial)) throw new AppError(409, "SPOT treatment is frozen once a payment instruction or payment exists.");
+    const preview = await previewAccountingDetraction({ id, categoryCode });
+    if (legacyPartial && current.detraction?.status) {
+      if (current.detraction.status !== preview.calculation.status || current.detraction.categoryCode !== preview.calculation.categoryCode || Number(current.detraction.amount || 0) !== Number(preview.calculation.amount || 0) || Number(current.detraction.amountPen || 0) !== Number(preview.calculation.amountPen || 0)) throw new AppError(409, "Accounting must preserve the original detraction of a partially paid invoice.");
+      preview.calculation = current.detraction.toObject();
+    }
+    if (preview.calculation.status === "PENDING" && !preview.bankAccountRegistered) throw new AppError(422, "Register the supplier's Banco de la Nacion detracciones account in its profile first.");
+    if (preview.netAmount < 0) throw new AppError(422, "Detraction cannot exceed the outstanding amount.");
+    const previous = current.detraction?.toObject?.() || current.detraction;
+    const confirmedAt = new Date();
+    current.accountingTreatment = { ...current.accountingTreatment?.toObject?.(), spotConfirmed: true, spotCategoryCode: String(categoryCode), confirmedBy: user._id, confirmedAt };
+    current.detraction = { ...preview.calculation, confirmedBy: user._id, confirmedAt,
+      beneficiaryAccountNumber: preview.calculation.status === "DEPOSITED" ? preview.calculation.beneficiaryAccountNumber : preview.calculation.status === "PENDING" ? await resolveSupplierDetractionAccount(current.supplier) : "" };
+    current.history.push({ status: current.status, by: user._id, comments: `Accounting confirmed SPOT ${categoryCode || "not applicable"}; net ${current.currency} ${preview.netAmount.toFixed(2)}.` });
+    await current.save();
+    await recordAudit({ entityType: "AccountsPayable", entity: current, requestId: current.request, action: "DETRACTION_CONFIRMED", module: "ACCOUNTING", user, req, oldValues: previous, newValues: current.detraction.toObject() });
+    await resolveNotification(`payable:${id}:detraction-review`);
+    const request = await FinancialRequest.findById(current.request).select("requestNumber").lean();
+    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${current.request}:treasury`, type: "TREASURY_PAYABLE",
+      title: notificationText("Payable item ready"),
+      message: notificationText("{requestNumber} has an open CXP ready for Treasury scheduling.", { requestNumber: request?.requestNumber || "" }),
+      path: `/treasury?record=${current._id}`, entityType: "AccountsPayable", entityId: current._id });
+    return current.populate("detraction.confirmedBy", "name");
+  } finally { await claims.deleteOne({ _id: payable._id, accountingReview: true }); }
 }
 
 function normalizeDetractionAccount(value) {

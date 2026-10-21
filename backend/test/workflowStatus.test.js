@@ -18,6 +18,7 @@ import { createMassUploadBatch, dismissInvoiceObservation, processMassUploadBatc
 import Notification from "../src/models/Notification.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import AccountsPayable from "../src/models/AccountsPayable.js";
+import { confirmAccountingDetraction } from "../src/services/detractionService.js";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
 import AccountingMapping from "../src/models/AccountingMapping.js";
 import Reconciliation from "../src/models/Reconciliation.js";
@@ -95,11 +96,12 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await reserveBudget(request, admin._id);
       const voucher = { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F001", number: String(++sequence), issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
       const evidence = request.flowType === "C" ? null : await fiscalFixture(request, supplier, voucher, admin, files);
-      const ap = await createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence?.stored, flowType, user: admin });
+      const ap = await createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence?.stored, flowType, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, user: admin });
       await syncFinancialProgress({ request, user: admin, req });
       return ap;
     }
     async function makeBatch(payables) {
+      for (const ap of payables) if (!ap.detraction?.confirmedAt && ap.flowType !== "C") await confirmAccountingDetraction({ id: ap._id, categoryCode: "", user: admin, req });
       const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       // Accounting releases the TXT before Treasury sends it to the bank.

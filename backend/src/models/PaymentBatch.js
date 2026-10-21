@@ -6,6 +6,7 @@ const paymentItemSchema = new mongoose.Schema(
     accountsPayable: { type: mongoose.Schema.Types.ObjectId, ref: "AccountsPayable", required: true },
     request: { type: mongoose.Schema.Types.ObjectId, ref: "FinancialRequest", required: true },
     requestNumber: { type: String, required: true },
+    voucherNumber: String,
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: "Supplier" },
     supplierIdentifier: { type: String, required: true },
     supplierName: { type: String, required: true },
@@ -48,6 +49,7 @@ const paymentItemSchema = new mongoose.Schema(
 
 const paymentBatchSchema = new mongoose.Schema(
   {
+    generationKey: { type: String, immutable: true },
     batchNumber: { type: String, required: true, unique: true, immutable: true },
     bank: { type: String, enum: SOURCE_BANKS, required: true },
     currency: { type: String, enum: CURRENCY, required: true },
@@ -99,6 +101,7 @@ const paymentBatchSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+paymentBatchSchema.index({ generationKey: 1 }, { unique: true, partialFilterExpression: { generationKey: { $type: "string" } } });
 paymentBatchSchema.index({ status: 1, paymentDate: 1 });
 paymentBatchSchema.index({ "verification.status": 1, paymentDate: 1 });
 paymentBatchSchema.index({ bank: 1, currency: 1, generatedAt: -1 });

@@ -56,7 +56,9 @@
     "sunat:padron:worker": "node scripts/padronWorker.js",
     "sunat:padron:bootstrap": "node scripts/padronWorker.js --once",
     "sunat:padron:status": "node scripts/padronStatus.js",
-    "test:padron-deployment": "node test/padronDeployment.test.js"
+    "test:padron-deployment": "node test/padronDeployment.test.js",
+    "migrate:approval-optimization": "node scripts/migrateApprovalOptimization.js",
+    "migrate:approval-optimization:apply": "node scripts/migrateApprovalOptimization.js --apply"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

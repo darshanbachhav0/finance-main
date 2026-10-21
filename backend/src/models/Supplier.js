@@ -132,6 +132,7 @@ const supplierSchema = new mongoose.Schema(
     },
     taxpayerStatus: { type: String, enum: ["PENDING", "ACTIVE", "INACTIVE", "NOT_CONFIGURED", "MANUALLY_VALIDATED"], default: "PENDING" },
     taxpayerValidation: {
+      revalidationRequired: { type: Boolean, default: false },
       status: { type: String, enum: ["NOT_VERIFIED", "VALID", "INVALID"], default: "NOT_VERIFIED" },
       providerMode: { type: String, enum: ["NOT_CONFIGURED", "MANUAL", "MOCK", "PRODUCTION"], default: "NOT_CONFIGURED" },
       providerConfigured: { type: Boolean, default: false },

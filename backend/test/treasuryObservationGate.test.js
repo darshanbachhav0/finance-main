@@ -36,6 +36,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
     const expenseType = await ExpenseType.create({ code: "EXP-TRE-GATE", name: "Services", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", deductible: true, permittedRequestTypes: [REQUEST_TYPE.OPEX], active: true });
     const solicitor = await User.create({ name: "Requester", email: "requester-gate@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id });
     const treasury = await User.create({ name: "Treasury Officer", email: "treasury-gate@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" });
+    const accounting = await User.create({ name: "Accounting", email: "accounting-gate@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" });
     const supplier = await Supplier.create({
       identifierType: "RUC", rucDni: "20999999992", normalizedIdentifier: "20999999992",
       legalName: "Gate Supplier SAC", name: "Gate Supplier SAC", taxpayerStatus: "MANUALLY_VALIDATED",
@@ -65,6 +66,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
         supplierIdentifierSnapshot: supplier.rucDni,
         voucher: { voucherType: "FACTURA", documentType: "FACTURA", series, number, documentDate: new Date(issueDate) },
         originalAmount: 118, currency: "PEN", exchangeRate: 1, penEquivalent: 118, outstandingAmount: 118,
+        accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, detraction: { status: "NOT_APPLICABLE", confirmedAt: new Date(), confirmedBy: accounting._id },
         dueDate: new Date("2026-10-10"), status: AP_STATUS.OPEN, provisionJournal: new mongoose.Types.ObjectId()
       });
     }
@@ -91,7 +93,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
     await t.test("an unresolved observation blocks scheduling", async () => {
       await assert.rejects(
         () => schedulePayments({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req }),
-        (error) => error.code === "PAYABLE_BLOCKING_OBSERVATION"
+        (error) => (error.code === "PAYABLE_BLOCKING_OBSERVATION" || error.details?.issues?.some(issue => issue.code === "PAYABLE_BLOCKING_OBSERVATION"))
       );
       assert.equal((await AccountsPayable.findById(blockedPayable._id)).status, AP_STATUS.OPEN, "the payable is not silently advanced");
     });
@@ -99,7 +101,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
     await t.test("an unresolved observation blocks BBVA batch generation", async () => {
       await assert.rejects(
         () => generatePaymentBatch({ payableIds: [String(blockedPayable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req }),
-        (error) => error.code === "PAYABLE_BLOCKING_OBSERVATION"
+        (error) => (error.code === "PAYABLE_BLOCKING_OBSERVATION" || error.details?.issues?.some(issue => issue.code === "PAYABLE_BLOCKING_OBSERVATION"))
       );
       assert.equal(await PaymentBatch.countDocuments(), 0, "no bank file is produced for a blocked payable");
     });
@@ -133,7 +135,7 @@ test("Treasury rejects a CXP with an unresolved blocking observation and accepts
         accountsPayable: a2Payable._id, resolutionStatus: "OPEN"
       });
 
-      await assert.rejects(() => assertNoBlockingObservation(a2Payable), (error) => error.code === "PAYABLE_BLOCKING_OBSERVATION");
+      await assert.rejects(() => assertNoBlockingObservation(a2Payable), (error) => (error.code === "PAYABLE_BLOCKING_OBSERVATION" || error.details?.issues?.some(issue => issue.code === "PAYABLE_BLOCKING_OBSERVATION")));
 
       await InvoiceObservation.updateOne({ accountsPayable: a2Payable._id }, { $set: { resolutionStatus: "RESOLVED", resolvedAt: new Date(), resolvedBy: treasury._id } });
       await assert.doesNotReject(() => assertNoBlockingObservation(a2Payable));

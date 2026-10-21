@@ -67,6 +67,7 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
         request: request._id, flowType: FLOW_TYPE.B, supplier: supplier._id, supplierIdentifierSnapshot: supplier.rucDni,
         voucher: { voucherType: "FACTURA", documentType: "FACTURA", series: "F001", number: String(800 + sequence), documentDate: new Date(issueDate) },
         originalAmount: 118, currency: "PEN", exchangeRate: 1, penEquivalent: 118, outstandingAmount: 118,
+        accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, detraction: { status: "NOT_APPLICABLE", confirmedAt: new Date(), confirmedBy: admin._id },
         dueDate: new Date("2026-10-10"), status: AP_STATUS.OPEN, provisionJournal: new mongoose.Types.ObjectId()
       });
     }

@@ -24,7 +24,7 @@ import {
 } from "../controllers/treasuryController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { advancesDueSummary, nextPaymentRunSummary } from "../services/treasuryService.js";
+import { advancesDueSummary, nextPaymentRunSummary, getPaymentBatchSummary } from "../services/treasuryService.js";
 import { useCurrentBankAccountForAdvance } from "../services/advanceDestinationService.js";
 import { uploadFields } from "../middleware/upload.js";
 import { ROLES } from "../utils/constants.js";
@@ -36,6 +36,11 @@ const router = Router();
 router.get("/spot-categories", protect, authorize(ROLES.ADMIN, ROLES.TREASURY, ROLES.ACCOUNTING), spotCategories);
 router.put("/spot-categories/:code", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), saveSpotCategory);
 router.put("/suppliers/:id/detraction-account", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), saveSupplierDetractionAccount);
+router.get("/bank-files/:id/summary", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), asyncHandler(async (req, res) => {
+  const data = await getPaymentBatchSummary(req.params.id, { csv: req.query.format === "csv" });
+  if (req.query.format === "csv") return res.type("text/csv; charset=utf-8").attachment(data.fileName).send(data.content);
+  res.json({ data });
+}));
 
 router.use(protect, authorize(ROLES.ADMIN, ROLES.TREASURY));
 router.get("/queue", paymentQueue);

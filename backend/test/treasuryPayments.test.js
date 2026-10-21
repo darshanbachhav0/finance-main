@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import app from "../src/app.js";
+import jwt from "jsonwebtoken";
 import fs from "node:fs/promises";
 import path from "node:path";
 import mongoose from "mongoose";
@@ -35,11 +37,11 @@ import {
   resolvePaymentSchedule,
   schedulePayments
 } from "../src/services/treasuryService.js";
-import { findSpotCategory, listSpotCategories, setSupplierDetractionAccount, updateSpotCategory } from "../src/services/detractionService.js";
+import { confirmAccountingDetraction, findSpotCategory, listSpotCategories, setSupplierDetractionAccount, updateSpotCategory } from "../src/services/detractionService.js";
 import { verifySupplierBankAccount } from "../src/services/supplierService.js";
 import { supplierPaymentBlock } from "../src/services/paymentDestinationService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
-import { nextPaymentCycleDate } from "../../shared/businessCalendar.mjs";
+import { nextPaymentCycleDate, limaDateKey } from "../../shared/businessCalendar.mjs";
 import { AP_STATUS, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { roundMoney, sumMoney } from "../src/utils/money.js";
 
@@ -78,7 +80,7 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       const supplier = await Supplier.create({
         identifierType: "RUC", rucDni: ruc, normalizedIdentifier: ruc, legalName: `Supplier ${supplierSequence} SAC`, name: `Supplier ${supplierSequence} SAC`,
         taxpayerStatus: "MANUALLY_VALIDATED", complianceStatus: "COMPLIANT", homologationStatus: "HOMOLOGATED", supplierCode: `PRV-${8000 + supplierSequence}`,
-        active: true, status: "ACTIVE"
+        active: true, status: "ACTIVE", detractionAccount: { accountNumber: "00123456789", updatedBy: accounting._id }
       });
       const accounts = [];
       if (withAccount) {
@@ -92,7 +94,7 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
     let sequence = 0;
     // SPOT follows the expense nature (CONSULTING suggests 022) unless Accounting confirmed a
     // category on the CXP (accountingTreatment).
-    async function makePayable({ supplier, amount = 118, currency = "PEN", rate = 1, expenseType = plainExpense, request: existing, accountingTreatment } = {}) {
+    async function makePayable({ supplier, amount = 118, currency = "PEN", rate = 1, expenseType = plainExpense, request: existing, accountingTreatment, confirmTreatment = true } = {}) {
       sequence += 1;
       const request = existing || await FinancialRequest.create({
         requestNumber: `REQ-2026-7${String(sequence).padStart(4, "0")}`, requestType: REQUEST_TYPE.OPEX, expenseNature: expenseType === spotExpense ? EXPENSE_NATURE.CONSULTING : EXPENSE_NATURE.SERVICES,
@@ -113,7 +115,10 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       });
       ap.provisionJournal = provision._id;
       await ap.save();
-      return { request, ap };
+      if (confirmTreatment) {
+        await confirmAccountingDetraction({ id: ap._id, categoryCode: accountingTreatment?.spotConfirmed ? accountingTreatment.spotCategoryCode : expenseType === spotExpense ? "022" : "", user: accounting, req });
+      }
+      return { request, ap: await AccountsPayable.findById(ap._id) };
     }
     async function makeFile(payables, { currency = "PEN", paymentDate = cycle, paymentDateReason, verify = true } = {}) {
       const result = await generatePaymentBatch({ payableIds: payables.map((ap) => String(ap._id)), bank: "BBVA", currency, paymentDate, paymentDateReason, user: treasury, req });
@@ -448,18 +453,21 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       const { supplier } = await makeSupplier();
       const { ap: small } = await makePayable({ supplier, amount: 700, expenseType: spotExpense });
       const { ap: plain } = await makePayable({ supplier, amount: 5000 });
-      const { ap: missingAccount } = await makePayable({ supplier, amount: 2000, expenseType: spotExpense });
+      const { ap: missingAccount } = await makePayable({ supplier, amount: 2000, expenseType: spotExpense, confirmTreatment: false });
       // Accounting's confirmation at invoice time wins over the nature's suggestion, both ways.
       const { ap: clearedByAccounting } = await makePayable({ supplier, amount: 2000, expenseType: spotExpense, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" } });
       const { ap: setByAccounting } = await makePayable({ supplier, amount: 1000, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "037" } });
-      await schedulePayments({ payableIds: [small, plain, missingAccount, clearedByAccounting, setByAccounting].map((ap) => String(ap._id)), bank: "BBVA", currency: "PEN", user: treasury, req });
+      await schedulePayments({ payableIds: [small, plain, clearedByAccounting, setByAccounting].map((ap) => String(ap._id)), bank: "BBVA", currency: "PEN", user: treasury, req });
       assert.equal((await reload(small)).detraction.status, "NOT_APPLICABLE", "S/ 700 does not exceed the threshold");
       assert.equal((await reload(plain)).detraction.status, "NOT_APPLICABLE");
       assert.equal((await reload(clearedByAccounting)).detraction.status, "NOT_APPLICABLE");
       assert.equal((await reload(setByAccounting)).detraction.categoryCode, "037");
       assert.equal((await reload(setByAccounting)).detraction.amountPen, 120);
-      assert.equal((await reload(missingAccount)).detraction.amount, 240);
-      await assert.rejects(() => recordDetractionDeposit({ accountsPayableId: missingAccount._id, payload: { constancyNumber: "C-9", depositDate: today, amount: 240 }, user: treasury, req }), (error) => error.code === "BANK_DETAILS_MISSING");
+      await Supplier.updateOne({ _id: supplier._id }, { $unset: { detractionAccount: 1 } });
+      await assert.rejects(() => confirmAccountingDetraction({ id: missingAccount._id, categoryCode: "022", user: accounting, req }), /Banco de la Nacion/);
+      const blocked = await previewPaymentBatch({ payableIds: [String(missingAccount._id)], currency: "PEN" });
+      assert.equal(blocked.ready, false);
+      assert.ok(blocked.issues.some(issue => issue.code === "ACCOUNTING_DETRACTION_REQUIRED"));
       await assert.rejects(() => recordDetractionDeposit({ accountsPayableId: plain._id, payload: { constancyNumber: "C-8", depositDate: today, amount: 1 }, user: treasury, req }), (error) => error.statusCode === 409);
     });
 
@@ -471,6 +479,98 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       assert.equal(preview.ready, true);
       assert.equal((await reload(ap)).status, AP_STATUS.OPEN);
       assert.equal(await PaymentBatch.countDocuments(), count);
+    });
+
+    await t.test("date filters preserve stored calendar dates and apply Lima to timed due dates", async () => {
+      const calendarDay=limaDateKey(new Date());
+      const { supplier }=await makeSupplier();const {ap:calendar}=await makePayable({supplier});const {ap:instant}=await makePayable({supplier});
+      await AccountsPayable.updateOne({_id:calendar._id},{$set:{dueDate:new Date(`${calendarDay}T00:00:00Z`),scheduledFor:new Date(`${calendarDay}T00:00:00Z`)}});
+      await AccountsPayable.updateOne({_id:instant._id},{$set:{dueDate:new Date(`${calendarDay}T03:00:00Z`)}});
+      const due=await listTreasuryQueue({supplier:String(supplier._id),paymentStatus:"dueSoon",datePreset:"today"});
+      assert.deepEqual(due.data.map(row=>String(row._id)),[String(calendar._id)]);
+      const overdue=await listTreasuryQueue({supplier:String(supplier._id),paymentStatus:"overdue"});
+      assert.deepEqual(overdue.data.map(row=>String(row._id)),[String(instant._id)]);
+    });
+
+    await t.test("the bank batch date updates an already scheduled payable without changing its contractual due date", async () => {
+      const { supplier } = await makeSupplier();const { ap } = await makePayable({ supplier });
+      ap.dueDate=new Date(`${today}T12:00:00-05:00`);await ap.save();
+      await schedulePayments({ payableIds:[String(ap._id)],bank:"BBVA",currency:"PEN",paymentDate:cycle,user:treasury,req });
+      const laterDate=dayAfter(cycle,1);
+      const file=await makeFile([ap],{paymentDate:laterDate,paymentDateReason:"Fecha contractual autorizada por Tesorería"});
+      const updated=await reload(ap);
+      assert.equal(updated.scheduledFor.toISOString().slice(0,10),laterDate);
+      assert.equal(updated.dueDate.getTime(),ap.dueDate.getTime());
+      assert.equal(file.paymentDate.toISOString().slice(0,10),laterDate);
+      assert.ok(updated.history.some(item=>item.comments.includes(laterDate)));
+    });
+
+    await t.test("Accounting can attest a legacy partial invoice without changing its detraction, deposit or payment history", async () => {
+      const { supplier } = await makeSupplier();
+      const { ap,request } = await makePayable({ supplier, amount:1180,expenseType:spotExpense });
+      await makeFile([ap]); await confirm(ap,"OP-LEGACY-PARTIAL",200);
+      await AccountsPayable.updateOne({ _id:ap._id },{ $unset:{ "detraction.confirmedAt":1,"detraction.confirmedBy":1 } });
+      const before = await reload(ap);
+      await assert.rejects(() => confirmAccountingDetraction({ id:ap._id,categoryCode:"",user:accounting,req }),/preserve the original detraction/);
+      await confirmAccountingDetraction({ id:ap._id,categoryCode:"022",user:accounting,req });
+      const after = await reload(ap);
+      assert.equal(after.outstandingAmount,before.outstandingAmount);
+      assert.equal(after.detraction.amount,before.detraction.amount);
+      assert.equal(after.detraction.determinedAt.getTime(),before.detraction.determinedAt.getTime());
+      assert.equal((await FinancialRequest.findById(request._id)).payment.confirmations.filter(item => String(item.accountsPayable) === String(ap._id)).length,1);
+      const preview=await previewPaymentBatch({payableIds:[String(ap._id)],currency:"PEN"});
+      assert.equal(preview.ready,true); assert.equal(preview.summary.total,838);
+    });
+
+    await t.test("Accounting alone confirms SPOT; preflight aggregates issues and filtered eligibility uses real balances", async () => {
+      const { supplier } = await makeSupplier();
+      const { ap: unconfirmed } = await makePayable({ supplier, amount: 1180, expenseType: spotExpense, confirmTreatment: false });
+      const { supplier: missing } = await makeSupplier({ withAccount: false });
+      const { ap: noAccount } = await makePayable({ supplier: missing });
+      await assert.rejects(() => confirmAccountingDetraction({ id: unconfirmed._id, categoryCode: "022", user: treasury, req }), error => error.statusCode === 403);
+      const preview = await previewPaymentBatch({ payableIds: [String(unconfirmed._id),String(noAccount._id)], currency: "PEN" });
+      assert.equal(preview.ready,false); assert.equal(preview.issues.length,2);
+      assert.ok(preview.issues.some(issue => issue.code === "ACCOUNTING_DETRACTION_REQUIRED"));
+      const readyBefore = await listTreasuryQueue({ supplier: String(supplier._id), paymentStatus: "ready" });
+      assert.equal(readyBefore.pagination.total,0);
+      await confirmAccountingDetraction({ id: unconfirmed._id, categoryCode: "022", user: accounting, req });
+      const ready = await listTreasuryQueue({ supplier: String(supplier._id), paymentStatus: "ready" });
+      assert.equal(ready.pagination.total,1); assert.equal(ready.data[0].accountsPayable.netPayableAmount,1038);
+      assert.ok(await AuditLog.exists({ entityId: unconfirmed._id, action: "DETRACTION_CONFIRMED", user: accounting._id }));
+      assert.equal((await reload(unconfirmed)).status,AP_STATUS.OPEN);
+    });
+
+    await t.test("TXT retries are idempotent, concurrent batches cannot reuse a payable, and Accounting receives the supplier summary", async () => {
+      const { supplier } = await makeSupplier();
+      const { request, ap: first } = await makePayable({ supplier, amount: 20.10 });
+      const { ap: second } = await makePayable({ supplier, amount: 30.20, request });
+      const payload = { payableIds: [String(first._id),String(second._id)], bank: "BBVA", currency: "PEN", paymentDate: cycle, idempotencyKey: "retryable_bank_txt_123", user: treasury, req };
+      const preview = await previewPaymentBatch(payload);
+      assert.equal(preview.ready,true); assert.equal(preview.summary.supplierCount,1); assert.equal(preview.summary.requestCount,1);
+      assert.equal(preview.summary.total,50.30); assert.equal(preview.summary.suppliers[0].items.length,2);
+      const attempts = await Promise.allSettled([generatePaymentBatch(payload),generatePaymentBatch(payload)]);
+      assert.ok(attempts.some(item => item.status === "fulfilled"));
+      const batch = attempts.find(item => item.status === "fulfilled").value.batch;
+      cleanupPaths.push(path.join(generatedRoot,"bank-files",batch.fileName));
+      const retry = await generatePaymentBatch(payload);
+      assert.equal(String(retry.batch._id),String(batch._id));
+      assert.equal(await PaymentBatch.countDocuments({ generationKey: batch.generationKey }),1);
+      assert.equal(batch.items.length,2,"BBVA preserves the reference for each invoice");
+      assert.equal((await reload(first)).outstandingAmount,20.10,"generation does not record payment");
+      await assert.rejects(() => generatePaymentBatch({ ...payload, idempotencyKey: "different_attempt_123" }), error => error.code === "PAYMENT_PREFLIGHT_FAILED");
+      await assert.rejects(() => generatePaymentBatch({ ...payload, payableIds: [String(first._id)] }), error => error.statusCode === 409);
+      const server = app.listen(0,"127.0.0.1"); await new Promise(resolve => server.on("listening",resolve));
+      try {
+        const api = async (user,path,method="GET",body) => fetch(`http://127.0.0.1:${server.address().port}/api${path}`, { method,
+          headers: { Authorization: `Bearer ${jwt.sign({ id: user._id },process.env.JWT_SECRET || "dev_secret_change_me")}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+        const summary = await api(accounting,`/treasury/bank-files/${batch._id}/summary`);
+        assert.equal(summary.status,200); const data = (await summary.json()).data;
+        assert.equal(data.summary.total,50.30); assert.equal(data.summary.suppliers[0].items.length,2);
+        const csv = await api(accounting,`/treasury/bank-files/${batch._id}/summary?format=csv`);
+        assert.equal(csv.status,200); assert.match(await csv.text(),/50\.30/);
+        assert.equal((await api(solicitor,`/treasury/bank-files/${batch._id}/summary`)).status,403);
+        assert.equal((await api(treasury,`/accounting/accounts-payable/${first._id}/detraction-confirm`,"POST",{ categoryCode: "" })).status,403);
+      } finally { await new Promise(resolve => server.close(resolve)); }
     });
 
     await t.test("request-level reconciliation is grouped by currency", async () => {

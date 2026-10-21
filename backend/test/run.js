@@ -3,6 +3,7 @@ import "./isolateEnv.js";
 import "./permissions.test.js";
 import "./quotationPaymentTerms.test.js";
 import "./minimalFinance.test.js";
+import "./approvalOptimization.test.js";
 import "./annualMonthlyBudget.test.js";
 import "./flexibleBudgetPlans.test.js";
 import "./requestRules.test.js";

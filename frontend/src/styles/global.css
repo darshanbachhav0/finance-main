@@ -608,7 +608,6 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .task-indicator.tone-neutral { background: var(--gray-400); }
 .field select[multiple] { min-height: 112px; padding: 4px; }
 .field select[multiple] option { padding: 6px 7px; border-radius: var(--radius-xs); }
-.treasury-file-controls { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .toast-warning { border-left-color: var(--amber-700); }
 .toast-warning > svg { color: var(--amber-700); }
 
@@ -731,7 +730,6 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
   .readiness-gates, .responsibility-map { grid-template-columns: 1fr; }
   .responsibility-map > div, .responsibility-map > div:nth-child(3n) { border-right: 0; }
   .success-result, .period-toolbar { align-items: stretch; flex-direction: column; }
-  .treasury-file-controls { display: grid; }
   .budget-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .compact-period { width: 100%; }
   .topbar-popover { position: fixed; top: 62px; right: 8px; left: 8px; width: auto; }
@@ -1246,8 +1244,6 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .batch-item-row > div { display: grid; min-width: 0; }
 .batch-item-row strong { overflow: hidden; color: var(--gray-800); font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap; }
 .batch-item-row small { color: var(--gray-600); font-size: var(--font-xs); line-height: 1.4; }
-.treasury-file-controls { display: grid; gap: 12px; }
-.treasury-file-controls .filter-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .blocked-inline { display: inline-flex; align-items: center; gap: 6px; color: var(--red-700, #a12d24); font-size: var(--font-xs); font-weight: 700; }
 .payment-destination-summary.compact { min-width: 230px; }
 .payment-destination-summary.compact > div { display: grid; min-width: 0; }
@@ -1274,7 +1270,6 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 @media (max-width: 640px) {
   .purchase-order-balance-grid,
   .batch-kpis,
-  .treasury-file-controls .filter-row,
   .non-deductible-summary,
   .non-deductible-settlement-form { grid-template-columns: 1fr; }
   .non-deductible-settlement-form .form-span-two { grid-column: auto; }
@@ -1512,8 +1507,6 @@ input[type="file"]::file-selector-button { min-height: 38px; margin-right: 10px;
 .request-section-nav a:hover { background: var(--uma-soft); color: var(--uma-primary); text-decoration: none; }
 .table-account-select select { min-height: 42px; font-size: var(--font-sm); }
 .table-account-select small, .payment-destination-summary small { font-size: var(--font-xs); }
-.treasury-file-controls { display: block; }
-.treasury-file-controls .filter-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 /* Budget plans and reports */
 .budget-view-switch { border-radius: var(--radius-md); }
@@ -1716,7 +1709,6 @@ input[type="file"]::file-selector-button { min-height: 38px; margin-right: 10px;
   .form-grid.three-column-form, .two-column-form { grid-template-columns: minmax(0, 1fr); }
   .form-span-two { grid-column: auto; }
   .readiness-gates, .responsibility-map { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .treasury-file-controls .filter-row { grid-template-columns: minmax(0, 1fr); }
   .login-brand-panel { display: flex; padding: 24px; gap: 0; border-right: 0; border-bottom: 1px solid #f4dce5; }
   .login-brand-panel .uma-logo-full { width: 190px; }
   .login-brand-panel .login-system-mark { display: none; }

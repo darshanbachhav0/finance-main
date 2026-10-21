@@ -141,6 +141,15 @@ test("bell notifications are emailed once per person, after the delay, unless re
       assert.equal(sent.length, 0);
     });
 
+    await t.test("retired jefe supplier tasks are never emailed", async () => {
+      sent.length = 0;
+      const notification = await notifyUser({ userId: ana._id,eventKey:"retired:supplier:approval",type:"SUPPLIER_APPROVAL_PENDING",title:"Legacy supplier task",message:"Historical task",path:"/suppliers" });
+      const summary = await processNotificationEmails({ env:process.env,transport,now:later(6) });
+      assert.equal(sent.length,0);
+      assert.ok(summary.skipReasons.RETIRED_PROVIDER_TASK >= 1);
+      assert.equal((await NotificationDelivery.findOne({ notification:notification._id })).skipReason,"RETIRED_PROVIDER_TASK");
+    });
+
     await t.test("with emails off nothing is queued", async () => {
       process.env.NOTIFICATION_EMAIL_MODE = "OFF";
       const before = await NotificationDelivery.countDocuments();

@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, formatDateTime } from "../../utils/formatte
 import { netTransfer, supplierLabel, voucherLabel } from "../../utils/payables.js";
 import { scheduledPaymentDate, invoiceStatus, supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
 import InvoiceCreditEditor from "./InvoiceCreditEditor.jsx";
+import AccountingDetraction from "./AccountingDetraction.jsx";
 import { useEffect, useState } from "react";
 
 function Group({ title, children }) {
@@ -45,6 +46,7 @@ export default function PayableDetail({ payable, onUpdated }) {
       {row.invoiceAmount !== undefined && row.adjustments?.length > 0 && <Field label="Original invoice amount">{money(row.currency, row.invoiceAmount)}</Field>}
     </Group>
     <InvoiceCreditEditor payable={row} onUpdated={updated => { setRow(current => ({ ...current, dueDate: updated.dueDate, paymentTermsSnapshot: updated.paymentTermsSnapshot, history: updated.history })); onUpdated?.(updated); }} />
+    <AccountingDetraction payable={row} onUpdated={updated => { setRow(current => ({ ...current, accountingTreatment: updated.accountingTreatment, detraction: updated.detraction, history: updated.history })); onUpdated?.(updated); }} />
 
     {detraction && <Group title="Detraction (SPOT)">
       <Field label="Status"><StatusBadge status={detraction.status} /></Field>

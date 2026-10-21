@@ -1,3 +1,4 @@
+import { paymentBatchSummary } from "./paymentBatchSummary.js";
 import crypto from "crypto";
 import AccountsPayable from "../models/AccountsPayable.js";
 import GeneratedFile from "../models/GeneratedFile.js";
@@ -81,7 +82,7 @@ export async function listBankFilesForVerification(queryParams = {}) {
     PaymentBatch.countDocuments(query)
   ]);
   const now = new Date();
-  return paginatedPayload(batches.map((batch) => ({ ...batch.toObject(), verificationStatus: bankFileVerificationStatus(batch), paymentDateWarning: paymentDateWarning(batch, now) })), total, page, pageSize);
+  return paginatedPayload(batches.map((batch) => ({ ...batch.toObject(), summary: paymentBatchSummary(batch.items), verificationStatus: bankFileVerificationStatus(batch), paymentDateWarning: paymentDateWarning(batch, now) })), total, page, pageSize);
 }
 
 async function pendingBatch(batchId) {

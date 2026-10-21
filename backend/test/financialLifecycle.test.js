@@ -259,7 +259,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       const { xmlFile } = await fiscalFixture(request, supplier, { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F001", number: "0001", issueDate, currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 }, users.accounting, cleanupPaths);
       request.attachments.push({ ...xmlFile, kind: "XML", uploadedBy: users.accounting._id });
       await request.save();
-      const result = await processAccountsPayable({ requestId: request._id, payload: { documentType: "FACTURA", series: "F001", number: "0001", documentDate: issueDate, accountingDate: issueDate, fiscalPeriod: period, accountNumber: opex.accountNumber, dueDate: "2026-09-30" }, user: users.accounting, req });
+      const result = await processAccountsPayable({ requestId: request._id, payload: { spotCategoryCode: "", documentType: "FACTURA", series: "F001", number: "0001", documentDate: issueDate, accountingDate: issueDate, fiscalPeriod: period, accountNumber: opex.accountNumber, dueDate: "2026-09-30" }, user: users.accounting, req });
       request = result.request;
       payable = result.accountsPayable;
       assert.equal(request.status, REQUEST_STATUS.ACCOUNTED);

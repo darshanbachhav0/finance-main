@@ -3,6 +3,10 @@
 // {placeholders}, which the bell fills in from the notification's params after t(). Shared so
 // notification emails (backend/src/services/notificationEmailService.js) use the bell's wording.
 export default {
+  "Provider review pending": "Proveedor pendiente de revisión",
+  "{supplier} requires Accounting review.": "{supplier} requiere revisión de Contabilidad.",
+  "Accounting confirmation pending": "Pendiente de confirmación contable",
+  "{requestNumber}: confirm SPOT treatment and net payable.": "{requestNumber}: confirma la detracción y el neto a pagar.",
   // Approvals
   "Approval pending": "Aprobación pendiente",
   "{requestNumber} is waiting for {approvalLevel} approval.": "{requestNumber} está pendiente de aprobación por {approvalLevel}.",
@@ -83,10 +87,6 @@ export default {
   "{requestNumber}: the bank rejected a payment for incorrect or changed account details. Re-verify the account before it is used again.": "{requestNumber}: el banco rechazó un pago por datos de cuenta incorrectos o modificados. Vuelve a verificar la cuenta antes de usarla otra vez.",
 
   // Supplier approval (the proposer's jefe)
-  "Supplier awaiting your approval": "Proveedor pendiente de tu aprobación",
-  "{supplier}, proposed by {proposer}, is waiting for your approval.": "{supplier}, propuesto por {proposer}, está pendiente de tu aprobación.",
-  "{supplier}, proposed by {proposer}, is waiting for your approval on behalf of {name}.": "{supplier}, propuesto por {proposer}, está pendiente de tu aprobación en nombre de {name}.",
-  "{supplier} has no available jefe to approve it, so it waits for an Admin.": "{supplier} no tiene un jefe disponible que lo apruebe, así que espera a un Administrador.",
   "Supplier approved": "Proveedor aprobado",
   "{supplier} was approved by {name} and can now be used on requests.": "{supplier} fue aprobado por {name} y ya puede usarse en solicitudes.",
   "Supplier observed": "Proveedor observado",

@@ -92,6 +92,7 @@ test("BBVA certification is a controlled, per-format/currency action that never 
         supplierIdentifierSnapshot: supplier.rucDni,
         voucher: { voucherType: "FACTURA", documentType: "FACTURA", series: "F002", number: number.slice(-4), documentDate: new Date(issueDate) },
         originalAmount: 118, currency: "PEN", exchangeRate: 1, penEquivalent: 118, outstandingAmount: 118,
+        accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, detraction: { status: "NOT_APPLICABLE", confirmedAt: new Date(), confirmedBy: admin._id },
         dueDate: new Date("2026-10-10"), status: AP_STATUS.OPEN, provisionJournal: new mongoose.Types.ObjectId()
       });
       return { request, payable };

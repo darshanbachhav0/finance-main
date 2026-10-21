@@ -88,8 +88,8 @@ async function missingExchangeRateDates() {
 
 // Management decides budget exceptions in the Approval Inbox, next to its approvals.
 export const BUDGET_EXCEPTION_DECISIONS_PATH = "/approvals#budget-exceptions";
-// The proposer's jefe approves suppliers in the Approval Inbox too.
-export const SUPPLIER_APPROVALS_PATH = "/approvals#supplier-approvals";
+// Legacy import compatibility; provider review now opens the supplier workspace.
+export const SUPPLIER_APPROVALS_PATH = "/suppliers?awaitingMyApproval=true";
 
 // Requester statuses that wait on the requester's own correction (see canModifyRequest).
 const OWNER_CORRECTION_STATUSES = [REQUEST_STATUS.RETURNED, REQUEST_STATUS.OBSERVED, REQUEST_STATUS.OBSERVED_BUDGET, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.OBSERVED_BATCH];
@@ -143,9 +143,12 @@ async function buildTasks(user) {
     items.push({ key: "approvalDueSoon", label: "Approval due soon", count: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $gte: now, $lte: new Date(now.getTime() + config.dueSoonHours * 3600000) } }), path: "/approvals", tone: "warning", partOf: "approval" });
     const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope({ role: ROLES.ADMIN }) : query;
     items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "danger", ...(user.role === ROLES.MANAGEMENT ? {} : { partOf: "approval" }) });
-    // Suppliers whose proposer has this user as their (available) jefe, or the Admin when nobody can.
-    const supplierApprovals = await suppliersAwaitingApprovalBy(user);
-    items.push({ key: "suppliers", label: "Suppliers awaiting your approval", count: supplierApprovals.length, path: supplierApprovals.length === 1 ? `/suppliers/${supplierApprovals[0]._id}` : SUPPLIER_APPROVALS_PATH, tone: "warning" });
+
+  }
+  if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
+    const suppliers = await suppliersAwaitingApprovalBy(user);
+    items.push({ key: "suppliers", label: "Provider review pending", count: suppliers.length,
+      path: suppliers.length === 1 ? `/suppliers/${suppliers[0]._id}` : "/suppliers?awaitingMyApproval=true", tone: "warning" });
   }
   // Requester tasks for every Solicitor and for anyone granted "Create requests".
   if (actsAsRequester(user)) {
@@ -208,6 +211,9 @@ async function buildTasks(user) {
     items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: employeeBankReviews, path: (await singleRecordPath(employeeBankReviews, EmployeeReimbursementBankAccount, bankReviewQuery, (record) => `/reimbursement-bank?record=${record._id}`)) || "/reimbursement-bank?verificationStatus=PENDING", tone: "warning" });
     items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: supplierBankReviews, path: (await singleRecordPath(supplierBankReviews, SupplierBankAccount, bankReviewQuery, (record) => `/suppliers?record=${record.supplier}`)) || "/suppliers", tone: "warning" });
     items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "accent" });
+    const detractionQuery = { flowType: { $ne: "C" }, supplier: { $ne: null }, status: { $in: ["OPEN", "SCHEDULED", "PARTIALLY_PAID"] }, "detraction.confirmedAt": null, "voucher.voucherType": { $nin: ["ANTICIPO", "RECIBO", "RECIBO_HONORARIOS", "RHE", "RECIBO_POR_HONORARIOS"] } };
+    const detractionReviews = await AccountsPayable.countDocuments(detractionQuery);
+    items.push({ key: "detractionReview", label: "Accounting confirmation pending", count: detractionReviews, path: "/accounting/payables?detractionReview=true", tone: "warning" });
     // Treasury downloads a bank TXT only after Accounting verifies it; the earliest payment date
     // drives the urgency, and a file whose payment date has passed counts as overdue.
     const bankFileQuery = { status: "GENERATED", "verification.status": "PENDING" };

@@ -70,69 +70,34 @@ test("a request carrying a supplier that waits for its proposer's jefe", { timeo
     const approve = (request, user, extra = {}) => decideApproval({ id: request._id, action: "APPROVE", forward: false, user, req, ...extra });
     const statusOf = async (request) => (await FinancialRequest.findById(request._id)).status;
 
-    await t.test("the jefe sees the supplier to verify, and what it still needs, with the request", async () => {
+    await t.test("the jefe receives request decisions without provider approval controls", async () => {
       const ready = await requestWith(await waitingSupplier());
       const options = await getApprovalDecisionOptions(ready._id, jefe);
       assert.equal(options.chain, true);
-      assert.equal(options.supplierApproval.yours, true);
-      assert.equal(options.supplierApproval.ready, true);
-      assert.equal(options.supplierApproval.approver.name, "Requester Jefe");
+      assert.equal(options.supplierApproval, null);
       const incomplete = await requestWith(await waitingSupplier({ complete: false }));
-      const missing = (await getApprovalDecisionOptions(incomplete._id, jefe)).supplierApproval;
-      assert.equal(missing.ready, false);
-      assert.ok(missing.issues.some((issue) => issue.code === "PERSON_TYPE_MISSING"));
-      assert.equal((await getApprovalDecisionOptions(ready._id, requester)).supplierApproval, null, "only someone who can approve sees it");
+      assert.equal((await getApprovalDecisionOptions(incomplete._id, jefe)).supplierApproval, null);
     });
-
-    await t.test("approving the request asks for the supplier explicitly: a quick or bulk approval never approves it unseen", async () => {
-      const supplier = await waitingSupplier();
-      const request = await requestWith(supplier);
-      await assert.rejects(approve(request, jefe), (error) => error.code === "SUPPLIER_APPROVAL_REQUIRED" && error.statusCode === 409);
-      const bulk = await bulkApproveRequests({ ids: [request._id], forward: false, user: jefe, req });
-      assert.equal(bulk.results[0].ok, false);
-      assert.equal(bulk.results[0].code, "SUPPLIER_APPROVAL_REQUIRED");
-      assert.equal(await statusOf(request), REQUEST_STATUS.PENDING_APPROVAL);
+    await t.test("quick and bulk approval record only the request decision; Finance readiness still gates financial handoff", async () => {
+      const supplier = await waitingSupplier(); const request = await requestWith(supplier);
+      const result = await bulkApproveRequests({ ids: [request._id], forward: false, user: jefe, req });
+      assert.equal(result.results[0].ok, true);
       assert.equal((await Supplier.findById(supplier._id)).homologationStatus, "PENDING_VALIDATION");
+      assert.notEqual(await statusOf(request), REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(await AuditLog.countDocuments({ entityId: supplier._id, action: "APPROVED_BY_JEFE" }),0);
     });
-
-    await t.test("a supplier that cannot be approved yet keeps the request where it is; it can still be sent back", async () => {
-      const supplier = await waitingSupplier({ complete: false });
-      const request = await requestWith(supplier);
-      await assert.rejects(approve(request, jefe, { approveSupplier: true }), (error) => error.code === "SUPPLIER_HOMOLOGATION_PENDING" && error.statusCode === 422 && error.details.errors.length > 0);
-      assert.equal(await statusOf(request), REQUEST_STATUS.PENDING_APPROVAL);
-      assert.equal((await Supplier.findById(supplier._id)).homologationStatus, "PENDING_VALIDATION");
-      await decideApproval({ id: request._id, action: "OBSERVE", comments: "Complete the supplier's documents.", user: jefe, req });
+    await t.test("a request can still be returned with a reason", async () => {
+      const request = await requestWith(await waitingSupplier({ complete: false }));
+      await decideApproval({ id: request._id, action: "OBSERVE", comments: "Clarify the requirement.", user: jefe, req });
       assert.equal(await statusOf(request), REQUEST_STATUS.OBSERVED);
     });
-
-    await t.test("the jefe approves supplier and request in one decision", async () => {
-      const supplier = await waitingSupplier();
-      const request = await requestWith(supplier);
-      const { request: decided } = await approve(request, jefe, { approveSupplier: true, comments: "Checked the supplier too." });
-      const approved = await Supplier.findById(supplier._id);
-      assert.equal(approved.homologationStatus, "HOMOLOGATED");
-      assert.ok(approved.supplierCode, "the PRV code is assigned");
-      assert.equal(String(approved.jefeApproval.decidedBy), String(jefe._id));
-      assert.equal(decided.status, REQUEST_STATUS.BUDGET_COMMITTED, "the budget commitment runs with the approved supplier");
-      assert.equal((await FinancialRequest.findById(request._id)).supplierSnapshot.homologationStatus, "HOMOLOGATED");
-      assert.ok(await AuditLog.exists({ entityId: supplier._id, action: "APPROVED_BY_JEFE" }));
-      assert.ok(await Notification.exists({ user: requester._id, type: "REQUEST_APPROVED", entityId: request._id }));
-    });
-
-    await t.test("someone else's waiting supplier: the request goes up the chain but is finalized only once the supplier is approved", async () => {
-      const supplier = await waitingSupplier({ proposedBy: colleague });
-      const request = await requestWith(supplier);
-      const options = (await getApprovalDecisionOptions(request._id, jefe)).supplierApproval;
-      assert.equal(options.yours, false);
-      assert.equal(options.approver.name, "Other Jefe");
-      await assert.rejects(approve(request, jefe, { approveSupplier: true }), (error) => error.code === "SUPPLIER_HOMOLOGATION_PENDING" && error.statusCode === 409);
+    await t.test("the manager chain continues without a separate provider decision", async () => {
+      const supplier = await waitingSupplier({ proposedBy: colleague }); const request = await requestWith(supplier);
       await decideApproval({ id: request._id, action: "APPROVE", forward: true, user: jefe, req });
-      const forwarded = await FinancialRequest.findById(request._id);
-      assert.equal(String(activeApprovalStep(forwarded).approverUser), String(root._id));
-      await assert.rejects(approve(request, root), (error) => error.code === "SUPPLIER_HOMOLOGATION_PENDING");
-      await decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE" }, user: otherJefe, req });
-      const { request: decided } = await approve(request, root);
-      assert.equal(decided.status, REQUEST_STATUS.BUDGET_COMMITTED);
+      assert.equal(String(activeApprovalStep(await FinancialRequest.findById(request._id)).approverUser), String(root._id));
+      await approve(request, root);
+      assert.equal((await Supplier.findById(supplier._id)).homologationStatus, "PENDING_VALIDATION");
+      assert.ok(await Notification.exists({ user: requester._id, type: "REQUEST_APPROVED", entityId: request._id }));
     });
   } finally {
     await mongoose.connection.dropDatabase();

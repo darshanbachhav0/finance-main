@@ -14,7 +14,6 @@ import RequestQuickView from "../components/RequestQuickView.jsx";
 import StatCard from "../components/StatCard.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import BudgetExceptionDecisions, { useBudgetExceptionDecisions } from "../components/BudgetExceptionDecisions.jsx";
-import SupplierApprovalDecisions, { useSupplierApprovalDecisions } from "../components/SupplierApprovalDecisions.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
@@ -54,8 +53,6 @@ export default function ApprovalInbox() {
   const { rows, loading } = approvalTable;
   // Management/Admin: reviewed budget exceptions awaiting Management's decision (own section below).
   const exceptionDecisions = useBudgetExceptionDecisions();
-  // Suppliers proposed by this user's team (or covered for) wait for their approval (own section below).
-  const supplierDecisions = useSupplierApprovalDecisions();
 
   const summary = useMemo(() => ({
     total: approvalTable.payload.summary?.total || 0,
@@ -256,10 +253,9 @@ export default function ApprovalInbox() {
         <StatCard label="Pending approval" value={summary.total} tone="warning" />
         <StatCard label="PEN equivalent waiting" value={formatCurrency(summary.amount, "PEN", language)} tone="accent" />
         <StatCard label="Oldest request age" value={summary.oldest} suffix="days" tone="neutral" />
-        {supplierDecisions.total > 0 && <StatCard label="Suppliers to approve" value={supplierDecisions.total} tone="warning" to="#supplier-approvals" actionLabel="View suppliers to approve" />}
         {exceptionDecisions.enabled && <>
           <StatCard label="Budget exceptions to decide" value={exceptionDecisions.total} tone="danger" to="#budget-exceptions" actionLabel="View budget exceptions" />
-          <StatCard label="Decisions awaiting you" value={summary.total + exceptionDecisions.total + supplierDecisions.total} tone="neutral" />
+          <StatCard label="Decisions awaiting you" value={summary.total + exceptionDecisions.total} tone="neutral" />
         </>}
       </div>
       {bulkResult && (
@@ -326,7 +322,6 @@ export default function ApprovalInbox() {
           </div>
         )}
       </div>
-      <SupplierApprovalDecisions queue={supplierDecisions} />
       <BudgetExceptionDecisions queue={exceptionDecisions} />
       <RequestQuickView requestId={quickViewId} onClose={() => setQuickViewId(null)} />
       <RequestDocumentsDrawer requestId={documentsId} onClose={() => setDocumentsId(null)} />

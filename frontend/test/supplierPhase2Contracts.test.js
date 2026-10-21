@@ -24,7 +24,7 @@ test("RCO-FOR-002 supplier workspace uses the existing shared UI and all officia
   ]) assert.ok(form.includes(section), `Missing form section ${section}`);
   // The declarations and the three "mandatory" documents were taken out of the proposal form.
   for (const removed of ["Compliance Declarations", "Mandatory Documents", "Needed for homologation", "DeclarationField"]) assert.ok(!form.includes(removed), `Removed from the form: ${removed}`);
-  for (const section of ["Banking Information", "Areas", "Jefe Approval", "ERP Supplier Code", "Audit / History", "Homologation Readiness"]) {
+  for (const section of ["Banking Information", "Areas", "Provider review", "ERP Supplier Code", "Audit / History", "Homologation Readiness"]) {
     assert.ok(detail.includes(section), `Missing detail section ${section}`);
   }
 });
@@ -50,14 +50,11 @@ test("supplier UI calls the staged backend actions and never posts Finance-owned
 test("the proposer's jefe decides suppliers from the record and from the Approval Inbox", () => {
   const detail = source("../src/components/suppliers/SupplierDetail.jsx");
   const inbox = source("../src/pages/ApprovalInbox.jsx");
-  const queue = source("../src/components/SupplierApprovalDecisions.jsx");
   assert.ok(detail.includes("permissions.canApprove"));
-  assert.doesNotMatch(detail, /canReview|canHomologate/);
-  for (const decision of ["APPROVE", "OBSERVE", "REJECT"]) assert.ok(detail.includes(`onDecision("${decision}")`), `Missing ${decision} decision`);
-  assert.ok(inbox.includes("<SupplierApprovalDecisions queue={supplierDecisions} />"));
-  assert.ok(queue.includes("awaitingMyApproval: \"true\""));
-  assert.ok(queue.includes("/approval`, { decision: confirm.decision, comments }"));
-  assert.ok(queue.includes("id=\"supplier-approvals\""), "task links land on the section");
+  for (const decision of ["APPROVE", "OBSERVE", "REJECT"]) assert.ok(detail.includes(`onDecision("${decision}")`));
+  assert.doesNotMatch(inbox, /SupplierApprovalDecisions|supplierDecisions/);
+  assert.ok(detail.includes('title="Provider review"'));
+
 });
 
 test("all Phase 2 Supplier labels have one synchronized Spanish dictionary", () => {

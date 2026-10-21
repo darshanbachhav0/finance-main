@@ -153,6 +153,9 @@ const accountsPayableSchema = new mongoose.Schema(
       amount: Number,
       amountPen: Number,
       determinedAt: Date,
+        categoryEffectiveFrom: Date,
+        confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        confirmedAt: Date,
       beneficiaryAccountNumber: String,
       constancyNumber: String,
       depositDate: Date,
@@ -186,6 +189,7 @@ const accountsPayableSchema = new mongoose.Schema(
 );
 
 accountsPayableSchema.index({ status: 1, dueDate: 1 });
+  accountsPayableSchema.index({ status: 1, "detraction.confirmedAt": 1 });
 accountsPayableSchema.index({ supplier: 1, status: 1 });
 accountsPayableSchema.index({ request: 1, createdAt: 1 });
 accountsPayableSchema.index({ purchaseOrder: 1, status: 1, createdAt: 1 });

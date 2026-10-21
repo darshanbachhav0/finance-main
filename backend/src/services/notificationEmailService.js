@@ -313,6 +313,7 @@ function userSkipReason(user, config) {
 
 function notificationSkipReason(notification) {
   if (!notification) return "NOTIFICATION_DELETED";
+  if (notification.type === "SUPPLIER_APPROVAL_PENDING") return "RETIRED_PROVIDER_TASK";
   if (notification.resolvedAt) return "RESOLVED";
   if (notification.readAt) return "READ_IN_APP";
   return null;
@@ -337,6 +338,7 @@ export function skipExplanation(reason, user, config) {
     case "RESOLVED": return "the task was already done or closed before the email was due";
     case "READ_IN_APP": return config.delayMs ? `the alert was opened in the app within the ${config.delayMs / 60000}-minute wait` : "the alert was opened in the app before the email went out";
     case "NOTIFICATION_DELETED": return "the notification no longer exists";
+    case "RETIRED_PROVIDER_TASK": return "provider reviews now belong to Accounting; the old jefe task is retired";
     default: return reason;
   }
 }

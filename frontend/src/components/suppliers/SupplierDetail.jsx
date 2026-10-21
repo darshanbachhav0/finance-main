@@ -119,6 +119,7 @@ export default function SupplierDetail({
   }
   const [bankReview, setBankReview] = useState({ verificationStatus: "VERIFIED", ownershipResult: "MATCH", comments: "" });
   const [taxForm, setTaxForm] = useState({ valid: true, returnedIdentifier: supplier.rucDni || "", returnedLegalName: supplier.legalName || supplier.name || "", comments: "" });
+  const [revalidationOpen, setRevalidationOpen] = useState(false);
   const permissions = supplier.permissions || {};
   // SPOT: Banco de la Nacion detracciones account, maintained by Accounting/Admin.
   const [detractionAccount, setDetractionAccount] = useState(supplier.detractionAccount?.accountNumber || "");
@@ -145,7 +146,7 @@ export default function SupplierDetail({
   const jefeApproval = supplier.jefeApproval || {};
   const onBehalfOf = (person) => (person?.name ? ` (${t("on behalf of {name}").replace("{name}", person.name)})` : "");
   const waitingOn = supplier.approval
-    ? supplier.approval.approver ? `${supplier.approval.approver.name}${onBehalfOf(supplier.approval.coveringFor)}` : t("Admin (no jefe available)")
+    ? supplier.approval.approver ? `${supplier.approval.approver.name}${onBehalfOf(supplier.approval.coveringFor)}` : t("Accounting / Admin")
     : "";
   const decidedBy = jefeApproval.decidedBy?.name ? `${jefeApproval.decidedBy.name}${onBehalfOf(jefeApproval.coveringFor)}` : "";
   // Fix 2: homologation is only valid for a configurable period (default 12 months) from when it was granted.
@@ -155,7 +156,7 @@ export default function SupplierDetail({
 
   // Drafts saved before the bank list grew kept "currency" instead of "accountCurrency".
   const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: (saved) => setBankForm({ ...emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN"), ...saved, accountCurrency: saved?.accountCurrency || saved?.currency || supplier.currency || "PEN" }) });
-  const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: permissions.canValidateTaxpayer && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
+  const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: (permissions.canValidateTaxpayer || revalidationOpen) && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
   const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canVerifyBanking && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
   useDraftResume("supplier-bank-review", id => { const account = supplier.bankAccounts?.find(row => row._id === id.split("~")[1]); if (account) setReviewAccount(account); });
   useDraftResume("supplier-bank", () => setShowBankForm(true));
@@ -209,9 +210,9 @@ export default function SupplierDetail({
       </div>
 
       <SectionNavigation className="supplier-section-nav" aria-label={t("Supplier sections")}>
-        {["Legal Identification", "Areas", "Banking Information", "Homologation Readiness", "Jefe Approval", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
+        {["Legal Identification", "Areas", "Banking Information", "Homologation Readiness", "Provider review", "Audit / History"].map((title) => <a key={title} href={`#${sectionId(title)}`}>{t(title)}</a>)}
       </SectionNavigation>
-      {permissions.canApprove && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier and approve, observe or reject it." : "Some requirements are missing. Observe the supplier so the proposer completes them, or reject it.")}</p></div><a className="secondary-button" href={`#${sectionId("Jefe Approval")}`}>{t("Decide")}</a></div>}
+      {permissions.canApprove && <div className="record-next-action"><div><strong>{t("Next step")}</strong><p>{t(readiness?.valid ? "Review the supplier and approve, observe or reject it." : "Some requirements are missing. Observe the supplier so the proposer completes them, or reject it.")}</p></div><a className="secondary-button" href={`#${sectionId("Provider review")}`}>{t("Decide")}</a></div>}
 
       <Section icon={Building2} title="Legal Identification" status={supplier.proposalJustification ? "Registration justification recorded" : "Registration justification missing"}>
         {supplier.similarNameWarning?.possibleDuplicateOf && (
@@ -349,6 +350,7 @@ export default function SupplierDetail({
       </Section>}
 
       <Section icon={ShieldCheck} title="Taxpayer Validation" status={provider.configured ? `${t("Provider")}: ${t(provider.state)}` : "SUNAT integration not configured"}>
+        {supplier.taxpayerValidation?.status === "VALID" && !permissions.canValidateTaxpayer && <p className="cell-note">{t("Verified supplier")}</p>}
         <DetailGrid>
           <Detail label="Validation source" value={supplier.taxpayerValidation?.source || provider.state} />
           <Detail label="Taxpayer Status" value={t(supplier.taxpayerStatus || "PENDING")} />
@@ -364,9 +366,11 @@ export default function SupplierDetail({
             </button>
           </div>
         )}
-        {permissions.canValidateTaxpayer && provider.state === "MANUAL" && (
-          <DraftPanel busy={loading} draft={taxDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitTax}>
+        {!permissions.canValidateTaxpayer && permissions.canRevalidateTaxpayer && provider.variant === "PADRON" && <details><summary>{t("Revalidate for a documented risk")}</summary><form className="supplier-inline-form" onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); onTaxValidation({ revalidationReason: data.get("reason") }); }}><label className="field"><span>{t("Revalidation reason")}</span><input name="reason" required minLength={8} /></label><button type="submit" className="secondary-button" disabled={loading}>{t("Validate automatically with SUNAT")}</button></form></details>}
+        {(permissions.canValidateTaxpayer || permissions.canRevalidateTaxpayer) && provider.state === "MANUAL" && (
+          <details open={permissions.canValidateTaxpayer || undefined} onToggle={event => setRevalidationOpen(event.currentTarget.open)}><summary>{t(permissions.canValidateTaxpayer ? "Taxpayer Validation" : "Revalidate for a documented risk")}</summary><DraftPanel busy={loading} draft={taxDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitTax}>
             <div className="form-grid supplier-form-grid">
+              {!permissions.canValidateTaxpayer && <label className="field field-span-2"><span>{t("Revalidation reason")}</span><input required minLength={8} value={taxForm.revalidationReason || ""} onChange={event => setTaxForm(current => ({ ...current, revalidationReason: event.target.value }))} /></label>}
               <label className="field"><span>{t("Manual validation result")}</span><select value={String(taxForm.valid)} onChange={(event) => setTaxForm((current) => ({ ...current, valid: event.target.value === "true" }))}><option value="true">{t("Valid")}</option><option value="false">{t("Invalid")}</option></select></label>
               <label className="field"><span>{t("Returned / reviewed RUC")}</span><input value={taxForm.returnedIdentifier} onChange={(event) => setTaxForm((current) => ({ ...current, returnedIdentifier: event.target.value }))} /></label>
               <label className="field field-span-2"><span>{t("Returned / reviewed legal name")}</span><input value={taxForm.returnedLegalName} onChange={(event) => setTaxForm((current) => ({ ...current, returnedLegalName: event.target.value }))} /></label>
@@ -374,7 +378,7 @@ export default function SupplierDetail({
             </div>
             <p className="section-note">{t("This records an authorized manual validation and does not claim live SUNAT verification.")}</p>
             <div className="inline-form-actions"><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Record taxpayer validation")}</span></button></div>
-          </form></DraftPanel>
+          </form></DraftPanel></details>
         )}
       </Section>
 
@@ -388,7 +392,7 @@ export default function SupplierDetail({
         {readiness?.valid && !readiness?.legacyCompatible && <div className="inline-alert alert-success"><CheckCircle2 size={16} /><span>{t("All backend homologation requirements are currently satisfied.")}</span></div>}
       </Section>
 
-      <Section icon={UserCheck} title="Jefe Approval" status={jefeApproval.decision === "APPROVED" ? "Approved for use on requests" : waitingOn ? "Waiting for the decision of the proposer's jefe" : "Only the proposer's jefe approves a supplier"}>
+      <Section icon={UserCheck} title="Provider review" status={jefeApproval.decision === "APPROVED" ? "Approved for use on requests" : waitingOn ? "Waiting for Accounting review" : "Accounting reviews suppliers"}>
         <DetailGrid>
           <Detail label="Decision"><StatusBadge status={jefeApproval.decision || "PENDING"} /></Detail>
           <Detail label={waitingOn ? "Waiting for" : "Decided By"} value={waitingOn || decidedBy} />

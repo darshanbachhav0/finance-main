@@ -12,6 +12,7 @@ import {
   voucherIdentity
 } from "./sunatVoucherService.js";
 import AccountsPayable from "../models/AccountsPayable.js";
+import { prepareAccountingDetraction } from "./detractionService.js";
 import ExpenseType from "../models/ExpenseType.js";
 import { resolvePayablePaymentTerms, resolvePayableDueDate } from "./payablePaymentTermsService.js";
 import FinancialRequest from "../models/FinancialRequest.js";
@@ -657,6 +658,7 @@ export async function createAccountsPayableFromVoucher({
     igvDeductible: accountingTreatment?.igvDeductible
   }, user?._id || user, { session });
   accountsPayable.provisionJournal = journal._id;
+  await prepareAccountingDetraction({ request, accountsPayable, user, session });
   if (request.flowType !== FLOW_TYPE.C && !accountsPayable.budgetExecutedAt) {
     await executeBudgetAmount(request, user?._id || user, accountsPayable.penEquivalent, { session });
     accountsPayable.budgetExecutedAt = new Date();
@@ -1036,6 +1038,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
       ? await createProvisionJournalForVoucher(request, accountsPayable, { netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount, exchangeRate, voucherType: fiscal.voucherType, igvDeductible: treatment?.igvDeductible }, user._id, { session })
       : await createProvisionJournal(request, accountsPayable, user._id, { session });
     accountsPayable.provisionJournal = journal._id;
+    await prepareAccountingDetraction({ request, accountsPayable, user, session });
     if (request.flowType !== FLOW_TYPE.C && !accountsPayable.budgetExecutedAt) {
       await executeBudgetAmount(request, user._id, accountsPayable.penEquivalent, { session });
       accountsPayable.budgetExecutedAt = new Date();
@@ -1078,13 +1081,14 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     return { request, accountsPayable, journal };
   });
   await resolveNotification(`request:${request._id}:accounting`);
+  const needsDetractionReview = result.accountsPayable.flowType !== FLOW_TYPE.C && result.accountsPayable.supplier && !result.accountsPayable.detraction?.confirmedAt;
   await notifyRoles({
-    roles: ["Treasury"],
-    eventKey: `request:${request._id}:treasury`,
-    type: "TREASURY_PAYABLE",
-    title: notificationText("Payable item ready"),
-    message: notificationText("{requestNumber} has an open CXP ready for Treasury scheduling.", { requestNumber: request.requestNumber }),
-    path: `/treasury?tab=prepare&request=${request._id}`,
+    roles: needsDetractionReview ? ["Accounting", "Admin"] : ["Treasury"],
+    eventKey: needsDetractionReview ? `payable:${result.accountsPayable._id}:detraction-review` : `request:${request._id}:treasury`,
+    type: needsDetractionReview ? "ACCOUNTING_DETRACTION_REQUIRED" : "TREASURY_PAYABLE",
+    title: needsDetractionReview ? notificationText("Accounting confirmation pending") : notificationText("Payable item ready"),
+    message: needsDetractionReview ? notificationText("{requestNumber}: confirm SPOT treatment and net payable.", { requestNumber: request.requestNumber }) : notificationText("{requestNumber} has an open CXP ready for Treasury scheduling.", { requestNumber: request.requestNumber }),
+    path: needsDetractionReview ? `/accounting/payables?record=${result.accountsPayable._id}` : `/treasury?tab=prepare&request=${request._id}`,
     entityType: "FinancialRequest",
     entityId: request._id
   });

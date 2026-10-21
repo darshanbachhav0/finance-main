@@ -461,7 +461,7 @@ export default function Suppliers() {
             "status",
 
           label:
-            "Jefe approval",
+            "Provider review",
 
           width:
             "170px",
@@ -492,7 +492,7 @@ export default function Suppliers() {
                       {
                         row.approval.approver
                           ? row.approval.approver.name
-                          : t("Admin (no jefe available)")
+                          : t("Accounting / Admin")
                       }
                     </span>
                   )
@@ -2191,7 +2191,7 @@ export default function Suppliers() {
     <div className="page-shell supplier-page">
       <PageHeader
         title="Supplier Master & Homologation"
-        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, approval by the proposer's jefe, banking history and controlled PRV assignment."
+        description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, review by Accounting, banking history and controlled PRV assignment."
         actions={
           <>
             {!readOnly && ["Admin", "Accounting", "Procurement"].includes(user.role) && <ExcelImport kind="suppliers" onImported={() => suppliers.reload()} />}
@@ -2319,10 +2319,10 @@ export default function Suppliers() {
               "jefeApprovalDecision",
 
             label:
-              "Jefe approval",
+              "Provider review",
 
             allLabel:
-              "All jefe approval decisions",
+              "All provider review decisions",
 
             options: [
               "PENDING",
