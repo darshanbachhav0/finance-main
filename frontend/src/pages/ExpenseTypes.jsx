@@ -14,6 +14,7 @@ export default function ExpenseTypes() {
       title="Accounting Accounts"
       description="PCGE accounts Accounting books invoices to. The platform suggests one from the request type and the nature of the expense."
       endpoint="/expense-types"
+      deleteMode="deactivate"
       duplicateFields={["code", "accountNumber"]}
       fields={[
         { type: "section", label: "Account" },

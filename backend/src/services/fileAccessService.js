@@ -7,6 +7,7 @@ import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
 import { SUPPLIER_WORK_ROLES, canViewRequest, canViewSuppliers, hasPermission } from "../utils/permissions.js";
 import { generatedRoot, uploadRoot } from "./storageService.js";
 import { isCurrentSupplierApprover } from "./supplierService.js";
+import { SUPPLIER_OVERSIGHT_ROLES, canOpenSupplier } from "./supplierVisibilityService.js";
 import { assertBankFileReleased } from "../utils/bankFileVerification.js";
 
 // The Super Admin reads what an Admin reads; an unverified bank file stays closed to it (it does
@@ -60,14 +61,19 @@ export async function assertStoredAssetAccess(asset, user, { requestId } = {}) {
       if (request && String(request.supplier) === asset.segments[1] && canViewRequest(request, user) && (assigned || poolApprover)) return;
     }
     if (!canViewSuppliers(user)) throw forbidden();
-    if (!SUPPLIER_WORK_ROLES.includes(user.role) && !hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
-      // The proposer while the proposal is open, and the jefe who decides on it while it waits.
-      const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy homologationStatus homologationValidUntil");
-      const proposerOpen = supplier && String(supplier.proposedBy || "") === String(user._id) && ["PENDING_VALIDATION", "OBSERVED"].includes(supplier.homologationStatus);
-      if (!proposerOpen && !(supplier && await isCurrentSupplierApprover(supplier, user))) {
-        throw forbidden();
-      }
+    if (SUPPLIER_OVERSIGHT_ROLES.includes(user.role)) return;
+    const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy departments homologationStatus homologationValidUntil");
+    if (!supplier) throw forbidden();
+    // Accounting reviewing the proposal opens its evidence whatever the department.
+    if (await isCurrentSupplierApprover(supplier, user)) return;
+    if (SUPPLIER_WORK_ROLES.includes(user.role) || hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
+      // Finance staff: the suppliers they can open (their department's, or one their work reaches).
+      if (!(await canOpenSupplier(supplier, user))) throw forbidden();
+      return;
     }
+    // Everyone else: the proposer while the proposal is open.
+    const proposerOpen = String(supplier.proposedBy || "") === String(user._id) && ["PENDING_VALIDATION", "OBSERVED"].includes(supplier.homologationStatus);
+    if (!proposerOpen) throw forbidden();
     return;
   }
   if (asset.kind === "generated") {

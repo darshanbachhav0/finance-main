@@ -69,6 +69,7 @@ export default function ExchangeRates() {
       title="Exchange Rates"
       description="SUNAT selling rates are verified on the server. Manual and BCRP/SBS records remain references; historical rates are preserved."
       endpoint="/exchange-rates"
+      deleteMode="deactivate"
       duplicateFields={["date"]}
       transformSubmit={payload}
       renderHeaderActions={(actions) => (

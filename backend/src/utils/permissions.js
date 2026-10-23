@@ -3,8 +3,9 @@ import { activeApprovalStep } from "../services/approvalRuleService.js";
 import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
 export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT, ROLES.SUPER_ADMIN];
-// Roles that see every supplier (not only the proposals they made themselves). The Super Admin
-// only reads them.
+// Roles whose work reaches supplier records (and their files) beyond their own proposals. Which
+// suppliers each one sees is still their department's list (services/supplierVisibilityService.js);
+// only the Admin and the read-only Super Admin see every department.
 export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.SUPER_ADMIN];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
 

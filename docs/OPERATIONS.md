@@ -401,8 +401,9 @@ the highest code in use), requests get their priority rank and frequency, and ge
 `DOC-YYYY-#####` number in creation order. `--assign-areas` gives each supplier without areas the
 areas of the requesters who used it and of its proposer — this changes what requesters see, so run
 it deliberately; until then every existing supplier stays shared with every area. Running it again
-changes nothing. Users whose area is empty or "General" only see shared suppliers: set their area in
-Users first.
+changes nothing. A user's department is their area in Users (empty counts as "General"): set it
+before people register suppliers, and give Tesorería and Contabilidad staff different areas if each
+should keep its own supplier list.
 
 Migration reports are written under `backend/migration-reports`. Every migration script no-ops if
 its own key already exists in the `migrationruns` collection, so re-running an already-applied
