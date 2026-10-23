@@ -5,6 +5,7 @@ import SunatVoucher from "../models/SunatVoucher.js";
 import { assertVoucherEvidenceMatches, latestInvoiceEvidence } from "./xmlValidationService.js";
 import {
   createSunatVoucher,
+  duplicateVoucherError,
   findDuplicateVoucher,
   hasManualSunatException,
   manualExceptionEvidence,
@@ -582,7 +583,7 @@ export async function createAccountsPayableFromVoucher({
     const sameBatch = !sourceBatch || String(existing.sourceBatch || "") === String(sourceBatch?._id || sourceBatch);
     const sameVoucher = !sunatVoucher || String(existing.sunatVoucher || "") === String(sunatVoucher?._id || sunatVoucher);
     if (sameRequest && samePurchaseOrder && sameBatch && sameVoucher) return existing;
-    throw new AppError(409, "The fiscal voucher is already registered in Accounts Payable.", { accountsPayable: existing._id, request: existing.request }, ERROR_CODES.DUPLICATE_VOUCHER);
+    throw await duplicateVoucherError({ ruc: supplierIdentifier, voucherType, series, number }, { requestId: request._id, holderRequestId: existing.request, session });
   }
   await guardAccountingPeriod({ period: postingPeriod, action: "POST", user, module: "ACCOUNTING", entityType: "AccountsPayable", requestId: request._id });
   let validatedVoucher;
@@ -929,7 +930,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     ...activePayableFilter({ supplierIdentifier: fiscal.supplierIdentifierNormalized, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number })
   });
   if (duplicate) {
-    throw new AppError(409, "The supplier voucher is already registered.", { accountsPayable: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
+    throw await duplicateVoucherError({ ruc: fiscal.supplierIdentifierNormalized, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number }, { requestId: request._id, holderRequestId: duplicate.request });
   }
   const purchaseOrder = request.flowType === FLOW_TYPE.A1 ? await PurchaseOrder.findOne({ request: request._id }) : null;
   const existingPayable = await AccountsPayable.findOne({ request: request._id,
@@ -952,7 +953,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };
     await assertVoucherEvidenceMatches(invoiceFile?.path, voucher);
     const existingEvidence = await findDuplicateVoucher(voucher);
-    if (existingEvidence && String(existingEvidence.request) !== String(request._id)) throw new AppError(409, "Fiscal document already registered.", undefined, ERROR_CODES.DUPLICATE_VOUCHER);
+    if (existingEvidence && String(existingEvidence.request) !== String(request._id)) throw await duplicateVoucherError(voucher, { requestId: request._id, holderRequestId: existingEvidence.request });
     let validation;
     if (hasManualSunatException(existingEvidence)) {
       manualEvidence = existingEvidence;
@@ -1025,7 +1026,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     if (invoiceBased) {
       const voucher = { ruc: supplierIdentifier, voucherType: fiscal.voucherType, series: fiscal.series, number: fiscal.number, issueDate: fiscal.documentDate, currency: request.currency, netAmount: request.totalNet, igvAmount: request.totalIGV, totalAmount: request.totalAmount };
       let evidence = await findDuplicateVoucher(voucher, { session });
-      if (evidence && String(evidence.request) !== String(request._id)) throw new AppError(409, "Fiscal document already registered.", undefined, ERROR_CODES.DUPLICATE_VOUCHER);
+      if (evidence && String(evidence.request) !== String(request._id)) throw await duplicateVoucherError(voucher, { requestId: request._id, holderRequestId: evidence.request, session });
       if (!evidence) evidence = await createSunatVoucher({ request, supplier: request.supplier, voucher, validationStatus: "VALID", sunatResult: request.fiscalValidation, xmlFile: [...request.attachments].reverse().find(item => item.kind === "XML"), user, session });
       evidence.accountsPayable = accountsPayable._id;
       evidence.provisionedAt = new Date();
@@ -1249,6 +1250,35 @@ async function createAccountsPayableCancellationJournal(request, accountsPayable
 // SUNAT voucher is marked ANNULLED so the same or a corrected invoice can be registered again.
 // A partially paid or paid obligation cannot disappear this way - use a credit note. History is
 // never deleted; cancellation only adds a reversing journal entry and history records.
+// The request stops holding a cancelled invoice: its fiscal data (unique per invoice across
+// requests) moves to another active invoice of the request, or is cleared when none is left, so
+// the same or a corrected invoice can be registered again on this or another request.
+async function releaseCancelledInvoice(request, accountsPayable, session) {
+  const fiscal = request.fiscalData;
+  const cancelled = accountsPayable.voucher || {};
+  const holds = fiscal?.series && fiscal?.number && cancelled.series && cancelled.number
+    && canonicalSeries(fiscal.series) === canonicalSeries(cancelled.series)
+    && canonicalVoucherNumber(fiscal.number) === canonicalVoucherNumber(cancelled.number)
+    && canonicalVoucherType(fiscal.voucherType) === canonicalVoucherType(cancelled.voucherType);
+  if (!holds) return undefined;
+  const released = `${canonicalSeries(fiscal.series)}-${canonicalVoucherNumber(fiscal.number)}`;
+  const active = await AccountsPayable.findOne({ request: request._id, _id: { $ne: accountsPayable._id }, status: { $ne: AP_STATUS.CANCELLED }, voucherActive: { $ne: false } })
+    .sort({ createdAt: -1 }).session(session || null);
+  if (active?.voucher?.series && active.voucher.number) {
+    Object.assign(request.fiscalData, {
+      supplierIdentifierNormalized: active.supplierIdentifierSnapshot || fiscal.supplierIdentifierNormalized,
+      voucherType: active.voucher.voucherType,
+      documentType: active.voucher.documentType || active.voucher.voucherType,
+      series: active.voucher.series,
+      number: active.voucher.number,
+      documentDate: active.voucher.documentDate || fiscal.documentDate
+    });
+  } else {
+    request.fiscalData = undefined;
+  }
+  return released;
+}
+
 export async function cancelAccountsPayable({ accountsPayableId, reason, user, req }) {
   const trimmedReason = String(reason || "").trim();
   if (!trimmedReason) throw new AppError(422, "A cancellation reason is required.", { field: "reason" }, ERROR_CODES.VALIDATION_ERROR);
@@ -1306,6 +1336,7 @@ export async function cancelAccountsPayable({ accountsPayableId, reason, user, r
       const replacement = await AccountsPayable.findOne({ request: request._id, status: { $ne: AP_STATUS.CANCELLED } }).session(session || null);
       request.accountsPayable = replacement?._id;
     }
+    const releasedInvoice = await releaseCancelledInvoice(request, accountsPayable, session);
     // Re-derive the parent status: without any active payable the request returns to the budget
     // commitment stage, so a corrected invoice can be registered.
     const progress = await syncFinancialProgress({ request, user, req, session, action: "ACCOUNTS_PAYABLE_CANCELLED" });
@@ -1318,7 +1349,7 @@ export async function cancelAccountsPayable({ accountsPayableId, reason, user, r
       req,
       module: "ACCOUNTING",
       comments: trimmedReason,
-      newValues: { status: AP_STATUS.CANCELLED, reversalJournal: reversalJournal?.entryNumber, reversalPeriod, purchaseOrderRemaining: purchaseOrder?.remainingAmount, voucherStatus: voucher?.validationStatus, requestStatus: request.status },
+      newValues: { status: AP_STATUS.CANCELLED, reversalJournal: reversalJournal?.entryNumber, reversalPeriod, purchaseOrderRemaining: purchaseOrder?.remainingAmount, voucherStatus: voucher?.validationStatus, requestStatus: request.status, releasedInvoice },
       session
     });
     return { accountsPayable, reversalJournal, request, purchaseOrder, voucher, progress };

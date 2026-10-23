@@ -7,7 +7,7 @@ import User from "../models/User.js";
 import { createAccountsPayableFromVoucher } from "./accountingService.js";
 import { reserveBudget, executeBudget } from "./budgetService.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
-import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat } from "./sunatVoucherService.js";
+import { createSunatVoucher, duplicateVoucherError, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat } from "./sunatVoucherService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS } from "../utils/constants.js";
@@ -175,7 +175,7 @@ export async function provisionDirectPayment({ request, user, req, session, pref
   const { voucher, sunatResult } = checked;
   const duplicate = await findDuplicateVoucher(voucher, { session });
   const reusable = sameObservedRequestVoucher(duplicate, request) ? duplicate : null;
-  if (duplicate && !reusable) throw new AppError(409, "This fiscal voucher already exists in the system.", { voucher: duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
+  if (duplicate && !reusable) throw await duplicateVoucherError(voucher, { requestId: request._id, holderRequestId: duplicate.request, session });
 
   const xmlAttachment = latestAttachment(request, "XML");
   const pdfAttachment = latestAttachment(request, "PDF");

@@ -1,3 +1,5 @@
+import AccountsPayable from "../models/AccountsPayable.js";
+import FinancialRequest from "../models/FinancialRequest.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import Supplier from "../models/Supplier.js";
 import { sunatService } from "./sunatService.js";
@@ -10,8 +12,52 @@ import {
   canonicalVoucherType,
   seriesNumberPattern,
   sunatDocumentTypeCode,
+  voucherNumberPattern,
   voucherTypeVariants
 } from "../utils/voucherIdentity.js";
+
+// A duplicate invoice is refused with what to do about it, never only "already registered": the
+// message says how to correct it (fixed text, translated on the screen) and the details say where
+// it already is: the invoice, its issuer and the request holding it with its status.
+export const DUPLICATE_VOUCHER_MESSAGES = Object.freeze({
+  SAME_REQUEST: "This invoice is already registered on this request, so it does not need to be uploaded again. To use the order's remaining balance, upload the next invoice the supplier issued.",
+  OTHER_REQUEST: "This invoice is already registered on another request, and an invoice can be registered only once. Upload the invoice issued for this purchase. If it was registered on the other request by mistake and is not paid yet, ask Accounting to cancel that request's payable (CXP), then upload it here again.",
+  ELSEWHERE: "This invoice is already registered in the platform (same RUC, type, series and number), and an invoice can be registered only once. Upload the invoice issued for this purchase. If it was registered by mistake and is not paid yet, ask Accounting to cancel the payable (CXP) that holds it, then upload it again."
+});
+
+export async function duplicateVoucherError(voucher, options = {}) {
+  const details = await duplicateVoucherDetails(voucher, options);
+  return new AppError(409, DUPLICATE_VOUCHER_MESSAGES[details.reason], details, ERROR_CODES.DUPLICATE_VOUCHER);
+}
+
+export async function duplicateVoucherDetails(voucher, { requestId, holderRequestId, session } = {}) {
+  const identity = voucherIdentity(voucher || {});
+  let holderId = holderRequestId;
+  if (!holderId && identity.rucIssuer && identity.series && identity.number) {
+    const evidence = await SunatVoucher.findOne({ ...duplicateFilter(identity), validationStatus: { $ne: "ANNULLED" } }).select("request").session(session || null).lean();
+    const payable = evidence?.request ? null : await AccountsPayable.findOne({
+      supplierIdentifierSnapshot: identity.rucIssuer,
+      "voucher.voucherType": { $in: voucherTypeVariants(identity.voucherType) },
+      "voucher.series": identity.series,
+      "voucher.number": voucherNumberPattern(identity.number),
+      voucherActive: { $ne: false }
+    }).select("request").session(session || null).lean();
+    holderId = evidence?.request || payable?.request;
+  }
+  const holder = holderId ? await FinancialRequest.findById(holderId).select("requestNumber status").session(session || null).lean() : null;
+  const reason = !holder ? "ELSEWHERE" : requestId && String(holder._id) === String(requestId) ? "SAME_REQUEST" : "OTHER_REQUEST";
+  return {
+    reason,
+    invoice: identity.series && identity.number ? `${identity.series}-${identity.number}` : undefined,
+    ruc: identity.rucIssuer || undefined,
+    request: holder ? { _id: holder._id, requestNumber: holder.requestNumber, status: holder.status } : undefined
+  };
+}
+
+// A database duplicate-key error on an invoice identity (two saves racing past the checks).
+export function isDuplicateVoucherKeyError(error) {
+  return error?.code === 11000 && Object.keys(error.keyPattern || {}).some((key) => key.includes("fiscalData") || key.includes("voucher") || key === "seriesNumber" || key === "rucIssuer");
+}
 
 export function splitVoucherNumber(invoiceNumber = "") {
   const normalized = String(invoiceNumber || "").trim().toUpperCase().replace(/\s+/g, "");

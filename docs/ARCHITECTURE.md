@@ -345,7 +345,15 @@ itself reserved.
   only possible while it's `OPEN` or `SCHEDULED` (no money has moved) — it posts a `REVERSAL` journal
   entry that exactly offsets the original provision and moves the budget back to committed. A
   partially paid or fully paid CXP cannot be cancelled this way — real money has moved, so it is
-  corrected with a supplier credit note instead.
+  corrected with a supplier credit note instead. The request also lets go of the cancelled invoice
+  (its `fiscalData` moves to another active invoice of the request, or is cleared), so the same or a
+  corrected invoice can be registered again on this or another request.
+- **Duplicate invoices** (`DUPLICATE_VOUCHER`, one RUC + type + series + number per platform) are
+  refused with what to do, never only "already registered": `duplicateVoucherError` in
+  `sunatVoucherService.js` says whether the invoice is already on this request (nothing to correct),
+  on another one (upload this purchase's invoice, or have Accounting cancel the other unpaid CXP),
+  or somewhere unknown, and its details carry the invoice, the RUC and the request holding it. The
+  invoice form shows this as numbered steps (`DuplicateInvoiceHelp`).
 - **Credit and debit notes** (`adjustmentNoteService.js`): every note is linked to its original
   voucher (from the XML reference or chosen by Accounting) and reverses the matching accounting
   amount. A credit note on an unpaid invoice reduces its outstanding balance; on a paid invoice the

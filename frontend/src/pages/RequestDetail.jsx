@@ -44,6 +44,7 @@ import Tabs from "../components/Tabs.jsx";
 import InfoPopover from "../components/InfoPopover.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
+import DuplicateInvoiceHelp from "../components/DuplicateInvoiceHelp.jsx";
 import UploadedFileList from "../components/UploadedFileList.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import OfficialRenditionWorkspace from "../components/rendition/OfficialRenditionWorkspace.jsx";
@@ -210,6 +211,8 @@ export default function RequestDetail() {
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
   // Invoice registration errors stay next to the invoice form, far down the Documents tab.
   const [invoiceError, setInvoiceError] = useState("");
+  // An invoice already registered is explained with where it is and how to correct it.
+  const [invoiceDuplicate, setInvoiceDuplicate] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -394,17 +397,20 @@ export default function RequestDetail() {
     }
     setInvoiceSubmitting(true);
     setInvoiceError("");
+    setInvoiceDuplicate(null);
     try {
       const data = new FormData();
       invoiceDocumentFields.forEach((field) => { if (invoiceFiles[field.key]) data.append(field.key, invoiceFiles[field.key]); });
       const response = await api.post(`/requests/${id}/invoice`, data);
       await invoiceDraft.complete();
       notify(response.data.observed ? "Invoice isolated for correction; the observation is now traceable." : "Invoice validated, matched to the PO and provisioned in CXP.");
+      if (response.data.duplicate) setInvoiceDuplicate(response.data.duplicate);
       setInvoiceFiles(Object.fromEntries(invoiceDocumentFields.map((field) => [field.key, null])));
       form.reset();
       await load();
     } catch (err) {
-      setInvoiceError(`${err.message}${err.code ? ` (${err.code})` : ""}`);
+      if (err.code === "DUPLICATE_VOUCHER") setInvoiceDuplicate(err.details || {});
+      else setInvoiceError(`${err.message}${err.code ? ` (${err.code})` : ""}`);
     } finally {
       setInvoiceSubmitting(false);
     }
@@ -814,6 +820,7 @@ export default function RequestDetail() {
                   <span>{t("Remaining PO balance")}: {formatCurrency(order?.remainingAmount, order?.currency || request.currency, language)}</span>
                   <span>{t("The server validates SUNAT, anti-duplication and the PO ceiling before creating CXP.")}</span>
                 </div>}
+                {invoiceDuplicate && <DuplicateInvoiceHelp details={invoiceDuplicate} linkRequest={["Admin", "Accounting", "Treasury"].includes(user.role)} />}
                 <Message type="error">{invoiceError}</Message>
                 <button className="primary-button" type="submit" disabled={invoiceSubmitting}><UploadCloud size={16} /><span>{t(invoiceSubmitting ? "Processing..." : "Validate and provision invoice")}</span></button>
               </form></DraftPanel>
