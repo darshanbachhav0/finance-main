@@ -116,7 +116,7 @@ function parseInvoiceXmlText(xml) {
   }
   const rootName = parsed.Invoice ? "Invoice" : parsed.CreditNote ? "CreditNote" : parsed.DebitNote ? "DebitNote" : "";
   const root = parsed.Invoice || parsed.CreditNote || parsed.DebitNote || parsed;
-  const supplierParty = findSection(root, "AccountingSupplierParty") || findSection(root, "SupplierParty") || root;
+  const supplierParty = findSection(root, "AccountingSupplierParty") || findSection(root, "SupplierParty") || {};
   // UBL debit notes carry their totals in RequestedMonetaryTotal instead of LegalMonetaryTotal.
   const legalTotal = findSection(root, "LegalMonetaryTotal") || findSection(root, "RequestedMonetaryTotal") || root;
   const taxTotal = findSection(root, "TaxTotal") || root;
@@ -133,7 +133,7 @@ function parseInvoiceXmlText(xml) {
   } : undefined;
   // The document's own ID is a direct child of the root; searching the whole tree first could pick
   // up the ID of a BillingReference or signature block.
-  const ownId = localValue(root.ID) ?? findFirstValue(root, ["ID"]);
+  const ownId = localValue(root.ID);
   return {
     ruc: normalizeIdentifier(findFirstValue(supplierParty, ["CompanyID", "ID"])),
     supplierName: String(findFirstValue(supplierParty, ["RegistrationName", "Name"]) || "").trim(),
@@ -194,10 +194,27 @@ export function latestInvoiceEvidence(attachments = []) {
   return latest("XML") || latest("PDF") || latest("FEE_RECEIPT") || null;
 }
 
-export async function parseInvoiceEvidence(filePath, { expectedRuc, buyerRuc } = {}) {
+export async function parseInvoiceEvidence(filePath, { expectedRuc, buyerRuc = String(process.env.SIRE_TAXPAYER_RUC || "").replace(/\D/g, "") || undefined } = {}) {
   const content = await readStoredFile(filePath);
   if (isPdfBuffer(content)) return { source: "PDF", data: await parseInvoicePdf(content, { expectedRuc, buyerRuc }) };
   return { source: "XML", data: parseInvoiceXmlText(content.toString("utf8")) };
+}
+
+// XML and PDF may accompany the same invoice, but an older XML must never silently
+// replace the identity of a newly uploaded PDF. Scans can still accompany a valid XML.
+export async function assertInvoiceEvidencePair(xmlPath, pdfPath, options = {}) {
+  if (!xmlPath || !pdfPath) return;
+  const xml = (await parseInvoiceEvidence(xmlPath, options)).data;
+  let pdf;
+  try { pdf = (await parseInvoiceEvidence(pdfPath, options)).data; }
+  catch (error) { if (error.code === ERROR_CODES.INVOICE_PDF_UNREADABLE) return; throw error; }
+  const mismatches = [
+    ["supplier", xml.ruc, pdf.ruc],
+    ["documentNumber", canonicalSeriesNumber(xml.invoiceNumber), canonicalSeriesNumber(pdf.invoiceNumber)],
+    ["documentType", xml.documentTypeCode, pdf.documentTypeCode]
+  ].filter(([, expected, found]) => expected && found && expected !== found)
+    .map(([field, expected, found]) => ({ field, expected, found }));
+  if (mismatches.length) throw new AppError(422, "The XML and PDF belong to different invoices. Remove the old file or upload matching invoice files.", { mismatches }, ERROR_CODES.XML_VALIDATION_FAILED);
 }
 
 // A voucher registered from a factura PDF must show its own identity and total: SUNAT is consulted

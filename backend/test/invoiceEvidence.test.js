@@ -3,7 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { invoiceFieldsFromLines, parseInvoicePdf } from "../src/services/invoicePdfService.js";
-import { assertReadableVoucher, assertVoucherEvidenceMatches, buildInvoiceValidationResult, latestInvoiceEvidence, parseInvoiceEvidence, parseInvoiceXml } from "../src/services/xmlValidationService.js";
+import { assertInvoiceEvidencePair, assertReadableVoucher, assertVoucherEvidenceMatches, buildInvoiceValidationResult, latestInvoiceEvidence, parseInvoiceEvidence, parseInvoiceXml } from "../src/services/xmlValidationService.js";
+import SunatVoucher from "../src/models/SunatVoucher.js";
+import { findDuplicateVoucher } from "../src/services/sunatVoucherService.js";
 import { tempUploadDir } from "../src/services/storageService.js";
 import { invoicePdf, invoiceXml, textPdf } from "./fiscalFixtures.js";
 
@@ -110,4 +112,73 @@ test("the XML is preferred when both files are attached", () => {
   assert.equal(latestInvoiceEvidence([pdf, xml]), xml);
   assert.equal(latestInvoiceEvidence([pdf]), pdf);
   assert.equal(latestInvoiceEvidence([{ kind: "QUOTATION" }]), null);
+});
+
+const ipsLines = [
+  "INTERNATIONAL PRIVATE SECURITY PERU S.A.C.", "RUC: 20603075251",
+  "CALLE RODOLFO BELTRAN N° 120", "FACTURA ELECTRONICA", "LA VICTORIA - LIMA - LIMA",
+  "Nro. F001-00008545", "Cliente: UNIVERSIDAD MARIA AUXILIADORA S.A.C. Moneda: SOLES IGV: 18.00 %",
+  "RUC: 20550807123", "Fecha de Emision: Forma de Pago: Orden de Compra: Fecha de Vencimiento:",
+  "02-sep-2026 Credito 02-oct-2026", "SUB TOTAL S/ 25,228.65", "IGV S/ 4,541.16",
+  "Detraccion (12%) S/ 3,572.38 TOTAL S/ 29,769.81"
+];
+const ipsPdf = () => textPdf(ipsLines.map((line, index) => [40, 800 - index * 20, line]));
+
+test("IPS F001-8545 preserves issuer, own number, issue date and gross total", async () => {
+  const data = await parseInvoicePdf(ipsPdf(), { expectedRuc: "20550807123" });
+  assert.equal(data.ruc, "20603075251", "even an incorrectly selected customer cannot override the issuer");
+  assert.equal(data.invoiceNumber, "F001-00008545");
+  assert.equal(data.issueDate, "2026-09-02");
+  assert.equal(data.totalAmount, 29769.81);
+  assert.doesNotThrow(() => assertReadableVoucher(data, "PDF"));
+  assert.equal(invoiceFieldsFromLines(["Cliente:", "UNIVERSIDAD MARIA AUXILIADORA", "Direccion Lima", "RUC 20550807123"]).ruc, "");
+  assert.equal(invoiceFieldsFromLines(["RUC 20550807123", "RUC 20603075251"]).ruc, "", "ambiguous parties require correction");
+});
+
+test("stale F901-14 XML is rejected before it can replace the uploaded PDF identity", async () => {
+  const pdf = await stored("ips.pdf", ipsPdf());
+  const stale = await stored("stale.xml", invoiceXml({ ...voucher, ruc: "20550807123", series: "F901", number: "14" }));
+  await assert.rejects(() => assertInvoiceEvidencePair(stale, pdf), error => {
+    assert.equal(error.code, "XML_VALIDATION_FAILED");
+    assert.deepEqual(error.details.mismatches, [
+      { field: "supplier", expected: "20550807123", found: "20603075251" },
+      { field: "documentNumber", expected: "F901-14", found: "F001-8545" }
+    ]);
+    return true;
+  });
+  const matching = await stored("ips.xml", invoiceXml({ ...voucher, ruc: "20603075251", series: "F001", number: "8545" }));
+  await assert.doesNotReject(() => assertInvoiceEvidencePair(matching, pdf));
+  const scan = await stored("scan.pdf", textPdf([]));
+  await assert.doesNotReject(() => assertInvoiceEvidencePair(matching, scan));
+});
+
+test("XML cannot obtain its supplier or own invoice ID from customer/reference blocks", async () => {
+  const data = await parseInvoiceXml(await stored("no-issuer.xml", '<Invoice><AccountingCustomerParty><CompanyID>20550807123</CompanyID></AccountingCustomerParty><BillingReference><ID>F901-14</ID></BillingReference></Invoice>'));
+  assert.equal(data.ruc, "");
+  assert.equal(data.invoiceNumber, "");
+});
+
+test("duplicate lookup isolates supplier, type and invoice while retaining zero-padding and annulment rules", async (t) => {
+  const records = [
+    { rucIssuer: "20550807123", voucherType: "FACTURA", seriesNumber: "F901-14", validationStatus: "VALID", request: "SOL-2026-00014" },
+    { rucIssuer: "20603075251", voucherType: "FACTURA", seriesNumber: "F001-00008545", validationStatus: "ANNULLED" }
+  ];
+  t.mock.method(SunatVoucher, "findOne", filter => ({ session: () => Promise.resolve(records.find(row =>
+    row.rucIssuer === filter.rucIssuer && filter.voucherType.$in.includes(row.voucherType) &&
+    filter.seriesNumber.test(row.seriesNumber) && (!filter.validationStatus || row.validationStatus !== filter.validationStatus.$ne)
+  ) || null) }));
+  const identity = { ruc: "20603075251", voucherType: "01", invoiceNumber: "F001-8545" };
+  assert.equal(await findDuplicateVoucher(identity), null);
+  records[1].validationStatus = "VALID";
+  assert.equal(await findDuplicateVoucher(identity), records[1]);
+  assert.equal(await findDuplicateVoucher({ ...identity, ruc: "20550807123" }), null);
+  assert.equal(await findDuplicateVoucher({ ...identity, invoiceNumber: "F001-8546" }), null);
+  assert.equal(await findDuplicateVoucher({ ...identity, voucherType: "07" }), null);
+  assert.equal(await findDuplicateVoucher({ ruc: "20550807123", invoiceNumber: "F901-00000014" }), records[0]);
+});
+
+test("PDF invoice identity prefers its heading, excludes references and rejects ambiguity", () => {
+  assert.equal(invoiceFieldsFromLines(["Referencia factura F901-14", "FACTURA ELECTRONICA", "Nro. F001-00008545"]).invoiceNumber, "F001-00008545");
+  assert.equal(invoiceFieldsFromLines(["Servicio factura F901-14", "Nro. F001-00008545"]).invoiceNumber, "F001-00008545");
+  assert.equal(invoiceFieldsFromLines(["F001-1", "F001-2"]).invoiceNumber, "");
 });

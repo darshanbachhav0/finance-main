@@ -25,7 +25,7 @@ const UMA_RUC = "20550807123";
 
 test("a factura read for a new request never takes UMA's own RUC as the supplier's", () => {
   const lines = ["UNIVERSIDAD MARIA AUXILIADORA S.A.C. RUC 20550807123", "SOFTWARE ANDINO S.A.C. RUC 20512345678", "FACTURA ELECTRONICA F001-12", "FECHA DE EMISION 2026-10-10", "MONEDA: SOLES", "OP. GRAVADA 100.00", "IGV 18.00", "IMPORTE TOTAL 118.00"];
-  assert.equal(invoiceFieldsFromLines(lines).ruc, UMA_RUC, "without the buyer's RUC the first unlabelled RUC is taken");
+  assert.equal(invoiceFieldsFromLines(lines).ruc, "", "ambiguous unlabelled parties are never guessed");
   assert.equal(invoiceFieldsFromLines(lines, { buyerRuc: UMA_RUC }).ruc, "20512345678");
 });
 

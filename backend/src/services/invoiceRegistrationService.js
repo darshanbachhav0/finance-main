@@ -33,7 +33,7 @@ import {
 } from "./sunatVoucherService.js";
 import { isAdjustmentNote } from "../utils/voucherIdentity.js";
 import { runFinancialOperation } from "./transactionService.js";
-import { assertReadableVoucher, fileChecksum, parseInvoiceEvidence, parseInvoiceXml } from "./xmlValidationService.js";
+import { assertInvoiceEvidencePair, assertReadableVoucher, fileChecksum, parseInvoiceEvidence, parseInvoiceXml } from "./xmlValidationService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
@@ -366,6 +366,7 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
     if (!evidenceFile?.path) throw new AppError(422, "Upload the invoice XML or its factura PDF.", { missing: ["XML", "PDF"] }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
     evidenceFile.checksum ||= await fileChecksum(evidenceFile.path);
     const expectedRuc = String(request.supplier?.normalizedIdentifier || request.supplier?.rucDni || "").replace(/\D/g, "");
+    await assertInvoiceEvidencePair(xmlFile?.path, pdfFile?.path, { expectedRuc });
     const source = xmlFile?.path ? "XML" : "PDF";
     const data = source === "XML" ? await parseInvoiceXml(xmlFile.path) : assertReadableVoucher((await parseInvoiceEvidence(pdfFile.path, { expectedRuc })).data, "PDF");
     // The document's own type decides the path: a credit/debit note adjusts its original

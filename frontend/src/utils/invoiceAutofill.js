@@ -59,3 +59,8 @@ export function invoiceMatchRows({ invoice, form, totals, supplier }) {
 }
 
 export const invoiceFileKey = (file) => (/\.xml$/i.test(file?.name || "") ? "xml" : "pdf");
+
+// The single receipt drop zone replaces all representations of its previous invoice.
+export function replaceInvoiceFile(files, file) {
+  return { ...files, xml: [], pdf: [], feeReceipt: [], [invoiceFileKey(file)]: [file] };
+}

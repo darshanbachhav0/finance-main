@@ -4,7 +4,7 @@ import { preflightDirectPayment, provisionDirectPayment } from "./directPaymentS
 import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { runFinancialOperation } from "./transactionService.js";
-import { validateInvoiceAgainstRequest } from "./xmlValidationService.js";
+import { assertInvoiceEvidencePair, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { actsAsRequester } from "../utils/permissions.js";
@@ -32,6 +32,7 @@ export async function registerDirectPaymentInvoice({ requestId, files = {}, user
     const attachments = Object.entries(INVOICE_FIELDS).flatMap(([field, kind]) => (persisted[field] || []).map((file) => ({
       kind, originalName: file.originalname, filename: file.filename, path: file.path, url: file.url, mimetype: file.mimetype, size: file.size, checksum: file.checksum, uploadedBy: user._id
     })));
+    await assertInvoiceEvidencePair(persisted.xml?.[0]?.path, persisted.pdf?.[0]?.path);
     // The XML when there is one, otherwise the factura PDF.
     const evidence = attachments.find((item) => item.kind === "XML") || attachments.find((item) => item.kind === "PDF");
     const validation = await validateInvoiceAgainstRequest(evidence.path, {

@@ -39,7 +39,7 @@ import { assertSupplierSubmittable } from "./supplierService.js";
 import { assertSupplierSelectable, isDepartmentScoped } from "./supplierVisibilityService.js";
 import { limaToday } from "../../../shared/businessCalendar.mjs";
 import { transitionRequest, canTransition } from "./workflowService.js";
-import { INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, parseInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
+import { assertInvoiceEvidencePair, INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, parseInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
 import { evaluateProcurementReadiness } from "./procurementReadinessService.js";
 import { cancelProcurementOnVoid, settleProcurementAtClosure } from "./purchaseOrderService.js";
@@ -682,6 +682,8 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
   // check an XML attached early, as before; their invoice is registered later.
   const xmlAttachment = request.flowType === FLOW_TYPE.B ? latestInvoiceEvidence(request.attachments) : latestInvoiceEvidence((request.attachments || []).filter((attachment) => attachment.kind === "XML"));
   if (xmlAttachment) {
+    const pdfAttachment = [...(request.attachments || [])].reverse().find((item) => item.kind === "PDF");
+    if (xmlAttachment.kind === "XML") await assertInvoiceEvidencePair(xmlAttachment.path, pdfAttachment?.path);
     request.xmlValidation = await validateInvoiceAgainstRequest(xmlAttachment.path, {
       supplier,
       fiscalData: request.fiscalData,

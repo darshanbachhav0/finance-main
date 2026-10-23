@@ -54,7 +54,7 @@ import { formatCurrency } from "../utils/formatters.js";
 import { extraSubmissionDocuments } from "../utils/documentRequirements.js";
 import InvoiceDropZone from "../components/InvoiceDropZone.jsx";
 import InvoiceMatchStrip from "../components/InvoiceMatchStrip.jsx";
-import { invoiceFileKey, linesFromInvoice } from "../utils/invoiceAutofill.js";
+import { invoiceFileKey, linesFromInvoice, replaceInvoiceFile } from "../utils/invoiceAutofill.js";
 import { defaultOpenPeriod, quickTrack, quickTrackText, showCapexDetails, titleFromDescription } from "../utils/quickRequest.js";
 import { celebrate } from "../utils/celebrate.js";
 import BankAccountFields from "../components/suppliers/BankAccountFields.jsx";
@@ -261,6 +261,7 @@ export default function RequestCreate() {
   // The supplier's receipt read on this form: { status: "reading" | "done" | "error", fileName,
   // file, invoice, supplier, supplierElsewhere, source, error }.
   const [invoiceCheck, setInvoiceCheck] = useState(null);
+  const invoiceReadVersion = useRef(0);
   const validationFocusRef = useRef(null);
   useEffect(() => () => window.cancelAnimationFrame(validationFocusRef.current), []);
 
@@ -570,6 +571,7 @@ export default function RequestCreate() {
     clearErrors(["requestType", "supplier", "paymentAccount"]);
     setForm((current) => ({ ...current, ...track, supplier: track.flowType === "C" ? "" : current.supplier, paymentAccount: track.flowType === "C" ? "" : current.paymentAccount }));
     if (track.flowType === "C") {
+      invoiceReadVersion.current += 1;
       setFiles((current) => ({ ...current, xml: [], pdf: [], feeReceipt: [] }));
       setInvoiceCheck(null);
       setInvoiceDetails(emptyInvoiceDetails());
@@ -637,17 +639,22 @@ export default function RequestCreate() {
   async function readInvoice(file) {
     if (!file) return;
     clearErrors(["invoice", "quote"]);
+    const version = ++invoiceReadVersion.current;
+    setInvoiceDetails(emptyInvoiceDetails());
     setInvoiceCheck({ status: "reading", fileName: file.name, file });
     const key = invoiceFileKey(file);
-    setFiles((current) => ({ ...current, xml: key === "xml" ? [file] : current.xml, pdf: key === "pdf" ? [file] : current.pdf }));
+    setFiles((current) => replaceInvoiceFile(current, file));
+    setRemovedAttachmentIds((current) => [...new Set([...current, ...storedAttachments.filter((item) => INVOICE_KINDS.includes(item.kind)).map((item) => String(item._id))])]);
     try {
       const data = new FormData();
       data.append(key, file);
       const response = await api.post("/requests/invoice-preview", data, { headers: { "Content-Type": "multipart/form-data" } });
+      if (version !== invoiceReadVersion.current) return;
       const result = { status: "done", fileName: file.name, file, ...response.data.data };
       setInvoiceCheck(result);
       applyInvoice(result);
     } catch (err) {
+      if (version !== invoiceReadVersion.current) return;
       setInvoiceCheck({ status: "error", fileName: file.name, file, error: err.message });
     }
   }
@@ -680,6 +687,7 @@ export default function RequestCreate() {
   }
 
   function removeInvoice() {
+    invoiceReadVersion.current += 1;
     setFiles((current) => ({ ...current, xml: [], pdf: [], feeReceipt: [] }));
     setRemovedAttachmentIds((current) => [...new Set([...current, ...storedAttachments.filter((item) => INVOICE_KINDS.includes(item.kind)).map((item) => String(item._id))])]);
     setInvoiceCheck(null);
@@ -872,6 +880,7 @@ export default function RequestCreate() {
   }
 
   async function save(sendForApproval) {
+    if (invoiceCheck?.status === "reading") return;
     if (!draft.ready || draft.status === "conflict") return;
     // A saved draft needs who is paid, what is needed and its amount; sending it needs every step.
     // (Unsaved work is kept anyway: the form saves itself as it is typed.)

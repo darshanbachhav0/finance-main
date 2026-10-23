@@ -375,8 +375,13 @@ export default function RequestDetail() {
   const invoiceDraft = useWorkDraft({ scope: "invoice-files", recordId: id, title: "Invoice and conformity files", enabled: Boolean(permissions.canRegisterInvoice), value: invoiceFiles, restore: setInvoiceFiles });
   // Removing a chosen file also empties its file picker (a new key mounts a fresh input).
   const [invoiceInputKeys, setInvoiceInputKeys] = useState({});
+  function changeInvoiceFile(key, file) {
+    setInvoiceError("");
+    setInvoiceDuplicate(null);
+    setInvoiceFiles((current) => ({ ...current, [key]: file }));
+  }
   function removeInvoiceFile(key) {
-    setInvoiceFiles((current) => ({ ...current, [key]: null }));
+    changeInvoiceFile(key, null);
     setInvoiceInputKeys((current) => ({ ...current, [key]: (current[key] || 0) + 1 }));
   }
 
@@ -812,7 +817,7 @@ export default function RequestDetail() {
                     const either = isEitherOf(rule);
                     const chosenElsewhere = invoiceDocumentFields.some((other) => other.key !== field.key && coversKind(rule, other.kind) && invoiceFiles[other.key]);
                     // Each chosen file (also one restored from a saved draft) can be viewed, downloaded or removed before sending.
-                    return <label className="field" key={field.kind}><span>{t(field.label)}{either ? "" : " *"}</span><input key={invoiceInputKeys[field.key] || 0} type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key] && !chosenElsewhere} />{either && <small className="field-hint">{t(chosenElsewhere ? "Optional document" : "This or the other invoice file: one is enough.")}</small>}<UploadedFileList chosen={invoiceFiles[field.key] ? [invoiceFiles[field.key]] : []} onRemoveChosen={() => removeInvoiceFile(field.key)} /></label>;
+                    return <label className="field" key={field.kind}><span>{t(field.label)}{either ? "" : " *"}</span><input key={invoiceInputKeys[field.key] || 0} type="file" accept={field.accept} onChange={(event) => changeInvoiceFile(field.key, event.target.files?.[0] || null)} required={!invoiceFiles[field.key] && !chosenElsewhere} />{either && <small className="field-hint">{t(chosenElsewhere ? "Optional document" : "This or the other invoice file: one is enough.")}</small>}<UploadedFileList chosen={invoiceFiles[field.key] ? [invoiceFiles[field.key]] : []} onRemoveChosen={() => removeInvoiceFile(field.key)} /></label>;
                   })}
                 </div>
                 {order && <div className="invoice-control-note">

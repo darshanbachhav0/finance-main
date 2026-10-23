@@ -30,3 +30,15 @@ assert.match(detail, /required=\{!invoiceFiles\[field\.key\] && !chosenElsewhere
 assert.match(detail, /source === "PDF" \? "Invoice verified from the factura PDF"/);
 
 console.log("PASS invoice evidence: the invoice XML or its factura PDF satisfies the requirement in the request form and the request page");
+
+const { replaceInvoiceFile } = await import("../src/utils/invoiceAutofill.js");
+const oldXml = { name: "F901-14.xml" }, newPdf = { name: "F001-8545.pdf" };
+const selected = replaceInvoiceFile({ xml: [oldXml], pdf: [], feeReceipt: [oldXml], quotation: [oldXml] }, newPdf);
+assert.deepEqual(selected.xml, []);
+assert.deepEqual(selected.pdf, [newPdf]);
+assert.deepEqual(selected.feeReceipt, []);
+assert.deepEqual(selected.quotation, [oldXml]);
+assert.deepEqual(replaceInvoiceFile(selected, oldXml).pdf, []);
+assert.match(create, /if \(version !== invoiceReadVersion.current\) return;/);
+assert.match(create, /invoiceReadVersion.current \+= 1/);
+assert.match(create, /if \(invoiceCheck\?.status === "reading"\) return;/);

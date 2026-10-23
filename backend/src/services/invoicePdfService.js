@@ -59,14 +59,19 @@ function moneyValues(line) {
 }
 
 const RUC = /(?<!\d)((?:10|15|16|17|20)\d{9})(?!\d)/g;
-const BUYER_LABEL = /SENOR\(?ES\)?|CLIENTE|ADQUIRENTE|ADQUIRIENTE|USUARIO|DOC\.? ?(DE )?IDENTIDAD|RAZON SOCIAL DEL/;
+const BUYER_LABEL = /SENOR\(?ES\)?|CLIENTE|RECEPTOR|COMPRADOR|ADQUIRENTE|ADQUIRIENTE|USUARIO|DOC\.? ?(DE )?IDENTIDAD|RAZON SOCIAL DEL/;
 
 function rucs(lines) {
   const found = [];
+  let buyerSection = false;
   lines.forEach((line, index) => {
+    if (/\bEMISOR\b|\bPROVEEDOR\b/.test(line)) buyerSection = false;
+    if (BUYER_LABEL.test(line)) buyerSection = true;
     for (const [, ruc] of line.matchAll(RUC)) {
       const context = [lines[index - 1] || "", line].join(" ");
-      found.push({ ruc, buyer: BUYER_LABEL.test(plain(context)) });
+      // A separately named company starts a new party, even after a buyer block.
+      if (!BUYER_LABEL.test(line) && /S\.?A\.?C\.?|S\.?A\.?\b|E\.?I\.?R\.?L\.?/.test(line)) buyerSection = false;
+      found.push({ ruc, buyer: buyerSection || BUYER_LABEL.test(plain(context)) });
     }
   });
   return found;
@@ -84,19 +89,27 @@ function documentType(text) {
 const SERIES = /(?<![A-Z0-9])([FBE][A-Z0-9]{3}|\d{4})\s*[-–]\s*(\d{1,8})(?!\d)/;
 function seriesNumber(lines, type) {
   const preferred = { "01": "F", "03": "B", "02": "E", "07": "FB", "08": "FB" }[type] || "FBE";
-  let fallback = "";
+  const candidates = [];
   for (const line of lines) {
-    const match = plain(line).match(SERIES);
-    if (!match) continue;
-    const value = `${match[1]}-${match[2]}`;
-    if (preferred.includes(match[1][0])) return value;
-    fallback ||= value;
+    // References and item descriptions can name another invoice. Only a unique
+    // own-document candidate is safe; never take the first unrelated reference.
+    if (/REFERENCIA|DOCUMENTO (?:AFECTADO|MODIFICADO)|FACTURA (?:AFECTADA|MODIFICADA)|GUIA DE REMISION/.test(line)) continue;
+    for (const match of line.matchAll(new RegExp(SERIES.source, "g"))) {
+      candidates.push({ value: `${match[1]}-${match[2]}`, preferred: preferred.includes(match[1][0]), labelled: /^(?:FACTURA|BOLETA|RECIBO|NOTA DE)|\bNRO\.?|NUMERO/.test(line) });
+    }
   }
-  return fallback;
+  const preferredCandidates = candidates.filter((item) => item.preferred);
+  const compatible = preferredCandidates.length ? preferredCandidates : candidates;
+  const labelled = compatible.filter((item) => item.labelled);
+  const values = [...new Map((labelled.length ? labelled : compatible).map((item) => [item.value.replace(/-0+(?=\d)/, "-"), item.value])).values()];
+  return values.length === 1 ? values[0] : "";
 }
 
 const MONTHS = { ENERO: 1, FEBRERO: 2, MARZO: 3, ABRIL: 4, MAYO: 5, JUNIO: 6, JULIO: 7, AGOSTO: 8, SETIEMBRE: 9, SEPTIEMBRE: 9, OCTUBRE: 10, NOVIEMBRE: 11, DICIEMBRE: 12 };
 function dateIn(line) {
+  const shortMonths = { ENE: 1, FEB: 2, MAR: 3, ABR: 4, MAY: 5, JUN: 6, JUL: 7, AGO: 8, SEP: 9, SET: 9, OCT: 10, NOV: 11, DIC: 12 };
+  const named = line.match(/(?<!\d)(\d{1,2})[-/.]([A-Z]{3})[-/.](\d{4})(?!\d)/);
+  if (named && shortMonths[named[2]]) return [named[3], shortMonths[named[2]], named[1]];
   let match = line.match(/(?<!\d)(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/);
   if (match) return [match[1], match[2], match[3]];
   match = line.match(/(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?!\d)/);
@@ -156,9 +169,9 @@ export function invoiceFieldsFromLines(rawLines, { expectedRuc, buyerRuc } = {})
   const text = lines.join("\n");
   const documentTypeCode = documentType(text);
   const candidates = rucs(lines).filter((candidate) => !buyerRuc || candidate.ruc !== buyerRuc);
-  const issuer = candidates.find((candidate) => !candidate.buyer);
+  const issuers = [...new Set(candidates.filter((candidate) => !candidate.buyer).map((candidate) => candidate.ruc))];
   // When the expected supplier's RUC is printed as a non-buyer RUC, it is the issuer.
-  const ruc = (expectedRuc && candidates.find((candidate) => candidate.ruc === expectedRuc && !candidate.buyer)?.ruc) || issuer?.ruc || "";
+  const ruc = (issuers.length === 1 ? issuers[0] : expectedRuc && issuers.includes(expectedRuc) ? expectedRuc : "") || "";
   let netAmount = labelledAmount(lines, NET_LABEL);
   let igvAmount = documentTypeCode === "02" ? 0 : labelledAmount(lines, IGV_LABEL);
   let totalAmount = labelledAmount(lines, TOTAL_LABEL);
