@@ -953,6 +953,8 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .inline-alert { display: flex; align-items: flex-start; gap: 9px; margin: 8px 0; padding: 10px 12px; border: 1px solid; border-radius: var(--radius-sm); font-size: var(--font-xs); line-height: 1.45; }
 .inline-alert > svg { flex: 0 0 auto; margin-top: 1px; }
 .inline-alert > div { display: grid; gap: 2px; }
+/* An invoice already registered: where it is and the numbered steps to correct it. */
+.duplicate-invoice-help ol { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 2px; }
 .leave-banner { align-items: center; margin: 0 0 12px; }
 .leave-banner > div { flex: 1; }
 .leave-covering { margin: 4px 0 0; padding-left: 18px; }

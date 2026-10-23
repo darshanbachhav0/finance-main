@@ -32,7 +32,10 @@ import User from "../src/models/User.js";
 import { canModifyRequest } from "../src/utils/permissions.js";
 import { allowedTransitions, transitionRequest } from "../src/services/workflowService.js";
 import { getFinancialProgress, syncFinancialProgress } from "../src/services/financialProgressService.js";
-import { createAccountsPayableFromVoucher } from "../src/services/accountingService.js";
+import { cancelAccountsPayable, createAccountsPayableFromVoucher } from "../src/services/accountingService.js";
+import { duplicateVoucherError } from "../src/services/sunatVoucherService.js";
+import { errorHandler } from "../src/middleware/errorHandler.js";
+import { limaToday } from "../../shared/businessCalendar.mjs";
 import { generatePaymentBatch, confirmTreasuryPayable, reconcilePayment, listReconciliationQueue } from "../src/services/treasuryService.js";
 import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { updateFinancialRequest, submitFinancialRequest, deleteFinancialRequest, voidFinancialRequest, closeFinancialRequest, listRequestsPage } from "../src/services/requestService.js";
@@ -62,6 +65,17 @@ test("a rejected rendition is settled for closure only when nothing is owed", ()
   assert.equal(renditionSettledForClosure(rejected({ status: "NOT_APPLICABLE", advanceAmount: 100, returnedAmount: 40, outstandingAmount: 60 })), false, "NOT_APPLICABLE never hides money still owed");
   assert.equal(renditionSettledForClosure(rejected({ status: "NOT_APPLICABLE", advanceAmount: 0, returnedAmount: 0, outstandingAmount: 0 })), false, "a recovery that was never computed is not settled");
   assert.equal(renditionSettledForClosure(rejected(undefined)), false);
+});
+
+test("a database duplicate on an invoice identity is explained, with the invoice it is about", () => {
+  const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; } };
+  errorHandler({ code: 11000, keyPattern: { rucIssuer: 1, voucherType: 1, seriesNumber: 1 }, keyValue: { rucIssuer: "20999999991", voucherType: "FACTURA", seriesNumber: "F077-123" } }, {}, res);
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.code, "DUPLICATE_VOUCHER");
+  assert.match(res.body.message, /can be registered only once.*ask Accounting to cancel/);
+  assert.deepEqual(res.body.details, { reason: "ELSEWHERE", invoice: "F077-123", ruc: "20999999991" });
+  errorHandler({ code: 11000, keyPattern: { "fiscalData.supplierIdentifierNormalized": 1, "fiscalData.voucherType": 1, "fiscalData.series": 1, "fiscalData.number": 1 }, keyValue: { "fiscalData.supplierIdentifierNormalized": "20999999991", "fiscalData.voucherType": "FACTURA", "fiscalData.series": "F077", "fiscalData.number": "123" } }, {}, res);
+  assert.deepEqual(res.body.details, { reason: "ELSEWHERE", invoice: "F077-123", ruc: "20999999991" });
 });
 
 test("an annulled voucher that never posted is not pending accounting", () => {
@@ -337,6 +351,52 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         assert.match(path.basename(directory), /^[a-f0-9]{24}$/);
         await fs.rm(directory, { recursive: true, force: true });
       }
+    });
+
+    await t.test("a duplicate invoice says where it is and how to correct it; a cancelled one registers on another request", async () => {
+      const conformity = [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }];
+      const makeA1 = async (poNumber) => {
+        const request = await makeRequest({ attachments: conformity });
+        await reserveBudget(request, admin._id);
+        await PurchaseOrder.create({ poNumber, request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: admin._id });
+        return request;
+      };
+      const first = await makeA1("DUP-PO-1");
+      const second = await makeA1("DUP-PO-2");
+      const voucher = { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F077", number: "00000123", issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
+      async function upload(request, name, content, mimetype) {
+        await fs.mkdir(tempUploadDir, { recursive: true });
+        const filename = `${request._id}-${Date.now()}-${name}`, filePath = path.join(tempUploadDir, filename);
+        await fs.writeFile(filePath, content);
+        return { path: filePath, filename, originalname: name, mimetype, size: Buffer.byteLength(content) };
+      }
+      const register = async (request) => registerA1Invoice({ requestId: request._id, user: admin, req, files: { xml: [await upload(request, "invoice.xml", invoiceXml(voucher), "application/xml")], pdf: [await upload(request, "invoice.pdf", "%PDF-1.4 test", "application/pdf")] } });
+      assert.equal((await register(first)).observed, false);
+      const statusBefore = (await FinancialRequest.findById(first._id)).status;
+      // The same invoice again on the request that has it: nothing to correct, the request is not observed.
+      await assert.rejects(() => register(first), (error) => error.code === "DUPLICATE_VOUCHER" && error.statusCode === 409
+        && error.details.reason === "SAME_REQUEST" && error.details.invoice === "F077-123" && String(error.details.request._id) === String(first._id));
+      const untouched = await FinancialRequest.findById(first._id);
+      assert.equal(untouched.status, statusBefore);
+      assert.notEqual(untouched.observation?.code, "DUPLICATE_VOUCHER");
+      // On another request it is observed, and the answer names the request that holds it.
+      const observed = await register(second);
+      assert.equal(observed.observed, true);
+      assert.equal(observed.duplicate.reason, "OTHER_REQUEST");
+      assert.equal(String(observed.duplicate.request._id), String(first._id));
+      assert.equal(observed.duplicate.invoice, "F077-123");
+      const elsewhere = await duplicateVoucherError(voucher, { requestId: second._id });
+      assert.equal(elsewhere.details.reason, "OTHER_REQUEST");
+      assert.equal(String(elsewhere.details.request._id), String(first._id));
+      assert.match(elsewhere.message, /ask Accounting to cancel/);
+      // Cancelled on the first request, the same invoice is registered on the right one (the reversal
+      // posts in the current month).
+      await AccountingPeriod.updateOne({ period: limaToday().slice(0, 7) }, { $setOnInsert: { status: "OPEN" } }, { upsert: true });
+      const ap = await AccountsPayable.findOne({ request: first._id, status: { $ne: "CANCELLED" } });
+      await cancelAccountsPayable({ accountsPayableId: ap._id, reason: "Registered on the wrong request", user: admin, req });
+      assert.equal((await FinancialRequest.findById(first._id)).fiscalData?.number, undefined, "the first request no longer holds the invoice");
+      assert.equal((await register(second)).observed, false);
+      assert.equal((await FinancialRequest.findById(second._id)).fiscalData.number, "123");
     });
 
     await t.test("Track B is verified from its factura PDF when no XML is uploaded", async () => {

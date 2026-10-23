@@ -133,7 +133,7 @@ export const registerInvoice = asyncHandler(async (req, res) => {
     ? await registerDirectPaymentInvoice({ requestId: req.params.id, files: req.files, user: req.user, req })
     : await registerA1Invoice({ requestId: req.params.id, files: req.files, user: req.user, req });
   if (target?.flowType === FLOW_TYPE.B) await result.request.populate(requestPopulate);
-  res.json({ data: publicRequestPayload(result.request, req.user), sunatVoucher: result.sunatVoucher, accountsPayable: result.accountsPayable, observed: result.observed });
+  res.json({ data: publicRequestPayload(result.request, req.user), sunatVoucher: result.sunatVoucher, accountsPayable: result.accountsPayable, observed: result.observed, duplicate: result.duplicate });
 });
 
 export const replaceObservedInvoice = asyncHandler(async (req, res) => {

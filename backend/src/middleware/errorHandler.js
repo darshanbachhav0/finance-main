@@ -1,5 +1,15 @@
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
+import { DUPLICATE_VOUCHER_MESSAGES } from "../services/sunatVoucherService.js";
+
+// The invoice a duplicate-key error is about, whichever collection's identity collided.
+function duplicateKeyDetails(keyValue = {}) {
+  const value = (...keys) => keys.map((key) => keyValue[key]).find((item) => item !== undefined && item !== null && item !== "");
+  const series = value("voucher.series", "fiscalData.series");
+  const number = value("voucher.number", "fiscalData.number");
+  const invoice = value("seriesNumber") || (series && number ? `${series}-${number}` : undefined);
+  return { reason: "ELSEWHERE", invoice, ruc: value("rucIssuer", "supplierIdentifierSnapshot", "fiscalData.supplierIdentifierNormalized") };
+}
 
 export function notFoundHandler(req, _res, next) {
   next(new AppError(404, `Route not found: ${req.method} ${req.originalUrl}`, undefined, ERROR_CODES.NOT_FOUND));
@@ -30,9 +40,9 @@ export function errorHandler(error, _req, res, _next) {
       ? ERROR_CODES.DUPLICATE_VOUCHER
       : ERROR_CODES.CONFLICT;
     message = code === ERROR_CODES.DUPLICATE_VOUCHER
-      ? "The supplier voucher is already registered."
+      ? DUPLICATE_VOUCHER_MESSAGES.ELSEWHERE
       : "Duplicate value violates a unique constraint.";
-    details = error.keyValue;
+    details = code === ERROR_CODES.DUPLICATE_VOUCHER ? duplicateKeyDetails(error.keyValue) : error.keyValue;
     const identifierLabels = { employeeCode: "employee code", dni: "DNI", email: "email address" };
     const duplicateFields = Object.keys(error.keyPattern || error.keyValue || {});
     if (duplicateFields.length === 1 && identifierLabels[duplicateFields[0]]) {

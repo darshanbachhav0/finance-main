@@ -21,8 +21,11 @@ import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js"
 import {
   applyManualSunatOverride,
   createSunatVoucher,
+  duplicateVoucherDetails,
+  duplicateVoucherError,
   findDuplicateVoucher,
   hasManualSunatException,
+  isDuplicateVoucherKeyError,
   manualExceptionEvidence,
   splitVoucherNumber,
   validateVoucherWithSunat,
@@ -206,7 +209,7 @@ async function provisionA1Voucher({ request, purchaseOrder, voucher, data, sunat
       await assertPostingAllowed(currentRequest, { user, req });
       const duplicateCheck = await reusablePlaceholder(voucher, currentRequest._id, session);
       if (duplicateCheck.duplicate && !duplicateCheck.placeholder) {
-        throw new AppError(409, "The supplier voucher is already registered.", { voucher: duplicateCheck.duplicate._id }, ERROR_CODES.DUPLICATE_VOUCHER);
+        throw await duplicateVoucherError(voucher, { requestId: currentRequest._id, holderRequestId: duplicateCheck.duplicate.request, session });
       }
       await assertPurchaseOrderInvoiceFits(currentPurchaseOrder._id, data.totalAmount, { currency: voucher.currency, session });
       await consumePurchaseOrderBalance(currentPurchaseOrder._id, data.totalAmount, { session });
@@ -351,6 +354,7 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
 
   let persisted;
   let evidenceAdopted = false;
+  let voucher;
   try {
     persisted = await persistUploadedFiles(files, { domain: "requests", entityId: request._id });
     const xmlFile = persisted.xml?.[0];
@@ -374,7 +378,7 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
       return { request: refreshed, sunatVoucher: result.note || result.sunatVoucher, accountsPayable: result.accountsPayable, supplierCredit: result.supplierCredit, observed: result.observed, adjustment: true };
     }
     const parts = splitVoucherNumber(data.invoiceNumber);
-    const voucher = {
+    voucher = {
       ...data,
       voucherType: data.voucherType || "FACTURA",
       series: parts.series,
@@ -390,12 +394,18 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
       evidenceAdopted = true;
       return result;
     }
+    // The same invoice again on the request that already has it: nothing to correct, so the request
+    // is not observed; the person is told it is already there.
+    if (duplicate && !placeholder && String(duplicate.request) === String(request._id)) {
+      throw await duplicateVoucherError(voucher, { requestId: request._id, holderRequestId: duplicate.request });
+    }
     if (duplicate && !placeholder) {
       addAttemptAttachments(request, evidenceFiles, user._id);
       await observeRequest(request, REQUEST_STATUS.OBSERVED_SUNAT, "DUPLICATE_VOUCHER", "The RUC + voucher type + series + number already exists.", user, req);
       evidenceAdopted = true;
       await recordAudit({ entityType: "FinancialRequest", entity: request, requestId: request._id, action: "DUPLICATE_VOUCHER", user, req, module: "ACCOUNTING", newValues: { duplicateVoucher: duplicate._id } });
-      return { request, duplicateVoucher: duplicate, observed: true };
+      // Where it already is, so the screen can say how to correct it.
+      return { request, duplicateVoucher: duplicate, duplicate: await duplicateVoucherDetails(voucher, { requestId: request._id, holderRequestId: duplicate.request }), observed: true };
     }
 
     let sunatResult;
@@ -428,6 +438,7 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
     return result;
   } catch (error) {
     if (persisted && !evidenceAdopted) await cleanupUploadedFiles(persisted).catch(() => undefined);
+    if (isDuplicateVoucherKeyError(error)) throw await duplicateVoucherError(voucher, { requestId: request._id });
     throw error;
   }
 }

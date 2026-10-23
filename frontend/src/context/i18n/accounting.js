@@ -136,5 +136,21 @@ export default {
   "Use this only for an invoice that will never be provisioned, such as the same invoice uploaded twice. The observation leaves the inbox and no longer blocks the request's closure, and a stored voucher that was never posted is annulled.": "Úsalo solo para un comprobante que nunca se provisionará, como la misma factura cargada dos veces. La observación sale de la bandeja y ya no bloquea el cierre de la solicitud; el comprobante almacenado que nunca se contabilizó se anula.",
   "Keep observation": "Mantener observación",
   "Dismissal reason": "Motivo del descarte",
-  "Invoice observation dismissed.": "Observación de factura descartada."
+  "Invoice observation dismissed.": "Observación de factura descartada.",
+  // An invoice already registered: the server message and the steps to correct it.
+  "This invoice is already registered on this request, so it does not need to be uploaded again. To use the order's remaining balance, upload the next invoice the supplier issued.": "Esta factura ya está registrada en esta solicitud, así que no hace falta subirla otra vez. Para usar el saldo restante de la orden, sube la siguiente factura que emitió el proveedor.",
+  "This invoice is already registered on another request, and an invoice can be registered only once. Upload the invoice issued for this purchase. If it was registered on the other request by mistake and is not paid yet, ask Accounting to cancel that request's payable (CXP), then upload it here again.": "Esta factura ya está registrada en otra solicitud, y una factura solo se puede registrar una vez. Sube la factura emitida para esta compra. Si se registró por error en la otra solicitud y aún no se pagó, pide a Contabilidad que anule la cuenta por pagar (CXP) de esa solicitud y luego súbela aquí de nuevo.",
+  "This invoice is already registered in the platform (same RUC, type, series and number), and an invoice can be registered only once. Upload the invoice issued for this purchase. If it was registered by mistake and is not paid yet, ask Accounting to cancel the payable (CXP) that holds it, then upload it again.": "Esta factura ya está registrada en la plataforma (mismo RUC, tipo, serie y número), y una factura solo se puede registrar una vez. Sube la factura emitida para esta compra. Si se registró por error y aún no se pagó, pide a Contabilidad que anule la cuenta por pagar (CXP) que la tiene y luego súbela de nuevo.",
+  "Invoice {invoice} is already registered on this request.": "La factura {invoice} ya está registrada en esta solicitud.",
+  "Invoice {invoice} is already registered on request {request} ({status}).": "La factura {invoice} ya está registrada en la solicitud {request} ({status}).",
+  "Invoice {invoice} is already registered in the platform.": "La factura {invoice} ya está registrada en la plataforma.",
+  "This invoice is already registered in the platform.": "Esta factura ya está registrada en la plataforma.",
+  "What to do:": "Qué hacer:",
+  "How to correct it:": "Cómo corregirlo:",
+  "Nothing needs to be corrected: this request already has this invoice.": "No hay nada que corregir: esta solicitud ya tiene esta factura.",
+  "To use the order's remaining balance, upload the next invoice the supplier issued for this purchase.": "Para usar el saldo restante de la orden, sube la siguiente factura que el proveedor emitió para esta compra.",
+  "Check the file you chose: it must be the invoice the supplier issued for this purchase (look at its series and number).": "Revisa el archivo que elegiste: debe ser la factura que el proveedor emitió para esta compra (mira su serie y número).",
+  "If the supplier issued a different invoice for this purchase, upload that one instead.": "Si el proveedor emitió otra factura para esta compra, sube esa.",
+  "If it was registered on the other request by mistake and is not paid yet, ask Accounting to cancel that request's payable (CXP). Then upload it here again.": "Si se registró por error en la otra solicitud y aún no se pagó, pide a Contabilidad que anule la cuenta por pagar (CXP) de esa solicitud. Luego súbela aquí de nuevo.",
+  "Not sure? Write in this request's Comments so Accounting can check it.": "¿No estás seguro? Escribe en los Comentarios de esta solicitud para que Contabilidad lo revise."
 };
