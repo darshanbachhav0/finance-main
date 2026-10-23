@@ -44,6 +44,7 @@ import Tabs from "../components/Tabs.jsx";
 import InfoPopover from "../components/InfoPopover.jsx";
 import WorkspaceSkeleton from "../components/WorkspaceSkeleton.jsx";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
+import UploadedFileList from "../components/UploadedFileList.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import OfficialRenditionWorkspace from "../components/rendition/OfficialRenditionWorkspace.jsx";
 import SimpleRenditionForm from "../components/rendition/SimpleRenditionForm.jsx";
@@ -369,6 +370,12 @@ export default function RequestDetail() {
   }
 
   const invoiceDraft = useWorkDraft({ scope: "invoice-files", recordId: id, title: "Invoice and conformity files", enabled: Boolean(permissions.canRegisterInvoice), value: invoiceFiles, restore: setInvoiceFiles });
+  // Removing a chosen file also empties its file picker (a new key mounts a fresh input).
+  const [invoiceInputKeys, setInvoiceInputKeys] = useState({});
+  function removeInvoiceFile(key) {
+    setInvoiceFiles((current) => ({ ...current, [key]: null }));
+    setInvoiceInputKeys((current) => ({ ...current, [key]: (current[key] || 0) + 1 }));
+  }
 
   async function submitInvoice(event) {
     event.preventDefault(); if (!invoiceDraft.ready || invoiceDraft.status === "conflict") return;
@@ -793,12 +800,13 @@ export default function RequestDetail() {
           {permissions.canRegisterInvoice && (
             <Section title={request.flowType === "B" ? "Register the invoice" : "Register A1 invoice and conformity"} description={request.flowType === "B" ? "Approved with its quote: upload the supplier's invoice (XML or factura PDF). It must match the approved amounts; once checked it goes to Treasury for payment." : "Upload the invoice XML or its factura PDF (one is enough) and the other required documents. The amounts are read from the XML, or from the factura PDF when there is no XML."}>
               <DraftPanel busy={invoiceSubmitting} draft={invoiceDraft}><form className="invoice-registration-panel" onSubmit={submitInvoice}>
-                <p className="draft-file-list">{Object.values(invoiceFiles).filter(Boolean).map(file => file.name).join(", ")}</p><div className="file-upload-grid">
+                <div className="file-upload-grid">
                   {invoiceDocumentFields.filter((field) => invoiceRequirements.some((item) => coversKind(item, field.kind))).map((field) => {
                     const rule = invoiceRequirements.find((item) => coversKind(item, field.kind));
                     const either = isEitherOf(rule);
                     const chosenElsewhere = invoiceDocumentFields.some((other) => other.key !== field.key && coversKind(rule, other.kind) && invoiceFiles[other.key]);
-                    return <label className="field" key={field.kind}><span>{t(field.label)}{either ? "" : " *"}</span><input type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key] && !chosenElsewhere} />{either && <small className="field-hint">{t(chosenElsewhere ? "Optional document" : "This or the other invoice file: one is enough.")}</small>}</label>;
+                    // Each chosen file (also one restored from a saved draft) can be viewed, downloaded or removed before sending.
+                    return <label className="field" key={field.kind}><span>{t(field.label)}{either ? "" : " *"}</span><input key={invoiceInputKeys[field.key] || 0} type="file" accept={field.accept} onChange={(event) => setInvoiceFiles((current) => ({ ...current, [field.key]: event.target.files?.[0] || null }))} required={!invoiceFiles[field.key] && !chosenElsewhere} />{either && <small className="field-hint">{t(chosenElsewhere ? "Optional document" : "This or the other invoice file: one is enough.")}</small>}<UploadedFileList chosen={invoiceFiles[field.key] ? [invoiceFiles[field.key]] : []} onRemoveChosen={() => removeInvoiceFile(field.key)} /></label>;
                   })}
                 </div>
                 {order && <div className="invoice-control-note">

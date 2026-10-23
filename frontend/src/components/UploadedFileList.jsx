@@ -1,4 +1,4 @@
-import { Eye, RotateCcw, Trash2 } from "lucide-react";
+import { Download, Eye, RotateCcw, Trash2 } from "lucide-react";
 import ProtectedAssetButton from "./ProtectedAssetButton.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
@@ -11,8 +11,21 @@ export function openLocalFile(file) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
+// ...and saved back to the computer under its own name.
+export function downloadLocalFile(file) {
+  if (!(file instanceof Blob)) return;
+  const objectUrl = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = file.name || "document";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
 // The files on one document card: already on the request (view, or mark for removal until the
-// form is saved), marked for removal (keep it after all), and chosen now (view, or drop it).
+// form is saved), marked for removal (keep it after all), and chosen now (view, download, or drop it).
 // It sits inside the card's <label>, so a click on it must not reopen the file picker.
 export default function UploadedFileList({ stored = [], removed = [], chosen = [], onRemoveStored, onRestoreStored, onRemoveChosen }) {
   const { t } = useLanguage();
@@ -37,6 +50,7 @@ export default function UploadedFileList({ stored = [], removed = [], chosen = [
         <li key={`${file.name}-${file.size}-${index}`}>
           <span title={file.name}>{file.name} - {(file.size / 1024).toFixed(0)} KB</span>
           <button type="button" className="icon-button quiet" onClick={() => openLocalFile(file)} title={t("View document")} aria-label={label("View document", file.name)}><Eye size={15} aria-hidden="true" /></button>
+          <button type="button" className="icon-button quiet" onClick={() => downloadLocalFile(file)} title={t("Download")} aria-label={label("Download", file.name)}><Download size={15} aria-hidden="true" /></button>
           <button type="button" className="icon-button quiet danger" onClick={() => onRemoveChosen(index)} title={t("Remove document")} aria-label={label("Remove document", file.name)}><Trash2 size={15} aria-hidden="true" /></button>
         </li>
       ))}
