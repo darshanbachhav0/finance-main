@@ -5,7 +5,7 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import { budgetOverview } from "./budgetReportingService.js";
 import { listApprovalInbox } from "./approvalService.js";
 import { requestVisibilityFilter } from "../utils/permissions.js";
-import { ROLES, AP_STATUS } from "../utils/constants.js";
+import { ROLES, AP_STATUS, ERROR_CODES } from "../utils/constants.js";
 import { limaToday } from "../../../shared/businessCalendar.mjs";
 import { AppError } from "../utils/AppError.js";
 import { parsePagination, paginatedPayload } from "./queryService.js";
@@ -68,7 +68,7 @@ export async function jefeDashboard(user) {
 }
 
 export async function jefeInvoices(user, query = {}) {
-  if (!await isJefe(user)) throw new AppError(403, "This view is reserved for department approvers.");
+  if (!await isJefe(user)) throw new AppError(403, "This view is reserved for department approvers.", undefined, ERROR_CODES.FORBIDDEN);
   const pipeline = await invoicePipeline(user);
   if (query.state === "due") pipeline.push({ $match: { invoiceState: { $in: ["Por vencer", "Vencida"] } } });
   else if (["Pendiente", "Por vencer", "Vencida", "Pagada"].includes(query.state)) pipeline.push({ $match: { invoiceState: query.state } });

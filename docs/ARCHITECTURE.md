@@ -421,16 +421,22 @@ which homologates it. The RUC file, legal representative ID, bank certificate an
 declarations are no longer asked by the proposal form and no longer block the approval; ones already
 on file still show, and a risky declared answer still warns the jefe.
 
-**Suppliers by area** (`supplierVisibilityService.js`). `Supplier.departments` lists the areas
-(`User.area`) whose requesters see it; empty means shared with every area. A requester (anyone
-outside Admin, Accounting, Treasury, Procurement and Super Admin) sees their area's suppliers, the
-shared ones and their own proposals — in the list, detail, RUC lookup, global search, the invoice
-reader and on a saved request (the API refuses another area's supplier with
-`SUPPLIER_OTHER_DEPARTMENT`; a supplier already on a request stays usable, and an approver on the
-request can open it). A requester's proposal starts in their own area. Accounting and Admin choose a
-supplier's areas (`PUT /suppliers/:id/departments`); a requester who needs another area's supplier
-asks for it (`POST /suppliers/:id/access-request`, a task for Accounting/Admin). A user whose area
-is empty or "General" sees only shared suppliers and is told to ask an Admin for their area. A request may be sent
+**Suppliers by department** (`supplierVisibilityService.js`). Every user belongs to one department,
+their area (`User.area`; "General" when nobody assigned one). `Supplier.departments` lists the
+departments that see a supplier; empty means shared with every area (suppliers registered before
+departments existed). A new supplier belongs to the department of whoever registers it, so everyone
+in that department sees it at once and nobody else does. Each user's Proveedores list holds their
+department's suppliers, the shared ones and their own proposals — Accounting, Treasury and
+Procurement included; only the Admin and the read-only Super Admin see every department. The same
+rule guards the detail, every change, the RUC lookup, global search, the invoice reader, supplier
+files and a saved request (the API refuses another department's supplier with
+`SUPPLIER_OTHER_DEPARTMENT`; the RUC stays unique, so a second department is told the supplier
+exists instead of registering it again). Work still reaches another department's supplier without
+adding it to the list: Accounting reviews every proposal and verifies pending bank accounts (its
+task links open `/suppliers?awaitingMyApproval=true` and `/suppliers?bankReview=pending`), and
+Accounting, Treasury and Procurement open the supplier of any submitted request they process. The
+Admin chooses any supplier's departments (`PUT /suppliers/:id/departments`; Accounting only for its
+own list) and answers requests to share one (`POST /suppliers/:id/access-request`). A request may be sent
 with a supplier still waiting for that approval: the jefe approves the supplier together with the
 request (`approveSupplier: true` on `POST /approvals/:id/approve`, shown on the approval screens),
 a supplier that is not ready yet sends the request back, and no approval completes while the

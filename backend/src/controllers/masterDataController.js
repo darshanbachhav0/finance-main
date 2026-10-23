@@ -65,6 +65,14 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
       const [data, total] = await Promise.all([find, Model.countDocuments(query)]);
       res.json(paginatedPayload(data, total, page, pageSize));
     }),
+    // One record, as the list shows it (a saved edit draft reopens its record this way).
+    get: asyncHandler(async (req, res) => {
+      let find = Model.findById(req.params.id);
+      for (const path of populate) find = find.populate(path);
+      const data = await find;
+      if (!data) throw new AppError(404, `${label} not found.`, { id: req.params.id }, ERROR_CODES.NOT_FOUND);
+      res.json({ data });
+    }),
     create: asyncHandler(async (req, res) => {
       const payload = pick(req.body, fields);
       if (Model === BudgetAllocation) await assertLegacyAllocationChange(payload);

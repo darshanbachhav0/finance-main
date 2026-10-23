@@ -80,6 +80,7 @@ import "./globalSearch.test.js";
 
 import "./dashboardTasks.test.js";
 import "./platformImprovements.test.js";
+import "./supplierDepartments.test.js";
 
 import "./sessionRefresh.test.js";
 

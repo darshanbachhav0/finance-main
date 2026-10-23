@@ -121,23 +121,42 @@ export default function Suppliers() {
   const canPropose =
     user.role !== "ManagementViewer" && !readOnly;
 
-  // Requesters (everyone outside the supplier work roles) see their own area's list.
+  // Everyone sees their own department's list; the Admin and the Super Admin see every department.
   const departmentScoped =
-    !["Admin", "Accounting", "Treasury", "Procurement", "SuperAdmin"].includes(user.role);
+    !["Admin", "SuperAdmin"].includes(user.role);
   const userArea =
-    ["", "general"].includes(String(user.area || "").trim().toLowerCase()) ? "" : String(user.area).trim();
+    String(user.area || "").trim() || "General";
+
+  // Accounting's task links open its work queues, which span every department: the proposals it
+  // reviews (?awaitingMyApproval=true) and the bank accounts it verifies (?bankReview=pending).
+  const workQueue =
+    searchParams.get("awaitingMyApproval") === "true"
+      ? "review"
+      : searchParams.get("bankReview") === "pending" ? "bankReview" : "";
 
   const suppliers =
     usePaginatedResource(
       "/suppliers",
       {
         persistKey:
-          "official-supplier-master",
+          workQueue ? `official-supplier-master:${workQueue}` : "official-supplier-master",
+
+        fixedParams:
+          workQueue === "review"
+            ? { awaitingMyApproval: "true" }
+            : workQueue === "bankReview" ? { bankReview: "pending" } : {},
 
         initialPageSize:
           10
       }
     );
+
+  // The Admin can look at one department's list at a time.
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  useEffect(() => {
+    if (departmentScoped) return;
+    api.get("/suppliers/departments").then((response) => setDepartmentOptions(response.data.data || [])).catch(() => setDepartmentOptions([]));
+  }, [departmentScoped]);
 
   const [
     drawer,
@@ -413,12 +432,16 @@ export default function Suppliers() {
         },
 
         {
-          // The areas whose requesters see the supplier (none: every area).
+          // The areas whose users see the supplier (none: every area). Only lists that span
+          // departments show it (the Admin's and Accounting's work queues).
           key:
             "departments",
 
           label:
             "Areas",
+
+          primary:
+            true,
 
           sortable:
             false,
@@ -1703,7 +1726,7 @@ export default function Suppliers() {
                   <span>
                     {t(
                       lookup.result.otherDepartment
-                        ? "It is registered for another area. Ask Accounting to share it with your area; a duplicate will not be created."
+                        ? "It is registered for another area. Ask an Admin to share it with your area; a duplicate will not be created."
                         : "Open the existing record. A duplicate will not be created."
                     )}
                   </span>
@@ -1804,7 +1827,7 @@ export default function Suppliers() {
                             `/suppliers/${lookup.result._id}/access-request`
                           ),
 
-                        "Accounting was asked to share this supplier with your area."
+                        "An Admin was asked to share this supplier with your area."
                       )
                   }
                 >
@@ -2256,15 +2279,28 @@ export default function Suppliers() {
       }
 
       {
-        // A requester's list holds their area's suppliers, the shared ones and their own proposals.
-        departmentScoped && (
+        // Which list this is: the user's department's, or one of Accounting's work queues.
+        workQueue ? (
           <div
-            className={`inline-alert ${userArea ? "alert-info" : "alert-warning"}`}
+            className="inline-alert alert-info"
             role="status"
           >
-            {userArea
-              ? t("You see the suppliers of your area ({area}) and the ones shared with every area. Need another area's supplier? Search its RUC when you register it and ask to share it.").replace("{area}", userArea)
-              : t("Your profile has no area yet, so you only see the suppliers shared with every area. Ask an Admin to assign your area in Users.")}
+            {t(
+              workQueue === "review"
+                ? "Suppliers waiting for your review, from every area. Once reviewed, they stay in their own area's list."
+                : "Suppliers with a bank account waiting for your verification, from every area."
+            )}
+            {" "}
+            <Link className="text-link" to="/suppliers">
+              {t(departmentScoped ? "Back to my area's suppliers" : "Back to all suppliers")}
+            </Link>
+          </div>
+        ) : departmentScoped && (
+          <div
+            className="inline-alert alert-info"
+            role="status"
+          >
+            {t("Suppliers of your area: {area}. Everyone in your area sees the suppliers any of you register; other areas do not.").replace("{area}", userArea)}
           </div>
         )
       }
@@ -2273,7 +2309,9 @@ export default function Suppliers() {
         tableId="official-supplier-master"
         caption="Supplier Master and Homologation"
         columns={
-          columns
+          departmentScoped && !workQueue
+            ? columns.filter((column) => column.key !== "departments")
+            : columns
         }
         rows={
           suppliers.rows
@@ -2295,6 +2333,24 @@ export default function Suppliers() {
             )
         }
         filters={[
+          ...(!departmentScoped && !workQueue
+            ? [{
+                key:
+                  "department",
+
+                label:
+                  "Area",
+
+                allLabel:
+                  "All areas",
+
+                options: [
+                  { value: "__shared", label: "Shared with every area" },
+                  ...departmentOptions.map((area) => ({ value: area, label: area }))
+                ]
+              }]
+            : []),
+
           {
             key:
               "homologationStatus",
@@ -2311,24 +2367,6 @@ export default function Suppliers() {
               "OBSERVED",
               "REJECTED",
               "INACTIVE"
-            ]
-          },
-
-          {
-            key:
-              "jefeApprovalDecision",
-
-            label:
-              "Provider review",
-
-            allLabel:
-              "All provider review decisions",
-
-            options: [
-              "PENDING",
-              "APPROVED",
-              "OBSERVED",
-              "REJECTED"
             ]
           }
         ]}

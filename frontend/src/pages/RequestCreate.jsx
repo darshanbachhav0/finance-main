@@ -988,7 +988,6 @@ export default function RequestCreate() {
           </WizardSection>}
 
           {payee === "supplier" && <WizardSection icon={Building2} title="Supplier details" description={userArea ? t("Your area's suppliers ({area}) and the ones shared with every area.").replace("{area}", userArea) : "Search by name, RUC or PRV code."}>
-            {supplierScope?.scoped && !userArea && <div className="inline-alert alert-warning"><AlertTriangle size={16} aria-hidden="true" /><span>{t("Your profile has no area yet, so you only see the suppliers shared with every area. Ask an Admin to assign your area in Users.")}</span></div>}
             {!registering && <>
               <SearchSelect label="Supplier" value={form.supplier} options={eligibleSuppliers} onChange={selectSupplier} getOptionLabel={supplierLabel} error={errors.supplier} required searchPlaceholder="Search name, RUC or PRV..." onSearch={searchSuppliers} searching={supplierSearching} />
               <button type="button" className="text-button" onClick={() => { setRegistering(true); clearErrors(["supplier"]); }}><UserPlus size={15} aria-hidden="true" />{t("Not in the list? Register a new supplier")}</button>

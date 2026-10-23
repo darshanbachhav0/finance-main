@@ -142,7 +142,8 @@ export const getHomologationReadiness =
       res.json({
         data:
           await getSupplierHomologationReadiness(
-            req.params.id
+            req.params.id,
+            req.user
           )
       });
     }

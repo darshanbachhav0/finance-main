@@ -435,6 +435,10 @@ function serializeSupplierBase(supplier, user, approval = null) {
   };
 }
 
+function canManageSupplierDepartments(supplier, user) {
+  return FINANCE_ROLES.includes(user?.role) && canSeeSupplier(supplier, user);
+}
+
 function supplierPermissions(supplier, user, approval = null) {
   const finance = FINANCE_ROLES.includes(user?.role);
   const editable = EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus);
@@ -451,8 +455,9 @@ function supplierPermissions(supplier, user, approval = null) {
     canRevalidateTaxpayer: finance,
     canVerifyBanking: finance,
     canDeactivate: finance && supplier.homologationStatus !== "INACTIVE",
-    // Which areas see the supplier in their list.
-    canManageDepartments: finance,
+    // Which areas see the supplier in their list: the Admin for any supplier, Accounting for the
+    // ones in its own list.
+    canManageDepartments: canManageSupplierDepartments(supplier, user),
     // An expired homologation is decided again even though its status still reads HOMOLOGATED.
     canApprove: decidesSupplierApproval(supplier, user, approval),
     canViewFullBankData: canViewFullBankData(supplier, user, approval)
@@ -484,6 +489,14 @@ async function loadSupplier(supplierId, options = {}) {
   if (options.includeDocumentPaths) query.select("+documents.path");
   const supplier = await query;
   if (!supplier) throw new AppError(404, "Supplier not found.", { supplierId }, ERROR_CODES.NOT_FOUND);
+  return supplier;
+}
+
+// The supplier one user opens or changes: one of their department's list, one Accounting reviews,
+// or one their work reaches (supplierVisibilityService). Another department's is refused.
+async function loadSupplierFor(supplierId, user, options = {}) {
+  const supplier = await loadSupplier(supplierId, options);
+  if (!decidesSupplierApproval(supplier, user)) await assertCanOpenSupplier(supplier, user);
   return supplier;
 }
 
@@ -690,9 +703,13 @@ export async function getSupplierDetailPayload(supplierId, user) {
 }
 
 export async function listSuppliersPage(queryParams, user) {
-  // A requester's list is their area's suppliers, the shared ones and their own proposals.
-  // The proposals a jefe decides are listed whatever their area.
-  const query = { $and: [queryParams.awaitingMyApproval === "true" ? {} : supplierVisibilityQuery(user)] };
+  // Each user's list is their department's suppliers, the shared ones and their own proposals.
+  // Accounting's two work queues list what it must act on whatever the department: the proposals
+  // it reviews and the suppliers with a bank account waiting for its verification.
+  const reviewQueue = queryParams.awaitingMyApproval === "true";
+  const bankReviewQueue = queryParams.bankReview === "pending" && FINANCE_ROLES.includes(user?.role);
+  const query = { $and: [reviewQueue || bankReviewQueue ? {} : supplierVisibilityQuery(user)] };
+  if (bankReviewQueue) query.$and.push({ _id: { $in: await SupplierBankAccount.distinct("supplier", { active: true, verificationStatus: "PENDING" }) } });
   if (queryParams.department && !isDepartmentScoped(user)) {
     const department = normalizeDepartment(queryParams.department);
     query.$and.push(department === "__shared" ? { $or: [{ departments: { $exists: false } }, { departments: { $size: 0 } }] } : { departments: new RegExp(`^${escapedRegex(department)}$`, "i") });
@@ -739,9 +756,11 @@ export async function listSuppliersPage(queryParams, user) {
       riskyDeclarations: supplierDeclarationWarnings(supplier)
     };
   }), total, page, pageSize);
-  // Which list the requester is looking at: their area's, or only the shared suppliers when their
-  // profile has no area yet (an Admin assigns it in Users).
-  payload.scope = isDepartmentScoped(user) ? { scoped: true, department: userDepartment(user) } : { scoped: false };
+  // Which list the user is looking at: their department's, or every department's (Admin, Super
+  // Admin and Accounting's work queues).
+  payload.scope = isDepartmentScoped(user) && !reviewQueue && !bankReviewQueue
+    ? { scoped: true, department: userDepartment(user) }
+    : { scoped: false, department: userDepartment(user) };
   return payload;
 }
 
@@ -761,7 +780,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     throw new AppError(
       409,
       otherDepartment
-        ? "This supplier is already registered for another area. Ask Accounting or an Admin to share it with your area."
+        ? "This supplier is already registered for another area. Ask an Admin to share it with your area."
         : "A supplier with this RUC/DNI already exists. Open the existing onboarding record instead.",
       { supplier: duplicate._id, supplierCode: duplicate.supplierCode, homologationStatus: duplicate.homologationStatus, otherDepartment },
       ERROR_CODES.DUPLICATE_SUPPLIER
@@ -771,11 +790,11 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
   if (bankAccounts !== undefined && !Array.isArray(bankAccounts)) {
     throw new AppError(422, "bankAccounts must be a list.", { field: "bankAccounts" }, ERROR_CODES.VALIDATION_ERROR);
   }
-  // A requester's proposal belongs to their own area; Accounting and Admin choose the areas (none:
-  // shared with every area).
-  const departments = isDepartmentScoped(user)
-    ? [userDepartment(user)].filter(Boolean)
-    : payload.departments !== undefined ? sanitizeDepartments(payload.departments) : [];
+  // A new supplier belongs to the department of whoever registers it, so everyone in that
+  // department sees it at once and nobody else does. Only the Admin may name other departments.
+  const departments = !isDepartmentScoped(user) && payload.departments !== undefined
+    ? sanitizeDepartments(payload.departments)
+    : [userDepartment(user)];
   const supplier = new Supplier({
     identifierType: identifier.length === 8 ? "DNI" : "RUC",
     rucDni: identifier,
@@ -884,7 +903,7 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
     assertFieldsAreNotPresent(payload, protectedSupplierFields, "Solicitors cannot set supplier review, status or PRV fields.");
     assertFieldsAreNotPresent(payload, protectedBankReviewFields, "Solicitors cannot set bank review fields.");
   }
-  const supplier = await loadSupplier(supplierId, { includeDocumentPaths: true });
+  const supplier = await loadSupplierFor(supplierId, user, { includeDocumentPaths: true });
   assertProposalEditable(supplier, user);
   const oldValues = {
     rucDni: supplier.rucDni,
@@ -966,7 +985,7 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
 }
 
 export async function addSupplierBankAccount({ supplierId, payload, user, req }) {
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   if (actsAsSupplierProposer(user)) assertProposalEditable(supplier, user);
   else assertFinanceUser(user, "Only an authorized proposer, Accounting or Admin can add supplier bank accounts.");
   return createBankAccountRecord({ supplier, payload, user, req });
@@ -974,7 +993,7 @@ export async function addSupplierBankAccount({ supplierId, payload, user, req })
 
 export async function verifySupplierBankAccount({ supplierId, accountId, payload, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can verify supplier bank accounts.");
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   const account = await SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id });
   if (!account) throw new AppError(404, "Supplier bank account not found.", { accountId }, ERROR_CODES.NOT_FOUND);
   const verificationStatus = payload.verificationStatus;
@@ -1043,7 +1062,7 @@ export async function verifySupplierBankAccount({ supplierId, accountId, payload
 
 export async function setPreferredSupplierBankAccount({ supplierId, accountId, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can select a preferred supplier bank account.");
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   const result = await runFinancialOperation(async (session) => {
     let accountQuery = SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id });
     if (session) accountQuery = accountQuery.session(session);
@@ -1106,7 +1125,7 @@ export async function setPreferredSupplierBankAccount({ supplierId, accountId, u
 
 export async function deactivateSupplierBankAccount({ supplierId, accountId, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can deactivate supplier bank accounts.");
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   const account = await SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id });
   if (!account) throw new AppError(404, "Supplier bank account not found.", { accountId }, ERROR_CODES.NOT_FOUND);
   if (!account.active) return account;
@@ -1141,7 +1160,7 @@ export async function deactivateSupplierBankAccount({ supplierId, accountId, use
 
 export async function validateSupplierTaxpayer({ supplierId, payload, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can validate supplier taxpayer information.");
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   if (supplierVerificationCurrent(supplier) && !payload?.revalidationReason) return supplier;
   if (payload?.revalidationReason) {
     const reason = String(payload.revalidationReason).trim();
@@ -1368,8 +1387,8 @@ export async function assertSupplierCanBeHomologated(supplier) {
   return result;
 }
 
-export async function getSupplierHomologationReadiness(supplierId) {
-  const supplier = await loadSupplier(supplierId);
+export async function getSupplierHomologationReadiness(supplierId, user) {
+  const supplier = user ? await loadSupplierFor(supplierId, user) : await loadSupplier(supplierId);
   if (supplier.homologationStatus === "HOMOLOGATED" && supplier.active && !isHomologationExpired(supplier)) {
     return { valid: true, legacyCompatible: true, issues: [], warnings: supplierDeclarationWarnings(supplier) };
   }
@@ -1668,6 +1687,7 @@ export async function replaceActiveBankAccount(supplier, payload, userId) {
 // Approving, observing or rejecting is the proposer's jefe's decision (decideSupplierApproval).
 export async function updateAndReviewSupplier({ supplierId, payload, files = {}, user, req }) {
   assertFinanceUser(user);
+  await loadSupplierFor(supplierId, user);
   const requestedStatus = payload.homologationStatus || payload.status;
   if (["HOMOLOGATED", "ACTIVE", "OBSERVED", "REJECTED"].includes(requestedStatus) || payload.complianceReviewResult || payload.complianceReview) {
     throw new AppError(403, "Only Accounting or Admin approves, observes or rejects a supplier.", { requestedStatus }, ERROR_CODES.FORBIDDEN);
@@ -1709,7 +1729,7 @@ export async function updateAndReviewSupplier({ supplierId, payload, files = {},
 
 export async function deactivateSupplier({ supplierId, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can deactivate suppliers.");
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   supplier.homologationStatus = "INACTIVE";
   supplier.active = false;
   supplier.status = "INACTIVE";
@@ -1742,7 +1762,7 @@ export async function deactivateSupplier({ supplierId, user, req }) {
 // accounts stay deactivated (unrelated to homologation) and must be reverified/re-added as needed.
 export async function reactivateSupplier({ supplierId, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can reactivate suppliers.");
-  const supplier = await loadSupplier(supplierId);
+  const supplier = await loadSupplierFor(supplierId, user);
   if (supplier.homologationStatus !== "INACTIVE") {
     throw new AppError(
       409,
@@ -1775,10 +1795,14 @@ export async function reactivateSupplier({ supplierId, user, req }) {
   return supplier;
 }
 
-// ---- Suppliers by area. Accounting and Admin decide which areas see a supplier (none: every area).
+// ---- Suppliers by department. The Admin decides which areas see any supplier (none: every area);
+// Accounting only for the suppliers in its own list, never another department's.
 export async function updateSupplierDepartments({ supplierId, departments, user, req }) {
   assertFinanceUser(user, "Only Accounting or Admin can choose which areas see a supplier.");
   const supplier = await loadSupplier(supplierId);
+  if (!canManageSupplierDepartments(supplier, user)) {
+    throw new AppError(403, "This supplier belongs to another area. Only an Admin can share it.", { supplier: supplier._id, reason: "OTHER_DEPARTMENT" }, ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT);
+  }
   const next = sanitizeDepartments(departments);
   const previous = [...(supplier.departments || [])];
   supplier.departments = next;
@@ -1798,20 +1822,18 @@ export async function updateSupplierDepartments({ supplierId, departments, user,
   return supplier;
 }
 
-// A requester who needs another area's supplier asks for it: Accounting and Admin get a task to
-// share it with the requester's area. Nothing is shared until one of them does it.
+// Someone who needs another department's supplier asks for it: the Admin, who sees every
+// department, gets a task to share it with theirs. Nothing is shared until the Admin does it.
 export async function requestSupplierAccess({ supplierId, user, req, reason = "" }) {
   const supplier = await loadSupplier(supplierId);
   if (canSeeSupplier(supplier, user)) return { alreadyVisible: true, supplier: { _id: supplier._id, supplierCode: supplier.supplierCode } };
   const area = userDepartment(user);
   await notifyRoles({
-    roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
+    roles: [ROLES.ADMIN],
     eventKey: `supplier:${supplier._id}:access-request:${user._id}`,
     type: "SUPPLIER_ACCESS_REQUEST",
     title: notificationText("Share a supplier with an area"),
-    message: area
-      ? notificationText("{name} ({area}) needs supplier {supplier}. Share it with their area if it is correct.", { name: user.name, area, supplier: `${supplier.supplierCode || ""} ${supplierName(supplier)}`.trim() })
-      : notificationText("{name} needs supplier {supplier}, but their profile has no area. Assign their area in Users first.", { name: user.name, supplier: `${supplier.supplierCode || ""} ${supplierName(supplier)}`.trim() }),
+    message: notificationText("{name} ({area}) needs supplier {supplier}. Share it with their area if it is correct.", { name: user.name, area, supplier: `${supplier.supplierCode || ""} ${supplierName(supplier)}`.trim() }),
     path: `/suppliers/${supplier._id}`,
     entityType: "Supplier",
     entityId: supplier._id

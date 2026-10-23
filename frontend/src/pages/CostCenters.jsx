@@ -15,6 +15,7 @@ export default function CostCenters() {
       title="Cost Centers"
       description="UMA Cost Centers with their area, organizational hierarchy, import source, and budget controls."
       endpoint="/cost-centers"
+      deleteMode="deactivate"
       duplicateFields={["code"]}
       transformSubmit={numberPayload}
       fields={[

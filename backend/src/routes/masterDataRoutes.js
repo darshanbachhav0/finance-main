@@ -18,6 +18,7 @@ import { PERMISSIONS, ROLES } from "../utils/constants.js";
 
 function bindCrud(router, controller, writeRoles = [ROLES.ADMIN, ROLES.ACCOUNTING], readRoles) {
   router.get("/", protect, ...(readRoles ? [authorize(...readRoles)] : []), controller.list);
+  router.get("/:id", protect, ...(readRoles ? [authorize(...readRoles)] : []), controller.get);
   router.post("/", protect, authorize(...writeRoles), controller.create);
   router.put("/:id", protect, authorize(...writeRoles), controller.update);
   router.delete("/:id", protect, authorize(...writeRoles), controller.remove);
@@ -61,6 +62,7 @@ bankFormatRouter.post("/:id/certify", protect, authorizePermission(PERMISSIONS.B
 
 export const financeConfigurationRouter = Router();
 financeConfigurationRouter.get("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), financeConfigurations.list);
+financeConfigurationRouter.get("/:id", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), financeConfigurations.get);
 financeConfigurationRouter.post("/", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), financeConfigurations.create);
 financeConfigurationRouter.put("/:id", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), financeConfigurations.update);
 financeConfigurationRouter.delete("/:id", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), financeConfigurations.remove);

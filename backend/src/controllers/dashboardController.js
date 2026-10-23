@@ -209,7 +209,7 @@ async function buildTasks(user) {
       SupplierBankAccount.countDocuments(bankReviewQuery)
     ]);
     items.push({ key: "employeeBankReviews", label: "Reimbursement bank profiles awaiting review", count: employeeBankReviews, path: (await singleRecordPath(employeeBankReviews, EmployeeReimbursementBankAccount, bankReviewQuery, (record) => `/reimbursement-bank?record=${record._id}`)) || "/reimbursement-bank?verificationStatus=PENDING", tone: "warning" });
-    items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: supplierBankReviews, path: (await singleRecordPath(supplierBankReviews, SupplierBankAccount, bankReviewQuery, (record) => `/suppliers?record=${record.supplier}`)) || "/suppliers", tone: "warning" });
+    items.push({ key: "supplierBankReviews", label: "Supplier bank accounts awaiting review", count: supplierBankReviews, path: (await singleRecordPath(supplierBankReviews, SupplierBankAccount, bankReviewQuery, (record) => `/suppliers?record=${record.supplier}`)) || "/suppliers?bankReview=pending", tone: "warning" });
     items.push({ key: "accounting", label: "Requests awaiting fiscal processing", count: await FinancialRequest.countDocuments({ status: REQUEST_STATUS.BUDGET_COMMITTED }), path: "/accounting", tone: "accent" });
     const detractionQuery = { flowType: { $ne: "C" }, supplier: { $ne: null }, status: { $in: ["OPEN", "SCHEDULED", "PARTIALLY_PAID"] }, "detraction.confirmedAt": null, "voucher.voucherType": { $nin: ["ANTICIPO", "RECIBO", "RECIBO_HONORARIOS", "RHE", "RECIBO_POR_HONORARIOS"] } };
     const detractionReviews = await AccountsPayable.countDocuments(detractionQuery);

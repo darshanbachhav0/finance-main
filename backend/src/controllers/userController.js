@@ -148,6 +148,13 @@ export const listUsers = asyncHandler(async (req, res) => {
   res.json(paginatedPayload(data, total, page, pageSize));
 });
 
+// One user, as the list shows it (a saved edit draft reopens its user this way).
+export const getUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id).populate("costCenter authorizedCostCenters").populate("jefe substitute", "name jobTitle");
+  if (!user || (user.role === ROLES.SUPER_ADMIN && req.user?.role !== ROLES.SUPER_ADMIN)) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
+  res.json({ data: user });
+});
+
 export const createUser = asyncHandler(async (req, res) => {
   const { name, dni, email, password, role } = req.body;
   if (!name || !dni || !password || !role) throw new AppError(400, "Name, DNI, password, and role are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
