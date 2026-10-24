@@ -69,6 +69,8 @@ import {
 } from "../utils/options.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import RequestSummaryFacts from "../components/RequestSummaryFacts.jsx";
+import CostAllocationSummary from "../components/CostAllocationSummary.jsx";
+import { beneficiaryNames, costCenterTypeLabels, isOnBehalf } from "../utils/costAllocation.js";
 
 import { coversKind, isEitherOf, presentCount } from "../utils/documentRequirements.js";
 import { invoiceMismatchLines } from "../utils/validationMessages.js";
@@ -581,6 +583,7 @@ export default function RequestDetail() {
       <dl className="request-overview">
         <div><dt>{t("Total amount")}</dt><dd>{formatCurrency(request.totalAmount, request.currency, language)}</dd></div>
         <div><dt>{t("Requester")}</dt><dd>{requesterName(request)}</dd></div>
+        {isOnBehalf(request) && <div><dt>{t("On behalf of")}</dt><dd>{beneficiaryNames(request)}</dd></div>}
         <div><dt>{t("Title")}</dt><dd>{request.title || request.description}</dd></div>
       </dl>
       <ApprovalStatusSummary request={request} holder={journey.holder} onHistory={() => { setActiveTab("Approvals"); window.requestAnimationFrame(() => document.getElementById("request-approval-history")?.scrollIntoView({ block: "start", behavior: "smooth" })); }} />
@@ -630,6 +633,12 @@ export default function RequestDetail() {
               <Definition label="Track">{t(flowTypeLabels[request.flowType] || request.flowType)}</Definition>
               <Definition label="Expense nature">{t(optionLabel(request.expenseNature, expenseNatureLabels))}</Definition>
               <Definition label="Area / School">{request.schoolOrDepartment || request.requesterArea || request.requestingArea || "-"}</Definition>
+              {request.flowType !== "C" && <Definition label="Cost center type">{t(costCenterTypeLabels[isOnBehalf(request) ? "POR_ENCARGO" : "PROPIO"])}</Definition>}
+              {isOnBehalf(request) && <>
+                <Definition label="Requesting area">{[request.requesterArea || request.requestingArea, request.requesterCostCenterSnapshot?.code && `${request.requesterCostCenterSnapshot.code} - ${request.requesterCostCenterSnapshot.name || ""}`].filter(Boolean).join(" · ") || "-"}</Definition>
+                <Definition label="Charged to"><CostAllocationSummary allocations={request.costAllocations} currency={request.currency} /></Definition>
+                {request.costCenterReviewers?.length > 0 && <Definition label="Reviewed for the beneficiary area by">{request.costCenterReviewers.map((reviewer) => [reviewer.name, reviewer.jobTitle].filter(Boolean).join(" · ")).join(", ")}</Definition>}
+              </>}
               <Definition label="Requirement date">{formatDate(request.issueDate, language)}</Definition>
               <Definition label="Accounting period">{request.accountingPeriod}</Definition>
               <Definition label="Priority"><PriorityBadge priority={request.priority} /></Definition>

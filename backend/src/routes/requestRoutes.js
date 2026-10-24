@@ -6,6 +6,7 @@ import {
   createRequest,
   deleteRequest,
   getAuthorizedCostCenters,
+  getBeneficiaryCostCenters,
   getBudgetPreview,
   getProcurementReadiness,
   getRequestDocumentRequirements,
@@ -43,6 +44,8 @@ router.get("/document-requirements", getRequestDocumentRequirements);
 router.get("/form-policy", getRequestFormPolicy);
 // "Create requests" (every Solicitor and Admin by role, anyone else by grant).
 router.get("/authorized-cost-centers", authorizePermission(PERMISSIONS.REQUEST_CREATE), getAuthorizedCostCenters);
+// The schools and departments a request can be made Por Encargo for (the active CECO master).
+router.get("/beneficiary-cost-centers", authorizePermission(PERMISSIONS.REQUEST_CREATE), getBeneficiaryCostCenters);
 router.post("/budget-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), getBudgetPreview);
 router.post("/invoice-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, previewRequestInvoice);
 router.route("/").get(listRequests).post(authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, createRequest);

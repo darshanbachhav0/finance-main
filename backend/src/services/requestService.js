@@ -15,12 +15,13 @@ import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Reconciliation from "../models/Reconciliation.js";
 import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
+import { COST_CENTER_TYPE, COST_CENTER_TYPES, costAllocationProblems } from "../../../shared/costCenterAllocation.mjs";
 import SunatVoucher from "../models/SunatVoucher.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
-import { initializeApprovalRoute } from "./approvalRuleService.js";
+import { activeApprovalStep, initializeApprovalRoute } from "./approvalRuleService.js";
 import {
   assertConfiguredDocuments,
   configuredDocumentRequirements,
@@ -31,7 +32,7 @@ import {
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
-import { notifyRoles, notifyApprovalStep, resolveApprovalNotifications, resolveNotification, resolveRequestNotifications } from "./notificationService.js";
+import { notificationText, notifyRoles, notifyApprovalStep, notifyUser, resolveApprovalNotifications, resolveNotification, resolveRequestNotifications } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
@@ -70,6 +71,7 @@ export const requestPopulate = [
   { path: "requester", select: "name email role area costCenter authorizedCostCenters" },
   { path: "solicitor", select: "name email role area costCenter authorizedCostCenters" },
   { path: "requesterCostCenter" },
+  { path: "costCenterReviewers", select: "name jobTitle area" },
   { path: "lines.costCenter" },
   { path: "lines.expenseType" },
   { path: "quotations.supplier", select: "supplierCode name commercialName legalName rucDni normalizedIdentifier homologationStatus active taxpayerStatus taxpayerValidation" },
@@ -89,7 +91,7 @@ export const requestPopulate = [
 export const requestListSelect = [
   "requestNumber", "issueDate", "accountingPeriod", "requester", "solicitor", "requesterArea", "requestingArea",
   "schoolOrDepartment", "flowType", "requestType", "expenseNature", "priority", "priorityRank", "frequency", "project", "areaCorrelative", "title", "currency", "exchangeRate",
-  "paymentAccount", "invoiceDetails",
+  "paymentAccount", "invoiceDetails", "costCenterType", "costAllocations",
   "totalNet", "totalIGV", "totalAmount", "totalPENEquivalent", "supplier", "supplierSnapshot", "status",
   "description", "payment", "rendition", "approvalStage", "approvalDueAt", "approvalRouteSnapshot", "purchaseOrder", "createdAt", "updatedAt"
 ].join(" ");
@@ -298,6 +300,27 @@ function parseFrequency(value) {
   return frequency;
 }
 
+export function parseCostCenterType(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const type = String(value).trim().toUpperCase();
+  if (!COST_CENTER_TYPES.includes(type)) throw new AppError(422, "Choose the cost center type: Propio or Por Encargo.", { field: "costCenterType", value }, ERROR_CODES.INVALID_COST_ALLOCATION);
+  return type;
+}
+
+// The beneficiary CECOs of a Por Encargo request, as { costCenter, percentage }. Only ids of the
+// CECO master are taken (never a typed code); one beneficiary alone is 100%.
+export function parseCostAllocations(value) {
+  const parsed = parseJson(value, "costAllocations") || [];
+  if (!Array.isArray(parsed)) throw new AppError(400, "costAllocations must be an array.", { field: "costAllocations" }, ERROR_CODES.VALIDATION_ERROR);
+  return parsed.map((allocation, index) => {
+    if (!allocation || typeof allocation !== "object" || Array.isArray(allocation)) throw new AppError(422, "Each cost center of the distribution must be an object.", { field: `costAllocations.${index}` }, ERROR_CODES.INVALID_COST_ALLOCATION);
+    const costCenter = String(allocation.costCenter?._id || allocation.costCenter || "");
+    if (costCenter && !/^[a-f\d]{24}$/i.test(costCenter)) throw new AppError(422, "Choose an active school or department from the cost center list.", { field: `costAllocations.${index}.costCenter` }, ERROR_CODES.INVALID_COST_ALLOCATION);
+    const percentage = optionalNumber(allocation.percentage);
+    return { costCenter: costCenter || undefined, percentage: percentage === undefined && parsed.length === 1 ? 100 : percentage };
+  });
+}
+
 function optionalMoney(value, field) {
   if (value === undefined || value === null || value === "") return undefined;
   const number = Number(value);
@@ -461,13 +484,7 @@ async function validateHeaderCostCenter(request, user, { required = false } = {}
     );
   }
   request.requesterCostCenter = center._id;
-  request.requesterCostCenterSnapshot = {
-    code: center.code,
-    name: center.name,
-    area: center.area,
-    organizationalUnit: center.organizationalUnit,
-    organizationalUnitCode: center.organizationalUnitCode
-  };
+  request.requesterCostCenterSnapshot = costCenterSnapshot(center);
   return center;
 }
 
@@ -507,6 +524,13 @@ function officialAuditSnapshot(request) {
   return {
     requestType: request.requestType,
     requesterCostCenter: request.requesterCostCenter?._id || request.requesterCostCenter,
+    costCenterType: request.costCenterType || COST_CENTER_TYPE.OWN,
+    ...(request.costAllocations?.length ? { costAllocations: request.costAllocations.map((allocation) => ({
+      costCenter: allocation.costCenter?._id || allocation.costCenter,
+      code: allocation.costCenterSnapshot?.code,
+      percentage: allocation.percentage,
+      amount: allocation.amount
+    })) } : {}),
     areaCorrelative: request.areaCorrelative,
     title: request.title,
     detailedDescription: request.detailedDescription,
@@ -565,6 +589,8 @@ function applyEditableFields(request, payload) {
   if (payload.invoiceDetails !== undefined) request.invoiceDetails = parseInvoiceDetails(payload.invoiceDetails);
   if (payload.supplierPaymentTerms !== undefined) request.supplierPaymentTerms = parseSupplierPaymentTerms(payload.supplierPaymentTerms);
   if (payload.requesterCostCenter !== undefined) request.requesterCostCenter = payload.requesterCostCenter?._id || payload.requesterCostCenter;
+  if (payload.costCenterType !== undefined) request.costCenterType = parseCostCenterType(payload.costCenterType) || COST_CENTER_TYPE.OWN;
+  if (payload.costAllocations !== undefined) request.costAllocations = parseCostAllocations(payload.costAllocations);
   if (payload.capexDetails !== undefined) request.capexDetails = parseCapexDetails(payload.capexDetails);
   if (payload.opexDetails !== undefined) request.opexDetails = parseOpexDetails(payload.opexDetails);
   if (payload.quotations !== undefined) request.quotations = parseQuotations(payload.quotations);
@@ -642,15 +668,58 @@ async function assertSuppliersOnRequesterList(request, supplier, user) {
   for (const other of await Supplier.find({ _id: { $in: quoted } }).select("departments proposedBy supplierCode")) assertSupplierSelectable(other, user);
 }
 
+const costCenterSnapshot = (center) => ({
+  code: center.code,
+  name: center.name,
+  area: center.area,
+  organizationalUnit: center.organizationalUnit,
+  organizationalUnitCode: center.organizationalUnitCode
+});
+
+// Tipo de Centro de Costo. Propio keeps the requester's own (or authorized) CECO on the lines, as
+// before. Por Encargo charges the school or department the request is for: its CECOs come only
+// from the active CECO master, the distribution adds up to 100%, and every line carries the first
+// beneficiary's CECO (budget and journals share the expense when there are several). Advances and
+// reimbursements (Track C) are rendered against the advance's own CECO, so they stay Propio.
+async function applyCostCenterType(request, user) {
+  if (request.costCenterType !== COST_CENTER_TYPE.ON_BEHALF) {
+    request.costCenterType = COST_CENTER_TYPE.OWN;
+    request.costAllocations = undefined;
+    request.costCenterReviewers = undefined;
+    return;
+  }
+  if (request.flowType === FLOW_TYPE.C) {
+    throw new AppError(422, "Advances and reimbursements are charged to your own cost center: choose Propio.", { field: "costCenterType", flowType: request.flowType }, ERROR_CODES.INVALID_COST_ALLOCATION);
+  }
+  const allocations = request.costAllocations || [];
+  const problems = costAllocationProblems(allocations);
+  if (problems.length) throw new AppError(422, problems[0].message, { field: problems[0].field, problems }, ERROR_CODES.INVALID_COST_ALLOCATION);
+  const centers = await CostCenter.find({ _id: { $in: allocations.map((allocation) => allocation.costCenter) }, active: true });
+  const byId = new Map(centers.map((center) => [String(center._id), center]));
+  for (const [index, allocation] of allocations.entries()) {
+    const center = byId.get(String(allocation.costCenter?._id || allocation.costCenter));
+    if (!center) throw new AppError(422, "Choose an active school or department from the cost center list.", { field: `costAllocations.${index}.costCenter`, costCenter: allocation.costCenter }, ERROR_CODES.INVALID_COST_ALLOCATION);
+    allocation.costCenterSnapshot = costCenterSnapshot(center);
+  }
+  const own = String(request.requesterCostCenter?._id || request.requesterCostCenter || user?.costCenter?._id || user?.costCenter || "");
+  if (allocations.length === 1 && own && String(allocations[0].costCenter?._id || allocations[0].costCenter) === own) {
+    throw new AppError(422, "That is your own cost center: choose Propio, or the school or department the request is for.", { field: "costAllocations.0.costCenter" }, ERROR_CODES.INVALID_COST_ALLOCATION);
+  }
+  for (const line of request.lines || []) line.costCenter = allocations[0].costCenter;
+}
+
 async function prepareRequest(request, { user, files = {}, validateSubmission = false }) {
   normalizeTrackFields(request);
+  await applyCostCenterType(request, user);
   const officialRequest = isOfficialCapexOpexRequest(request);
   assertRequestLines(request.lines);
+  // A requester may charge only their own or authorized CECOs. Por Encargo lines carry the
+  // beneficiary's CECO, already checked against the active CECO master above.
   await validateAccountingDimensions({
     requestType: request.requestType,
     expenseNature: request.expenseNature,
     lines: request.lines,
-    user
+    user: request.costCenterType === COST_CENTER_TYPE.ON_BEHALF ? undefined : user
   });
   const supplier = request.flowType === FLOW_TYPE.C ? null : await Supplier.findById(request.supplier?._id || request.supplier);
   if (request.flowType !== FLOW_TYPE.C && !supplier) throw new AppError(404, "Supplier not found.", { supplier: request.supplier }, ERROR_CODES.NOT_FOUND);
@@ -787,6 +856,58 @@ function routeAuditSnapshot(route = []) {
   }));
 }
 
+// The heads of the CECOs a Por Encargo request is charged to. Two existing ways of saying who leads
+// an area: the Area Director or Vice-Rector of the CECO's area (their area or approval areas, as the
+// approval inbox reads them; "*" and "General" are not an area), and the CECO's top jefe in the
+// roster (someone whose own CECO it is, with active reports, whose own jefe is outside it). Active
+// people only, never the requester.
+export async function costCenterReviewersFor(request) {
+  if (request.costCenterType !== COST_CENTER_TYPE.ON_BEHALF) return [];
+  const allocations = request.costAllocations || [];
+  const centers = allocations.map((allocation) => allocation.costCenter?._id || allocation.costCenter);
+  const areas = [...new Set(allocations.map((allocation) => String(allocation.costCenterSnapshot?.area || "").trim()).filter((area) => area && area !== "*" && area.toUpperCase() !== "GENERAL"))];
+  const requester = String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
+  const internal = { active: true, role: { $nin: [ROLES.SUPER_ADMIN, ROLES.MANAGEMENT_VIEWER] } };
+  const [directors, people] = await Promise.all([
+    areas.length ? User.find({ ...internal, role: { $in: [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR] }, $or: [{ area: { $in: areas } }, { approvalAreas: { $in: areas } }] }).select("_id").lean() : [],
+    User.find({ ...internal, costCenter: { $in: centers } }).select("role costCenter jefe").lean()
+  ]);
+  const leading = new Set((await User.distinct("jefe", { jefe: { $in: people.map((person) => person._id) }, active: true })).map(String));
+  const jefes = await User.find({ _id: { $in: people.map((person) => person.jefe).filter(Boolean) } }).select("costCenter").lean();
+  const jefeCenter = new Map(jefes.map((jefe) => [String(jefe._id), String(jefe.costCenter || "")]));
+  const heads = people.filter((person) => [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR].includes(person.role)
+    || (leading.has(String(person._id)) && jefeCenter.get(String(person.jefe || "")) !== String(person.costCenter)));
+  const reviewers = new Map([...directors, ...heads].map((person) => [String(person._id), person._id]));
+  reviewers.delete(requester);
+  return [...reviewers.values()];
+}
+
+// The beneficiary's heads hear about the request at once; the approver of the first step already
+// has its own notice.
+async function notifyCostCenterReviewers(request) {
+  const approver = String(activeApprovalStep(request)?.approverUser || "");
+  const charged = (request.costAllocations || []).map((allocation) => `${allocation.costCenterSnapshot?.code || ""} ${allocation.costCenterSnapshot?.name || ""} (${allocation.percentage}%)`.trim()).join(", ");
+  for (const reviewer of request.costCenterReviewers || []) {
+    const userId = reviewer?._id || reviewer;
+    if (String(userId) === approver) continue;
+    await notifyUser({
+      userId,
+      eventKey: `request:${request._id}:on-behalf:${userId}`,
+      type: "COST_CENTER_ON_BEHALF",
+      title: notificationText("Request charged to your cost center"),
+      message: notificationText("{requestNumber}: {area} requests {amount} on behalf of {costCenters}. Open it to review it or comment.", {
+        requestNumber: request.requestNumber,
+        area: request.requesterArea || request.requestingArea || "",
+        amount: `${request.currency} ${Number(request.totalAmount || 0).toFixed(2)}`,
+        costCenters: charged
+      }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  }
+}
+
 async function submitPreparedRequest(request, { user, req, comments }) {
   assertRequestActive(request);
   // A resubmission (after OBSERVE, RETURN or a withdrawal) never reuses the old
@@ -795,6 +916,9 @@ async function submitPreparedRequest(request, { user, req, comments }) {
   // audit log so its decisions stay visible.
   const previousRoute = routeAuditSnapshot(request.approvalRouteSnapshot || []);
   await initializeApprovalRoute(request);
+  // Like the route, who reviews for the beneficiary is resolved again on every sending.
+  const reviewers = await costCenterReviewersFor(request);
+  request.costCenterReviewers = reviewers.length ? reviewers : undefined;
   request.rejectionReason = "";
   await request.save();
   if (previousRoute.length) {
@@ -822,6 +946,7 @@ async function submitPreparedRequest(request, { user, req, comments }) {
     dueAt: request.approvalDueAt
   });
   await notifyApprovalStep(request);
+  await notifyCostCenterReviewers(request);
   return request;
 }
 
@@ -991,6 +1116,8 @@ export async function createFinancialRequest({ payload, files, user, req }) {
     requesterArea: user.area,
     requestingArea: user.area,
     requesterCostCenter: payload.requesterCostCenter || user.costCenter,
+    costCenterType: parseCostCenterType(payload.costCenterType),
+    costAllocations: payload.costAllocations === undefined ? undefined : parseCostAllocations(payload.costAllocations),
     schoolOrDepartment: payload.schoolOrDepartment || user.area,
     project: payload.project,
     issueDate: payload.issueDate,
@@ -1239,16 +1366,30 @@ export async function requestAuthorizedCostCenters(user) {
   return CostCenter.find(query).select("code name area organizationalUnit organizationalUnitCode active annualBudget committedAmount executedAmount paidAmount budgetMode availableAmount importProvenance").sort({ code: 1 });
 }
 
+// The schools and departments a request can be made Por Encargo for: every active CECO of the
+// master, by code. Only what identifies it; their budgets are not shown here.
+export async function requestBeneficiaryCostCenters() {
+  return CostCenter.find({ active: true }).select("code name area organizationalUnit organizationalUnitCode").sort({ code: 1 }).lean();
+}
+
 export async function previewFinancialRequestBudget({ payload, user }) {
   const flowType = payload.flowType || FLOW_TYPE.A1;
   const requestType = normalizeRequestTypeForTrack(flowType, payload.requestType);
   const lines = parseRequestLines(payload.lines);
+  // Por Encargo previews the beneficiary CECOs' budgets, with the shares the request would take.
+  const onBehalf = flowType !== FLOW_TYPE.C && parseCostCenterType(payload.costCenterType) === COST_CENTER_TYPE.ON_BEHALF;
+  const costAllocations = onBehalf ? parseCostAllocations(payload.costAllocations) : [];
+  if (onBehalf) {
+    const problems = costAllocationProblems(costAllocations);
+    if (problems.length) throw new AppError(422, problems[0].message, { field: problems[0].field, problems }, ERROR_CODES.INVALID_COST_ALLOCATION);
+    for (const line of lines) line.costCenter = costAllocations[0].costCenter;
+  }
   assertRequestLines(lines);
   await validateAccountingDimensions({
     requestType,
     expenseNature: payload.expenseNature,
     lines,
-    user
+    user: onBehalf ? undefined : user
   });
   const percentage = payload.scenario?.percentage === undefined ? 100 : Number(payload.scenario.percentage);
   const period = payload.scenario?.period || payload.accountingPeriod;
@@ -1277,7 +1418,8 @@ export async function previewFinancialRequestBudget({ payload, user }) {
     issueDate: payload.issueDate,
     accountingPeriod: period,
     project: payload.project,
-    lines
+    lines,
+    ...(onBehalf ? { costCenterType: COST_CENTER_TYPE.ON_BEHALF, costAllocations } : {})
   });
   return { ...preview, asOf: new Date().toISOString(), period, exchangeRate, exchangeRateDate: snapshot.date,
     scenarioPercentage: percentage, deferredCommitment: flowType === FLOW_TYPE.C };

@@ -52,7 +52,24 @@
 .supplier-quick-register h4 { margin: 0; font-size: var(--font-md); }
 .supplier-quick-register header small { color: var(--gray-600); font-size: var(--font-xs); }
 
+/* Step 3, Por Encargo: the school or department the request is for, optionally shared by
+   percentage (components/CostAllocationEditor.jsx). */
+.cost-allocation { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--gray-200); border-radius: var(--radius-md); background: var(--gray-50); }
+.cost-allocation-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-3); }
+.cost-allocation-row.is-shared { grid-template-columns: minmax(0, 1fr) 120px minmax(110px, auto) auto; }
+.percentage-input { display: flex; align-items: center; gap: 6px; }
+.percentage-input input { min-width: 0; text-align: right; }
+.percentage-input > span { color: var(--gray-600); font-weight: 700; }
+.cost-allocation-amount { display: grid; justify-items: end; gap: 2px; padding-bottom: 8px; font-variant-numeric: tabular-nums; }
+.cost-allocation-amount span { color: var(--gray-600); font-size: var(--font-xs); }
+.cost-allocation-amount strong { color: var(--gray-900); font-size: var(--font-sm); }
+.cost-allocation-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.cost-allocation-total { color: var(--amber-700); font-size: var(--font-xs); font-weight: 700; }
+.cost-allocation-total.is-complete { color: var(--green-700); }
+
 @media (max-width: 640px) {
   .wizard-section { padding: var(--space-3); }
   .account-choice { align-items: flex-start; flex-wrap: wrap; }
+  .cost-allocation-row.is-shared { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .cost-allocation-row.is-shared > .search-select-field { grid-column: 1 / -1; }
 }

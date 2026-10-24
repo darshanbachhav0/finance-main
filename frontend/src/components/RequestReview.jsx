@@ -1,13 +1,17 @@
 import { AlertTriangle } from "lucide-react";
 import StatusBadge from "./StatusBadge.jsx";
 import PriorityBadge from "./PriorityBadge.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 import { formatIsoMonth } from "../utils/dateInput.js";
 import { bankAccountLabel } from "../utils/bankAccounts.js";
 import { expenseNatureLabels, flowTypeLabels, optionLabel, requestFrequencyLabels, trackCRequestTypeLabels } from "../utils/options.js";
 import { invoiceDueDate, supplierCreditDays } from "../../../shared/invoiceFinance.mjs";
+import { allocationPercentages, splitByPercentages } from "../../../shared/costCenterAllocation.mjs";
 import PaymentTermsSummary from "./PaymentTermsSummary.jsx";
+import CostAllocationSummary from "./CostAllocationSummary.jsx";
+import { costCenterTypeLabels } from "../utils/costAllocation.js";
 
 const supplierName = (supplier) => supplier?.legalName || supplier?.name || "";
 const supplierStatus = (supplier) => supplier?.homologationStatus || supplier?.status || "PENDING_VALIDATION";
@@ -27,9 +31,15 @@ function Item({ label, wide = false, children }) {
 
 // The last step of the request form ("Resumen y envío"): everything the approver will see, in the
 // order it was entered, each part with a link back to its step so it is corrected in place.
-export default function RequestReview({ form, capex, lines, quotations, quotationFiles, files, existingAttachments, masters, totals, budgetPreview, selectedSupplier, selectedAccount, invoice, onEdit }) {
+export default function RequestReview({ form, capex, lines, costAllocations = [], quotations, quotationFiles, files, existingAttachments, masters, totals, budgetPreview, selectedSupplier, selectedAccount, invoice, onEdit }) {
   const { t, language } = useLanguage();
-  const center = (id) => masters.costCenters.find((item) => item._id === id);
+  const { user } = useAuth();
+  const center = (id) => masters.costCenters.find((item) => item._id === id) || masters.beneficiaryCenters?.find((item) => item._id === id);
+  // Por Encargo: who bears the expense, with the share each takes of the total.
+  const onBehalf = costAllocations.length > 0;
+  const percentages = allocationPercentages(costAllocations);
+  const shares = splitByPercentages(totals.total, percentages);
+  const charged = costAllocations.map((allocation, index) => ({ costCenterSnapshot: center(allocation.costCenter) || {}, percentage: percentages[index], amount: shares[index] }));
   const project = masters.projects.find((item) => item._id === capex.projectId);
   const trackC = form.flowType === "C";
   const otherDocuments = existingAttachments.filter((item) => !["QUOTATION", "XML", "PDF", "FEE_RECEIPT"].includes(item.kind)).length
@@ -80,6 +90,9 @@ export default function RequestReview({ form, capex, lines, quotations, quotatio
         <Item label="Frequency">{t(requestFrequencyLabels[form.frequency] || form.frequency)}</Item>
         <Item label="Requirement date">{formatDate(form.issueDate, language)}</Item>
         <Item label="Total amount">{formatCurrency(totals.total, form.currency, language)}</Item>
+        {!trackC && <Item label="Cost center type">{t(costCenterTypeLabels[onBehalf ? "POR_ENCARGO" : "PROPIO"])}</Item>}
+        {onBehalf && <Item label="Requesting area">{user?.area}</Item>}
+        {onBehalf && <Item label="Charged to" wide><CostAllocationSummary allocations={charged} currency={form.currency} /></Item>}
         {!trackC && form.supplierPaymentTerms?.paymentCondition && <Item label="Payment condition"><PaymentTermsSummary terms={terms} /></Item>}
       </dl>
       <details><summary>{t("Additional details")}</summary><dl className="detail-grid">
@@ -88,7 +101,7 @@ export default function RequestReview({ form, capex, lines, quotations, quotatio
         {!trackC && <Item label="CAPEX / OPEX">{t(form.requestType)}</Item>}
         <Item label="Expense nature">{t(optionLabel(form.expenseNature, expenseNatureLabels))}</Item>
         <Item label="Request month">{formatIsoMonth(form.accountingPeriod) || form.accountingPeriod}</Item>
-        <Item label="CECO">{center(form.requesterCostCenter) ? `${center(form.requesterCostCenter).code} - ${center(form.requesterCostCenter).name}` : ""}</Item>
+        <Item label={onBehalf ? "Requesting CECO" : "CECO"}>{center(form.requesterCostCenter) ? `${center(form.requesterCostCenter).code} - ${center(form.requesterCostCenter).name}` : ""}</Item>
         {form.observations && <Item label="Additional observations" wide>{form.observations}</Item>}
         {form.nonApprovalRisk && <Item label="Risk if not approved" wide>{form.nonApprovalRisk}</Item>}
         {form.requestType === "CAPEX" && <>

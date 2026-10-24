@@ -17,6 +17,8 @@ import { requestFrequencyLabels } from "../utils/options.js";
 import { bankAccountLabel } from "../utils/bankAccounts.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { receiptIssueDate } from "../components/RequestSummaryFacts.jsx";
+import CostAllocationSummary from "../components/CostAllocationSummary.jsx";
+import { isOnBehalf } from "../utils/costAllocation.js";
 
 // One page, made for the phone, that the approval email's "Aprobar ahora" opens (after sign-in):
 // what is asked, by whom, for how much, the documents, who approved before, and three decisions -
@@ -121,7 +123,10 @@ export default function ApprovalDecision() {
           <div><dt>{t("Requirement date")}</dt><dd>{formatDate(request.issueDate, language)}</dd></div>
           {request.flowType !== "C" && <div><dt>{t("Receipt issue date")}</dt><dd>{receiptIssueDate(request) ? formatDate(receiptIssueDate(request), language) : t("Pending")}</dd></div>}
           {request.businessJustification && <div><dt>{t("Why is it needed?")}</dt><dd>{request.businessJustification}</dd></div>}
-          {centers.length > 0 && <div><dt>{t("Charged to")}</dt><dd>{centers.join(", ")}</dd></div>}
+          {/* Por Encargo: the requesting area (above) buys for another school or department, whose CECOs bear the expense. */}
+          {isOnBehalf(request)
+            ? <div><dt>{t("Charged to")} · {t("On behalf of another area")}</dt><dd><CostAllocationSummary allocations={request.costAllocations} currency={request.currency} /></dd></div>
+            : centers.length > 0 && <div><dt>{t("Charged to")}</dt><dd>{centers.join(", ")}</dd></div>}
           <div><dt>{t("Month")}</dt><dd>{formatIsoMonth(request.accountingPeriod) || request.accountingPeriod || "-"}</dd></div>
           <div><dt>{t("How it goes")}</dt><dd>{t(quickTrackText(request)) || request.flowType}</dd></div>
           {budget?.status && <div><dt>{t("Budget")}</dt><dd><StatusBadge status={budget.status} />{budget.projectedBalance !== null && budget.projectedBalance !== undefined && <span className="muted-text"> {t("Projected balance")}: {formatCurrency(budget.projectedBalance, "PEN", language)}</span>}</dd></div>}

@@ -124,6 +124,8 @@ export function canViewRequest(request, user) {
   if (user.role === ROLES.ADMIN) return true;
   if (requesterIdOf(request) === String(user._id)) return true;
   if ((request.approvalRouteSnapshot || []).some((step) => step.approverUser && String(step.approverUser?._id || step.approverUser) === String(user._id))) return true;
+  // The heads of the CECOs a Por Encargo request is charged to review it (they are not approvers).
+  if ((request.costCenterReviewers || []).some((reviewer) => String(reviewer?._id || reviewer) === String(user._id))) return true;
   // Preserves the Area Director/Vice-Rector/Management carve-out exactly: broad but
   // never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
   // (Accounting, Treasury, Budget) keeps its original unrestricted access.
@@ -142,7 +144,8 @@ export function requestVisibilityFilter(user) {
     $or: [
       { requester: user._id },
       { solicitor: user._id },
-      { "approvalRouteSnapshot.approverUser": user._id }
+      { "approvalRouteSnapshot.approverUser": user._id },
+      { costCenterReviewers: user._id }
     ]
   };
 }
