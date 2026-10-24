@@ -1,6 +1,7 @@
 import { canonicalRequestStatus, LEGACY_WORKFLOW_STATUSES, statusAliases } from "../../../shared/workflowStatus.mjs";
 import mongoose from "mongoose";
 import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
+import { COST_CENTER_TYPE, COST_CENTER_TYPES, costAllocationProblems, splitByPercentages } from "../../../shared/costCenterAllocation.mjs";
 import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
 import {
   ACKNOWLEDGMENT_TYPES,
@@ -223,6 +224,25 @@ const xmlValidationSchema = new mongoose.Schema(
   { _id: false, suppressReservedKeysWarning: true }
 );
 
+// A beneficiary CECO of a Por Encargo request: its share of the expense, in percent and in money
+// (request currency and PEN), kept in step with the request total.
+const costAllocationSchema = new mongoose.Schema(
+  {
+    costCenter: { type: mongoose.Schema.Types.ObjectId, ref: "CostCenter", required: true },
+    costCenterSnapshot: {
+      code: String,
+      name: String,
+      area: String,
+      organizationalUnit: String,
+      organizationalUnitCode: String
+    },
+    percentage: { type: Number, required: true, min: 0.01, max: 100 },
+    amount: { type: Number, default: 0, min: 0 },
+    penEquivalent: { type: Number, default: 0, min: 0 }
+  },
+  { _id: false }
+);
+
 const approvalRouteSnapshotSchema = new mongoose.Schema(
   {
     rule: { type: mongoose.Schema.Types.ObjectId, ref: "ApprovalRule" },
@@ -279,6 +299,14 @@ const financialRequestSchema = new mongoose.Schema(
       authorizedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       reason: String
     },
+    // Tipo de Centro de Costo (shared/costCenterAllocation.mjs). PROPIO is every request saved before
+    // this field. POR_ENCARGO: requesterArea / requesterCostCenter stay the requesting department, and
+    // costAllocations name the beneficiary CECO(s) that bear the expense; the lines carry the first one.
+    costCenterType: { type: String, enum: COST_CENTER_TYPES, default: COST_CENTER_TYPE.OWN },
+    costAllocations: { type: [costAllocationSchema], default: undefined },
+    // The beneficiary CECOs' heads, resolved when a Por Encargo request is sent: they are told about
+    // it and may open and comment on it. They review it; they are not an approval step.
+    costCenterReviewers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: undefined },
     schoolOrDepartment: { type: String, trim: true },
     flowType: { type: String, enum: FLOW_TYPES, default: FLOW_TYPE.A1, index: true },
     requestType: { type: String, enum: REQUEST_TYPES, required: true, set: (value) => LEGACY_REQUEST_TYPE_MAP[value] || value },
@@ -653,6 +681,22 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
   this.netAmount = this.totalNet;
   this.igvAmount = this.totalIGV;
   this.penEquivalent = this.totalPENEquivalent;
+
+  // A Por Encargo request's shares follow its total; a Propio request carries none.
+  if (this.costCenterType === COST_CENTER_TYPE.ON_BEHALF) {
+    const allocations = this.costAllocations || [];
+    const problem = costAllocationProblems(allocations)[0];
+    if (problem) this.invalidate("costAllocations", problem.message);
+    else {
+      const percentages = allocations.map((allocation) => allocation.percentage);
+      const amounts = splitByPercentages(this.totalAmount, percentages);
+      const penAmounts = splitByPercentages(this.totalPENEquivalent, percentages);
+      allocations.forEach((allocation, index) => {
+        allocation.amount = amounts[index];
+        allocation.penEquivalent = penAmounts[index];
+      });
+    }
+  } else if (this.costAllocations?.length) this.costAllocations = undefined;
 
   this.totalCommercialAmount = sumMoney((this.lines || []).map((line) => line.commercialTotal));
   this.commercialTotalDifference = subtractMoney(this.totalCommercialAmount, this.totalAmount);

@@ -5,3 +5,9 @@
 .request-summary-facts dt { color: var(--gray-600); font-size: var(--font-xs); }
 .request-summary-facts dd { margin: 2px 0 0; color: var(--gray-900); font-size: var(--font-sm); font-weight: 650; }
 .pending-value { color: var(--amber-700); }
+
+/* Por Encargo: the CECOs a request is charged to (components/CostAllocationSummary.jsx). */
+.cost-allocation-summary { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.cost-allocation-summary li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px var(--space-3); }
+.cost-allocation-summary small { color: var(--gray-600); font-size: var(--font-xs); font-weight: 500; }
+.cost-allocation-share { color: var(--gray-700); font-variant-numeric: tabular-nums; white-space: nowrap; }

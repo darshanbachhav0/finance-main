@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import { assertBudgetBeforePosting, executeBudgetAmount, reverseBudgetExecution } from "./budgetService.js";
+import { distributeAcrossCostCenters, sharedCostAllocations } from "../../../shared/costCenterAllocation.mjs";
 import SunatVoucher from "../models/SunatVoucher.js";
 import { assertVoucherEvidenceMatches, latestInvoiceEvidence } from "./xmlValidationService.js";
 import {
@@ -218,6 +219,22 @@ function settleResidual(lines, target, expenseLines = []) {
   receiver.debit = addMoney(receiver.debit, difference);
 }
 
+// A Por Encargo request shared across several CECOs books each expense debit to every beneficiary
+// CECO by its percentage, to the cent, so each school's cost lands in its own CECO. Returns the
+// journal lines and the expense lines among them (which absorb any rounding residual).
+function shareExpenseLines(request, lines, expenseLines) {
+  const allocations = sharedCostAllocations(request);
+  if (!allocations.length) return [lines, expenseLines];
+  const shared = [];
+  const result = lines.flatMap((line) => {
+    if (!expenseLines.includes(line)) return [line];
+    const parts = distributeAcrossCostCenters([line], allocations, "debit");
+    shared.push(...parts);
+    return parts;
+  });
+  return [result, shared];
+}
+
 async function provisionJournalLines(request, { voucherType, igvDeductible } = {}) {
   await request.populate("lines.expenseType");
   const total = request.totalPENEquivalent ?? request.penEquivalent;
@@ -280,14 +297,15 @@ async function provisionJournalLines(request, { voucherType, igvDeductible } = {
       }
     }
   }
-  settleResidual(lines, total, expenseLines);
-  lines.push(creditLine({
+  const [booked, expenses] = shareExpenseLines(request, lines, expenseLines);
+  settleResidual(booked, total, expenses);
+  booked.push(creditLine({
     accountNumber: payable.accountNumber,
     subAccount: payable.subAccount,
     description: `Accounts payable ${request.requestNumber}`,
     amount: total
   }));
-  return lines;
+  return booked;
 }
 
 async function createJournal({ request, accountsPayable, entryType, sourceTransaction, lines, userId, originalAmount, currency, exchangeRate, penEquivalent, period, allowClosedRequest = false, session }) {
@@ -431,14 +449,15 @@ async function provisionJournalLinesForVoucher(request, voucherAmount) {
     }));
   }
   const penTotal = multiplyMoney(total, exchangeRate);
-  settleResidual(lines, penTotal, expenseLines);
-  lines.push(creditLine({
+  const [booked, expenses] = shareExpenseLines(request, lines, expenseLines);
+  settleResidual(booked, penTotal, expenses);
+  booked.push(creditLine({
     accountNumber: payable.accountNumber,
     subAccount: payable.subAccount,
     description: `Accounts payable ${request.requestNumber}`,
     amount: penTotal
   }));
-  return lines;
+  return booked;
 }
 
 export async function createProvisionJournalForVoucher(request, accountsPayable, voucherAmount, userId, { session } = {}) {

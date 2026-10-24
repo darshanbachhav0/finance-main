@@ -9,6 +9,8 @@ const labels = {
   amount: "Amount", attachment: "Quotation evidence", rucDni: "RUC / identifier", personType: "Person type",
   accountType: "Account type", accountNumber: "Account number", cci: "CCI", dni: "DNI", email: "Email",
   name: "Name", bank: "Bank", lines: "Items", quotations: "Quotations", quote: "Quote", invoice: "Invoice",
+  // Por Encargo's distribution: costAllocations.<n>.costCenter / .percentage.
+  costAllocations: "Cost center distribution", percentage: "Percentage",
   // The request form's document uploads.
   xml: "Invoice XML", pdf: "Invoice / receipt PDF", feeReceipt: "Recibo por Honorarios", purchaseOrder: "Purchase order", contract: "Signed contract",
   conformity: "Conformity report", activityReport: "Activity report", supporting: "Supporting documents"
@@ -17,8 +19,8 @@ export function validationFieldLabel(path, t = value => value) {
   const parts = String(path || "").split(".");
   const key = parts.at(-1);
   const label = t(labels[key] || key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " "));
-  if (["lines", "quotations"].includes(parts[0]) && /^\d+$/.test(parts[1])) {
-    return `${t(parts[0] === "lines" ? "Item" : "Quotation")} ${Number(parts[1]) + 1} — ${label}`;
+  if (["lines", "quotations", "costAllocations"].includes(parts[0]) && /^\d+$/.test(parts[1])) {
+    return `${t({ lines: "Item", quotations: "Quotation", costAllocations: "Cost center" }[parts[0]])} ${Number(parts[1]) + 1} — ${label}`;
   }
   return label;
 }
