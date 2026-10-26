@@ -92,6 +92,8 @@ export const requestListSelect = [
   "requestNumber", "issueDate", "accountingPeriod", "requester", "solicitor", "requesterArea", "requestingArea",
   "schoolOrDepartment", "flowType", "requestType", "expenseNature", "priority", "priorityRank", "frequency", "project", "areaCorrelative", "title", "currency", "exchangeRate",
   "paymentAccount", "invoiceDetails", "costCenterType", "costAllocations",
+  // Track D lists show source -> destination where other tracks show the supplier.
+  "treasuryTransfer.purpose", "treasuryTransfer.sourceAccount.code", "treasuryTransfer.destinationAccount.code",
   "totalNet", "totalIGV", "totalAmount", "totalPENEquivalent", "supplier", "supplierSnapshot", "status",
   "description", "payment", "rendition", "approvalStage", "approvalDueAt", "approvalRouteSnapshot", "purchaseOrder", "createdAt", "updatedAt"
 ].join(" ");
@@ -867,7 +869,7 @@ export async function costCenterReviewersFor(request) {
   const centers = allocations.map((allocation) => allocation.costCenter?._id || allocation.costCenter);
   const areas = [...new Set(allocations.map((allocation) => String(allocation.costCenterSnapshot?.area || "").trim()).filter((area) => area && area !== "*" && area.toUpperCase() !== "GENERAL"))];
   const requester = String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
-  const internal = { active: true, role: { $nin: [ROLES.SUPER_ADMIN, ROLES.MANAGEMENT_VIEWER] } };
+  const internal = { active: true, role: { $nin: [ROLES.SUPER_ADMIN, ROLES.AUDITOR, ROLES.MANAGEMENT_VIEWER] } };
   const [directors, people] = await Promise.all([
     areas.length ? User.find({ ...internal, role: { $in: [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR] }, $or: [{ area: { $in: areas } }, { approvalAreas: { $in: areas } }] }).select("_id").lean() : [],
     User.find({ ...internal, costCenter: { $in: centers } }).select("role costCenter jefe").lean()

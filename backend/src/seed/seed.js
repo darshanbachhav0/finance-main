@@ -20,6 +20,7 @@ import FinancialRequest from "../models/FinancialRequest.js";
 import Project from "../models/Project.js";
 import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
+import TreasuryBankAccount from "../models/TreasuryBankAccount.js";
 import User from "../models/User.js";
 import { removeDemoAccounts } from "../services/demoAccountRemovalService.js";
 import { ensureSpotCategories } from "../services/detractionService.js";
@@ -729,6 +730,19 @@ async function seedRulesAndMappings({ costCenters }) {
       // recorded above via AccountingMapping regardless of this restriction.
       if (bank === "BBVA") await seedBbvaFormat(currency);
     }
+  }
+
+  // UMA's own accounts for Track D transfers, on the same ledger accounts as the BANK mappings
+  // above. Fictional numbers; created once, so Treasury's later edits survive a re-seed.
+  for (const [code, bank, currency, accountNumber, ledgerAccount, kind] of [
+    ["BBVA-PEN", "BBVA", "PEN", "0011-0999-0100000001", "104102", "OPERATING"],
+    ["BBVA-USD", "BBVA", "USD", "0011-0999-0100000002", "104102", "OPERATING"],
+    ["BCP-PEN", "BCP", "PEN", "191-0000001-0-01", "104101", "OPERATING"],
+    ["BCP-USD", "BCP", "USD", "191-0000002-1-02", "104101", "OPERATING"],
+    ["SCOTIABANK-PEN", "SCOTIABANK", "PEN", "000-0000001", "104104", "OPERATING"],
+    ["BBVA-DPF-PEN", "BBVA", "PEN", "0011-0999-9600000001", "106201", "INVESTMENT"]
+  ]) {
+    await TreasuryBankAccount.updateOne({ code }, { $setOnInsert: { code, bank, currency, accountNumber, ledgerAccount, kind, description: `Cuenta UMA ${bank} ${currency} (demo)`, active: true } }, { upsert: true });
   }
 
   // Budget is held per Cost Center (one pool per project where a project has its own funds).

@@ -23,7 +23,9 @@ const renditionSettled = (request) => request.rendition?.status === "VALIDATED" 
 export function journeyMilestones(request, { orderApplies = true } = {}) {
   const rank = journeyRank(request.status);
   const steps = [{ key: "submitted", label: "Submitted", done: rank >= 1 }, { key: "approved", label: "Approved", done: rank >= 2 }];
-  if (request.flowType === "C") {
+  if (request.flowType === "D") {
+    steps.push({ key: "transferred", label: "Transferred", done: rank >= 7 }, { key: "reconciled", label: "Reconciled", done: rank >= 8 });
+  } else if (request.flowType === "C") {
     if (isAdvance(request)) steps.push({ key: "advance", label: "Advance paid", done: rank >= 7 }, { key: "rendition", label: "Rendition validated", done: renditionSettled(request) });
     else steps.push({ key: "declaration", label: "Declaration approved", done: rank >= 4 }, { key: "paid", label: "Paid", done: rank >= 7 });
   } else if (request.flowType === "B") {
@@ -41,6 +43,8 @@ export function journeyMilestones(request, { orderApplies = true } = {}) {
 // When the money is expected: the scheduled date of the first unpaid payable, else the next
 // payment cycle (15th / 30th) once a payable exists, else nothing yet. A paid request shows when.
 export function expectedPayment(request, payables = [], now = new Date()) {
+  // A transfer between UMA's own accounts pays nobody: its execution shows in its milestones.
+  if (request.flowType === "D") return null;
   const rank = journeyRank(request.status);
   if (rank >= 7) {
     const paidAt = request.payment?.paidAt || request.payment?.confirmations?.at?.(-1)?.paidAt;
@@ -71,10 +75,17 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
   const team = (name) => ({ name, team: true });
 
   if (status === "BORRADOR") return { text: mine ? "Draft: only you can see it. Submit it when it is ready." : "Draft, not submitted yet.", holder: requester, since };
+  // A step decided by role (Head of Treasury, GAF, General Management) waits on that whole team.
+  const tierTeam = { TREASURY_HEAD: "Treasury", GAF: "GAF", GENERAL_MANAGEMENT: "Management" }[activeStep?.tier || (!activeStep?.approverSnapshot?.name && activeStep?.approvalLevel)];
+  const tierText = { TREASURY_HEAD: "Waiting for the Head of Treasury's approval.", GAF: "Waiting for the approval of the Financial Administration Management (GAF).", GENERAL_MANAGEMENT: "Waiting for General Management's approval." };
+  if (status === "PENDIENTE_APROBACION" && tierTeam) return { text: tierText[activeStep.tier || activeStep.approvalLevel], holder: team(tierTeam), since: activeStep?.startedAt || since };
   if (status === "PENDIENTE_APROBACION") return { text: "Waiting for {name}'s approval.", params: { name: activeStep?.approverSnapshot?.name || "-" }, holder: person(activeStep?.approverSnapshot?.name), since: activeStep?.startedAt || since };
   if (waitsForBankAccount(request)) return request.observation.resolver === "ACCOUNTING"
     ? { text: "Approved. Accounting is verifying the bank account; then the advance is paid.", holder: team("Accounting"), since, tone: "attention" }
     : { text: mine ? "Approved. Register your bank account so the advance can be paid." : "Approved. Waiting for the requester's verified bank account.", holder: requester, since, tone: "attention" };
+  if (status === "APROBADO" && request.flowType === "D") return { text: "Approved. Treasury makes the transfer at the bank and records its operation number.", holder: team("Treasury"), since };
+  if (status === "PAGADO" && request.flowType === "D") return { text: "Transferred. Treasury reconciles it with the bank statement.", holder: team("Treasury"), since };
+  if (["OBSERVADO", "DEVUELTO"].includes(status) && request.flowType === "D") return { text: mine ? "Returned to you for corrections. Correct it in Transfers and send it again." : "Returned to Treasury for corrections.", holder: requester, since, tone: "attention" };
   if (status === "APROBADO") return { text: "Approved. The budget is being committed.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status)) return { text: mine ? "Returned to you for corrections. Fix it and submit it again." : "Returned to the requester for corrections.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Treasury"), since, tone: "attention" };

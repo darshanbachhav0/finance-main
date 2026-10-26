@@ -90,10 +90,16 @@ test("bulk approval runs decideApproval per request with one shared decision", {
       assert.deepEqual(repeated.summary, { requested: 1, approved: 1, failed: 0 });
     });
 
-    await t.test("a manager-chain batch needs one explicit finalize-or-forward choice", async () => {
-      const request = await makeRequest();
-      await assert.rejects(bulkApproveRequests({ ids: [request._id], user: mid, req }), (error) => error.statusCode === 422 && error.details.field === "forward" && error.details.requests.length === 1);
+    await t.test("a manager-chain batch needs one explicit finalize-or-forward choice where finalizing is possible", async () => {
+      // root has no jefe: its direct report's request may be finalized there, so the choice is needed.
+      const request = await makeRequest({ owner: directReport });
+      await assert.rejects(bulkApproveRequests({ ids: [request._id], user: root, req }), (error) => error.statusCode === 422 && error.details.field === "forward" && error.details.requests.length === 1);
       assert.equal((await FinancialRequest.findById(request._id)).status, REQUEST_STATUS.PENDING_APPROVAL, "nothing is decided");
+      // The cost center's responsible has no choice to make: their approval always goes up.
+      const sentUp = await makeRequest();
+      const { results } = await bulkApproveRequests({ ids: [sentUp._id], user: mid, req });
+      assert.equal(results[0].ok, true);
+      assert.equal(String(activeApprovalStep(await FinancialRequest.findById(sentUp._id)).approverUser), String(root._id));
     });
 
     await t.test("finalize: approved rows complete, and each row fails or succeeds on its own", async () => {
@@ -110,7 +116,9 @@ test("bulk approval runs decideApproval per request with one shared decision", {
       assert.deepEqual(summary, { requested: 6, approved: 2, failed: 4 });
       const byId = Object.fromEntries(results.map((item) => [item.id, item]));
       assert.equal(byId[first._id].ok, true);
-      assert.equal(byId[first._id].status, REQUEST_STATUS.BUDGET_COMMITTED, "the regular post-approval budget commitment still runs");
+      assert.equal(byId[first._id].status, REQUEST_STATUS.PENDING_APPROVAL, "the jefe's approval goes to their superior");
+      const finalized = await bulkApproveRequests({ ids: [first._id, second._id], comments: "Monthly batch", forward: false, user: root, req });
+      assert.ok(finalized.results.every((item) => item.status === REQUEST_STATUS.BUDGET_COMMITTED), "the regular post-approval budget commitment still runs");
       assert.equal(byId[second._id].ok, true);
       assert.equal(byId[missingDocuments._id].ok, false);
       assert.equal(byId[missingDocuments._id].code, "MISSING_REQUIRED_DOCUMENT", "approval controls are not bypassed");

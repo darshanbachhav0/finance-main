@@ -108,6 +108,10 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
   if (owner && request.requestType === "REEMBOLSO_SIN_SUSTENTO" && status === "COMPROMISO_PRESUPUESTAL" && ["PENDING", "OBSERVED", "NOT_REQUIRED", undefined].includes(rendition.status)) {
     return turn("declaration", "Send your signed declaration", "List what you paid and sign the declaration. Accounting reviews it and then you are paid.", { action: { label: "Open the declaration", open: { tab: "Documents", target: "official-rendition" } } });
   }
+  // A returned transfer is corrected on the Transfers page, never in the request form.
+  if (request.flowType === "D" && (owner || role === "Admin") && ["OBSERVADO", "DEVUELTO"].includes(status)) {
+    return turn("resubmitTransfer", "Correct the transfer and send it again", "Read the approver's comment, correct the amount or the description, and send it for approval again.", { tone: "warning", action: { label: "Open Transfers", href: `/treasury/transfers?request=${request._id}` }, more: { label: "Read the comments", open: { tab: "Approvals" } } });
+  }
   if (permissions.canCommitBudget) return turn("commitBudget", "Commit the budget", "Review budget availability and commit the approved request.", { action: { label: "Commit budget", run: "budget" } });
   if (permissions.modifiable) {
     const edit = { label: "Edit request", href: `/requests/${request._id}/edit` };
@@ -116,6 +120,14 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
     return turn("submit", "Submit for approval", "Your request is ready for your submission review.", { action: { label: "Submit", run: "submit" }, more: edit });
   }
   if (permissions.canApprove) return turn("approve", "Approve or reject this request", "Review the supporting documents and record your decision.", { action: { label: "Approve", run: "approve" }, more: { label: "Other options", open: { target: "request-actions" } } });
+  // Track D: Treasury makes the approved transfer at the bank, then reconciles it (Transfers page).
+  if (request.flowType === "D") {
+    const transfers = `/treasury/transfers?request=${request._id}`;
+    if (PAYERS.includes(role) && status === "APROBADO") return turn("executeTransfer", "Make the transfer", "Both approvals are in. Make the transfer at the bank and record its operation number.", { action: { label: "Open Transfers", href: transfers } });
+    if (PAYERS.includes(role) && status === "PAGADO") return turn("reconcileTransfer", "Reconcile the transfer", "Match it with the bank statement: the reference and the amount on the statement. Reconciling closes it.", { action: { label: "Open Transfers", href: transfers } });
+    if (status === "APROBADO") return note("executeTransfer", "Approved. Treasury makes the transfer at the bank next.");
+    if (["OBSERVADO", "DEVUELTO"].includes(status)) return null;
+  }
   if (permissions.canIssueOrder) return turn("issueOrder", "Issue the purchase order", "Review the approved purchase and issue the order.", { action: { label: "Issue order", run: "order" } });
   // Only while the request waits for its first invoice. An A1 order may still receive more invoices
   // after one is booked (the Documents tab keeps the upload), but that is nobody's turn.

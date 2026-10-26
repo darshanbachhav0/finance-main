@@ -18,11 +18,13 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { flowTypes, requestPriorityLabels, requestTypes } from "../utils/options.js";
+import { requestFlowTypes, requestPriorityLabels, requestTypes } from "../utils/options.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 import RequestDocumentsDrawer from "../components/RequestDocumentsDrawer.jsx";
 import { beneficiaryNames } from "../utils/costAllocation.js";
+import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
+import { laterStagesText } from "../utils/approvalOptions.js";
 
 // Mirrors MAX_BULK_APPROVALS in backend/src/services/approvalService.js.
 const BULK_APPROVAL_LIMIT = 50;
@@ -72,6 +74,13 @@ export default function ApprovalInbox() {
   const canForward = row => Boolean(row.approvalOptions?.canForward);
   const isChainRow = (row) => activeStepOf(row)?.source === "MANAGER_CHAIN";
   const forwardName = row => row.approvalOptions?.forwardTo?.name || "";
+  // Above the superior-approval threshold the jefe cannot finalize: the approval always goes up to
+  // their own superior (the backend forwards it anyway).
+  const mustForward = (row) => isChainRow(row) && row.approvalOptions?.canFinalize === false;
+  // The approve button's choice for a chain step: finalize, unless it must go to the superior.
+  const approveForward = (row) => (isChainRow(row) ? mustForward(row) : undefined);
+  // Who is asked: the supplier, or for a Track D transfer its two accounts.
+  const counterparty = (row) => isTransfer(row) ? `${t("Transfer")}: ${transferRoute(row)}` : row.supplier?.legalName || row.supplier?.name || (row.flowType === "C" ? t("No supplier (Track C)") : "-");
 
   async function decide(comments) {
     setProcessing(true);
@@ -105,7 +114,14 @@ export default function ApprovalInbox() {
     const directorStage = row.approvalStage === "AREA_DIRECTOR";
     const chainRow = isChainRow(row);
     const definitions = {
-      approve: chainRow ? (forward ? {
+      approve: chainRow ? (forward && mustForward(row) ? {
+        title: forwardName(row) ? t("Approve and send to {name}?").replace("{name}", forwardName(row)) : "Approve and send to your jefe?",
+        description: "Above this amount your approval cannot finalize the request: it goes to your superior, who decides next.",
+        confirmLabel: forwardName(row) ? t("Approve and send to {name}").replace("{name}", forwardName(row)) : "Send to my jefe",
+        tone: "success",
+        inputLabel: "Approval comments",
+        result: "This step is marked approved and your superior decides next."
+      } : forward ? {
         title: "Approve and send to your jefe?",
         description: forwardName(row)
           ? `${t("This records your approval and sends the request to your jefe for a further decision:")} ${forwardName(row)}.`
@@ -154,11 +170,12 @@ export default function ApprovalInbox() {
       inputRequired: !approve,
       details: [
         { label: "Request", value: row.requestNumber },
-        { label: "Supplier", value: row.supplier?.name },
+        { label: isTransfer(row) ? "Transfer" : "Supplier", value: isTransfer(row) ? transferRoute(row) : row.supplier?.name },
         { label: "Amount", value: formatCurrency(row.totalAmount || 0, row.currency, language) },
-        { label: "Approval level", value: row.approvalStage },
+        { label: "Approval level", value: t(row.approvalStage) },
         { label: "Track", value: row.flowType || "A1" },
-        { label: "Result", value: definition.result }
+        { label: "Result", value: definition.result },
+        ...(approve && laterStagesText(row.approvalOptions, t) ? [{ label: "Then", value: laterStagesText(row.approvalOptions, t) }] : [])
       ]
     });
   }
@@ -175,7 +192,7 @@ export default function ApprovalInbox() {
 
   // Phones: swipe a request right to approve it, left to send it back (each opens its usual dialog).
   const rowSwipe = {
-    right: { label: "Approve", enabled: (row) => hasAction(row, "APPROVE"), onSwipe: (row) => openDecision(row, "approve", isChainRow(row) ? false : undefined) },
+    right: { label: "Approve", enabled: (row) => hasAction(row, "APPROVE"), onSwipe: (row) => openDecision(row, "approve", approveForward(row)) },
     left: { label: "Send back", enabled: canSendBack, onSwipe: sendBack }
   };
 
@@ -187,6 +204,9 @@ export default function ApprovalInbox() {
   }, [rows]);
   const selectedRows = rows.filter((row) => selectedIds.includes(row._id));
   const selectedChainRows = selectedRows.filter(isChainRow);
+  // Chain steps above the superior threshold are always sent up, whatever the batch decides.
+  const selectedSentUp = selectedChainRows.filter(mustForward);
+  const selectedFinalizable = selectedChainRows.filter((row) => !mustForward(row));
   const notForwardable = selectedRows.filter((row) => !(isChainRow(row) && canForward(row)));
   const bulkCanForward = selectedRows.length > 0 && notForwardable.length === 0;
   const bulkOverLimit = selectedRows.length > BULK_APPROVAL_LIMIT;
@@ -200,7 +220,7 @@ export default function ApprovalInbox() {
     const names = list.map((row) => row.requestNumber);
     return names.length > max ? `${names.slice(0, max).join(", ")} +${names.length - max}` : names.join(", ");
   };
-  const bulkApproveLabel = selectedChainRows.length ? "Approve and finalize" : "Approve selected";
+  const bulkApproveLabel = selectedFinalizable.length ? "Approve and finalize" : selectedSentUp.length ? "Approve and send to the superior" : "Approve selected";
 
   function openBulkApproval(forward) {
     if (!selectedRows.length || bulkOverLimit || (forward && !bulkCanForward)) return;
@@ -209,7 +229,9 @@ export default function ApprovalInbox() {
       title: forward ? "Approve these requests and send them to your jefe?" : "Approve these requests?",
       description: forward
         ? "Each request is approved at your level and sent to your jefe, who decides next. Every request is processed on its own, with the same checks as an individual approval."
-        : "Each request is approved with the same checks as an individual approval. Manager-chain requests are finalized at your level. A request that fails a check stays pending and is listed in the result.",
+        : selectedSentUp.length
+          ? `${t("Each request is approved with the same checks as an individual approval. A request that fails a check stays pending and is listed in the result.")} ${t("These must also be approved by your superior and are sent up, not finalized:")} ${requestNumbers(selectedSentUp)}`
+          : "Each request is approved with the same checks as an individual approval. Manager-chain requests are finalized at your level. A request that fails a check stays pending and is listed in the result.",
       confirmLabel: forward ? "Send to my jefe" : bulkApproveLabel,
       details: [
         { label: "Requests", value: String(selectedRows.length) },
@@ -280,7 +302,7 @@ export default function ApprovalInbox() {
           rowSwipe={rowSwipe}
           selection={{ selected: selectedIds, onChange: setSelectedIds, isRowSelectable: (row) => hasAction(row, "APPROVE") }}
           filters={[
-            { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes.filter((item) => item !== "A2") },
+            { key: "flowType", label: "tracks", allLabel: "All tracks", options: requestFlowTypes.filter((item) => item !== "A2") },
             { key: "requestType", label: "types", allLabel: "All types", options: requestTypes },
             { key: "priority", label: "priorities", allLabel: "All priorities", options: ["ALTA", "MEDIA", "BAJA"].map((value) => ({ value, label: requestPriorityLabels[value] })) }
           ]}
@@ -291,13 +313,13 @@ export default function ApprovalInbox() {
             { label: "Open decision page", icon: PanelTop, hidden: !canDecide(row), onClick: () => navigate(`/approvals/${row._id}`) },
             // Approve, send back and reject are the Decision column's buttons; a manager-chain
             // approval can also go up to the approver's own jefe from here.
-            { label: "Send to my jefe", icon: Forward, hidden: !(hasAction(row, "APPROVE") && isChainRow(row) && canForward(row)), onClick: () => openDecision(row, "approve", true) }
+            { label: "Send to my jefe", icon: Forward, hidden: !(hasAction(row, "APPROVE") && isChainRow(row) && canForward(row) && !mustForward(row)), onClick: () => openDecision(row, "approve", true) }
           ]}
           columns={[
             { key: "requestNumber", type: "name", primary: true, label: "Request", render: (row) => <div className="primary-cell"><Link to={`/requests/${row._id}`}>{row.requestNumber}</Link><span>{row.title || row.description || ""}</span></div> },
             { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "MEDIA"]), render: (row) => <PriorityBadge priority={row.priority} /> },
-            { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.legalName || row.supplier?.name || (row.flowType === "C" ? t("No supplier (Track C)") : "-") },
-            { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => { const covering = activeStepOf(row)?.coveringForSnapshot?.name; return covering ? <span className="primary-cell"><span>{t(row.approvalStage || "AREA_DIRECTOR")}</span><small>{t("on behalf of {name}").replace("{name}", covering)}</small></span> : t(row.approvalStage || "AREA_DIRECTOR"); } },
+            { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => (isTransfer(row) ? counterparty(row) : row.supplier?.name), render: counterparty },
+            { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => { const covering = activeStepOf(row)?.coveringForSnapshot?.name; const later = laterStagesText(row.approvalOptions, t); return covering || later ? <span className="primary-cell"><span>{t(row.approvalStage || "AREA_DIRECTOR")}</span>{covering && <small>{t("on behalf of {name}").replace("{name}", covering)}</small>}{later && <small>{t("Then")}: {later}</small>}</span> : t(row.approvalStage || "AREA_DIRECTOR"); } },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
             // Por Encargo: the area that bears the expense, under the requester (always shown).
             { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong>{beneficiaryNames(row) && <small>{t("On behalf of {area}").replace("{area}", beneficiaryNames(row))}</small>}</div> },
@@ -305,7 +327,7 @@ export default function ApprovalInbox() {
             { key: "totalAmount", type: "money", sortKey: "totalPENEquivalent", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "scheduledPaymentDate", primary: true, label: "Scheduled payment date", sortable: false, render: row => row.scheduledPaymentDate ? formatDate(row.scheduledPaymentDate, language) : "Por programar" },
             { key: "documents", primary: true, label: "Documents", sortable: false, render: row => <button type="button" className="text-button" onClick={() => setDocumentsId(row._id)}>Ver documentos</button> },
-            { key: "decision", primary: true, label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions decision-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={t("Approve")} onClick={() => openDecision(row, "approve", isChainRow(row) ? false : undefined)}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{canSendBack(row) && <button type="button" className="secondary-button decision-button" title={t("Send back")} onClick={() => sendBack(row)}><MessageSquareWarning size={17} /><span>{t("Send back")}</span></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} aria-label={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
+            { key: "decision", primary: true, label: "Decision", sortable: false, render: (row) => canDecide(row) ? <div className="row-actions decision-actions">{hasAction(row, "APPROVE") && <button type="button" className="secondary-button approve decision-button" title={mustForward(row) && forwardName(row) ? t("Approve and send to {name}").replace("{name}", forwardName(row)) : t("Approve")} onClick={() => openDecision(row, "approve", approveForward(row))}><CheckCircle2 size={17} /><span>{t("Approve")}</span></button>}{canSendBack(row) && <button type="button" className="secondary-button decision-button" title={t("Send back")} onClick={() => sendBack(row)}><MessageSquareWarning size={17} /><span>{t("Send back")}</span></button>}{hasAction(row, "REJECT") && <button type="button" className="icon-button danger" title={t("Reject")} aria-label={t("Reject")} onClick={() => openDecision(row, "reject")}><XCircle size={17} /></button>}</div> : <span className="muted-text">{t("No action available")}</span> }
           ]}
         />
         {selectedRows.length > 0 && (
@@ -316,11 +338,12 @@ export default function ApprovalInbox() {
             </div>
             <div className="bulk-bar-actions">
               <button type="button" className="primary-button" disabled={processing || bulkOverLimit} onClick={() => openBulkApproval(false)}><CheckCircle2 size={16} /><span>{t(bulkApproveLabel)}</span></button>
-              {selectedChainRows.length > 0 && <button type="button" className="secondary-button" disabled={processing || bulkOverLimit || !bulkCanForward} aria-describedby={bulkCanForward ? undefined : "bulk-forward-note"} onClick={() => openBulkApproval(true)}><Forward size={16} /><span>{t("Send to my jefe")}</span></button>}
+              {selectedFinalizable.length > 0 && <button type="button" className="secondary-button" disabled={processing || bulkOverLimit || !bulkCanForward} aria-describedby={bulkCanForward ? undefined : "bulk-forward-note"} onClick={() => openBulkApproval(true)}><Forward size={16} /><span>{t("Send to my jefe")}</span></button>}
               <button type="button" className="text-button" onClick={() => setSelectedIds([])}>{t("Clear selection")}</button>
             </div>
             {bulkOverLimit && <p className="bulk-bar-note">{t("Select at most {max} requests per batch.").replace("{max}", BULK_APPROVAL_LIMIT)}</p>}
-            {selectedChainRows.length > 0 && !bulkCanForward && <p className="bulk-bar-note" id="bulk-forward-note">{t("Send to my jefe is available only when every selected request can be sent to your jefe. Not possible for:")} {requestNumbers(notForwardable)}</p>}
+            {selectedSentUp.length > 0 && <p className="bulk-bar-note">{t("These must also be approved by your superior and are sent up, not finalized:")} {requestNumbers(selectedSentUp)}</p>}
+            {selectedFinalizable.length > 0 && !bulkCanForward && <p className="bulk-bar-note" id="bulk-forward-note">{t("Send to my jefe is available only when every selected request can be sent to your jefe. Not possible for:")} {requestNumbers(notForwardable)}</p>}
           </div>
         )}
       </div>

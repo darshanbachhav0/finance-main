@@ -60,7 +60,7 @@ const dashboard = read("../src/pages/Dashboard.jsx");
 assert.match(dashboard, /<MyTasks items=\{summary\.tasks\?\.items\}/);
 assert.doesNotMatch(dashboard, /dashboard-next|Keep university operations moving/);
 const actions = [...dashboard.matchAll(/^\s+(\w+): \[(AWAITING_PURCHASE_ORDER_PATH|"[^"]+"), "([^"]+)"\]/gm)].map(([, role, path, label]) => ({ role, path: path === "AWAITING_PURCHASE_ORDER_PATH" ? "/requests" : JSON.parse(path), label }));
-assert.equal(actions.length, 8, "every internal role has a primary action (Budget was folded into Treasury)");
+assert.equal(actions.length, 11, "every internal role has a primary action (Budget was folded into Treasury; GAF, Legal and Human Resources added)");
 for (const action of actions) assert.ok(canAccessNavigation(action.role, action.path.split("?")[0]), `${action.role} can open ${action.path}`);
 assert.deepEqual(actions.find((action) => action.role === "Solicitor"), { role: "Solicitor", path: "/requests/new", label: "New request" });
 const myTasks = read("../src/components/MyTasks.jsx");

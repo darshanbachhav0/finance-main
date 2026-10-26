@@ -23,7 +23,7 @@ import { budgetExceptionPath, countPendingBudgetExceptions } from "../services/b
 import { countPendingBudgetPlanChanges } from "../services/budgetPlanChangeService.js";
 import { suppliersAwaitingApprovalBy } from "../services/supplierService.js";
 import { personalDashboard } from "../services/personalDashboardService.js";
-import { APPROVAL_STAGES, AP_STATUS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { APPROVAL_STAGES, APPROVAL_TIERS, AP_STATUS, READ_ONLY_OVERSIGHT_ROLES, REQUEST_STATUS, REQUESTER_ROLES, ROLES } from "../utils/constants.js";
 import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
 import { limaDateKey, limaToday } from "../../../shared/businessCalendar.mjs";
@@ -34,14 +34,14 @@ function currentPeriod() {
 }
 
 function ownerScope(user) {
-  return user.role === ROLES.SOLICITOR ? { $or: [{ requester: user._id }, { solicitor: user._id }] } : {};
+  return REQUESTER_ROLES.includes(user.role) ? { $or: [{ requester: user._id }, { solicitor: user._id }] } : {};
 }
 
 // Requests the dashboard may count or list for this user: what the request list would show them
 // (requestVisibilityFilter; a Solicitor's dashboard stays on their own requests), and never
 // somebody else's draft.
 export function dashboardRequestScope(user) {
-  const visibility = user.role === ROLES.SOLICITOR ? ownerScope(user) : requestVisibilityFilter(user);
+  const visibility = REQUESTER_ROLES.includes(user.role) ? ownerScope(user) : requestVisibilityFilter(user);
   const notOthersDrafts = { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
   return { $and: [visibility, notOthersDrafts].filter((clause) => Object.keys(clause).length) };
 }
@@ -62,14 +62,19 @@ function approvalScope(user) {
   const query = { status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalStage: { $ne: "COMPLETE" } };
   if (user.role !== ROLES.ADMIN) {
     const chain = { approvalRouteSnapshot: { $elemMatch: { approverUser: user._id, status: "PENDING", source: "MANAGER_CHAIN" } } };
+    // Same pool as the Approvals inbox: the role's tier steps, never on their own requests.
+    const tier = Object.values(APPROVAL_TIERS).includes(user.role)
+      ? [{ approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: user.role, status: "PENDING" } }, requester: { $ne: user._id } }]
+      : [];
     if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
       const legacy = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
       if (legacy.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
         const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
         if (!areas.includes("*")) legacy.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
       }
-      query.$or = [chain, legacy];
-    } else Object.assign(query, chain);
+      query.$or = [chain, legacy, ...tier];
+    } else if (tier.length) query.$or = [chain, ...tier];
+    else Object.assign(query, chain);
   }
   return query;
 }
@@ -125,8 +130,8 @@ async function openBudgetExceptions({ awaitingDecision = false } = {}) {
 // dueAt (earliest due date), overdue (how many are past due), kind (the variant of the task this
 // role sees) and partOf (a detail shown inside another task rather than as its own row).
 async function buildTasks(user) {
-  // The Super Admin acts in no queue, so it has no tasks (its bell carries security alerts only).
-  if (user.role === ROLES.SUPER_ADMIN) return { items: [], total: 0, counters: {} };
+  // The Super Admin and the Auditor act in no queue, so they have no tasks.
+  if (READ_ONLY_OVERSIGHT_ROLES.includes(user.role)) return { items: [], total: 0, counters: {} };
   const items = [];
   const now = new Date();
   if (user.role !== ROLES.MANAGEMENT_VIEWER) {
@@ -161,13 +166,13 @@ async function buildTasks(user) {
     items.push({ key: "drafts", label: "Drafts to finish", count: drafts, path: (await singleRecordPath(drafts, FinancialRequest, draftQuery, (record) => `/requests/${record._id}/edit`)) || `/requests?status=${REQUEST_STATUS.DRAFT}`, tone: "neutral" });
     items.push({ key: "corrections", label: "Requests to correct", count: corrections, path: (await singleRecordPath(corrections, FinancialRequest, correctionQuery, (record) => `/requests/${record._id}`)) || `/requests?status=${OWNER_CORRECTION_STATUSES.join("%2C")}`, tone: "danger" });
   }
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SOLICITOR].includes(user.role)) {
+  if ([ROLES.ADMIN, ROLES.ACCOUNTING, ...REQUESTER_ROLES].includes(user.role)) {
     // Each role sees the rendition work that is its own: the requester submits (PENDING or
     // OBSERVED, against the deadline), Accounting reviews what was SUBMITTED, Admin oversees all.
-    const kind = user.role === ROLES.SOLICITOR ? "submit" : user.role === ROLES.ACCOUNTING ? "review" : "outstanding";
+    const kind = REQUESTER_ROLES.includes(user.role) ? "submit" : user.role === ROLES.ACCOUNTING ? "review" : "outstanding";
     const statuses = { submit: ["PENDING", "OBSERVED"], review: ["SUBMITTED"], outstanding: ["PENDING", "SUBMITTED", "OBSERVED"] }[kind];
     const query = { flowType: "C", "rendition.status": { $in: statuses }, status: { $nin: TERMINAL_REQUEST_STATUSES } };
-    if (user.role === ROLES.SOLICITOR) query.$or = [{ requester: user._id }, { solicitor: user._id }];
+    if (REQUESTER_ROLES.includes(user.role)) query.$or = [{ requester: user._id }, { solicitor: user._id }];
     const count = await FinancialRequest.countDocuments(query);
     const deadline = kind === "submit" ? {
       dueAt: await earliestDate(FinancialRequest, query, "rendition.dueAt"),
@@ -314,7 +319,7 @@ async function roleDetails(user, common) {
     data.recentActivity = recentActivity;
   }
 
-  if (user.role === ROLES.SOLICITOR) {
+  if (REQUESTER_ROLES.includes(user.role)) {
     metrics.push(
       { key: "drafts", label: "My drafts", value: statusCount(common, REQUEST_STATUS.DRAFT), tone: "neutral" },
       { key: "returned", label: "Returned / observed", value: statusCount(common, REQUEST_STATUS.RETURNED) + statusCount(common, REQUEST_STATUS.OBSERVED), tone: "danger" },

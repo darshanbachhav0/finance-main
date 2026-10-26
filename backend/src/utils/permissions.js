@@ -1,16 +1,23 @@
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
-import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, REQUEST_STATUS, ROLE_PERMISSIONS, ROLES } from "./constants.js";
+import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, READ_ONLY_OVERSIGHT_ROLES, REQUEST_STATUS, REQUESTER_ROLES, ROLE_PERMISSIONS, ROLES } from "./constants.js";
 
-export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SOLICITOR, ROLES.PROCUREMENT, ROLES.SUPER_ADMIN];
+export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ...REQUESTER_ROLES, ROLES.PROCUREMENT, ROLES.GAF, ...READ_ONLY_OVERSIGHT_ROLES];
 // Roles whose work reaches supplier records (and their files) beyond their own proposals. Which
 // suppliers each one sees is still their department's list (services/supplierVisibilityService.js);
-// only the Admin and the read-only Super Admin see every department.
-export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.SUPER_ADMIN];
-export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ROLES.SOLICITOR];
+// only the Admin, the GAF and the read-only overseers see every department.
+export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.GAF, ...READ_ONLY_OVERSIGHT_ROLES];
+export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ...REQUESTER_ROLES];
+// Approval-pool roles that see every submitted request but never other people's drafts.
+const SUBMITTED_REQUEST_VIEWERS = [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT, ROLES.GAF, ROLES.AUDITOR];
 
 export function isSuperAdmin(user) {
   return user?.role === ROLES.SUPER_ADMIN;
+}
+
+// The Super Admin and the Auditor: they read every workspace and never act in a process.
+export function isReadOnlyOverseer(user) {
+  return READ_ONLY_OVERSIGHT_ROLES.includes(user?.role);
 }
 
 export function permissionsFor(userOrRole) {
@@ -32,10 +39,11 @@ export function hasPermission(userOrRole, permission) {
   return permissionsFor(userOrRole).includes(permission);
 }
 
-// A person who raises their own requests: every Solicitor, plus anyone granted "Create requests".
-// Requester controls (only own requests, only authorized cost centers) apply to them.
+// A person who raises their own requests: every Solicitor, Legal and Gestión de Personas user,
+// plus anyone granted "Create requests". Requester controls (only own requests, only authorized
+// cost centers) apply to them.
 export function actsAsRequester(user) {
-  return user?.role === ROLES.SOLICITOR || extraGrants(user).includes(PERMISSIONS.REQUEST_CREATE);
+  return REQUESTER_ROLES.includes(user?.role) || extraGrants(user).includes(PERMISSIONS.REQUEST_CREATE);
 }
 
 // A person who proposes suppliers without being Accounting/Admin (every other internal user):
@@ -129,14 +137,14 @@ export function canViewRequest(request, user) {
   // Preserves the Area Director/Vice-Rector/Management carve-out exactly: broad but
   // never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
   // (Accounting, Treasury, Budget) keeps its original unrestricted access.
-  if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
+  if (SUBMITTED_REQUEST_VIEWERS.includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
   return hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL);
 }
 
 export function requestVisibilityFilter(user) {
   if (!user) return { _id: null };
   if (user.role === ROLES.ADMIN) return {};
-  if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
+  if (SUBMITTED_REQUEST_VIEWERS.includes(user.role)) {
     return { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
   }
   if (hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL)) return {};

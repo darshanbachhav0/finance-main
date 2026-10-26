@@ -17,7 +17,9 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { expenseNatureLabels, expenseNatures, flowTypes, requestPriorityLabels, requestStatuses, requestTypes } from "../utils/options.js";
+import { expenseNatureLabels, expenseNatures, requestFlowTypes, requestPriorityLabels, requestStatuses, requestTypes } from "../utils/options.js";
+import { requesterRoles } from "../utils/navigationAccess.js";
+import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 
@@ -34,7 +36,7 @@ export default function RequestsList() {
   const [withdrawRow, setWithdrawRow] = useState(null);
   const [withdrawing, setWithdrawing] = useState(false);
   // Solicitors see "My Requests": only their own. Their reports' requests are on My Team.
-  const ownScope = user.role === "Solicitor";
+  const ownScope = requesterRoles.includes(user.role);
   const requestsTable = usePaginatedResource("/requests", {
     fixedParams: ownScope ? { ownScope: true } : {},
     initialSearch: searchParams.get("search") || "",
@@ -58,7 +60,7 @@ export default function RequestsList() {
   const periods = useMemo(() => periodsResource.rows.map((row) => row.period), [periodsResource.rows]);
   const costCenters = useMemo(() => costCentersResource.rows.map((row) => ({ value: row._id, label: `${row.code} - ${row.name}` })), [costCentersResource.rows]);
   const projects = useMemo(() => projectsResource.rows.map((row) => ({ value: row.code || row.name, label: `${row.code || ""} ${row.name || ""}`.trim() })), [projectsResource.rows]);
-  const canCreate = ["Admin", "Solicitor"].includes(user.role);
+  const canCreate = ["Admin", ...requesterRoles].includes(user.role);
   // Requesters get a short list: what, how much, its plain status and what is needed from them.
   const plain = usesPlainStatuses(user);
   const priorityOptions = ["ALTA", "MEDIA", "BAJA"].map((value) => ({ value, label: requestPriorityLabels[value] }));
@@ -70,7 +72,7 @@ export default function RequestsList() {
     { key: "expenseNature", label: "Expense nature", plainHidden: true, render: (row) => t(expenseNatureLabels[row.expenseNature] || row.expenseNature) },
     // Everyone sees the priority, requesters included; sorting by it puts Alta first.
     { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "MEDIA"]), render: (row) => <PriorityBadge priority={row.priority} /> },
-    { key: "supplier", type: "name", label: "Supplier", plainHidden: true, sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
+    { key: "supplier", type: "name", label: "Supplier", plainHidden: true, sortable: false, getValue: (row) => (isTransfer(row) ? `${t("Transfer")}: ${transferRoute(row)}` : row.supplier?.name), render: (row) => isTransfer(row) ? <div className="primary-cell"><strong>{t("Transfer")}</strong><span>{transferRoute(row)}</span></div> : <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
     { key: "solicitor", label: "Solicitor", plainHidden: true, sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
     { key: "accountingPeriod", type: "code", label: "Period", plainHidden: true },
     { key: "totalAmount", type: "money", label: "Amount", exportValue: (row) => Number(row.totalAmount || 0), render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
@@ -152,7 +154,7 @@ export default function RequestsList() {
               { value: "PENDING,SUBMITTED,OBSERVED", label: "Pending / submitted / observed" },
               "VALIDATED", "NOT_REQUIRED"
             ] },
-            { key: "flowType", label: "tracks", allLabel: "All tracks", options: flowTypes },
+            { key: "flowType", label: "tracks", allLabel: "All tracks", options: requestFlowTypes },
             { key: "requestType", label: "types", allLabel: "All types", options: requestTypes },
             { key: "expenseNature", label: "expense natures", allLabel: "All expense natures", options: expenseNatures.map((value) => ({ value, label: expenseNatureLabels[value] || value })) },
             { key: "priority", label: "priorities", allLabel: "All priorities", options: priorityOptions },

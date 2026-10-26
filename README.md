@@ -13,7 +13,7 @@ payment confirmation, reconciliation, close, and audit — for Universidad Marí
 - Languages: Spanish (default) and English, toggle-able per session.
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full business-workflow and technical
-description (roles, the A1/A2/B/C "triple-track" workflow, approval routing, budget, accounting,
+description (roles, the A1/A2/B/C/D track workflow, approval routing, budget, accounting,
 treasury, suppliers, SUNAT/SIRE integration, and what's intentionally out of scope).
 
 ## Functional areas
@@ -34,13 +34,16 @@ treasury, suppliers, SUNAT/SIRE integration, and what's intentionally out of sco
 
 ## Roles
 
-Nine stored operational roles — see **[docs/ROLE_PERMISSIONS_GUIDE.md](docs/ROLE_PERMISSIONS_GUIDE.md)**
+Thirteen stored operational roles — see **[docs/ROLE_PERMISSIONS_GUIDE.md](docs/ROLE_PERMISSIONS_GUIDE.md)**
 for the full capability matrix and per-role guide:
 
 `Admin`, `Solicitor`, `AreaDirector`, `ViceRector` (same permissions; the role sets the approval
 level), `Accounting`, `Treasury` (also manages the budget — the former `Budget` role was folded into
-it), `Procurement`, `Management`, `ManagementViewer` (strictly read-only), plus `SuperAdmin`, which
-manages administrator accounts and takes part in no process.
+it), `Procurement`, `Management` (Gerencia General), `GAF` (Gerencia de Administración Financiera),
+`Legal`, `HumanResources` (Gestión de Personas), `Auditor` (read-only), `ManagementViewer` (strictly
+read-only), plus `SuperAdmin`, which manages administrator accounts and takes part in no process.
+Approvals follow the amount in UIT: the cost center's responsible and their superior always, the
+GAF above 5 UIT, the Gerencia General above 20 UIT. Track D moves money between UMA's own accounts.
 
 Backend role/permission/ownership/workflow checks are authoritative; frontend navigation is a
 separate, narrower presentational layer on top of them.

@@ -24,6 +24,12 @@ import { previewAccountingDetraction, confirmAccountingDetraction } from "../ser
 
 const router = Router();
 
+// Bank TXT verification: Treasury downloads a file only after Accounting or the GAF verifies it
+// here. Declared before the Accounting-only guard below so the GAF reaches it.
+router.get("/bank-files", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), listBankFiles);
+router.get("/bank-files/:id/checks", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), reviewBankFileChecks);
+router.post("/bank-files/:id/verify", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), verifyBankFileAction);
+router.post("/bank-files/:id/reject", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), rejectBankFileAction);
 router.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
 router.get("/entries", listEntries);
 router.get("/accounts-payable", listAccountsPayable);
@@ -41,10 +47,5 @@ router.post("/requests/:id/process", processPayable);
 router.get("/consolidation", consolidationPreview);
 router.get("/consolidation/export", exportConsolidation);
 router.get("/exports", listAccountingExports);
-// Bank TXT verification: Treasury downloads a file only after Accounting verifies it here.
-router.get("/bank-files", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), listBankFiles);
-router.get("/bank-files/:id/checks", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), reviewBankFileChecks);
-router.post("/bank-files/:id/verify", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), verifyBankFileAction);
-router.post("/bank-files/:id/reject", authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), rejectBankFileAction);
 
 export default router;

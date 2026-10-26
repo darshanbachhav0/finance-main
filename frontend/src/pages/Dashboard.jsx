@@ -22,6 +22,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
 import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
 import { todayIso } from "../utils/dateInput.js";
+import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
 
 const AnalyticsChart = lazy(() => import("../components/AnalyticsChart.jsx"));
 
@@ -33,7 +34,10 @@ const descriptions = {
   Accounting: "Period readiness, accounting entries, exchange rates, and pending closures.",
   Treasury: "Payable workload, bank readiness, generated files, and the budget: assigned, available, committed and paid.",
   Management: "Institutional CAPEX/OPEX, budget availability, spending, and pending commitments.",
-  Procurement: "Approved requests awaiting a Purchase Order, open orders, and invoices registered against them."
+  Procurement: "Approved requests awaiting a Purchase Order, open orders, and invoices registered against them.",
+  Legal: "Your drafts, approvals, rejected work, renditions, and recent requests.",
+  HumanResources: "Your drafts, approvals, rejected work, renditions, and recent requests.",
+  GAF: "Approvals above 5 UIT, transfers between UMA's accounts, bank files to approve, and the budget."
 };
 
 const isApprovalRole = (role) => role === "AreaDirector" || role === "ViceRector";
@@ -105,7 +109,7 @@ export default function Dashboard() {
   const requestColumns = [
     ...(isApprovalRole(summary?.role) ? [{ key: "approvalDueAt", label: "SLA due", render: row => <div className="primary-cell"><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /><span>{row.approvalDueAt ? formatDateTime(row.approvalDueAt, language) : "-"}</span></div> }] : []),
     { key: "requestNumber", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-    { key: "supplier", label: "Supplier", getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.name || "-" },
+    { key: "supplier", label: "Supplier", getValue: (row) => (isTransfer(row) ? transferRoute(row) : row.supplier?.name), render: (row) => (isTransfer(row) ? `${t("Transfer")}: ${transferRoute(row)}` : row.supplier?.name || "-") },
     { key: "totalAmount", label: "Amount", align: "right", render: (row) => formatCurrency(row.totalAmount, row.currency, language) },
     { key: "status", label: "Status", render: (row) => <FinancialProgressSummary request={row} compact /> }
   ];
@@ -119,6 +123,9 @@ export default function Dashboard() {
     Accounting: ["/accounting", "Open Accounting"],
     Treasury: ["/treasury", "Open Treasury"],
     Management: ["/approvals", "Review decisions"],
+    GAF: ["/approvals", "Review decisions"],
+    Legal: ["/requests/new", "New request"],
+    HumanResources: ["/requests/new", "New request"],
     Procurement: [AWAITING_PURCHASE_ORDER_PATH, "Review requests"]
   }[summary?.role];
 

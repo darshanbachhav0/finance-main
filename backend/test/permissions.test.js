@@ -18,13 +18,15 @@ test("only Admin and Solicitor can create financial requests", () => {
 });
 
 test("every internal role can open Suppliers and propose one; the portal-only viewer cannot", () => {
-  for (const role of Object.values(ROLES).filter((role) => ![ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(role))) {
+  for (const role of Object.values(ROLES).filter((role) => ![ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN, ROLES.AUDITOR].includes(role))) {
     assert.equal(canViewSuppliers(role), true, role);
     assert.equal(hasPermission(role, PERMISSIONS.SUPPLIER_PROPOSE), true, role);
   }
-  // The read-only Super Admin sees suppliers but never proposes one.
-  assert.equal(canViewSuppliers(ROLES.SUPER_ADMIN), true);
-  assert.equal(hasPermission(ROLES.SUPER_ADMIN, PERMISSIONS.SUPPLIER_PROPOSE), false);
+  // The read-only Super Admin and Auditor see suppliers but never propose one.
+  for (const role of [ROLES.SUPER_ADMIN, ROLES.AUDITOR]) {
+    assert.equal(canViewSuppliers(role), true, role);
+    assert.equal(hasPermission(role, PERMISSIONS.SUPPLIER_PROPOSE), false, role);
+  }
   assert.equal(canViewSuppliers(ROLES.MANAGEMENT_VIEWER), false);
   assert.equal(hasPermission(ROLES.MANAGEMENT_VIEWER, PERMISSIONS.SUPPLIER_PROPOSE), false);
   assert.equal(canViewSuppliers(ROLES.ADMIN), true);

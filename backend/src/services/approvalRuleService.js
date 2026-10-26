@@ -2,12 +2,19 @@ import ApprovalRule from "../models/ApprovalRule.js";
 import User from "../models/User.js";
 import { approvalSlaWorkingDays, classifyApprovalSla } from "./slaPolicy.js";
 import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
+import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_ROUTING_MODE,
   APPROVAL_STAGES,
+  APPROVAL_TIERS,
   DEFAULT_APPROVAL_SLA_HOURS,
+  DEFAULT_GAF_APPROVAL_UIT,
+  DEFAULT_GENERAL_MANAGEMENT_APPROVAL_UIT,
+  DEFAULT_SUPERIOR_APPROVAL_UIT,
+  DEFAULT_UIT_VALUE,
   ERROR_CODES,
+  FINANCE_CONFIGURATION_KEYS,
   FLOW_TYPE,
   MAX_APPROVAL_CHAIN_DEPTH,
   ROLES
@@ -194,6 +201,74 @@ function chainStep(jefe, { sequence, startedAt, coveringFor = null }) {
   };
 }
 
+async function configuredNumber(key, fallback) {
+  const configuration = await getEffectiveFinanceConfiguration(key).catch(() => null);
+  const value = Number(configuration?.numericValue);
+  return configuration && Number.isFinite(value) ? value : fallback;
+}
+
+// Who approves depends on the amount in UIT (Manual del usuario, "Aprobaciones"): any amount needs
+// the cost center's responsible and their superior (Vicerrector / Gerente); above 5 UIT the GAF
+// also approves, above 20 UIT the Gerencia General. Each threshold is a FinanceConfiguration key.
+export async function approvalThresholds() {
+  const [uit, superiorUit, gafUit, generalManagementUit] = await Promise.all([
+    configuredNumber(FINANCE_CONFIGURATION_KEYS.UIT_VALUE, DEFAULT_UIT_VALUE),
+    configuredNumber(FINANCE_CONFIGURATION_KEYS.SUPERIOR_APPROVAL_UIT, DEFAULT_SUPERIOR_APPROVAL_UIT),
+    configuredNumber(FINANCE_CONFIGURATION_KEYS.GAF_APPROVAL_UIT, DEFAULT_GAF_APPROVAL_UIT),
+    configuredNumber(FINANCE_CONFIGURATION_KEYS.GENERAL_MANAGEMENT_APPROVAL_UIT, DEFAULT_GENERAL_MANAGEMENT_APPROVAL_UIT)
+  ]);
+  return { uit: uit > 0 ? uit : DEFAULT_UIT_VALUE, superiorUit, gafUit, generalManagementUit };
+}
+
+// The request's PEN amount in UIT. A request not saved yet has no totals: its lines are counted.
+export function requestAmountInUit(request, uit) {
+  const lineTotal = (request.lines || []).reduce((sum, line) => sum + Number(line.penEquivalent || Number(line.totalAmount || 0) * Number(line.exchangeRate || request.exchangeRate || 1)), 0);
+  const amount = Number(request.totalPENEquivalent || request.penEquivalent || 0) || lineTotal;
+  return amount / uit;
+}
+
+// A policy step decided by role: any active user of that role other than the requester.
+function tierStep(stage, { sequence, startedAt = null }) {
+  const slaHours = approvalStepSlaHours();
+  return {
+    approvalLevel: stage,
+    role: APPROVAL_TIERS[stage],
+    tier: stage,
+    sequence,
+    slaHours,
+    required: true,
+    status: startedAt ? "PENDING" : "NOT_REACHED",
+    ...(startedAt ? { startedAt, dueAt: dueDate(slaHours, startedAt) } : {}),
+    source: APPROVAL_ROUTING_MODE.RULE_BASED
+  };
+}
+
+const TIER_NAMES = Object.freeze({
+  [APPROVAL_STAGES.TREASURY_HEAD]: "Jefe de Tesorería",
+  [APPROVAL_STAGES.GAF]: "Gerencia de Administración Financiera",
+  [APPROVAL_STAGES.GENERAL_MANAGEMENT]: "Gerencia General"
+});
+
+// A tier nobody can decide would strand the request: refuse the submission and name the gap.
+async function assertTierStaffed(stage, request) {
+  const requesterId = request.requester || request.solicitor;
+  const staffed = await User.exists({ role: APPROVAL_TIERS[stage], active: true, onLeave: { $ne: true }, _id: { $ne: requesterId } });
+  if (!staffed) {
+    throw new AppError(422, `This request needs the approval of ${TIER_NAMES[stage]}, and no active user has that role. Ask the Admin to assign it in User Administration.`,
+      { approvalLevel: stage, role: APPROVAL_TIERS[stage] }, ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED);
+  }
+}
+
+// The amount tiers a supplier or employee request adds after its manager chain.
+export async function amountTierStages(request, thresholds) {
+  const { uit, gafUit, generalManagementUit } = thresholds || await approvalThresholds();
+  const amountUit = requestAmountInUit(request, uit);
+  return [
+    ...(amountUit > gafUit ? [APPROVAL_STAGES.GAF] : []),
+    ...(amountUit > generalManagementUit ? [APPROVAL_STAGES.GENERAL_MANAGEMENT] : [])
+  ];
+}
+
 // The manager chain is resolved by identity, not by role/area membership: a
 // request's approval path is always the requester's real organizational chain
 // (jefe, jefe's jefe, and so on). Requesters without a jefe (not yet imported
@@ -204,14 +279,31 @@ function chainStep(jefe, { sequence, startedAt, coveringFor = null }) {
 // (the chain is complete) or sends it to their own jefe, and only then is that
 // next level added to the route - resolved at that moment, skipping inactive and
 // on-leave managers. The whole hierarchy is still walked at submission, so a
-// cyclical or over-deep roster is refused up front.
-export async function resolveManagerChain(request) {
+// cyclical or over-deep roster is refused up front. The first jefe (the cost
+// center's responsible) cannot finalize while a superior is available when the
+// amount needs one (superiorRequired): their approval always goes up a level.
+export async function resolveManagerChain(request, thresholds) {
   const requesterId = request.requester || request.solicitor;
   if (!requesterId) return null;
   const { approver, coveringFor, skipped, hasSupervisor } = await nearestAvailableSupervisor(requesterId, { exclude: [requesterId] });
   if (!hasSupervisor) return null;
   if (!approver) throw noAvailableApproverError({ unavailableSupervisors: skipped.map((user) => user.name) });
-  return [chainStep(approver, { sequence: 1, startedAt: new Date(), coveringFor })];
+  const { uit, superiorUit } = thresholds || await approvalThresholds();
+  const superiorRequired = superiorUit <= 0 || requestAmountInUit(request, uit) > superiorUit;
+  return [{ ...chainStep(approver, { sequence: 1, startedAt: new Date(), coveringFor }), superiorRequired }];
+}
+
+// Track D: a Treasury user other than the requester (the Jefe de Tesorería), then the GAF.
+async function initializeTreasuryTransferRoute(request) {
+  const stages = [APPROVAL_STAGES.TREASURY_HEAD, APPROVAL_STAGES.GAF];
+  for (const stage of stages) await assertTierStaffed(stage, request);
+  const startedAt = new Date();
+  request.approvalRoutingMode = APPROVAL_ROUTING_MODE.RULE_BASED;
+  request.approvalRouteSnapshot = stages.map((stage, index) => tierStep(stage, { sequence: index + 1, startedAt: index === 0 ? startedAt : null }));
+  const first = activeApprovalStep(request);
+  request.approvalStage = first.approvalLevel;
+  request.approvalDueAt = first.dueAt;
+  return request.approvalRouteSnapshot;
 }
 
 // Every submission, including a resubmission after OBSERVE or RETURN, resolves a
@@ -219,10 +311,14 @@ export async function resolveManagerChain(request) {
 // roster, and restarts at the first approver. The previous route stays in the
 // approval history and the audit log (see submitPreparedRequest).
 export async function initializeApprovalRoute(request) {
-  const chain = await resolveManagerChain(request);
+  if (request.flowType === FLOW_TYPE.D) return initializeTreasuryTransferRoute(request);
+  const thresholds = await approvalThresholds();
+  const chain = await resolveManagerChain(request, thresholds);
   if (chain) {
+    const tiers = await amountTierStages(request, thresholds);
+    for (const stage of tiers) await assertTierStaffed(stage, request);
     request.approvalRoutingMode = APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
-    request.approvalRouteSnapshot = chain;
+    request.approvalRouteSnapshot = [...chain, ...tiers.map((stage, index) => tierStep(stage, { sequence: chain.length + index + 1 }))];
     const first = activeApprovalStep(request);
     request.approvalStage = first?.approvalLevel || APPROVAL_STAGES.COMPLETE;
     request.approvalDueAt = first?.dueAt || null;
@@ -234,6 +330,38 @@ export async function initializeApprovalRoute(request) {
     { field: "jefe" }, ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED);
 }
 
+// Someone who already approved this route holds the tier's role (a GAF who was the requester's
+// superior, say): the tier is satisfied and recorded as SKIPPED, never asked twice.
+async function tierCoveredByApprover(request, step) {
+  const approverIds = (request.approvalRouteSnapshot || [])
+    .filter((item) => item.status === "APPROVED" && (item.completedBy || item.approverUser))
+    .map((item) => item.completedBy || item.approverUser);
+  if (!approverIds.length) return false;
+  return Boolean(await User.exists({ _id: { $in: approverIds }, role: step.role }));
+}
+
+// Opens the next open required step after `fromSequence`: a tier already covered by an earlier
+// approver is skipped. Returns the opened step, or null when the route is complete.
+export async function activateNextRouteStep(request, fromSequence, at = new Date()) {
+  const later = bySequence(request).filter((step) => step.sequence > fromSequence && step.required !== false && OPEN_STEP_STATUSES.includes(step.status));
+  for (const step of later) {
+    if (step.tier && await tierCoveredByApprover(request, step)) {
+      step.status = "SKIPPED";
+      step.completedAt = at;
+      continue;
+    }
+    step.status = "PENDING";
+    step.startedAt = at;
+    step.dueAt = dueDate(step.slaHours, at);
+    request.approvalStage = step.approvalLevel;
+    request.approvalDueAt = step.dueAt;
+    return step;
+  }
+  request.approvalStage = APPROVAL_STAGES.COMPLETE;
+  request.approvalDueAt = null;
+  return null;
+}
+
 
 export function activeApprovalStep(request) {
   return [...(request.approvalRouteSnapshot || [])]
@@ -241,25 +369,14 @@ export function activeApprovalStep(request) {
     .find((step) => step.required !== false && step.status === "PENDING");
 }
 
-export function advanceApprovalRoute(request, userId) {
+export async function advanceApprovalRoute(request, userId) {
   const current = activeApprovalStep(request);
   if (!current) return { current: null, next: null, complete: true };
   const completedAt = new Date();
   current.status = "APPROVED";
   current.completedAt = completedAt;
   current.completedBy = userId;
-  const next = [...(request.approvalRouteSnapshot || [])].sort((a, b) => a.sequence - b.sequence)
-    .find(step => step.sequence > current.sequence && step.required !== false && ["PENDING", "NOT_REACHED"].includes(step.status));
-  if (next) {
-    next.status = "PENDING";
-    next.startedAt = completedAt;
-    next.dueAt = dueDate(next.slaHours, completedAt);
-    request.approvalStage = next.approvalLevel;
-    request.approvalDueAt = next.dueAt;
-  } else {
-    request.approvalStage = APPROVAL_STAGES.COMPLETE;
-    request.approvalDueAt = null;
-  }
+  const next = await activateNextRouteStep(request, current.sequence, completedAt);
   return { current, next, complete: !next };
 }
 
@@ -329,7 +446,8 @@ export async function activateNextChainStep(request, currentStep, decidingUser) 
 }
 
 // "Approve and finalize": completes the manager chain at this level, whatever the
-// level. Legacy policy tails are retained as explicit skips, not new approvals.
+// level. Legacy policy tails are retained as explicit skips, not new approvals. The
+// amount tiers (GAF, Gerencia General) are not the chain's to waive: the next one opens.
 export async function finalizeChainApproval(request, currentStep, decidingUser) {
   const completedAt = new Date();
   markApproved(currentStep, decidingUser, completedAt);
@@ -337,14 +455,20 @@ export async function finalizeChainApproval(request, currentStep, decidingUser) 
   // The jefe's final decision supersedes only uncompleted legacy tail steps.
   // Completed sign-offs and the original route remain available for audit.
   for (const step of request.approvalRouteSnapshot || []) {
-    if (step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
+    if (!step.tier && step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
       step.status = "SKIPPED";
       step.completedAt = completedAt;
     }
   }
-  request.approvalStage = APPROVAL_STAGES.COMPLETE;
-  request.approvalDueAt = null;
-  return { complete: true, next: null };
+  const next = await activateNextRouteStep(request, currentStep.sequence, completedAt);
+  return { complete: !next, next };
+}
+
+// The cost center's responsible must send the approval to their superior while one is
+// available and the amount needs one (resolveManagerChain's superiorRequired).
+export async function superiorApprovalRequired(request, currentStep = activeApprovalStep(request)) {
+  if (!currentStep?.superiorRequired || currentStep.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) return false;
+  return Boolean(await nextChainApprover(request, currentStep));
 }
 
 // Moves a pending chain step to whoever holds it now (the substitute or nearest available jefe

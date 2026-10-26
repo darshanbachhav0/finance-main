@@ -57,8 +57,8 @@ test("employee reimbursement banking is a protected role-aware route", () => {
   const app = source("../src/App.jsx");
   const access = source("../src/utils/navigationAccess.js");
   assert.match(app, /path="reimbursement-bank"/);
-  assert.match(app, /roles=\{\["Admin", "Solicitor", "Accounting", "Treasury"\]\}/);
-  assert.match(access, /"\/reimbursement-bank": \["Admin", "Solicitor", "Accounting", "Treasury"\]/);
+  assert.match(app, /roles=\{\["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"\]\}/);
+  assert.match(access, /"\/reimbursement-bank": \["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"\]/);
 });
 
 test("bank UI masks values, separates Finance review, and exposes no verification field in employee form", () => {

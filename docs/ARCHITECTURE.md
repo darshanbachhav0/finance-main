@@ -20,9 +20,9 @@ financial-progress derivation, budget-planning math, payment-terms math, line-am
 
 ## 2. Roles
 
-Nine stored operational roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`,
-`AreaDirector`, `ViceRector`, `Accounting`, `Treasury`, `Procurement`, `Management`,
-`ManagementViewer` (plus `SuperAdmin`, which takes part in no process; it only manages CECO budget
+Thirteen stored operational roles (`backend/src/utils/constants.js`, `ROLES`): `Admin`, `Solicitor`,
+`AreaDirector`, `ViceRector`, `Accounting`, `Treasury`, `Procurement`, `Management` (Gerencia
+General), `GAF`, `Legal`, `HumanResources`, `Auditor`, `ManagementViewer` (plus `SuperAdmin`, which takes part in no process; it only manages CECO budget
 plans with Admin and Treasury). The former `Budget` role was
 folded into `Treasury` (`RETIRED_ROLES`): users, previous roles and approval rules still stored as
 `Budget` are moved to `Treasury` when the server starts (`services/legacyRoleService.js`, audited).
@@ -53,6 +53,12 @@ section only summarizes each role's purpose:
   (Track A1), tracks invoices registered against open orders, has its own dashboard.
 - **Management** — executive reporting, and the sole authority that may approve/reject a
   configured budget exception.
+- **GAF** — Gerencia de Administración Financiera: approves the amount tier above 5 UIT and step 2
+  of every Track D transfer (§3.3), and verifies bank files like Accounting (never one it generated).
+- **Legal / HumanResources** — Asesoría Legal and Gestión de Personas: requesters of their own area
+  (`REQUESTER_ROLES`), with the Solicitor's controls.
+- **Auditor** — reads every workspace like the Super Admin (`READ_ONLY_OVERSIGHT_ROLES`; GET passes any
+  guard an Admin passes, bank numbers masked) and writes nothing but its notification settings.
 - **ManagementViewer** — management portal only: the read-only aggregate API
   (`/api/management/v1`) and its portal screen. No internal Reports, dashboards, audit or request
   data (the internal API gate refuses it), and it can never be granted any other permission.
@@ -95,7 +101,7 @@ action or financial evidence (`assertTransitionControls`/`getFinancialProgress` 
 `workflowService.js` / `financialProgressService.js` re-derive and validate the target status from
 the actual child records before allowing it).
 
-### 3.2 Tracks A1 / A2 / B / C
+### 3.2 Tracks A1 / A2 / B / C / D
 
 Requesters do not choose a track. A new request is one form in four steps, in the order the work
 happens (`pages/RequestCreate.jsx`): **1. Datos de proveedor** (who is paid: a supplier of the
@@ -211,6 +217,20 @@ two people saving at once never share a number and a refused request takes none.
   approval the budget is committed, the employee submits the signed declaration with a verified
   reimbursement account, Accounting's approval provisions the payable, and Treasury pays it.
 
+- **D — transfer between UMA's own accounts (`TRASPASO`).** Registered by Treasury (or Admin) from
+  Payments › Transfers (`POST /api/treasury/transfers`, `services/treasuryTransferService.js`), never
+  from the request form: a source and a destination among UMA's own accounts
+  (`TreasuryBankAccount`, maintained by Treasury/Admin at `/api/treasury/accounts`, each with its
+  class-10 ledger account), same currency (nothing is converted), purpose funding or placement
+  (instrument and reference). It is sent straight to approval: a Treasury user other than the
+  requester (`TREASURY_HEAD`), then the GAF. There is no supplier, budget, IGV or payable: on
+  approval it stays `APROBADO` and Treasury is told to execute it. Treasury records the bank
+  operation (`POST /transfers/:id/execute`: journal `TRANSFER`, debit destination, credit source, in
+  the execution date's period) → `PAGADO`, then reconciles it with the statement
+  (`POST /transfers/:id/reconcile`, a difference needs a comment) → `CONCILIADO` → `CERRADO`.
+  `workflowService` gives D its own transitions (`APROBADO → PAGADO → CONCILIADO → CERRADO`) whose
+  evidence is the execution and the reconciliation, not payables.
+
 ### 3.3 Approval routing
 
 One engine, two identity sources, resolved in `backend/src/services/approvalRuleService.js`:
@@ -223,10 +243,19 @@ One engine, two identity sources, resolved in `backend/src/services/approvalRule
    (`forward: true`), which records the approval and only then adds the approver's own nearest
    available jefe as the next step. "Send to my jefe" is offered only while the current approver
    has such a jefe (`GET /approvals/:id/options`). Levels that were never asked are simply not on
-   the route, so the history shows exactly who decided. Any *configured* policy stage
-   (`ApprovalRule`) matching the request is appended after the chain and still applies after the
-   chain is finalized, unless someone who approved in the chain already holds that
-   role/approval level (it is then recorded as `SKIPPED`).
+   the route, so the history shows exactly who decided. The first chain step is the cost center's
+   responsible and carries `superiorRequired` (amount above `SUPERIOR_APPROVAL_UIT`, default 0 =
+   always): while that approver has an available jefe, their approval is always sent up
+   (`superiorApprovalRequired`; the options report `canFinalize: false`), so every request has the
+   responsible's and their superior's approval.
+   **Amount tiers.** After the chain the route carries role-based `tier` steps by the request's PEN
+   amount in UIT (`approvalThresholds`: FinanceConfiguration `UIT_VALUE` 5,500, `GAF_APPROVAL_UIT` 5,
+   `GENERAL_MANAGEMENT_APPROVAL_UIT` 20): `GAF` (role GAF) and `GENERAL_MANAGEMENT` (role
+   Management). Finalizing the chain opens the next tier (`activateNextRouteStep`); a tier is
+   `SKIPPED` when someone who already approved on the route holds its role. Any active user of the
+   role other than the requester decides it (inbox pool, notification to the role); a tier with no
+   such user refuses the submission with `APPROVAL_ROUTE_NOT_CONFIGURED`. Track D's route is two
+   tiers, `TREASURY_HEAD` (role Treasury) then `GAF`.
 2. **Rule-based fallback.** If the requester has no `jefe` at all, a specifically configured
    `ApprovalRule` for the request's exact area/type/flow/amount is required. **There is no silent
    generic default anymore** — a missing supervisor with no matching rule is treated as a real

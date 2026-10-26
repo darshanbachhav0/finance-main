@@ -4,7 +4,7 @@ import AppLayout from "./layouts/AppLayout.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import WorkspaceSkeleton from "./components/WorkspaceSkeleton.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
-import { configurationRoles, settingsRoles } from "./utils/navigationAccess.js";
+import { configurationRoles, navigationAccess, settingsRoles } from "./utils/navigationAccess.js";
 
 const SettingsHub = lazy(() => import("./pages/SettingsHub.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
@@ -26,6 +26,7 @@ const RequestsList = lazy(() => import("./pages/RequestsList.jsx"));
 const SireExport = lazy(() => import("./pages/SireExport.jsx"));
 const Suppliers = lazy(() => import("./pages/Suppliers.jsx"));
 const TreasuryQueue = lazy(() => import("./pages/TreasuryQueue.jsx"));
+const TreasuryTransfers = lazy(() => import("./pages/TreasuryTransfers.jsx"));
 const BudgetControl = lazy(() => import("./pages/BudgetControl.jsx"));
 const ManagementReports = lazy(() => import("./pages/ManagementReports.jsx"));
 const MasterConfiguration = lazy(() => import("./pages/MasterConfiguration.jsx"));
@@ -40,13 +41,17 @@ const SuperAdminAlerts = lazy(() => import("./pages/superadmin/SuperAdminAlerts.
 const SuperAdminAudit = lazy(() => import("./pages/superadmin/SuperAdminAudit.jsx"));
 const SuperAdminSettings = lazy(() => import("./pages/superadmin/SuperAdminSettings.jsx"));
 
-const internalRoles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management"];
-// The Super Admin reads these pages (read-only) besides its own console.
-const readers = [...internalRoles, "SuperAdmin"];
+const internalRoles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "GAF", "Legal", "HumanResources"];
+// The Super Admin and the Auditor read these pages (read-only); the Super Admin also has its console.
+const readOnlyRoles = ["SuperAdmin", "Auditor"];
+const readers = [...internalRoles, ...readOnlyRoles];
+const requesterRoles = ["Admin", "Solicitor", "Legal", "HumanResources"];
 
 function RoleHome() {
   const { user } = useAuth();
   if (user?.role === "SuperAdmin") return <Navigate to="/super-admin" replace />;
+  // The Auditor has no task dashboard: it starts at the request list.
+  if (user?.role === "Auditor") return <Navigate to="/requests" replace />;
   return user?.role === "ManagementViewer" ? <Navigate to="/management-view" replace /> : <Dashboard />;
 }
 
@@ -61,7 +66,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route index element={<RoleHome />} />
-          <Route path="management-view" element={<ProtectedRoute roles={["Admin", "Management", "ManagementViewer", "SuperAdmin"]} permissions={["management-portal:view"]} />}>
+          <Route path="management-view" element={<ProtectedRoute roles={["Admin", "Management", "ManagementViewer", "GAF", "SuperAdmin", "Auditor"]} permissions={["management-portal:view"]} />}>
             <Route index element={<ExternalManagementPortal />} />
           </Route>
           <Route path="settings" element={<ProtectedRoute roles={settingsRoles} permissions={["bank-format:certify"]} />}><Route index element={<SettingsHub />} /></Route>
@@ -70,10 +75,10 @@ export default function App() {
           <Route path="requests" element={<ProtectedRoute roles={readers} />}><Route index element={<RequestsList />} /></Route>
           <Route path="requests/invoices" element={<ProtectedRoute roles={readers} />}><Route index element={<DepartmentInvoices />} /></Route>
           <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
-          <Route path="requests/new" element={<ProtectedRoute roles={["Admin", "Solicitor"]} permissions={["request:create"]} />}>
+          <Route path="requests/new" element={<ProtectedRoute roles={requesterRoles} permissions={["request:create"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
-          <Route path="requests/:id/edit" element={<ProtectedRoute roles={["Admin", "Solicitor"]} permissions={["request:create"]} />}>
+          <Route path="requests/:id/edit" element={<ProtectedRoute roles={requesterRoles} permissions={["request:create"]} />}>
             <Route index element={<RequestCreate />} />
           </Route>
           <Route path="requests/:id" element={<ProtectedRoute roles={readers} />}><Route index element={<RequestDetail />} /></Route>
@@ -84,44 +89,51 @@ export default function App() {
           <Route path="batch-invoices" element={<ProtectedRoute roles={["Admin", "Solicitor", "Accounting"]} permissions={["batch-invoice:upload", "batch-invoice:review"]} />}>
             <Route index element={<BulkInvoiceUpload />} />
           </Route>
-          <Route path="accounting" element={<ProtectedRoute roles={["Admin", "Accounting", "SuperAdmin"]} />}>
+          {/* The GAF approves bank files as Accounting does (backend bank-file:verify). */}
+          <Route path="accounting/bank-files" element={<ProtectedRoute roles={navigationAccess["/accounting/bank-files"]} />}>
+            <Route index element={<BankFileVerification />} />
+          </Route>
+          <Route path="accounting" element={<ProtectedRoute roles={["Admin", "Accounting", ...readOnlyRoles]} />}>
             <Route index element={<AccountingEntries />} />
             <Route path="invoices" element={<Navigate to="/accounting/payables" replace />} />
             <Route path="payables" element={<AccountsPayable />} />
-            <Route path="bank-files" element={<BankFileVerification />} />
             <Route path="periods" element={<AccountingPeriods />} />
             <Route path="sire" element={<SireExport />} />
           </Route>
-          <Route path="accounting/invoice-observations" element={<ProtectedRoute roles={["Admin", "Accounting", "SuperAdmin"]} permissions={["batch-invoice:review"]} />}>
+          <Route path="accounting/invoice-observations" element={<ProtectedRoute roles={["Admin", "Accounting", ...readOnlyRoles]} permissions={["batch-invoice:review"]} />}>
             <Route index element={<InvoiceObservations />} />
           </Route>
-          <Route path="treasury" element={<ProtectedRoute roles={["Admin", "Treasury", "SuperAdmin"]} />}>
+          {/* Track D: transfers between UMA's own accounts (Treasury, the GAF, Accounting). */}
+          <Route path="treasury/transfers" element={<ProtectedRoute roles={navigationAccess["/treasury/transfers"]} />}>
+            <Route index element={<TreasuryTransfers />} />
+          </Route>
+          <Route path="treasury" element={<ProtectedRoute roles={["Admin", "Treasury", ...readOnlyRoles]} />}>
             <Route index element={<TreasuryQueue />} />
             <Route path="history" element={<TreasuryQueue historyOnly />} />
           </Route>
-          <Route path="reimbursement-bank" element={<ProtectedRoute roles={["Admin", "Solicitor", "Accounting", "Treasury"]} permissions={["employee-bank:manage-own", "employee-bank:review"]} />}>
+          <Route path="reimbursement-bank" element={<ProtectedRoute roles={["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"]} permissions={["employee-bank:manage-own", "employee-bank:review"]} />}>
             <Route index element={<EmployeeReimbursementBanking />} />
           </Route>
-          <Route path="budget" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", "SuperAdmin"]} permissions={["budget:view"]} />}>
+          <Route path="budget" element={<ProtectedRoute roles={navigationAccess["/budget"]} permissions={["budget:view"]} />}>
             <Route index element={<BudgetControl />} />
           </Route>
-          <Route path="reports" element={<ProtectedRoute roles={["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "SuperAdmin"]} permissions={["report:view"]} />}>
+          <Route path="reports" element={<ProtectedRoute roles={navigationAccess["/reports"]} permissions={["report:view"]} />}>
             <Route index element={<ManagementReports />} />
           </Route>
           <Route path="suppliers" element={<ProtectedRoute roles={readers} permissions={["supplier:bank-view"]} />}>
             <Route index element={<Suppliers />} />
             <Route path=":id" element={<Suppliers />} />
           </Route>
-          <Route path="cost-centers" element={<ProtectedRoute roles={["Admin", "Accounting", "SuperAdmin"]} />}>
+          <Route path="cost-centers" element={<ProtectedRoute roles={["Admin", "Accounting", ...readOnlyRoles]} />}>
             <Route index element={<CostCenters />} />
           </Route>
-          <Route path="expense-types" element={<ProtectedRoute roles={["Admin", "Accounting", "SuperAdmin"]} />}>
+          <Route path="expense-types" element={<ProtectedRoute roles={["Admin", "Accounting", ...readOnlyRoles]} />}>
             <Route index element={<ExpenseTypes />} />
           </Route>
-          <Route path="exchange-rates" element={<ProtectedRoute roles={["Admin", "Accounting", "SuperAdmin"]} />}>
+          <Route path="exchange-rates" element={<ProtectedRoute roles={["Admin", "Accounting", ...readOnlyRoles]} />}>
             <Route index element={<ExchangeRates />} />
           </Route>
-          <Route path="users" element={<ProtectedRoute roles={["Admin", "SuperAdmin"]} />}>
+          <Route path="users" element={<ProtectedRoute roles={["Admin", ...readOnlyRoles]} />}>
             <Route index element={<AdminUsers />} />
           </Route>
           <Route path="super-admin" element={<ProtectedRoute roles={["SuperAdmin"]} />}>

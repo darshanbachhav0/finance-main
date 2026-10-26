@@ -2,8 +2,10 @@
 export const umaCopy = {
   "GOODS": "Goods", "SERVICES": "Services", "BAJA": "Low", "MEDIA": "Medium", "ALTA": "High",
   "AreaDirector": "Area Director", "ViceRector": "Vice Rector", "ManagementViewer": "Management viewer", "SuperAdmin": "Super Admin",
+  // Role codes (and the GAF approval tier, same code) shown by name. Management is the Gerencia General.
+  "Management": "General Management", "GAF": "Financial Administration Management", "HumanResources": "Human Resources", "Auditor": "Audit (read-only)",
   "AreaDirector Dashboard": "Area Director Dashboard", "ViceRector Dashboard": "Vice Rector Dashboard",
-  "AREA_DIRECTOR": "Area Director", "VICE_RECTOR": "Vice Rector", "RECTORATE": "Rectorate", "GENERAL_MANAGEMENT": "General management",
+  "AREA_DIRECTOR": "Area Director", "VICE_RECTOR": "Vice Rector", "RECTORATE": "Rectorate", "GENERAL_MANAGEMENT": "General Management", "TREASURY_HEAD": "Head of Treasury",
   "NOT_CONFIGURED": "Not configured", "PENDING_VALIDATION": "Pending validation", "OBSERVED": "Needs correction",
   "Financial Control": "Financial management",
   "Monitor and control assigned, committed, executed, paid, and available budget using the same dimensional ledger as workflow transactions.": "Follow your annual plan and each month’s available budget, commitments and spending.",

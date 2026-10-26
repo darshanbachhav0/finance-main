@@ -8,64 +8,79 @@ export const authenticatedRoles = [
   "Procurement",
   "Management",
   "ManagementViewer",
+  "GAF",
+  "Legal",
+  "HumanResources",
+  "Auditor",
   "SuperAdmin"
 ];
 
-// The roles that work in the processes: everyone except the portal-only ManagementViewer and the
-// read-only Super Admin.
-export const internalRoles = authenticatedRoles.filter(role => !["ManagementViewer", "SuperAdmin"].includes(role));
-
-// The Super Admin opens these pages read-only (the backend refuses its writes, and the pages hide
-// their actions for it, see AuthContext's readOnly). Plus its own console under /super-admin.
+// The Super Admin and the Auditor open these pages read-only (the backend refuses their writes,
+// and the pages hide their actions for them, see AuthContext's readOnly). The Super Admin also has
+// its own console under /super-admin; the Auditor has none.
 const SUPER_ADMIN = "SuperAdmin";
+const AUDITOR = "Auditor";
+const READERS = [SUPER_ADMIN, AUDITOR];
+
+// The roles that work in the processes: everyone except the portal-only ManagementViewer and the
+// read-only Super Admin and Auditor.
+export const internalRoles = authenticatedRoles.filter(role => !["ManagementViewer", ...READERS].includes(role));
+
+// Roles that raise their own area's requests like a Solicitor (backend REQUESTER_ROLES): they see
+// "My Requests", approve only as someone's jefe, and keep their bank account in the account menu.
+export const requesterRoles = Object.freeze(["Solicitor", "Legal", "HumanResources"]);
 export const superAdminConsolePaths = Object.freeze(["/super-admin", "/super-admin/administrators", "/super-admin/alerts", "/super-admin/audit", "/super-admin/settings"]);
 
 // Master-configuration resources (/configuration/:resource) and who may open each one. Mirrors
 // the per-resource roles in pages/MasterConfiguration.jsx; the backend still decides writes.
 export const configurationAccess = Object.freeze({
-  "approval-rules": ["Admin", "SuperAdmin"],
-  "finance-configurations": ["Admin", "Accounting", "SuperAdmin"],
-  "accounting-mappings": ["Admin", "Accounting", "SuperAdmin"],
-  "budget-rules": ["Admin", "Treasury", "SuperAdmin"],
-  "budget-allocations": ["Admin", "Treasury", "SuperAdmin"],
-  "bank-formats": ["Admin", "Treasury", "SuperAdmin"]
+  "approval-rules": ["Admin", ...READERS],
+  "finance-configurations": ["Admin", "Accounting", ...READERS],
+  "accounting-mappings": ["Admin", "Accounting", ...READERS],
+  "budget-rules": ["Admin", "Treasury", ...READERS],
+  "budget-allocations": ["Admin", "Treasury", ...READERS],
+  "bank-formats": ["Admin", "Treasury", ...READERS]
 });
 
 // Roles allowed to download a stored report file (generated/reports) - must match the "reports"
 // entry of generatedAccess in backend/src/services/fileAccessService.js.
-export const reportDownloadRoles = Object.freeze(["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", "SuperAdmin"]);
+export const reportDownloadRoles = Object.freeze(["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", "GAF", SUPER_ADMIN, AUDITOR]);
 
 export const configurationRoles = [...new Set(Object.values(configurationAccess).flat())];
 
 // Everyone who can open at least one Settings page.
-export const settingsRoles = ["Admin", "Accounting", "Treasury", SUPER_ADMIN];
+export const settingsRoles = ["Admin", "Accounting", "Treasury", ...READERS];
 
 export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
-  "/management-view": ["Admin", "Management", "ManagementViewer", SUPER_ADMIN],
-  "/requests": ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", SUPER_ADMIN],
+  "/management-view": ["Admin", "Management", "ManagementViewer", "GAF", ...READERS],
+  "/requests": ["Admin", ...requesterRoles, "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "GAF", ...READERS],
   "/my-team": internalRoles,
-  "/requests/new": ["Admin", "Solicitor"],
+  "/requests/new": ["Admin", ...requesterRoles],
   "/settings": settingsRoles,
-  "/treasury/history": ["Admin", "Treasury", SUPER_ADMIN],
+  "/treasury/history": ["Admin", "Treasury", ...READERS],
+  // Track D: transfers between UMA's own accounts. Treasury registers and executes them; the GAF
+  // approves them; Accounting reads them.
+  "/treasury/transfers": ["Admin", "Treasury", "GAF", "Accounting", ...READERS],
   "/approvals": internalRoles,
   "/batch-invoices": ["Admin", "Solicitor", "Accounting"],
-  "/accounting": ["Admin", "Accounting", SUPER_ADMIN],
-  "/accounting/payables": ["Admin", "Accounting", SUPER_ADMIN],
-  "/accounting/bank-files": ["Admin", "Accounting", SUPER_ADMIN],
-  "/accounting/invoice-observations": ["Admin", "Accounting", SUPER_ADMIN],
-  "/treasury": ["Admin", "Treasury", SUPER_ADMIN],
-  "/reimbursement-bank": ["Admin", "Solicitor", "Accounting", "Treasury"],
-  "/budget": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", SUPER_ADMIN],
-  "/accounting/periods": ["Admin", "Accounting", SUPER_ADMIN],
-  "/accounting/sire": ["Admin", "Accounting", SUPER_ADMIN],
-  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", SUPER_ADMIN],
-  // Every internal user can propose suppliers; the Super Admin only reads them.
-  "/suppliers": [...internalRoles, SUPER_ADMIN],
-  "/cost-centers": ["Admin", "Accounting", SUPER_ADMIN],
-  "/expense-types": ["Admin", "Accounting", SUPER_ADMIN],
-  "/exchange-rates": ["Admin", "Accounting", SUPER_ADMIN],
-  "/users": ["Admin", SUPER_ADMIN],
+  "/accounting": ["Admin", "Accounting", ...READERS],
+  "/accounting/payables": ["Admin", "Accounting", ...READERS],
+  // The GAF approves (verifies) each bank file as Accounting does.
+  "/accounting/bank-files": ["Admin", "Accounting", "GAF", ...READERS],
+  "/accounting/invoice-observations": ["Admin", "Accounting", ...READERS],
+  "/treasury": ["Admin", "Treasury", ...READERS],
+  "/reimbursement-bank": ["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"],
+  "/budget": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management", "GAF", ...READERS],
+  "/accounting/periods": ["Admin", "Accounting", ...READERS],
+  "/accounting/sire": ["Admin", "Accounting", ...READERS],
+  "/reports": ["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "GAF", "HumanResources", ...READERS],
+  // Every internal user can propose suppliers; the Super Admin and the Auditor only read them.
+  "/suppliers": [...internalRoles, ...READERS],
+  "/cost-centers": ["Admin", "Accounting", ...READERS],
+  "/expense-types": ["Admin", "Accounting", ...READERS],
+  "/exchange-rates": ["Admin", "Accounting", ...READERS],
+  "/users": ["Admin", ...READERS],
   "/configuration/*": configurationRoles,
   ...Object.fromEntries(Object.entries(configurationAccess).map(([resource, roles]) => [`/configuration/${resource}`, roles])),
   ...Object.fromEntries(superAdminConsolePaths.map((path) => [path, [SUPER_ADMIN]]))
@@ -100,6 +115,7 @@ export const pageLabels = Object.freeze({
   "/reimbursement-bank": "Reimbursement Banking",
   "/treasury": "Payments",
   "/treasury/history": "Payment History",
+  "/treasury/transfers": "Transfers",
   "/accounting": "Accounting Entries",
   "/accounting/periods": "Accounting Periods",
   "/accounting/sire": "SIRE Export",
@@ -126,7 +142,7 @@ export const pageLabels = Object.freeze({
 });
 
 // A requester only sees their own requests.
-const roleLabels = Object.freeze({ Solicitor: { "/requests": "My Requests" } });
+const roleLabels = Object.freeze(Object.fromEntries(requesterRoles.map((role) => [role, { "/requests": "My Requests" }])));
 
 export function pageLabel(path, role) {
   return roleLabels[role]?.[path] || pageLabels[path] || "";
@@ -163,11 +179,12 @@ export function visibleNavigationPaths(role, user) {
     .map(([path]) => path);
 }
 
-// Approvals follow the reporting line: a Solicitor approves only as someone's jefe, or when an
-// approval step is assigned to them (e.g. covering a jefe on leave). Other roles that approve keep
-// the entry. pendingApprovals is the live task counter, so an assignment shows up mid-session.
+// Approvals follow the reporting line: a requester (Solicitor, Legal, Human Resources) approves
+// only as someone's jefe, or when an approval step is assigned to them (e.g. covering a jefe on
+// leave). Other roles that approve keep the entry. pendingApprovals is the live task counter, so an
+// assignment shows up mid-session.
 export function approvesRequests(user, pendingApprovals = 0) {
-  if (user?.role !== "Solicitor") return true;
+  if (!requesterRoles.includes(user?.role)) return true;
   return user.hasTeam === true || user.hasPendingApprovals === true || Number(pendingApprovals) > 0;
 }
 
@@ -179,7 +196,7 @@ export const navigationSections = Object.freeze([
   ["Overview", ["/"]],
   ["My work", ["/requests", "/requests/new", "/approvals", "/my-team"]],
   ["Invoices and payables", ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/reimbursement-bank"]],
-  ["Treasury", ["/treasury", "/treasury/history"]],
+  ["Treasury", ["/treasury", "/treasury/history", "/treasury/transfers"]],
   ["Accounting", ["/accounting", "/accounting/periods", "/accounting/sire"]],
   ["Planning and reports", ["/budget", "/reports", "/management-view"]],
   ["Master Data", ["/suppliers", "/settings", ...settingsPaths]]
@@ -190,16 +207,23 @@ export const navigationSections = Object.freeze([
 const adminMenu = navigationSections.flatMap(([, paths]) => paths).filter((path) => path !== "/my-team" && !settingsPaths.includes(path) && path !== "/settings" && path !== "/suppliers" && !superAdminConsolePaths.includes(path));
 const roleMenus = {
   // Its console first, then every workspace it oversees (read-only). No dashboard of tasks: it has none.
-  SuperAdmin: [...superAdminConsolePaths, "/requests", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/treasury", "/treasury/history", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
+  SuperAdmin: [...superAdminConsolePaths, "/requests", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/treasury", "/treasury/history", "/treasury/transfers", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
+  // The same workspaces as the Super Admin, read-only, without its console.
+  Auditor: ["/requests", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/treasury", "/treasury/history", "/treasury/transfers", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
   Solicitor: ["/", "/requests", "/requests/new", "/approvals"],
+  Legal: ["/", "/requests", "/requests/new", "/approvals"],
+  HumanResources: ["/", "/requests", "/requests/new", "/approvals", "/reports"],
   AreaDirector: ["/", "/approvals", "/requests"],
   ViceRector: ["/", "/approvals", "/requests"],
   Procurement: ["/", "/requests", "/suppliers", "/reports"],
   Accounting: ["/", "/accounting/payables", "/accounting/bank-files", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire"],
   // Treasury also runs the budget (the former Budget role).
-  Treasury: ["/", "/treasury", "/treasury/history", "/budget"],
-  // Management also decides budget exceptions and budget changes above the approval threshold.
+  Treasury: ["/", "/treasury", "/treasury/history", "/treasury/transfers", "/budget"],
+  // Management (Gerencia General) also decides budget exceptions and budget changes above the
+  // approval threshold.
   Management: ["/", "/approvals", "/budget", "/reports", "/management-view"],
+  // Gerencia de Administracion Financiera: approvals above 5 UIT and every transfer, bank files.
+  GAF: ["/", "/approvals", "/accounting/bank-files", "/treasury/transfers", "/budget", "/reports", "/management-view"],
   // Portal only: no internal Reports, dashboards or request data.
   ManagementViewer: ["/management-view"],
   Admin: adminMenu
@@ -223,7 +247,7 @@ const grantedNavigation = [
 // bank account is a profile setting, not daily work.
 export const accountMenuLabels = Object.freeze({ "/reimbursement-bank": "My bank account" });
 export function accountMenuPaths(user) {
-  if (user?.role !== "Solicitor") return [];
+  if (!requesterRoles.includes(user?.role)) return [];
   return Object.keys(accountMenuLabels).filter((path) => canAccessNavigation(user.role, path, user));
 }
 
@@ -235,7 +259,7 @@ export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
   if (user?.hasTeam === true) add("/my-team");
   // Proposing suppliers is open to every internal user, so the menu offers it - except to
   // requesters, whose menu stays at their requests: they propose a supplier from the request form.
-  if (internalRoles.includes(role) && role !== "Solicitor") add("/suppliers");
+  if (internalRoles.includes(role) && !requesterRoles.includes(role)) add("/suppliers");
   for (const [path, permissions] of grantedNavigation) if (hasGrant(user, ...permissions) && !accountMenuPaths(user).includes(path)) add(path);
   // Settings is one entry. Someone with a single settings page (Treasury: bank formats) goes
   // straight to it instead of a page with one link.
@@ -268,13 +292,16 @@ export function groupNavigation(items) {
 const pageParents = Object.freeze({
   "/requests/new": "/requests",
   "/treasury/history": "/treasury",
+  "/treasury/transfers": "/treasury",
   ...Object.fromEntries(settingsPaths.map((path) => [path, "/settings"])),
   ...Object.fromEntries(superAdminConsolePaths.slice(1).map((path) => [path, "/super-admin"]))
 });
 
-// Where a role's breadcrumb trail starts: the dashboard, or the Super Admin's console.
+// Where a role's breadcrumb trail starts: the dashboard, the Super Admin's console, or the
+// Auditor's request list (it has no dashboard of tasks).
 export function homePath(role) {
-  return role === SUPER_ADMIN ? "/super-admin" : "/";
+  if (role === SUPER_ADMIN) return "/super-admin";
+  return role === AUDITOR ? "/requests" : "/";
 }
 
 // Breadcrumb trail for a location: [{ label, path }] from the dashboard down to the current page,
@@ -286,10 +313,10 @@ export function pageTrail(pathname, user) {
   if (path === "/" || path === home.path) return [{ label: home.label }];
   const request = path.match(/^\/requests\/([^/]+)(\/edit)?$/);
   if (request && request[1] !== "new") {
-    const requests = { label: pageLabel("/requests", role), path: "/requests" };
+    const trail = home.path === "/requests" ? [home] : [home, { label: pageLabel("/requests", role), path: "/requests" }];
     return request[2]
-      ? [home, requests, { label: "Request details", path: `/requests/${request[1]}` }, { label: "Edit request" }]
-      : [home, requests, { label: "Request details" }];
+      ? [...trail, { label: "Request details", path: `/requests/${request[1]}` }, { label: "Edit request" }]
+      : [...trail, { label: "Request details" }];
   }
   // The one-page approval the approval email opens.
   if (/^\/approvals\/[^/]+$/.test(path)) return [home, { label: pageLabel("/approvals", role), path: "/approvals" }, { label: "Your decision" }];
@@ -332,20 +359,25 @@ export function counterBadgeText(count) {
 // Phone bottom bar: up to three main destinations per role (from the role's menu), plus Search.
 export const bottomNavigation = Object.freeze({
   Solicitor: ["/", "/requests", "/requests/new"],
+  Legal: ["/", "/requests", "/requests/new"],
+  HumanResources: ["/", "/requests", "/requests/new"],
   AreaDirector: ["/", "/approvals", "/requests"],
   ViceRector: ["/", "/approvals", "/requests"],
   Procurement: ["/", "/requests", "/suppliers"],
   Accounting: ["/", "/accounting", "/accounting/invoice-observations"],
   Treasury: ["/", "/treasury", "/treasury/history"],
   Management: ["/", "/approvals", "/reports"],
+  GAF: ["/", "/approvals", "/treasury/transfers"],
   Admin: ["/", "/requests", "/settings"],
-  SuperAdmin: ["/super-admin", "/super-admin/administrators", "/super-admin/alerts"]
+  SuperAdmin: ["/super-admin", "/super-admin/administrators", "/super-admin/alerts"],
+  Auditor: ["/requests", "/treasury", "/reports"]
 });
 
 // Shorter labels where the menu label does not fit a bottom-bar slot.
 export const bottomNavigationLabels = Object.freeze({
   "/accounting/invoice-observations": "Observations",
   "/treasury/history": "History",
+  "/treasury/transfers": "Transfers",
   "/budget": "Budget",
   "/super-admin": "Overview",
   "/super-admin/alerts": "Alerts"
@@ -354,7 +386,7 @@ export const bottomNavigationLabels = Object.freeze({
 export function bottomNavigationForUser(user, options) {
   const items = navigationForUser(user, options);
   // A requester who also approves for a team gets Approvals in place of the request list.
-  const paths = user?.role === "Solicitor" && user?.hasTeam === true ? ["/", "/approvals", "/requests/new"] : bottomNavigation[user?.role];
+  const paths = requesterRoles.includes(user?.role) && user?.hasTeam === true ? ["/", "/approvals", "/requests/new"] : bottomNavigation[user?.role];
   const chosen = paths ? paths.map((path) => items.find(([, itemPath]) => itemPath === path)).filter(Boolean) : items.slice(0, 3);
   return chosen.slice(0, 3).map(([label, path]) => ({ label: bottomNavigationLabels[path] || label, path }));
 }

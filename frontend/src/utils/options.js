@@ -47,13 +47,21 @@ export function requestTypeForFlow(flowType, currentRequestType = "OPEX") {
 }
 
 export const flowTypes = ["A1", "A2", "B", "C"];
+// Every track a request can have. Track D (transfers between UMA's own accounts) has no payable,
+// supplier or invoice, so payment and configuration lists keep flowTypes.
+export const requestFlowTypes = [...flowTypes, "D"];
 
 export const flowTypeLabels = {
   A1: "A1 - Formal purchase with PO",
   A2: "A2 - Batch invoices against PO",
   B: "B - Direct invoice / advance payment",
-  C: "C - Advance to render / petty cash"
+  C: "C - Advance to render / petty cash",
+  D: "D · Transfer between accounts"
 };
+
+// Track D: why the money moves between UMA's own accounts, and the kinds of account.
+export const transferPurposeLabels = { FUNDING: "Funding", INVESTMENT: "Placement" };
+export const treasuryAccountKindLabels = { OPERATING: "Operating account", INVESTMENT: "Investment account" };
 
 export const requestStatuses = [
   "BORRADOR",
@@ -111,7 +119,7 @@ export const requestFrequencyLabels = { ONE_OFF: "Once", MONTHLY_RECURRING: "Mon
 export const approvalLevels = ["AREA_DIRECTOR", "VICE_RECTOR", "RECTORATE", "GENERAL_MANAGEMENT"];
 // Every beneficiary bank (shared/peruBanks.mjs, the SBS list).
 export const banks = PERU_BANK_CODES;
-export const roles = ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "ManagementViewer"];
+export const roles = ["Admin", "Solicitor", "Legal", "HumanResources", "AreaDirector", "ViceRector", "Accounting", "Treasury", "GAF", "Procurement", "Management", "ManagementViewer", "Auditor"];
 
 // Extra grants beyond a role's default set - an exception, not the everyday path. Only
 // self-contained features are grantable (mirrors GRANTABLE_PERMISSIONS in the backend); a
@@ -140,7 +148,8 @@ export const requestTypeLabels = {
   ENTREGA_RENDIR: "Advance to account",
   REEMBOLSO_CON_SUSTENTO: "Supported reimbursement",
   REEMBOLSO_SIN_SUSTENTO: "Undocumented reimbursement",
-  PAGO_CON_COTIZACION: "Quotation-based payment"
+  PAGO_CON_COTIZACION: "Quotation-based payment",
+  TRASPASO: "Transfer between UMA accounts"
 };
 
 export const expenseNatureLabels = {

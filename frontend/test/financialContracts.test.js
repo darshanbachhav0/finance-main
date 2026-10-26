@@ -37,7 +37,7 @@ test("request type and expense nature are separate controlled taxonomies", () =>
 });
 
 test("all required functional profiles are available", () => {
-  assert.deepEqual(roles, ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "ManagementViewer"]);
+  assert.deepEqual(roles, ["Admin", "Solicitor", "Legal", "HumanResources", "AreaDirector", "ViceRector", "Accounting", "Treasury", "GAF", "Procurement", "Management", "ManagementViewer", "Auditor"]);
 });
 
 test("solicitor navigation exposes work entry but no privileged finance modules", () => {

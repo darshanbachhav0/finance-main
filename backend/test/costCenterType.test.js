@@ -17,7 +17,7 @@ import Supplier from "../src/models/Supplier.js";
 import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
 import { getConsolidation, processAccountsPayable } from "../src/services/accountingService.js";
-import { decideApproval } from "../src/services/approvalService.js";
+import { approveThroughChain } from "./approvalFixtures.js";
 import { groupedRequestLines } from "../src/services/budgetService.js";
 import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
 import {
@@ -103,7 +103,8 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
       await FinancialRequest.updateOne({ _id: draft._id }, { $push: { attachments: quoteAttachment(owner._id) }, $set: { quotations: [recommendedQuote(supplier._id, 10000)] } });
       return submitFinancialRequest({ id: draft._id, user: owner, req });
     };
-    const approve = (request, user, extra = {}) => decideApproval({ id: request._id, action: "APPROVE", comments: "Conforme", forward: false, user, req, ...extra });
+    // The jefe sends it to their superior (the Vice-Rector), who finalizes.
+    const approve = (request, user, extra = {}) => approveThroughChain({ id: request._id, user, req, ...extra });
     const commitmentLines = async (request) => (await BudgetCommitment.findOne({ request: request._id }).lean()).lines.map((line) => [String(line.costCenter), line.amount]).sort();
 
     await t.test("Propio is the default: the request uses the requester's own CECO, as before", async () => {

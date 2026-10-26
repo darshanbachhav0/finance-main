@@ -7,6 +7,7 @@ import {
   ACKNOWLEDGMENT_TYPES,
   APPROVAL_ROUTING_MODE,
   APPROVAL_STAGES,
+  APPROVAL_TIERS,
   CAPEX_ASSET_CATEGORIES,
   CANONICAL_REQUEST_STATUSES,
   BENEFICIARY_BANKS,
@@ -26,7 +27,9 @@ import {
   REQUEST_PRIORITIES,
   REQUEST_PRIORITY_RANK,
   REQUEST_STATUS,
-  REQUEST_TYPES
+  REQUEST_TYPES,
+  TREASURY_ACCOUNT_KINDS,
+  TREASURY_TRANSFER_PURPOSES
 } from "../utils/constants.js";
 import { assertLineTotal, moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
 import { nextRequestNumber } from "../services/sequenceService.js";
@@ -268,9 +271,28 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
       name: String,
       jobTitle: String
     },
-    source: { type: String, enum: Object.values(APPROVAL_ROUTING_MODE), default: APPROVAL_ROUTING_MODE.RULE_BASED }
+    source: { type: String, enum: Object.values(APPROVAL_ROUTING_MODE), default: APPROVAL_ROUTING_MODE.RULE_BASED },
+    // A policy step decided by role (APPROVAL_TIERS): the UIT amount tiers and Track D's pair.
+    tier: { type: String, enum: Object.keys(APPROVAL_TIERS) },
+    // First manager-chain level only: its approval must go up to the approver's superior.
+    superiorRequired: Boolean
   },
   { _id: true }
+);
+
+// Track D: one of UMA's own bank accounts, as it was when the transfer was registered.
+const treasuryAccountSnapshotSchema = new mongoose.Schema(
+  {
+    account: { type: mongoose.Schema.Types.ObjectId, ref: "TreasuryBankAccount" },
+    code: String,
+    bank: String,
+    currency: { type: String, enum: CURRENCY },
+    accountNumber: String,
+    cci: String,
+    ledgerAccount: String,
+    kind: { type: String, enum: TREASURY_ACCOUNT_KINDS }
+  },
+  { _id: false }
 );
 
 const financialRequestSchema = new mongoose.Schema(
@@ -389,7 +411,22 @@ const financialRequestSchema = new mongoose.Schema(
     supplier: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Supplier",
-      required() { return this.flowType !== FLOW_TYPE.C; }
+      required() { return ![FLOW_TYPE.C, FLOW_TYPE.D].includes(this.flowType); }
+    },
+    // Track D (traspaso): money moves between two of UMA's own accounts in the same currency.
+    // Approved by a Treasury user other than the requester and the GAF; Treasury then executes it
+    // (operation number, journal debit destination / credit source) and reconciles it.
+    treasuryTransfer: {
+      purpose: { type: String, enum: TREASURY_TRANSFER_PURPOSES },
+      sourceAccount: { type: treasuryAccountSnapshotSchema, default: undefined },
+      destinationAccount: { type: treasuryAccountSnapshotSchema, default: undefined },
+      // Placement (INVESTMENT): the instrument and its reference, e.g. "DPF 60 días" / certificate.
+      instrument: { type: String, trim: true },
+      reference: { type: String, trim: true },
+      executedAt: Date,
+      executedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      operationNumber: { type: String, trim: true },
+      journal: { type: mongoose.Schema.Types.ObjectId, ref: "JournalEntry" }
     },
     supplierSnapshot: {
       identifierType: String,
@@ -631,6 +668,7 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
     this.opexDetails.expenseFrequency = this.frequency;
   }
   if (this.requestType === "ENTREGA_RENDIR") this.flowType = FLOW_TYPE.C;
+  if (this.requestType === "TRASPASO") this.flowType = FLOW_TYPE.D;
   if (!this.requester) this.requester = this.solicitor;
   if (!this.solicitor) this.solicitor = this.requester;
   if (!this.requesterArea) this.requesterArea = this.requestingArea;
@@ -638,9 +676,9 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
 
   let commercialLineCount = 0;
   let incompleteCommercialLine = false;
-  // An advance or a reimbursement (Track C) is not an invoice: its lines carry no IGV, so the
-  // amount is what is paid.
-  const igvExempt = this.flowType === FLOW_TYPE.C;
+  // An advance or a reimbursement (Track C) is not an invoice, nor is a transfer between UMA's own
+  // accounts (Track D): their lines carry no IGV, so the amount is what is paid.
+  const igvExempt = [FLOW_TYPE.C, FLOW_TYPE.D].includes(this.flowType);
   for (const [index, line] of (this.lines || []).entries()) {
     const automaticIGV = typeof line.priceIncludesIGV === "boolean";
     if (automaticIGV) {

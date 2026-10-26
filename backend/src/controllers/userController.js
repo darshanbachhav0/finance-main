@@ -95,7 +95,7 @@ export async function validateSupervisor(userId, supervisorId) {
     if (depth >= MAX_APPROVAL_CHAIN_DEPTH || visited.has(String(next))) throw new AppError(422, "Supervisor assignment creates a cycle or exceeds the hierarchy depth.");
     visited.add(String(next));
     const manager = await User.findById(next).select("jefe active role").lean();
-    if (!manager || manager.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(manager.role)) throw new AppError(422, "Choose an active, internal supervisor.");
+    if (!manager || manager.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN, ROLES.AUDITOR].includes(manager.role)) throw new AppError(422, "Choose an active, internal supervisor.");
     next = manager.jefe;
   }
 }
@@ -106,7 +106,7 @@ export async function validateSubstitute(userId, substituteId) {
   if (!substituteId) return;
   if (userId && String(substituteId) === String(userId)) throw new AppError(422, "A person cannot be their own substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
   const substitute = await User.findById(substituteId).select("active role").lean();
-  if (!substitute || substitute.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(substitute.role)) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
+  if (!substitute || substitute.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN, ROLES.AUDITOR].includes(substitute.role)) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
 }
 
 // Availability follows active direct reports, rather than a fixed role.
