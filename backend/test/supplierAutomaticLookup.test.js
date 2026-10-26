@@ -22,10 +22,10 @@ test("Consulta RUC is primary; a negative taxpayer status is never replaced by a
 });
 test("Website outage falls back to Padron and preserves its evidence and missing results", async () => {
  for(const found of [true,false]) {
- const result=await getSupplierAutomaticPrefill(ruc,{consulta:async()=>{throw new Error("Timeout or challenge");},padron:async()=>({found,source:"SUNAT_PUBLIC_PADRON_RUC",datasetDate:"2026-09-30"})});
+ const result=await getSupplierAutomaticPrefill(ruc,{consultaOnly:false,consulta:async()=>{throw new Error("Timeout or challenge");},padron:async()=>({found,source:"SUNAT_PUBLIC_PADRON_RUC",datasetDate:"2026-09-30"})});
  assert.equal(result.found,found);assert.equal(result.fallback,true);assert.equal(result.datasetDate,"2026-09-30");
  }
- await assert.rejects(getSupplierAutomaticPrefill(ruc,{consulta:async()=>{throw new Error("Unavailable");},padron:async()=>{throw new Error("Dataset unavailable");}}),/Padrón fallback is also unavailable/);
+ await assert.rejects(getSupplierAutomaticPrefill(ruc,{consultaOnly:false,consulta:async()=>{throw new Error("Unavailable");},padron:async()=>{throw new Error("Dataset unavailable");}}),/Padrón fallback is also unavailable/);
 });
 
 test("Consulta RUC keeps inactive status separate from its closure date", () => {

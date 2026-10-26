@@ -38,6 +38,7 @@ import "./uxShell.test.js";
 import "./tabs.test.js";
 import "./treasury.test.js";
 import "./supplierForm.test.js";
+import "./consultaRuc.test.js";
 import "./translations.test.js";
 import "./tones.test.js";
 import "./invoiceEvidence.test.js";

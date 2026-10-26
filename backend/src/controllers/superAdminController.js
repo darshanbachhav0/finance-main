@@ -25,6 +25,7 @@ import { escapedRegex, paginatedPayload, parsePagination } from "../services/que
 import { countRecentSecurityAlerts, listSecurityAlerts } from "../services/securityAlertService.js";
 import { SECURITY_ALERT_KINDS } from "../services/securityAlertRules.js";
 import { getSunatPadronStatus } from "../services/sunatPadronService.js";
+import { sunatProviderMode, usesPublicPadron } from "../config/sunatMode.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, ROLES } from "../utils/constants.js";
 
@@ -36,9 +37,7 @@ async function safely(work, fallback = null) {
   try { return await work(); } catch (error) { return fallback ?? { error: String(error?.message || error).slice(0, 200) }; }
 }
 
-function padronMode() {
-  return ["PADRON", "PUBLIC_PADRON", "PUBLIC-PADRON"].includes(String(process.env.SUNAT_PROVIDER_MODE || "").toUpperCase());
-}
+const padronMode = () => usesPublicPadron();
 
 export const overview = asyncHandler(async (req, res) => {
   const since = new Date(Date.now() - 86400000);
@@ -48,7 +47,7 @@ export const overview = asyncHandler(async (req, res) => {
     countRecentSecurityAlerts(7),
     safely(() => configurationHealth(), { issues: [], error: "Configuration checks could not run." }),
     NotificationDelivery.aggregate([{ $match: { updatedAt: { $gte: since } } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-    padronMode() ? safely(async () => { const status = await getSunatPadronStatus(); return { mode: "PADRON", ready: status.ready, fresh: status.fresh, workerRunning: Boolean(status.worker?.running) }; }) : { mode: String(process.env.SUNAT_PROVIDER_MODE || "MANUAL").toUpperCase() },
+    padronMode() ? safely(async () => { const status = await getSunatPadronStatus(); return { mode: "PADRON", ready: status.ready, fresh: status.fresh, workerRunning: Boolean(status.worker?.running) }; }) : { mode: sunatProviderMode() },
     lastSuccessfulBackup(),
     currentSettings(),
     safely(() => platformWorkload(req.user), []),

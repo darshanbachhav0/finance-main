@@ -11,7 +11,7 @@ import { notificationText, notifyRoles, notifyUser, resolveNotification } from "
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { paginatedPayload, parsePagination, parseSort, escapedRegex } from "./queryService.js";
 import { nextSupplierCode } from "./sequenceService.js";
-import { sunatService } from "./sunatService.js";
+import { sunatService, usesAutomaticTaxpayerLookup } from "./sunatService.js";
 import { getSupplierAutomaticPrefill } from "./supplierPadronLookupService.js";
 import { cachedSunatLegalRepresentatives, lookupSunatLegalRepresentatives } from "./sunatConsultaRucRepresentativesService.js";
 import { representativeDocumentType, sunatCalendarDate } from "../../../shared/supplierSunat.mjs";
@@ -871,7 +871,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       });
     }
     const warnings = bankResult.warnings || [];
-    if (sunatService.status().variant === "PADRON" && identifier.length === 11) {
+    if (usesAutomaticTaxpayerLookup() && identifier.length === 11) {
       try { await validateAutomaticSupplierTaxpayer(supplier, user, req); }
       catch (error) {
         warnings.push({ code: "TAXPAYER_VALIDATION_PENDING", message: "Supplier saved. Automatic SUNAT validation is pending; Accounting can retry it from Taxpayer Validation." });
@@ -879,7 +879,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       }
     }
     // Manual integration mode can still preserve the public evidence retrieved by the form.
-    if (identifier.length === 11 && (sunatService.status().variant === "PADRON" || cachedSunatLegalRepresentatives(identifier, supplier.legalName))) {
+    if (identifier.length === 11 && (usesAutomaticTaxpayerLookup() || cachedSunatLegalRepresentatives(identifier, supplier.legalName))) {
       try { await recordSupplierSunatRepresentatives(supplier, user, req); }
       catch (error) {
         warnings.push({ code: "SUNAT_REPRESENTATIVES_PENDING", message: "Supplier saved. SUNAT legal representatives could not be retrieved; complete the representative manually." });
@@ -1171,7 +1171,7 @@ export async function validateSupplierTaxpayer({ supplierId, payload, user, req 
     await recordAudit({ entityType: "Supplier", entity: supplier, action: "TAXPAYER_REVALIDATION_REQUESTED", module: "SUPPLIERS", user, req, comments: reason, oldValues: previous });
   }
   const provider = sunatService.status();
-  if (provider.variant === "PADRON") return validateAutomaticSupplierTaxpayer(supplier, user, req);
+  if (usesAutomaticTaxpayerLookup(provider)) return validateAutomaticSupplierTaxpayer(supplier, user, req);
   const result = await sunatService.validateTaxpayer(supplier.normalizedIdentifier || supplier.rucDni, {
     authorizedDecision: provider.mode === "MANUAL",
     valid: parseBoolean(payload.valid),
@@ -1240,6 +1240,21 @@ export async function validateAutomaticSupplierTaxpayer(supplier, user, req, loo
     provider: { mode: "PRODUCTION", state: "PRODUCTION", configured: true }, user, req });
 }
 
+// Only what SUNAT showed: absent fields stay absent (the Padrón has none of these).
+const textList = (values) => (Array.isArray(values) ? values.map((value) => String(value ?? "").trim()).filter(Boolean) : []);
+function consultaProfileEvidence(data) {
+  const evidence = {
+    taxpayerType: data.taxpayerType, identityDocument: data.identityDocument, voucherIssuanceSystem: data.voucherIssuanceSystem,
+    foreignTradeActivity: data.foreignTradeActivity, accountingSystem: data.accountingSystem,
+    economicActivities: Array.isArray(data.economicActivities) ? data.economicActivities.map(({ kind = "", code = "", description = "" }) => ({ kind, code, description })).filter((item) => item.description) : [],
+    printedVoucherTypes: textList(data.printedVoucherTypes), electronicIssuanceSystems: textList(data.electronicIssuanceSystems),
+    electronicIssuerSince: sunatCalendarDate(data.electronicIssuerSince), electronicVouchers: textList(data.electronicVouchers),
+    pleAffiliationDate: sunatCalendarDate(data.pleAffiliationDate), registries: textList(data.registries)
+  };
+  // "Padrones: NINGUNO" is an answer (an empty list); every other empty value was not reported.
+  return Object.fromEntries(Object.entries(evidence).filter(([key, value]) => (key === "registries" ? Array.isArray(data.registries) : Array.isArray(value) ? value.length : value)));
+}
+
 export function automaticTaxpayerResult(lookup) {
   const official = lookup?.officialSource === true && ["SUNAT_CONSULTA_RUC", "SUNAT_PUBLIC_PADRON_RUC"].includes(lookup.source);
   const data = lookup?.data || {};
@@ -1255,6 +1270,8 @@ export function automaticTaxpayerResult(lookup) {
       registrationDate: sunatCalendarDate(data.registrationDate),
       activityStartDate: sunatCalendarDate(data.activityStartDate),
       deregistrationDate: sunatCalendarDate(data.deregistrationDate),
+      // The rest of the Consulta RUC profile, kept as the evidence the supplier was verified on.
+      ...consultaProfileEvidence(data),
       queriedAt: lookup.queriedAt || undefined,
       datasetDate: sunatCalendarDate(lookup.datasetDate)
     },
@@ -1444,7 +1461,7 @@ function jefeDecisionRecord(decision, user, approval, comments) {
 }
 
 async function approveSupplier({ supplier, user, req, approval, comments }) {
-  if (!supplierVerificationCurrent(supplier) && sunatService.status().variant === "PADRON") {
+  if (!supplierVerificationCurrent(supplier) && usesAutomaticTaxpayerLookup()) {
     // A fresh official check when SUNAT answers; its being unreachable never blocks the jefe.
     try { supplier = await validateAutomaticSupplierTaxpayer(supplier, user, req); }
     catch (error) { console.warn("[SUPPLIER] Automatic taxpayer check skipped at approval:", error.code || error.name); }

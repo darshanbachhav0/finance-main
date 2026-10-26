@@ -475,9 +475,16 @@ registered a bank account cannot verify it. The supplier's Banco de la Nación d
 
 ## 8. SUNAT / SIRE integration
 
-`backend/src/services/sunatService.js` selects a provider by `SUNAT_PROVIDER_MODE`:
+`backend/src/services/sunatService.js` selects a provider by `SUNAT_PROVIDER_MODE`
+(`backend/src/config/sunatMode.js`):
 
-- **`PADRON`** (the realistic production baseline) — validates taxpayer status/HABIDO against
+- **`CONSULTA_RUC`** (the default) — verifies a RUC on SUNAT's public Consulta RUC page only
+  (`ConsultaRucSunatProvider`, `sunatConsultaRucRepresentativesService.js`, headless Chromium):
+  ACTIVO/HABIDO and a matching legal name make it valid, and the page's whole taxpayer profile is
+  kept as the supplier's validation evidence. No Padrón fallback and no simulated answer: SUNAT
+  unreachable leaves the validation pending. Like the Padrón it cannot validate an individual
+  voucher (CPE).
+- **`PADRON`** — validates taxpayer status/HABIDO against
   SUNAT's public national RUC registry, downloaded and indexed locally
   (`sunatPadronService.js`, refreshed by a dedicated worker — see `OPERATIONS.md`). It cannot
   validate an individual voucher (CPE), only taxpayer status.
@@ -489,7 +496,8 @@ registered a bank account cannot verify it. The supplier's Banco de la Nación d
   reason + evidence reference) for operational continuity during a SUNAT outage. It marks the
   voucher's status explicitly as `MANUAL_EXCEPTION` — non-authoritative, never silently treated as
   `VALID`.
-- **`MOCK`** — development-only, always valid.
+- **`MOCK`** — offline and always valid; only for the automated tests and the demo seed's own run
+  (its RUCs are fictional), never selected by default.
 
 XML voucher validation itself (RUC/currency/amounts/date match) is fully offline and independent of
 which SUNAT provider is active. Legal-representative lookup (Playwright scraping SUNAT's public

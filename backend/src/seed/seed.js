@@ -32,6 +32,7 @@ import { createMassUploadBatch, processMassUploadBatch } from "../services/batch
 import { closeFinancialRequest, submitFinancialRequest } from "../services/requestService.js";
 import { defaultQuotationPolicy, hasInvoiceEvidence } from "../services/documentRuleService.js";
 import { getSunatPadronStatus } from "../services/sunatPadronService.js";
+import { usesConsultaRucOnly, usesPublicPadron } from "../config/sunatMode.js";
 import { confirmAccountingDetraction, ensureSpotCategories, pendingDetractionAmount } from "../services/detractionService.js";
 import { requiresPurchaseOrder } from "../services/procurementReadinessService.js";
 import { issueProcurementOrder } from "../services/purchaseOrderService.js";
@@ -2148,11 +2149,17 @@ async function buildSummary(users) {
 
 // Connects with MONGODB_URI (the developer database by default), seeds, and returns the summary.
 // The caller owns the connection afterwards (the CLI entry point below disconnects).
-// A development machine configured for SUNAT_PROVIDER_MODE=PADRON usually has no downloaded
-// Padrón, and then no demo invoice could be validated. The seed (never run in production)
-// switches its own process to MOCK validation in that case and says so.
-async function useMockSunatWithoutPadron() {
-  if (!["PADRON", "PUBLIC_PADRON", "PUBLIC-PADRON"].includes(String(process.env.SUNAT_PROVIDER_MODE || "").toUpperCase())) return;
+// The demo suppliers' RUCs are fictional: SUNAT Consulta RUC (the default mode) does not have them,
+// and a development machine in SUNAT_PROVIDER_MODE=PADRON usually has no downloaded Padrón. Then
+// no demo invoice could be validated, so the seed (never run in production) switches its own
+// process to MOCK validation and says so. The application itself keeps its configured mode.
+async function useMockSunatForDemoData() {
+  if (usesConsultaRucOnly()) {
+    console.warn("[SEED] SUNAT_PROVIDER_MODE=CONSULTA_RUC: the demo RUCs are fictional, so demo invoices are validated with the MOCK provider for this seed run only.");
+    process.env.SUNAT_PROVIDER_MODE = "MOCK";
+    return;
+  }
+  if (!usesPublicPadron()) return;
   const status = await getSunatPadronStatus().catch(() => ({ ready: false }));
   if (status.ready) return;
   console.warn("[SEED] SUNAT_PROVIDER_MODE=PADRON but no Padrón dataset is downloaded: demo invoices are validated with the MOCK provider for this seed run only.");
@@ -2161,7 +2168,7 @@ async function useMockSunatWithoutPadron() {
 
 export async function seed() {
   if (process.env.NODE_ENV === "production") throw new Error("Development seed is disabled in production.");
-  await useMockSunatWithoutPadron();
+  await useMockSunatForDemoData();
   await connectDB();
   await fs.mkdir(generatedRoot, { recursive: true });
   await fs.mkdir(uploadRoot, { recursive: true });

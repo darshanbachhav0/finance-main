@@ -39,6 +39,8 @@ export async function cachedTaxpayerProfile(ruc, lookup, { model = TaxpayerProfi
   if (pending.has(ruc)) return pending.get(ruc);
   const work = (async () => {
     const profile = await lookup();
+    // SUNAT's own "no such RUC" is an answer, not evidence to keep: it is returned, never cached.
+    if (profile?.found === false && profile.officialSource === true && profile.source === "SUNAT_CONSULTA_RUC" && profile.ruc === ruc) return { ...profile, cached: false };
     const expiresAt = profileExpiry(profile, ruc);
     await model.updateOne({ _id: ruc }, { $set: { profile, expiresAt, nextRefreshAt: expiresAt } }, { upsert: true });
     return { ...profile, cached: false, cacheExpiresAt: expiresAt };

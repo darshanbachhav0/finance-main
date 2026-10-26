@@ -209,12 +209,15 @@ async function getBrowser() {
   if (process.env.RENDER === "true") {
     process.env.PLAYWRIGHT_BROWSERS_PATH ||= path.resolve(BACKEND_ROOT, "../node_modules/.cache/uma-chromium");
   }
+  // A computer without Playwright's Chromium (a Windows PC, say) may point at an installed
+  // Chromium-based browser such as Edge, as the browser tests do.
+  const executablePath = env("PLAYWRIGHT_EXECUTABLE_PATH");
   const pending = import("playwright").then(({ chromium }) =>
     chromium.launch({
         // Use full Chromium's unified headless mode, not the headless shell.
         // Supplier autofill must never open a desktop window, including when
         // an older launcher still sets SUNAT_REPRESENTATIVES_HEADLESS=false.
-        channel: "chromium",
+        ...(executablePath ? { executablePath } : { channel: "chromium" }),
         timeout: 10000,
         headless: true
       }))
@@ -1023,6 +1026,12 @@ async function lookupInternal(
       );
     }
 
+    // A RUC SUNAT does not have: its answer, not an outage.
+    if (consultaRucNotRegistered(await page.locator("body").innerText().catch(() => ""), ruc)) {
+      if (profileOnly) return consultaNotFoundProfile(ruc);
+      throw new Error("SUNAT Consulta RUC does not recognize this RUC.");
+    }
+
     {
       const fields = await extractConsultaFields(page);
       // Both operations visit the same company page. Preserve that verified
@@ -1143,6 +1152,11 @@ export async function extractConsultaFields(page) {
   return page.evaluate(() => {
     const clean = value => String(value || "").replace(/\s+/g, " ").trim();
     const key = value => clean(value).replace(/:$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    // A list (economic activities, vouchers, registries) is a table: one entry per row.
+    const valueOf = element => {
+      const rows = [...element.querySelectorAll("table tr")].map(row => clean(row.innerText || row.textContent)).filter(Boolean);
+      return rows.length ? rows : clean(element.innerText || element.textContent);
+    };
     const entries = [];
     for (const row of document.querySelectorAll(".list-group-item")) {
       // SUNAT puts registration and start dates in two label/value pairs in one row.
@@ -1150,7 +1164,7 @@ export async function extractConsultaFields(page) {
       if (headings.length) {
         for (const heading of headings) {
           const value = heading.parentElement.nextElementSibling;
-          if (value && ![...value.querySelectorAll("h4")].some(heading => /:\s*$/.test(heading.textContent))) entries.push([key(heading.textContent), clean(value.innerText || value.textContent)]);
+          if (value && ![...value.querySelectorAll("h4")].some(heading => /:\s*$/.test(heading.textContent))) entries.push([key(heading.textContent), valueOf(value)]);
         }
       } else {
         const text = clean(row.innerText || row.textContent), split = text.indexOf(":");
@@ -1161,21 +1175,57 @@ export async function extractConsultaFields(page) {
   });
 }
 
+// SUNAT's answer for a well-formed RUC it does not have ("El n\u00famero de RUC ... consultado no es
+// v\u00e1lido"): an official negative result, not an outage.
+export function consultaRucNotRegistered(bodyText, ruc) {
+  return /consultado no es v[a\u00e1]lido/i.test(String(bodyText || "")) && String(bodyText).includes(ruc);
+}
+
+export function consultaNotFoundProfile(ruc) {
+  return { found: false, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt: new Date().toISOString(), message: "SUNAT Consulta RUC does not recognize this RUC." };
+}
+
+const fieldText = value => (Array.isArray(value) ? value.join(" ") : String(value ?? "")).trim();
+// "-" and "NINGUNO" are how the page says there is nothing.
+const reported = value => (/^(-|NINGUNO|NO INFORMADO)?$/i.test(value) ? "" : value);
+const fieldList = value => (Array.isArray(value) ? value : [value]).map(item => reported(fieldText(item))).filter(Boolean);
+
+// "Principal - 8530 - ENSE\u00d1ANZA SUPERIOR"
+function economicActivity(text) {
+  const match = text.match(/^(.+?)\s*-\s*(\d{4,6})\s*-\s*(.+)$/);
+  return match ? { kind: match[1].trim(), code: match[2], description: match[3].trim() } : { kind: "", code: "", description: text };
+}
+
 export function consultaProfileFromFields(ruc, fields) {
-  const heading = fields["NUMERO DE RUC"] || "";
+  const field = pattern => Object.entries(fields).find(([name]) => pattern.test(name))?.[1];
+  const heading = fieldText(fields["NUMERO DE RUC"]);
   const match = heading.match(/^(\d{11})\s*-\s*(.+)$/);
   if (!match || match[1] !== ruc) throw new Error("SUNAT returned an unrecognized or mismatched RUC profile.");
-  const taxpayerStatus = (fields["ESTADO DEL CONTRIBUYENTE"] || "NO_INFORMADO").split(/\s+Fecha de Baja\s*:/i)[0].trim();
-  const domicileCondition = fields["CONDICION DEL CONTRIBUYENTE"] || "NO_INFORMADO";
-  const closure = fields["FECHA DE BAJA"] || fields["ESTADO DEL CONTRIBUYENTE"]?.match(/Fecha de Baja\s*:\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
+  const status = fieldText(fields["ESTADO DEL CONTRIBUYENTE"]);
+  const taxpayerStatus = (status || "NO_INFORMADO").split(/\s+Fecha de Baja\s*:/i)[0].trim();
+  const domicileCondition = fieldText(fields["CONDICION DEL CONTRIBUYENTE"]) || "NO_INFORMADO";
+  const closure = fieldText(fields["FECHA DE BAJA"]) || status.match(/Fecha de Baja\s*:\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
   return { found: true, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt: new Date().toISOString(),
-    data: { rucDni: ruc, legalName: match[2].trim(), commercialName: fields["NOMBRE COMERCIAL"] === "-" ? "" : fields["NOMBRE COMERCIAL"] || "",
+    data: { rucDni: ruc, legalName: match[2].trim(), commercialName: reported(fieldText(fields["NOMBRE COMERCIAL"])),
       personType: ruc.startsWith("20") ? "LEGAL_ENTITY" : ruc.startsWith("10") ? "NATURAL_PERSON_WITH_BUSINESS" : "",
-      fiscalAddress: fields["DOMICILIO FISCAL"] || "", location: { department: fields["DEPARTAMENTO"] || "", province: fields["PROVINCIA"] || "", district: fields["DISTRITO"] || "", ubigeo: fields["UBIGEO"] || "" },
+      fiscalAddress: reported(fieldText(fields["DOMICILIO FISCAL"])), location: { department: fieldText(fields["DEPARTAMENTO"]), province: fieldText(fields["PROVINCIA"]), district: fieldText(fields["DISTRITO"]), ubigeo: fieldText(fields["UBIGEO"]) },
       taxpayerStatus, domicileCondition, active: taxpayerStatus === "ACTIVO", habido: domicileCondition === "HABIDO",
-      registrationDate: sunatCalendarDate(fields["FECHA DE INSCRIPCION"]),
-      activityStartDate: sunatCalendarDate(fields["FECHA DE INICIO DE ACTIVIDADES"]),
+      registrationDate: sunatCalendarDate(fieldText(fields["FECHA DE INSCRIPCION"])),
+      activityStartDate: sunatCalendarDate(fieldText(fields["FECHA DE INICIO DE ACTIVIDADES"])),
       deregistrationDate: sunatCalendarDate(closure),
+      // Everything else the Consulta RUC result shows about the taxpayer.
+      taxpayerType: reported(fieldText(field(/^TIPO (DE )?CONTRIBUYENTE$/))),
+      identityDocument: reported(fieldText(field(/^TIPO DE DOCUMENTO$/))),
+      voucherIssuanceSystem: reported(fieldText(field(/^SISTEMA (DE )?EMISION DE COMPROBANTE/))),
+      foreignTradeActivity: reported(fieldText(field(/^ACTIVIDAD (DE )?COMERCIO EXTERIOR/))),
+      accountingSystem: reported(fieldText(field(/^SISTEMA (DE )?CONTABILIDAD/))),
+      economicActivities: fieldList(field(/^ACTIVIDAD\(?ES\)? ECONOMICA/)).map(economicActivity),
+      printedVoucherTypes: fieldList(field(/^COMPROBANTES DE PAGO/)),
+      electronicIssuanceSystems: fieldList(field(/^SISTEMA DE EMISION ELECTRONICA/)),
+      electronicIssuerSince: sunatCalendarDate(fieldText(field(/^EMISOR ELECTRONICO DESDE/))),
+      electronicVouchers: fieldList(fieldText(field(/^COMPROBANTES ELECTRONICOS/)).split(/,\s*/)),
+      pleAffiliationDate: sunatCalendarDate(fieldText(field(/^AFILIADO AL PLE/))),
+      registries: fieldList(field(/^PADRONES/)),
       eligibleForHomologation: taxpayerStatus === "ACTIVO" && domicileCondition === "HABIDO", accountHolderName: match[2].trim() },
     message: "Supplier information loaded from SUNAT Consulta RUC." };
 }

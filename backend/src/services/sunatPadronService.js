@@ -11,6 +11,7 @@ import { openZipEntryStream } from "../utils/zipReader.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { findPadronLine, preparePadronIndexes } from "./padronChunkIndex.js";
+import { usesPublicPadron } from "../config/sunatMode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1398,6 +1399,8 @@ function cachePut(
 }
 
 export function refreshForLookup() {
+  // Only the Padrón mode reads the downloaded file; Consulta RUC never needs it.
+  if (!usesPublicPadron()) return;
   if (String(process.env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO") return;
   if (["false", "off", "0"].includes(String(process.env.SUNAT_PADRON_WORKER_ENABLED || "").toLowerCase())) return;
   if (Date.now() < nextLookupRefreshAt) return;
