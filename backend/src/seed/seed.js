@@ -516,6 +516,12 @@ async function seedSupplier({ key, supplierCode, identifier, name, bank, account
     }
   }
 
+  // A database seeded by an earlier version of this seed keeps that version's demo account (another
+  // number) as the active preferred one; only one may be, so it is retired before this one is set.
+  await SupplierBankAccount.updateMany(
+    { supplier: supplier._id, currency, accountType: "CURRENT", active: true, preferred: true, accountNumber: { $ne: account }, createdBy: admin._id },
+    { $set: { active: false, preferred: false, validTo: now, changedBy: admin._id } }
+  );
   const bankAccount = await upsert(SupplierBankAccount, {
     supplier: supplier._id,
     bank,
