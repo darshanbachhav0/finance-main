@@ -34,6 +34,7 @@
     "share:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/share-cloudflare.ps1 stop",
     "rotate:deployment-passwords": "npm run rotate:deployment-passwords --workspace backend",
     "account:recover": "npm run account:recover --workspace backend --",
+    "demo:remove-accounts": "npm run demo:remove-accounts --workspace backend --",
     "superadmin:create": "npm run superadmin:create --workspace backend --",
     "superadmin:list": "npm run superadmin:list --workspace backend",
     "superadmin:reset-2fa": "npm run superadmin:reset-2fa --workspace backend --",
