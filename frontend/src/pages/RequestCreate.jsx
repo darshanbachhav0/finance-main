@@ -58,6 +58,7 @@ import { extraSubmissionDocuments } from "../utils/documentRequirements.js";
 import InvoiceDropZone from "../components/InvoiceDropZone.jsx";
 import InvoiceMatchStrip from "../components/InvoiceMatchStrip.jsx";
 import { invoiceFileKey, linesFromInvoice, replaceInvoiceFile } from "../utils/invoiceAutofill.js";
+import { clientId, withSafeQuotationIds } from "../utils/clientId.js";
 import { defaultOpenPeriod, quickTrack, quickTrackText, showCapexDetails, titleFromDescription } from "../utils/quickRequest.js";
 import { celebrate } from "../utils/celebrate.js";
 import BankAccountFields from "../components/suppliers/BankAccountFields.jsx";
@@ -95,7 +96,7 @@ const digits = (value) => String(value || "").replace(/\D/g, "");
 const payableAccounts = (supplier) => (supplier?.bankAccounts || []).filter((account) => account.active !== false && ["CURRENT", "SAVINGS"].includes(account.accountType));
 
 const emptyLine = (costCenter = "") => ({
-  clientId: `${Date.now()}-${Math.random()}`,
+  clientId: clientId(),
   itemDescription: "",
   quantity: "1",
   unitOfMeasure: "UNIT",
@@ -110,8 +111,9 @@ const emptyLine = (costCenter = "") => ({
   totalAmount: 0
 });
 
+// Its clientId also keys its file in quotationFiles, so it must be a safe field name (utils/clientId.js).
 const emptyQuotation = () => ({
-  clientId: `${Date.now()}-${Math.random()}`,
+  clientId: clientId(),
   supplier: "",
   amount: "",
   currency: "PEN",
@@ -445,9 +447,11 @@ export default function RequestCreate() {
       setLines((data.lines || [emptyLine()]).map(restoreEditorLine));
       setCostAllocations(data.costAllocations || []);
       setShowItems(Boolean(data.showItems) || (data.lines || []).length > 1);
-      setQuotations(data.quotations || []);
+      // A draft kept with the earlier dotted quote ids could never be saved: the ids are renamed.
+      const restoredQuotes = withSafeQuotationIds(data.quotations || [], data.quotationFiles || {});
+      setQuotations(restoredQuotes.quotations);
       setFiles(data.files || Object.fromEntries(documentDefinitions.map((item) => [item.key, []])));
-      setQuotationFiles(data.quotationFiles || {});
+      setQuotationFiles(restoredQuotes.quotationFiles);
       setRemovedAttachmentIds(data.removedAttachmentIds || []);
       setInvoiceDetails({ ...emptyInvoiceDetails(), ...(data.invoiceDetails || {}) });
       const stepOf = (value) => (typeof value === "number" ? LEGACY_STEP_ORDER[value] : value);
