@@ -20,6 +20,7 @@ import EmployeeReimbursementBankAccount from "../models/EmployeeReimbursementBan
 import FinanceConfiguration from "../models/FinanceConfiguration.js";
 import FinancialRequest from "../models/FinancialRequest.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
+import Notification from "../models/Notification.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Project from "../models/Project.js";
 import Supplier from "../models/Supplier.js";
@@ -1069,7 +1070,7 @@ async function seedRequest({
   flowType = [REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO].includes(requestType) ? FLOW_TYPE.C : FLOW_TYPE.A1
 }) {
   const existing = await FinancialRequest.findOne({ developmentScenarioKey: key });
-  if (existing) return existing;
+  if (existing && !(await retireStaleScenario(existing, period))) return existing;
   const projectRecord = requestType === REQUEST_TYPE.CAPEX && project ? await Project.findOne({ code: project }) : null;
   const exchangeRate = currency === "USD" ? demoUsdRate : 1;
   const request = new FinancialRequest({
@@ -1175,6 +1176,26 @@ async function seedRequest({
 
 function userById(users, id) {
   return Object.values(users).find((user) => user?._id && String(user._id) === String(id?._id || id));
+}
+
+// A demo scenario left by a seed run in an earlier month sits in a month the seed has since closed,
+// so it can no longer be approved or posted. While it is still a draft or waiting for approval,
+// with nothing financial behind it, it is removed and created again in this month through the
+// real services. One that went further cannot be redone and stops the seed with what to do.
+// Returns true when the scenario was removed (and must be created again).
+async function retireStaleScenario(existing, period) {
+  if (existing.accountingPeriod === period) return false;
+  const stored = await AccountingPeriod.findOne({ period: existing.accountingPeriod }).lean();
+  if (stored?.status !== "CLOSED") return false;
+  const unfinished = [REQUEST_STATUS.DRAFT, REQUEST_STATUS.PENDING_APPROVAL].includes(existing.status)
+    && !existing.budgetCommitment && !existing.purchaseOrder && !existing.accountsPayable && !(existing.accountsPayables || []).length;
+  if (!unfinished) {
+    throw new Error(`Demo scenario ${existing.developmentScenarioKey} (${existing.requestNumber}) was seeded in ${existing.accountingPeriod}, now a closed month, and is past approval, so it cannot be redone. Run "npm run seed:reset" and then "npm run seed" on a development database.`);
+  }
+  console.warn(`[SEED] ${existing.requestNumber} (${existing.developmentScenarioKey}) was left unfinished in the closed month ${existing.accountingPeriod}; it is created again in ${period}.`);
+  await Notification.deleteMany({ entityId: existing._id });
+  await FinancialRequest.deleteOne({ _id: existing._id });
+  return true;
 }
 
 async function refresh(request) {
