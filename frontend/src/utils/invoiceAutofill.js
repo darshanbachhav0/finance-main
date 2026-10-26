@@ -1,4 +1,5 @@
 import { calculateEditorLine } from "./requestLineEditor.js";
+import { clientId } from "./clientId.js";
 
 const cents = (value) => Math.round(Number(value || 0) * 100);
 const digits = (value) => String(value || "").replace(/\D/g, "");
@@ -6,7 +7,7 @@ const digits = (value) => String(value || "").replace(/\D/g, "");
 // One request line that reproduces the invoice exactly: priced with IGV included, else without,
 // else (an exonerated or rounded invoice) with its own net / IGV / total kept as they are.
 export function lineFromInvoice(invoice, { costCenter = "", description = "" } = {}) {
-  const base = { clientId: `${Date.now()}-${Math.random()}`, itemDescription: description, quantity: "1", unitOfMeasure: "UNIT", costCenter, budgetItem: "", projectId: "" };
+  const base = { clientId: clientId(), itemDescription: description, quantity: "1", unitOfMeasure: "UNIT", costCenter, budgetItem: "", projectId: "" };
   for (const [priceIncludesIGV, unitPrice] of [[true, invoice.totalAmount], [false, invoice.netAmount]]) {
     if (!(Number(unitPrice) > 0)) continue;
     const candidate = calculateEditorLine({ ...base, priceIncludesIGV, unitPrice: String(unitPrice) });
@@ -22,7 +23,7 @@ const UNIT_CODES = { NIU: "UNIT", ZZ: "SERVICE", HUR: "HOUR", DAY: "DAY", MON: "
 // item's own net / IGV / total, with IGV included otherwise, else its amounts kept as they are.
 function lineFromInvoiceItem(item, { costCenter }) {
   const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
-  const base = { clientId: `${Date.now()}-${Math.random()}`, itemDescription: item.description || "", quantity: String(quantity), unitOfMeasure: UNIT_CODES[String(item.unitCode || "").toUpperCase()] || "UNIT", costCenter, budgetItem: "", projectId: "" };
+  const base = { clientId: clientId(), itemDescription: item.description || "", quantity: String(quantity), unitOfMeasure: UNIT_CODES[String(item.unitCode || "").toUpperCase()] || "UNIT", costCenter, budgetItem: "", projectId: "" };
   for (const [priceIncludesIGV, amount] of [[false, item.netAmount], [true, item.totalAmount]]) {
     const unitCents = cents(amount) / quantity;
     if (!Number.isInteger(unitCents) || unitCents <= 0) continue;
