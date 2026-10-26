@@ -51,11 +51,11 @@ test("analytics provide real drilldowns and an exact tabular fallback", () => {
   assert.doesNotMatch(reports, /mock data/i);
 });
 
-test("shared login exposes all nine UMA demo roles and fills their DNI-based credentials", () => {
+test("shared login exposes the seeded UMA demo staff accounts and fills their DNI-based credentials", () => {
   const login = source("../src/pages/Login.jsx");
-  for (const key of ["admin", "solicitor", "director", "vice", "accounting", "treasury", "management", "procurement"]) {
-    assert.match(login, new RegExp(`key: "${key}"`));
-  }
+  for (const key of ["admin", "accounting", "treasury"]) assert.match(login, new RegExp(`key: "${key}"`));
+  // Requesters, directors, the Vice Rector, Management and Procurement are no longer seeded.
+  for (const dni of ["10000002", "10000003", "10000004", "10000008", "10000013"]) assert.doesNotMatch(login, new RegExp(`dni: "${dni}"`));
   assert.match(login, /setDni\(account\.dni\)/);
   assert.match(login, /setPassword\(account\.password\)/);
   assert.doesNotMatch(login, /import\.meta\.env\.DEV\s*&&/);

@@ -130,9 +130,9 @@ npm run dev
 - Frontend: `http://localhost:5174`
 - Backend: `http://localhost:5000`
 
-`npm run seed` populates a fictional but internally-consistent UMA demo dataset (nine role
-profiles, faculties/cost centers, suppliers, approval rules, budget rules,
-requests across every lifecycle stage). The demo password is **not** a fixed value in source —
+`npm run seed` populates a fictional UMA demo dataset: faculties/cost centers and their budgets,
+suppliers, expense types, approval, budget and document rules, accounting mappings and four staff
+accounts. It creates no requests. The demo password is **not** a fixed value in source —
 it comes from `SEED_DEMO_PASSWORD` if set, otherwise a random password is generated per run and
 printed in the seed's final JSON summary (`password`/`passwordSource` fields). Capture it from that
 output; it is not written anywhere else.
@@ -143,37 +143,28 @@ previous month through today in SUNAT's authoritative record shape (`sourceLabel
 `SUNAT_EXCHANGE_RATE_ENDPOINT` nor `EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK`. It also installs an
 uncertified BBVA fixed-width configuration with a fictional debit account (notes say DEMO; a
 configuration Treasury set up is left alone) so bank files can be generated outside production.
-Every scenario goes through the real services. Scenarios (`developmentScenarioKey`), all built by
-the seed:
+Demo accounts (all with the demo password):
 
-| # | Scenario | Resulting status |
+| DNI | Account | Role |
 | --- | --- | --- |
-| 01 | Draft (A1 goods) | `BORRADOR` |
-| 02 | Waiting for the first jefe (area director) | `PENDIENTE_APROBACION` |
-| 03 | Forwarded by the director, waiting for the vice-rector | `PENDIENTE_APROBACION` |
-| 04 | USD CAPEX > PEN 100,000, chain done, waiting for the Rectorate rule stage | `PENDIENTE_APROBACION` |
-| 05 | Approved, budget committed automatically | `COMPROMISO_PRESUPUESTAL` |
-| 06 | Purchase Order issued, invoice provisioned | `CONTABILIZADO` |
-| 07 | Payable scheduled on the next 15th/30th cycle | `PROGRAMADO` |
-| 08 | BBVA TXT to a Scotiabank beneficiary, SPOT detracción pending | `TXT_GENERADO` |
-| 09 | USD CAPEX in a BBVA USD TXT (Interbank beneficiary) | `TXT_GENERADO` |
-| 10 | Paid by BBVA, awaiting reconciliation | `PAGADO` |
-| 11 | Full A1 cycle with PO: paid, reconciled, closed | `CERRADO` |
-| 12 | Track C advance paid, rendition pending (due in working days) | `PAGADO` |
-| 13 | Track C advance rendered, validated, reconciled, closed | `CERRADO` |
-| 14 | Track C undocumented reimbursement, declaration approved and provisioned | `CONTABILIZADO` |
-| 15 | Observed by the area director | `OBSERVADO` |
-| 16 | Rejected | `RECHAZADO` |
-| 17 | Budget exception awaiting Management (extraordinary approval) | `OBSERVADO_PRESUPUESTO` |
-| 18 | Draft dated in the closed previous period | `BORRADOR` |
-| 19 | Track B direct payment, paid and reconciled (ready to close) | `CONCILIADO` |
-| 20 | SPOT maintenance service: net BBVA payment + Banco de la Nación deposit | `PAGADO` |
-| 21 | A1 framework PO invoiced through an A2 ZIP batch (two invoices, balance left) | `CONTABILIZADO` |
+| 10000001 | Administración ERP UMA (Demo) | Admin |
+| 10000005 | Contabilidad UMA (Demo) | Accounting |
+| 10000006 | Tesorería UMA (Demo) | Treasury |
+| 10000007 | Tesorería - Presupuesto UMA (Demo) | Treasury (budget plans and exceptions) |
 
-Scenarios paid during the seed are scheduled for today with an audited off-cycle reason (a
-payment cannot be confirmed before its date); the others use the default cycle date. Re-running
-the seed reuses scenarios that already exist. `backend/test/seedSmoke.test.js` runs the whole seed
-against a throwaway database and storage directory.
+Earlier seeds also created requesters, area directors, the Vice Rector, Management and
+Procurement (DNI 10000002-10000004 and 10000008-10000013) and 21 demo requests made by them. Those
+accounts and everything they own (their requests with each request's purchase order, invoices,
+journals, budget commitment, payment batches and bank files, comments, notifications, drafts and
+uploaded files) are removed by `npm run demo:remove-accounts`: it shows what would go and changes
+nothing unless `-- --apply`, writes every removed record to an EJSON backup under `BACKUP_DIR`
+first, gives the commitments' budget use back to the budget plans, unlinks anyone who reported to
+a removed account and keeps the audit history. It stops for manual review when another request
+still waits on one of those accounts' approval or shares a payment batch or bank file with their
+requests. `npm run seed` runs it first on its own database; for the Render database run it from
+your own computer with that `MONGODB_URI` (like `account:recover`). Re-running the seed reuses
+what already exists. `backend/test/seedSmoke.test.js` runs the whole seed against a throwaway
+database and storage directory.
 
 To wipe and recreate (refuses to run outside a database whose name contains `erp_financial`,
 `development`, or `dev`, and refuses to run at all when `NODE_ENV=production`):
