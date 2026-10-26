@@ -109,6 +109,23 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     const preferred = await accounts.find({ supplier: current.supplier, currency: "PEN", accountType: "CURRENT", active: true, preferred: true }).toArray();
     assert.deepEqual(preferred.map((account) => account.accountNumber), [current.accountNumber], "the current demo account is the preferred one");
     assert.equal((await accounts.findOne({ accountNumber: "00119999000200000123" })).active, false, "the older one is kept, inactive");
+
+    // A seed run in an earlier month left a scenario waiting for approval in that month, which the
+    // seed has since closed: it is created again in this month instead of failing on the closed
+    // period (ACCOUNTING_PERIOD_CLOSED).
+    const today = new Date();
+    const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+    const requests = db.collection("financialrequests");
+    const stale = await requests.findOne({ developmentScenarioKey: "UMA_02_PENDIENTE_DIRECTOR" });
+    await requests.updateOne({ _id: stale._id }, { $set: { accountingPeriod: lastMonth } });
+    const rerun = await seedOnce();
+    assert.equal(rerun.success, true, "the seed runs again over last month's unfinished demo data");
+    const recreated = await requests.findOne({ developmentScenarioKey: "UMA_02_PENDIENTE_DIRECTOR" });
+    assert.notEqual(String(recreated._id), String(stale._id), "created again");
+    assert.deepEqual([recreated.accountingPeriod, recreated.status, recreated.requestNumber], [today.toISOString().slice(0, 7), "PENDIENTE_APROBACION", stale.requestNumber]);
+    // One that went past approval cannot be redone: the seed says what to do instead.
+    await requests.updateOne({ developmentScenarioKey: "UMA_11_CERRADO_BCP" }, { $set: { accountingPeriod: lastMonth } });
+    await assert.rejects(seedOnce(), (error) => /UMA_11_CERRADO_BCP.*seed:reset/s.test(`${error.stderr || ""}${error.message}`));
   } finally {
     connection ||= await mongoose.createConnection(uri).asPromise();
     await connection.dropDatabase();
