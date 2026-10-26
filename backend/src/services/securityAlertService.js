@@ -14,7 +14,6 @@ function alertMessage(kind, audit, entity) {
     case "BANK_FORMAT_CHANGED": return notificationText("{actor} changed a bank file format.", { actor });
     case "PERMISSIONS_CHANGED": return notificationText("{actor} changed the additional permissions of {name}.", { actor, name });
     case "FINANCE_ROLE_ASSIGNED": return notificationText("{actor} gave {name} the {role} role.", { actor, name, role: audit.newValues?.role || "" });
-    case "ADMIN_ACCOUNT_LOCKED": return notificationText("The administrator account of {name} was locked after repeated failed sign-ins.", { name: audit.actorName || name });
     default: return null;
   }
 }

@@ -18,8 +18,6 @@ const BACKUP_POLL_MS = 3000;
 const numberFields = [
   ["passwordPolicy", "minLength", "Minimum password length", "Characters (10 to 72)."],
   ["passwordPolicy", "expiryDays", "Password expiry (days)", "0 means passwords never expire. An expired password must be changed at the next sign-in."],
-  ["passwordPolicy", "maxFailedAttempts", "Failed sign-ins before locking", "Consecutive wrong passwords or codes."],
-  ["passwordPolicy", "lockoutMinutes", "Lock duration (minutes)", "How long a locked account waits before it can try again."],
   ["session", "userMinutes", "Session length (minutes)", "For everyone except the Super Admin (15 to 1440)."],
   ["session", "superAdminMinutes", "Super Admin session length (minutes)", "Shorter on purpose (10 to 240)."]
 ];

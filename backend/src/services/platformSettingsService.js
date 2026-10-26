@@ -14,18 +14,12 @@ let cachedAt = 0;
 export const SETTINGS_LIMITS = Object.freeze({
   minLength: [10, 72],
   expiryDays: [0, 365],
-  maxFailedAttempts: [1, 20],
-  lockoutMinutes: [1, 1440],
   userMinutes: [15, 1440],
   superAdminMinutes: [10, 240]
 });
 
 const SUPER_ADMIN_DEFAULT_SESSION_MINUTES = 60;
-// How long an account stays locked after too many failed sign-ins, unless the Super Admin or
-// LOGIN_LOCKOUT_MINUTES sets another value.
-export const DEFAULT_LOCKOUT_MINUTES = 5;
-const PREVIOUS_DEFAULT_LOCKOUT_MINUTES = 15;
-const LOCKOUT_DEFAULT_MIGRATION_KEY = "2026-10-lockout-5-minutes";
+const LOCKOUT_REMOVAL_MIGRATION_KEY = "2026-10-remove-sign-in-lockout";
 
 export function clearPlatformSettingsCache() {
   cached = null;
@@ -55,9 +49,7 @@ export function effectiveSettings(settings = {}, env = process.env) {
   return {
     passwordPolicy: {
       minLength: policy.minLength || 10,
-      expiryDays: policy.expiryDays || 0,
-      maxFailedAttempts: policy.maxFailedAttempts || Math.max(1, Number(env.LOGIN_MAX_FAILED_ATTEMPTS) || 5),
-      lockoutMinutes: policy.lockoutMinutes || Math.max(1, Number(env.LOGIN_LOCKOUT_MINUTES) || DEFAULT_LOCKOUT_MINUTES)
+      expiryDays: policy.expiryDays || 0
     },
     session: {
       userMinutes: session.userMinutes || Math.round(envMinutes(env.JWT_EXPIRES_IN || "8h") || 480),
@@ -126,27 +118,19 @@ function text(value, field) {
   return result;
 }
 
-// The settings page saves every value it shows, so a Super Admin who saved it for any other
-// reason also stored the then-default 15-minute lock, which would keep overriding the new
-// default. Once, at server start, a stored 15 becomes 5; any value chosen after this run stays.
-export async function migrateLockoutDefault({ db = mongoose.connection.db } = {}) {
+// Accounts no longer lock after failed sign-ins (the login route still throttles wrong passwords
+// per IP). Once, at server start, the lock left on accounts and the two lockout settings are
+// removed, so an account locked before this release can sign in straight away.
+export async function removeSignInLockout({ db = mongoose.connection.db, now = new Date() } = {}) {
   const runs = db.collection("migrationruns");
-  if (await runs.findOne({ key: LOCKOUT_DEFAULT_MIGRATION_KEY })) return { applied: false, changed: false };
-  const settings = db.collection("platformsettings");
-  const saved = await settings.findOne({ key: "platform", "passwordPolicy.lockoutMinutes": PREVIOUS_DEFAULT_LOCKOUT_MINUTES });
-  const now = new Date();
-  if (saved) {
-    await settings.updateOne({ _id: saved._id }, { $set: { "passwordPolicy.lockoutMinutes": DEFAULT_LOCKOUT_MINUTES, updatedAt: now } });
-    await db.collection("auditlogs").insertOne({
-      entityType: "PlatformSettings", entityId: saved._id, action: "PLATFORM_SETTINGS_UPDATED", module: "SUPER_ADMIN", actorName: "System",
-      comments: `The sign-in lock now lasts ${DEFAULT_LOCKOUT_MINUTES} minutes by default; the stored ${PREVIOUS_DEFAULT_LOCKOUT_MINUTES} was the previous default.`,
-      oldValues: { passwordPolicy: { lockoutMinutes: PREVIOUS_DEFAULT_LOCKOUT_MINUTES } }, newValues: { passwordPolicy: { lockoutMinutes: DEFAULT_LOCKOUT_MINUTES } },
-      createdAt: now, updatedAt: now
-    });
-    clearPlatformSettingsCache();
-  }
-  await runs.insertOne({ key: LOCKOUT_DEFAULT_MIGRATION_KEY, appliedAt: now, summary: { changed: Boolean(saved) }, createdAt: now, updatedAt: now });
-  return { applied: true, changed: Boolean(saved) };
+  if (await runs.findOne({ key: LOCKOUT_REMOVAL_MIGRATION_KEY })) return { applied: false, unlocked: 0 };
+  const users = db.collection("users");
+  const unlocked = await users.countDocuments({ lockedUntil: { $gt: now } });
+  await users.updateMany({ $or: [{ lockedUntil: { $exists: true } }, { failedLoginAttempts: { $exists: true } }] }, { $unset: { lockedUntil: "", failedLoginAttempts: "" } });
+  await db.collection("platformsettings").updateMany({}, { $unset: { "passwordPolicy.maxFailedAttempts": "", "passwordPolicy.lockoutMinutes": "" } });
+  clearPlatformSettingsCache();
+  await runs.insertOne({ key: LOCKOUT_REMOVAL_MIGRATION_KEY, appliedAt: now, summary: { unlocked }, createdAt: now, updatedAt: now });
+  return { applied: true, unlocked };
 }
 
 export async function updatePlatformSettings(body, { user, req }) {
@@ -156,9 +140,7 @@ export async function updatePlatformSettings(body, { user, req }) {
   const next = {
     passwordPolicy: {
       minLength: boundedNumber(policy.minLength, "minLength"),
-      expiryDays: boundedNumber(policy.expiryDays, "expiryDays"),
-      maxFailedAttempts: boundedNumber(policy.maxFailedAttempts, "maxFailedAttempts"),
-      lockoutMinutes: boundedNumber(policy.lockoutMinutes, "lockoutMinutes")
+      expiryDays: boundedNumber(policy.expiryDays, "expiryDays")
     },
     session: {
       userMinutes: boundedNumber(session.userMinutes, "userMinutes"),

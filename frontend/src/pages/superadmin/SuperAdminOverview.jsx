@@ -1,4 +1,4 @@
-import { Activity, BellRing, Lock, RefreshCw, ShieldAlert, UserCog } from "lucide-react";
+import { Activity, BellRing, RefreshCw, ShieldAlert, UserCog } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client.js";
@@ -52,7 +52,6 @@ export default function SuperAdminOverview() {
       {data && <>
         <div className="stats-grid">
           <StatCard label="Active administrators" value={admins.activeAdmins ?? 0} tone="success" icon={UserCog} to="/super-admin/administrators" actionLabel="Manage administrators" />
-          <StatCard label="Locked administrators" value={admins.lockedAdmins ?? 0} tone={admins.lockedAdmins ? "danger" : "neutral"} icon={Lock} to="/super-admin/administrators" />
           <StatCard label="Security alerts (7 days)" value={data.alerts?.lastSevenDays ?? 0} tone={data.alerts?.lastSevenDays ? "warning" : "neutral"} icon={BellRing} to="/super-admin/alerts" actionLabel="Review alerts" />
           <StatCard label="Blocked sign-ins (24 hours)" value={data.signIns?.blockedLast24h ?? 0} tone={data.signIns?.blockedLast24h ? "warning" : "neutral"} icon={ShieldAlert} to="/super-admin/audit?module=AUTH&blocked=true" actionLabel="Open audit log" />
         </div>

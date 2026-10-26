@@ -11,7 +11,7 @@ import { createSuperAdmin, listSuperAdmins, resetSuperAdminTwoFactor } from "../
 //   Lost phone:      npm run superadmin:reset-2fa -- --dni=12345678
 //
 // Create prints a temporary password once; the first sign-in asks to change it and to set up the
-// authenticator app. A locked Super Admin is unlocked with npm run account:recover.
+// authenticator app. A Super Admin who lost the password recovers it with npm run account:recover.
 //
 // PowerShell:  $env:MONGODB_URI="mongodb+srv://..."; npm run superadmin:list
 const argument = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);

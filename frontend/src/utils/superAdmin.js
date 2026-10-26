@@ -26,8 +26,7 @@ export const securityAlertLabels = Object.freeze({
   APPROVAL_RULE_CHANGED: "Approval rule changed",
   BANK_FORMAT_CHANGED: "Bank file format changed",
   PERMISSIONS_CHANGED: "Additional permissions changed",
-  FINANCE_ROLE_ASSIGNED: "Treasury or Accounting role given",
-  ADMIN_ACCOUNT_LOCKED: "Administrator account locked"
+  FINANCE_ROLE_ASSIGNED: "Treasury or Accounting role given"
 });
 
 // The record an audit entry is about, in a few words.

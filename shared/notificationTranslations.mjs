@@ -149,7 +149,6 @@ export default {
   "{actor} changed a bank file format.": "{actor} cambió un formato de archivo bancario.",
   "{actor} changed the additional permissions of {name}.": "{actor} cambió los permisos adicionales de {name}.",
   "{actor} gave {name} the {role} role.": "{actor} asignó a {name} el rol {role}.",
-  "The administrator account of {name} was locked after repeated failed sign-ins.": "La cuenta de administrador de {name} se bloqueó tras varios intentos fallidos de inicio de sesión.",
 
   // Rendition deadline reminders
   "Rendition due soon": "Rendición por vencer",

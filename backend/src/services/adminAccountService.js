@@ -76,9 +76,6 @@ function adminView(user, activity = {}) {
     role: user.role,
     previousRole: user.previousRole || null,
     active: user.active !== false,
-    locked: status.locked,
-    lockedUntil: status.lockedUntil,
-    failedLoginAttempts: status.failedLoginAttempts,
     passwordResetRequired: status.passwordResetRequired,
     twoFactorEnabled: Boolean(user.twoFactor?.enabled),
     lastLoginAt: user.lastLoginAt || null,
@@ -129,7 +126,6 @@ export async function listAdministrators(query = {}) {
   const summary = {
     activeAdmins: data.filter((row) => row.role === ROLES.ADMIN && row.active).length,
     inactiveAdmins: data.filter((row) => row.role === ROLES.ADMIN && !row.active).length,
-    lockedAdmins: data.filter((row) => row.role === ROLES.ADMIN && row.locked).length,
     superAdmins: data.filter((row) => row.role === ROLES.SUPER_ADMIN && row.active).length,
     activityDays: ACTIVITY_DAYS
   };
@@ -158,8 +154,6 @@ async function applyTemporaryPassword(user) {
   user.passwordResetRequired = true;
   user.passwordChangedAt = new Date();
   user.tokenVersion = (user.tokenVersion || 0) + 1;
-  user.failedLoginAttempts = 0;
-  user.lockedUntil = null;
   return password;
 }
 
@@ -209,18 +203,8 @@ export async function resetAdministratorPassword(id, { actor, req }) {
   const user = await loadAdmin(id);
   const password = await applyTemporaryPassword(user);
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "ADMIN_PASSWORD_RESET", user: actor, req, module: MODULE, newValues: { passwordResetRequired: true, sessionsRevoked: true, unlocked: true } });
+  await recordAudit({ entityType: "User", entity: user, action: "ADMIN_PASSWORD_RESET", user: actor, req, module: MODULE, newValues: { passwordResetRequired: true, sessionsRevoked: true } });
   return { data: adminView(user), temporaryPassword: password };
-}
-
-export async function unlockAdministrator(id, { actor, req }) {
-  const user = await loadAdmin(id);
-  const before = accountStatus(user);
-  user.failedLoginAttempts = 0;
-  user.lockedUntil = null;
-  await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "ADMIN_UNLOCKED", user: actor, req, module: MODULE, oldValues: { locked: before.locked, lockedUntil: before.lockedUntil }, newValues: { locked: false } });
-  return { data: adminView(user) };
 }
 
 export async function signOutAdministrator(id, { actor, req }) {

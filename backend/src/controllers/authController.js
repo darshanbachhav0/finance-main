@@ -9,7 +9,7 @@ import { AppError } from "../utils/AppError.js";
 import { ADMINISTRATOR_ROLES, ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { clientIp, recordAudit } from "../services/auditService.js";
 import { endExpiredLeaves } from "../services/userLeaveService.js";
-import { assertPasswordPolicy, effectiveSettings, getPlatformSettings, passwordExpired, publicPlatformStatus, sessionLifetime } from "../services/platformSettingsService.js";
+import { assertPasswordPolicy, getPlatformSettings, passwordExpired, publicPlatformStatus, sessionLifetime } from "../services/platformSettingsService.js";
 import { decryptSecret, encryptSecret, generateSecret, otpauthUri, verifyTotp } from "../services/twoFactorService.js";
 
 export async function sessionUser(user, settings) {
@@ -53,19 +53,6 @@ async function issueSession(user) {
   return sessionResponse(signToken(user, settings), await sessionUser(user, settings));
 }
 
-// Per-account lockout: after maxFailedAttempts consecutive failures the account refuses sign-in
-// for lockoutMinutes, whatever IP the attempts come from (the route's rate limiter only throttles
-// per IP). Platform settings override the LOGIN_MAX_FAILED_ATTEMPTS / LOGIN_LOCKOUT_MINUTES defaults.
-export function loginLockoutPolicy(env = process.env, settings = {}) {
-  const { maxFailedAttempts, lockoutMinutes } = effectiveSettings(settings, env).passwordPolicy;
-  return { maxAttempts: maxFailedAttempts, lockoutMinutes };
-}
-
-// Fixed text so the frontend can translate it; details.lockedUntil carries the time.
-function lockedMessage() {
-  return "This account is temporarily locked after repeated failed sign-in attempts. Try again later.";
-}
-
 async function auditLogin(action, { req, user, identifier, reason, blocked = false, extra }) {
   try {
     await recordAudit({
@@ -86,30 +73,8 @@ async function auditLogin(action, { req, user, identifier, reason, blocked = fal
   }
 }
 
-function assertNotLocked(user) {
-  if (user?.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
-    throw new AppError(429, lockedMessage(), { lockedUntil: user.lockedUntil }, "ACCOUNT_LOCKED");
-  }
-}
-
-// Counts a failed password or authenticator code toward the lockout. Throws when the account
-// locks; otherwise the caller throws its own error.
-async function registerFailedSignIn(user, { req, identifier, reason, action = "LOGIN_FAILED" }) {
-  const { maxAttempts, lockoutMinutes } = loginLockoutPolicy(process.env, await getPlatformSettings());
-  const updated = await User.findOneAndUpdate({ _id: user._id }, { $inc: { failedLoginAttempts: 1 } }, { new: true, projection: { failedLoginAttempts: 1 } });
-  if ((updated?.failedLoginAttempts || 0) >= maxAttempts) {
-    const lockedUntil = new Date(Date.now() + lockoutMinutes * 60000);
-    await User.updateOne({ _id: user._id }, { $set: { lockedUntil, failedLoginAttempts: 0 } });
-    await auditLogin(action, { req, user, identifier, reason, blocked: true });
-    await auditLogin("ACCOUNT_LOCKED", { req, user, identifier, reason: `Locked for ${lockoutMinutes} minutes after ${maxAttempts} failed sign-ins.`, blocked: true });
-    throw new AppError(429, lockedMessage(), { lockedUntil }, "ACCOUNT_LOCKED");
-  }
-}
-
 async function completeSignIn(user, { req, identifier, method }) {
-  await User.updateOne({ _id: user._id }, { $set: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date(), lastLoginIp: clientIp(req) } });
-  user.failedLoginAttempts = 0;
-  user.lockedUntil = null;
+  await User.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date(), lastLoginIp: clientIp(req) } });
   await auditLogin("LOGIN_SUCCEEDED", { req, user, identifier, extra: method ? { method } : undefined });
   return issueSession(user);
 }
@@ -142,14 +107,8 @@ export const login = asyncHandler(async (req, res) => {
     ? await User.findOne({ dni: identifier })
     : await User.findOne({ email: identifier });
 
-  if (user?.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
-    await auditLogin("LOGIN_LOCKED", { req, user, identifier, reason: "Account temporarily locked after repeated failed sign-ins.", blocked: true });
-    assertNotLocked(user);
-  }
-
   if (!user || !user.active || !(await user.comparePassword(password))) {
     const reason = !user ? "Unknown account." : !user.active ? "Inactive account." : "Wrong password.";
-    if (user) await registerFailedSignIn(user, { req, identifier, reason });
     await auditLogin("LOGIN_FAILED", { req, user, identifier, reason, blocked: true });
     throw new AppError(401, "Invalid credentials.");
   }
@@ -176,10 +135,8 @@ export const loginTwoFactor = asyncHandler(async (req, res) => {
   if (!user || !user.active || (decoded.tokenVersion || 0) !== (user.tokenVersion || 0) || !user.twoFactor?.enabled) {
     throw new AppError(401, "The sign-in step expired. Enter your DNI and password again.", undefined, ERROR_CODES.TWO_FACTOR_INVALID);
   }
-  assertNotLocked(user);
   const step = verifyTotp(decryptSecret(user.twoFactor.secret), code, { lastUsedStep: user.twoFactor.lastUsedStep });
   if (step === null) {
-    await registerFailedSignIn(user, { req, identifier: user.dni, reason: "Wrong authenticator code.", action: "TWO_FACTOR_FAILED" });
     await auditLogin("TWO_FACTOR_FAILED", { req, user, identifier: user.dni, reason: "Wrong authenticator code.", blocked: true });
     throw new AppError(401, "The authenticator code is not valid. Check the time on your phone and try again.", undefined, ERROR_CODES.TWO_FACTOR_INVALID);
   }
