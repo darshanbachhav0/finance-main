@@ -17,6 +17,7 @@ import {
   requestPopulate,
   publicRequestPayload,
   requestAuthorizedCostCenters,
+  requestBeneficiaryCostCenters,
   requestDocumentRequirements,
   requestDocumentStatus,
   requestFormPolicy,
@@ -101,6 +102,10 @@ export const previewRequestInvoice = asyncHandler(async (req, res) => {
 
 export const getAuthorizedCostCenters = asyncHandler(async (req, res) => {
   res.json({ data: await requestAuthorizedCostCenters(req.user) });
+});
+
+export const getBeneficiaryCostCenters = asyncHandler(async (_req, res) => {
+  res.json({ data: await requestBeneficiaryCostCenters() });
 });
 
 export const getBudgetPreview = asyncHandler(async (req, res) => {

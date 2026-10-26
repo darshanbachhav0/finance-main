@@ -21,6 +21,7 @@ import {
   Save,
   Send,
   ShoppingCart,
+  Split,
   Trash2,
   UserPlus,
   UserRound,
@@ -42,6 +43,8 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import QuotationComparison from "../components/QuotationComparison.jsx";
 import RequestReview from "../components/RequestReview.jsx";
 import BudgetRemainingSummary from "../components/BudgetRemainingSummary.jsx";
+import CostAllocationEditor, { newCostAllocation } from "../components/CostAllocationEditor.jsx";
+import { costAllocationProblems } from "../../../shared/costCenterAllocation.mjs";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { supplierCreditDays } from "../../../shared/invoiceFinance.mjs";
 import SupplierPaymentCondition from "../components/SupplierPaymentCondition.jsx";
@@ -135,6 +138,8 @@ function initialForm() {
     priority: "MEDIA",
     frequency: "ONE_OFF",
     requesterCostCenter: "",
+    // Propio: the requester's own CECO. Por Encargo: another school or department's (costAllocations).
+    costCenterType: "PROPIO",
     schoolOrDepartment: "",
     areaCorrelative: "",
     issueDate: today,
@@ -228,12 +233,13 @@ export default function RequestCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const isEditing = Boolean(id);
-  const [masters, setMasters] = useState({ suppliers: [], costCenters: [], projects: [], periods: [] });
+  const [masters, setMasters] = useState({ suppliers: [], costCenters: [], beneficiaryCenters: [], projects: [], periods: [] });
   const [supplierScope, setSupplierScope] = useState(null);
   const [supplierSearching, setSupplierSearching] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [capex, setCapex] = useState(initialCapex);
   const [lines, setLines] = useState([emptyLine()]);
+  const [costAllocations, setCostAllocations] = useState([]);
   const [showItems, setShowItems] = useState(false);
   const [quotations, setQuotations] = useState([]);
   const [quotationFiles, setQuotationFiles] = useState({});
@@ -282,14 +288,17 @@ export default function RequestCreate() {
           api.get("/suppliers", { params: { pageSize: 100 } }),
           api.get("/requests/authorized-cost-centers"),
           api.get("/projects", { params: { pageSize: 100, active: true } }),
-          api.get("/accounting-periods", { params: { pageSize: 100 } })
+          api.get("/accounting-periods", { params: { pageSize: 100 } }),
+          // Por Encargo's schools and departments; Propio requests work without them.
+          api.get("/requests/beneficiary-cost-centers").catch(() => ({ data: { data: [] } }))
         ];
         if (isEditing) calls.push(api.get(`/requests/${id}`));
-        const [suppliersResponse, centersResponse, projectsResponse, periodsResponse, requestResponse] = await Promise.all(calls);
+        const [suppliersResponse, centersResponse, projectsResponse, periodsResponse, beneficiaryResponse, requestResponse] = await Promise.all(calls);
         if (!active) return;
         const nextMasters = {
           suppliers: suppliersResponse.data.data,
           costCenters: centersResponse.data.data,
+          beneficiaryCenters: beneficiaryResponse.data.data || [],
           projects: projectsResponse.data.data.filter((item) => item.active),
           periods: periodsResponse.data.data
         };
@@ -318,6 +327,7 @@ export default function RequestCreate() {
             priority: request.priority || "MEDIA",
             frequency: request.frequency || request.opexDetails?.expenseFrequency || "ONE_OFF",
             requesterCostCenter: idOf(request.requesterCostCenter),
+            costCenterType: request.costCenterType === "POR_ENCARGO" ? "POR_ENCARGO" : "PROPIO",
             schoolOrDepartment: request.schoolOrDepartment || "",
             areaCorrelative: request.areaCorrelative || "",
             issueDate: request.issueDate.slice(0, 10),
@@ -360,6 +370,7 @@ export default function RequestCreate() {
             totalAmount: line.totalAmount
           }));
           setLines(serverLines);
+          setCostAllocations((request.costAllocations || []).map((allocation) => ({ ...newCostAllocation(String(allocation.percentage ?? "")), costCenter: idOf(allocation.costCenter) })));
           setShowItems(serverLines.length > 1 || serverLines.some((line) => line.legacyAmounts || Number(line.quantity || 1) !== 1));
           setQuotations((request.quotations || []).map((quotation) => ({
             clientId: quotation._id,
@@ -393,6 +404,16 @@ export default function RequestCreate() {
     return () => { active = false; };
   }, [id]);
 
+  // Por Encargo (a supplier request only: Track C stays on the requester's own CECO). Its lines
+  // carry the first beneficiary's CECO, as the server saves them.
+  const onBehalf = form.flowType !== "C" && form.costCenterType === "POR_ENCARGO";
+  const beneficiaryCenter = onBehalf ? costAllocations[0]?.costCenter || "" : "";
+  useEffect(() => {
+    if (!onBehalf) return;
+    setLines((current) => current.some((line) => line.costCenter !== beneficiaryCenter) ? current.map((line) => ({ ...line, costCenter: beneficiaryCenter })) : current);
+  }, [onBehalf, beneficiaryCenter, lines]);
+  const allocationProblems = onBehalf ? costAllocationProblems(costAllocations) : [];
+
   // Advances and reimbursements (Track C) are not invoices: their lines carry no IGV, so the
   // amount typed is the amount paid. Lines follow the track as it changes.
   const igvExempt = form.flowType === "C";
@@ -417,13 +438,14 @@ export default function RequestCreate() {
 
   // "New request" always opens a blank request; unfinished ones are listed above it.
   const draft = useWorkDraft({ scope: "request", recordId: id || "new", title: String(form.title || form.detailedDescription || "").trim().split(/\r?\n/)[0] || "Financial request", resumeLatest: isEditing, enabled: hydrated && !loading && hydratedRecord === (id || "new"), sourceVersion,
-    value: { form, capex, lines, showItems, quotations, files, quotationFiles, removedAttachmentIds, invoiceDetails, stepId, visitedSteps, completedSteps },
+    value: { form, capex, lines, costAllocations, showItems, quotations, files, quotationFiles, removedAttachmentIds, invoiceDetails, stepId, visitedSteps, completedSteps },
     restore: (data) => {
       if (!data) return;
       // Drafts from the earlier forms lack the newer fields and kept the frequency with OPEX.
       setForm({ ...initialForm(), ...data.form, frequency: data.form?.frequency || data.opexFrequency || "ONE_OFF" });
       setCapex(data.capex || initialCapex);
       setLines((data.lines || [emptyLine()]).map(restoreEditorLine));
+      setCostAllocations(data.costAllocations || []);
       setShowItems(Boolean(data.showItems) || (data.lines || []).length > 1);
       // A draft kept with the earlier dotted quote ids could never be saved: the ids are renamed.
       const restoredQuotes = withSafeQuotationIds(data.quotations || [], data.quotationFiles || {});
@@ -481,11 +503,13 @@ export default function RequestCreate() {
     flowType: form.flowType, requestType: form.requestType, expenseNature: form.expenseNature,
     issueDate: form.issueDate, accountingPeriod: form.accountingPeriod, currency: form.currency,
     project: form.requestType === "CAPEX" ? capex.projectPep || masters.projects.find(item => item._id === capex.projectId)?.code : undefined,
-    lines: lines.map(requestLinePayload)
-  }), [form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, capex.projectPep, capex.projectId, masters.projects, lines]);
+    lines: lines.map(requestLinePayload),
+    // Por Encargo previews each beneficiary's budget with its share.
+    ...(onBehalf ? { costCenterType: "POR_ENCARGO", costAllocations: costAllocations.map(({ costCenter, percentage }) => ({ costCenter, percentage })) } : {})
+  }), [form.flowType, form.requestType, form.expenseNature, form.issueDate, form.accountingPeriod, form.currency, capex.projectPep, capex.projectId, masters.projects, lines, onBehalf, costAllocations]);
 
   useEffect(() => {
-    if (!hydrated || !form.accountingPeriod || lines.some((line) => !line.costCenter || !(Number(line.totalAmount) > 0))) {
+    if (!hydrated || !form.accountingPeriod || allocationProblems.length || lines.some((line) => !line.costCenter || !(Number(line.totalAmount) > 0))) {
       setBudgetPreview({ status: "PENDING_VALIDATION", lines: [] });
       setBudgetLoading(false);
       return undefined;
@@ -573,8 +597,10 @@ export default function RequestCreate() {
     const next = { payee, route, employeeNeed: form.requestType === "REEMBOLSO_SIN_SUSTENTO" ? "reimbursement" : "advance", capex: form.requestType === "CAPEX", ...patch };
     const track = quickTrack(next);
     clearErrors(["requestType", "supplier", "paymentAccount"]);
-    setForm((current) => ({ ...current, ...track, supplier: track.flowType === "C" ? "" : current.supplier, paymentAccount: track.flowType === "C" ? "" : current.paymentAccount }));
+    setForm((current) => ({ ...current, ...track, supplier: track.flowType === "C" ? "" : current.supplier, paymentAccount: track.flowType === "C" ? "" : current.paymentAccount, costCenterType: track.flowType === "C" ? "PROPIO" : current.costCenterType }));
     if (track.flowType === "C") {
+      // An advance or reimbursement is charged to the requester's own CECO.
+      if (onBehalf) setLines((current) => current.map((line) => ({ ...line, costCenter: form.requesterCostCenter })));
       invoiceReadVersion.current += 1;
       setFiles((current) => ({ ...current, xml: [], pdf: [], feeReceipt: [] }));
       setInvoiceCheck(null);
@@ -764,6 +790,20 @@ export default function RequestCreate() {
     });
   }
 
+  // Propio needs nothing more. Por Encargo asks for the school or department the request is for;
+  // going back to Propio returns the lines to the requester's CECO.
+  function changeCostCenterType(value) {
+    clearErrors(["costCenterType", "costAllocations", ...Object.keys(errors).filter((key) => key.startsWith("costAllocations."))]);
+    setForm((current) => ({ ...current, costCenterType: value }));
+    if (value === "POR_ENCARGO") setCostAllocations((current) => (current.length ? current : [newCostAllocation("100")]));
+    else if (onBehalf) setLines((current) => current.map((line) => ({ ...line, costCenter: form.requesterCostCenter })));
+  }
+
+  function changeCostAllocations(next) {
+    clearErrors(["costAllocations", ...Object.keys(errors).filter((key) => key.startsWith("costAllocations."))]);
+    setCostAllocations(next);
+  }
+
   function updateLine(index, patch) {
     window.cancelAnimationFrame(validationFocusRef.current);
     setLines((current) => current.map((line, currentIndex) => currentIndex === index ? editRequestLine(line, patch) : line));
@@ -812,9 +852,11 @@ export default function RequestCreate() {
       if (form.issueDate && form.issueDate > todayIso()) next.issueDate = "The requirement date cannot be later than today.";
       const period = masters.periods.find((item) => item.period === form.accountingPeriod);
       if (form.accountingPeriod && (!period || period.status !== "OPEN")) next.accountingPeriod = "Accounting period must be open.";
+      // Por Encargo: the same distribution rules the server applies (shared/costCenterAllocation.mjs).
+      for (const problem of allocationProblems) next[problem.field] ||= problem.message;
       if (!lines.length) next.lines = "At least one request line is required.";
       lines.forEach((line, lineIndex) => {
-        if (!line.costCenter) next[`lines.${lineIndex}.costCenter`] = "Select a Cost Center.";
+        if (!line.costCenter && !onBehalf) next[`lines.${lineIndex}.costCenter`] = "Select a Cost Center.";
         if (!(Number(line.totalAmount) > 0)) next[`lines.${lineIndex}.totalAmount`] = simpleAmount ? "Enter the total amount." : "Total must be greater than zero.";
         if (simpleAmount) return;
         if (!String(line.itemDescription || "").trim() && (!line.legacyAmounts || officialRequest && submitting)) next[`lines.${lineIndex}.itemDescription`] = "Item description is required.";
@@ -903,6 +945,7 @@ export default function RequestCreate() {
     const payloadForm = {
       ...formFields,
       requestType: requestTypeForFlow(form.flowType, form.requestType),
+      costCenterType: onBehalf ? "POR_ENCARGO" : "PROPIO",
       title: String(form.title || "").trim() || titleFromDescription(form.detailedDescription || form.description),
       description: form.description || form.detailedDescription
     };
@@ -921,6 +964,7 @@ export default function RequestCreate() {
     } : {}));
     data.append("opexDetails", JSON.stringify(form.requestType === "OPEX" ? { expenseFrequency: form.frequency } : {}));
     data.append("lines", JSON.stringify(lines.map(requestLinePayload)));
+    data.append("costAllocations", JSON.stringify(onBehalf ? costAllocations.map(({ costCenter, percentage }) => ({ costCenter, percentage })) : []));
     data.append("quotations", JSON.stringify(quotations.filter(quotationHasData).map((quotation) => ({
       ...quotation,
       clientId: undefined,
@@ -1146,9 +1190,19 @@ export default function RequestCreate() {
           </WizardSection>
 
           <WizardSection title="Amount and budget">
+            {payee === "supplier" && <div className="field"><span>{t("Cost center type")} *</span>
+              <fieldset className="quick-choices compact-choices">
+                <legend className="sr-only">{t("Cost center type")}</legend>
+                <Choice name="cost-center-type" value="PROPIO" current={onBehalf ? "POR_ENCARGO" : "PROPIO"} icon={Building2} title="Own cost center" hint="Charged to your area's cost center." onChange={changeCostCenterType} />
+                <Choice name="cost-center-type" value="POR_ENCARGO" current={onBehalf ? "POR_ENCARGO" : "PROPIO"} icon={Split} title="On behalf of another area" hint="For another school or department, charged to its cost center." onChange={changeCostCenterType} />
+              </fieldset>
+            </div>}
+            {onBehalf && <CostAllocationEditor allocations={costAllocations} centers={masters.beneficiaryCenters} ownCostCenter={form.requesterCostCenter} total={totals.total} currency={form.currency} errors={errors} onChange={changeCostAllocations} onFieldBlur={validateField} />}
             <div className="form-grid two-column-form">
-              <div className="field"><span>{t("Area")}</span><strong className="field-static">{user.area || "-"}</strong></div>
-              {masters.costCenters.length > 1
+              <div className="field"><span>{t(onBehalf ? "Requesting area" : "Area")}</span><strong className="field-static">{user.area || "-"}</strong></div>
+              {onBehalf
+                ? <div className="field"><span>{t("Requesting CECO")}</span><strong className="field-static">{costCenter ? `${costCenter.code} - ${costCenter.name}` : "-"}</strong>{fieldError("requesterCostCenter")}</div>
+                : masters.costCenters.length > 1
                 ? <div><SearchSelect label="Cost Center / CECO" value={form.requesterCostCenter} options={masters.costCenters} onChange={setHeaderCostCenter} getOptionLabel={(item) => `${item.code} - ${item.name}${item.area ? ` (${item.area})` : ""}`} error={errors.requesterCostCenter} required searchPlaceholder="Search authorized CECO..." /><small className="field-hint">{ownCostCenterHint}</small></div>
                 : <div className="field"><span>{t("Cost Center / CECO")}</span><strong className="field-static">{costCenter ? `${costCenter.code} - ${costCenter.name}` : "-"}</strong>{fieldError("requesterCostCenter")}</div>}
               <label className={fieldClass("issueDate")}><span>{t("Requirement date")} *</span><DateInput required max={todayIso()} value={form.issueDate} onChange={(event) => changeForm({ issueDate: event.target.value, accountingPeriod: event.target.value.slice(0, 7) })} onBlur={() => validateField("issueDate", "accountingPeriod")} aria-invalid={Boolean(errors.issueDate)} />{fieldError("issueDate") || <small className="field-hint">{t("Today in Lima unless the need started earlier.")}</small>}</label>
@@ -1167,7 +1221,7 @@ export default function RequestCreate() {
             {simpleAmount && <button type="button" className="text-button" onClick={() => setShowItems(true)}><ListPlus size={15} aria-hidden="true" />{t("Detail it by items")}</button>}
             <div className="request-items-total"><span>{t("Request total")}</span><strong>{formatCurrency(totals.total, form.currency, language)}</strong></div>
             {currencyMismatch && <div className="inline-alert alert-warning"><AlertTriangle size={16} aria-hidden="true" /><span>{t("The account is in {account} and the request in {request}. Nothing is converted: choose an account in {request} or change the currency.").replace("{account}", selectedAccount.currency).replaceAll("{request}", form.currency)}</span></div>}
-            {masters.costCenters.length > 1 && lines.length > 1 && <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.costCenter/.test(key)) ? true : undefined}>
+            {!onBehalf && masters.costCenters.length > 1 && lines.length > 1 && <details className="request-budget-adjustments" open={Object.keys(errors).some(key => /lines\.\d+\.costCenter/.test(key)) ? true : undefined}>
               <summary>{t("Adjust budget allocation")}</summary>
               <p className="section-note">{t("Items inherit the request's cost center. Adjust only when an item uses a different cost center budget.")}</p>
               {lines.map((line, index) => <div className="request-budget-line" key={line.clientId}><strong>{t("Item")} {index + 1}: {line.itemDescription || t("Item / service description")}</strong><div className="form-grid two-column-form"><SearchSelect label="Cost Center / CECO" value={line.costCenter} options={masters.costCenters} onChange={value => updateLine(index, { costCenter: value })} getOptionLabel={item => item.code + " - " + item.name} error={errors["lines." + index + ".costCenter"]} required searchPlaceholder="Search authorized CECO..." /></div></div>)}
@@ -1214,7 +1268,7 @@ export default function RequestCreate() {
         {stepId === "review" && <div className="wizard-step">
           <div className="section-heading"><div><h3>{t("Summary and submit")}</h3><p>{t("Check everything once. Change any part without starting again.")}</p></div></div>
           {payee === "supplier" && invoiceCheck?.invoice && <InvoiceMatchStrip invoice={invoiceCheck.invoice} form={form} totals={totals} supplier={selectedSupplier} flowType={form.flowType} />}
-          <RequestReview form={form} capex={capex} lines={lines} quotations={quotations.filter(quotationHasData)} quotationFiles={quotationFiles} files={files} existingAttachments={existingAttachments} masters={masters} totals={totals} budgetPreview={budgetPreview} selectedSupplier={selectedSupplier} selectedAccount={selectedAccount} invoice={payee === "supplier" ? { attached: invoiceAttached, ...invoiceDetails } : null} onEdit={goToStep} />
+          <RequestReview form={form} capex={capex} lines={lines} costAllocations={onBehalf ? costAllocations : []} quotations={quotations.filter(quotationHasData)} quotationFiles={quotationFiles} files={files} existingAttachments={existingAttachments} masters={masters} totals={totals} budgetPreview={budgetPreview} selectedSupplier={selectedSupplier} selectedAccount={selectedAccount} invoice={payee === "supplier" ? { attached: invoiceAttached, ...invoiceDetails } : null} onEdit={goToStep} />
         </div>}
 
         </MotionSurface>

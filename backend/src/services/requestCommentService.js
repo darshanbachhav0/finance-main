@@ -18,7 +18,7 @@ const AUTHOR_FIELDS = "name role area jobTitle";
 const idOf = (value) => String(value?._id || value || "");
 
 async function viewableRequest(requestId, user) {
-  const request = await FinancialRequest.findById(requestId).select("requestNumber title status requester solicitor approvalRouteSnapshot");
+  const request = await FinancialRequest.findById(requestId).select("requestNumber title status requester solicitor approvalRouteSnapshot costCenterReviewers");
   if (!request) throw new AppError(404, "Request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   if (!canViewRequest(request, user)) throw new AppError(403, "You do not have permission to view this request.", undefined, ERROR_CODES.FORBIDDEN);
   return request;

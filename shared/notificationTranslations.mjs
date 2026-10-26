@@ -12,6 +12,8 @@ export default {
   "{requestNumber} is waiting for {approvalLevel} approval.": "{requestNumber} está pendiente de aprobación por {approvalLevel}.",
   "Request approved": "Solicitud aprobada",
   "{requestNumber} completed its approval route.": "{requestNumber} completó su ruta de aprobación.",
+  "Request charged to your cost center": "Solicitud con cargo a tu centro de costo",
+  "{requestNumber}: {area} requests {amount} on behalf of {costCenters}. Open it to review it or comment.": "{requestNumber}: {area} solicita {amount} por encargo de {costCenters}. Ábrela para revisarla o comentar.",
   "Request observed": "Solicitud observada",
   "Request returned": "Solicitud devuelta",
   "Request rejected": "Solicitud rechazada",

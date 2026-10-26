@@ -329,6 +329,23 @@ advance's own CECO. At rendition, the check follows the approval rule: an advanc
 a plan (`NO_BUDGET`) and TRANSITIONAL lines never block, and an ACTIVE line counts what the advance
 itself reserved.
 
+**Tipo de Centro de Costo: Propio / Por Encargo** (`shared/costCenterAllocation.mjs`). A supplier
+request (A1/B) is `PROPIO` by default (every request saved before the field, too): charged as
+above. `POR_ENCARGO` means the requester's department buys on behalf of another school or
+department: `requesterArea` / `requesterCostCenter` stay the requesting department and
+`costAllocations` name the beneficiary CECO(s), chosen from the active CECO master
+(`GET /requests/beneficiary-cost-centers`), never typed. The distribution must add up to 100%
+(two decimals at most, each CECO once; one beneficiary is 100%); it is checked by the form, the
+service and the model, and each share's amount follows the request total to the cent. The lines
+carry the first beneficiary's CECO; a request shared by several CECOs reserves each one's budget
+by its percentage (`groupedRequestLines`) and books each expense debit to each CECO
+(`shareExpenseLines`), so the month-end consolidation shows each school. Track C stays `PROPIO`.
+The approval route does not change (the requester's manager chain): when a Por Encargo request is
+sent, the beneficiary CECOs' heads (their Area Director or Vice-Rector by area, or the CECO's top
+jefe in the roster) are recorded in `costCenterReviewers`, notified, and may open and comment on
+the request; they are not an approval step. Type and distribution are in the request's
+CREATED/UPDATED audit entries.
+
 ## 5. Accounting, Accounts Payable & Treasury
 
 - **Provisioning** (`accountingService.js`) posts a balanced journal (expense/asset debit, AP

@@ -22,6 +22,7 @@ import { flowTypes, requestPriorityLabels, requestTypes } from "../utils/options
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 import RequestDocumentsDrawer from "../components/RequestDocumentsDrawer.jsx";
+import { beneficiaryNames } from "../utils/costAllocation.js";
 
 // Mirrors MAX_BULK_APPROVALS in backend/src/services/approvalService.js.
 const BULK_APPROVAL_LIMIT = 50;
@@ -298,7 +299,8 @@ export default function ApprovalInbox() {
             { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => row.supplier?.legalName || row.supplier?.name || (row.flowType === "C" ? t("No supplier (Track C)") : "-") },
             { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => { const covering = activeStepOf(row)?.coveringForSnapshot?.name; return covering ? <span className="primary-cell"><span>{t(row.approvalStage || "AREA_DIRECTOR")}</span><small>{t("on behalf of {name}").replace("{name}", covering)}</small></span> : t(row.approvalStage || "AREA_DIRECTOR"); } },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },
-            { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong></div> },
+            // Por Encargo: the area that bears the expense, under the requester (always shown).
+            { key: "solicitor", type: "name", minWidth: "170px", primary: true, label: "Requester", sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => <div className="primary-cell"><strong>{row.solicitor?.name}</strong>{beneficiaryNames(row) && <small>{t("On behalf of {area}").replace("{area}", beneficiaryNames(row))}</small>}</div> },
             { key: "approvalDueAt", type: "date", primary: true, label: "SLA due", render: (row) => <div className="primary-cell"><strong className={row.sla?.overdue ? "text-danger" : ""}>{row.approvalDueAt ? formatDateTime(row.approvalDueAt) : "-"}</strong><StatusBadge status={row.sla?.alert || row.sla?.severity || "LOW"} /></div> },
             { key: "totalAmount", type: "money", sortKey: "totalPENEquivalent", label: "Amount", render: (row) => <strong>{formatCurrency(row.totalAmount || 0, row.currency, language)}</strong> },
             { key: "scheduledPaymentDate", primary: true, label: "Scheduled payment date", sortable: false, render: row => row.scheduledPaymentDate ? formatDate(row.scheduledPaymentDate, language) : "Por programar" },
