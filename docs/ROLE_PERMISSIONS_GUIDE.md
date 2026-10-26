@@ -1,10 +1,12 @@
 # UMA Finance Role Permissions Guide
 
-Detailed access and workflow reference for the nine operational profiles
+Detailed access and workflow reference for the operational profiles
 
-**Version date 16 October 2026**
+**Version date 26 October 2026**
 
 ## Changelog
+
+**Roles and approval tiers from the Manual del usuario (Sistema de Pagos UMA).** Four stored roles are added: **GAF** (Gerencia de Administración Financiera), **Legal** (Asesoría Legal), **HumanResources** (Gestión de Personas) and **Auditor** (Auditoría, read-only). **Management** is the Gerencia General. Who approves now follows the amount in UIT (FinanceConfiguration `UIT_VALUE`, default PEN 5,500): any amount needs the cost center's responsible **and their superior** (the first jefe can no longer finalize alone while a superior is available; `SUPERIOR_APPROVAL_UIT`, default 0 = always); above 5 UIT (`GAF_APPROVAL_UIT`) the GAF also approves; above 20 UIT (`GENERAL_MANAGEMENT_APPROVAL_UIT`) the Gerencia General too. A tier is skipped when someone who already approved in the chain holds that role, and a request whose tier has no active user is refused at submission (`APPROVAL_ROUTE_NOT_CONFIGURED`). The GAF also verifies bank files (`bank-file:verify`, never one they generated). **Track D (traspaso)** is new: Treasury moves money between two of UMA's own accounts in the same currency, approved by another Treasury user (Jefe de Tesorería) and the GAF. See "Approval routes and financial handoffs".
 
 **Budget folded into Treasury.** The stored role **Budget** no longer exists. Its permissions (`budget:view`, `budget:manage`) and its work — annual/monthly plans, budget rules and allocations, manual budget commitments, the year-end carry-over and the review of budget exceptions — now belong to **Treasury**. Management still alone decides a budget exception, and Procurement still issues Purchase and Service Orders. Users, previous roles and approval rules still stored as `Budget` are moved to `Treasury` automatically when the server starts, with an audit entry each (`backend/src/services/legacyRoleService.js`; `npm run migrate:retired-roles` shows the same change without applying it). Treasury therefore now both manages the budget and pays: see "Segregation of duties" below.
 
@@ -33,10 +35,14 @@ The platform separates requesting, authorization, budget control, accounting, an
 | Accounting or Contabilidad | Accounting | Supplier review, fiscal processing and renditions |
 | Treasury or Tesorería | Treasury | Budget plans and commitments, exception review, scheduling, bank files, payment and reconciliation |
 | Procurement or Abastecimiento | Procurement | Issues Purchase/Service Orders after budget commitment |
-| Management or Gerencia and Rectorado | Management | Usually RECTORATE; GENERAL_MANAGEMENT can be configured |
+| Management or Gerencia General and Rectorado | Management | Approves above 20 UIT (GENERAL_MANAGEMENT tier); decides budget exceptions |
+| Gerencia de Administración Financiera | GAF | Approves above 5 UIT and every Track D transfer; verifies bank files |
+| Asesoría Legal | Legal | Registers its area's requests, like a Solicitor |
+| Gestión de Personas | HumanResources | Registers its area's requests, like a Solicitor; reports |
+| Auditoría | Auditor | Reads every workspace, changes nothing |
 | Management Viewer | ManagementViewer | Read-only institutional management portal only |
 
-There are **nine stored roles, one per operational profile** (the former Budget role is now part of Treasury). Area Director and Vice-Rector are separate roles (`AreaDirector`, `ViceRector`) rather than a single Approver role distinguished only by approval level; they hold identical permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
+There are **thirteen stored roles, one per operational profile** (the former Budget role is now part of Treasury). Area Director and Vice-Rector are separate roles (`AreaDirector`, `ViceRector`) rather than a single Approver role distinguished only by approval level; they hold identical permissions and menus. Their approval level and area assignments determine which decisions they can make. A job title alone does not change access.
 
 **Area Director and Vice-Rector.** These are the platform's two sequential approval roles. On a manager-chain request (the requester's real organizational chain) every approver, whatever their role, chooses at their step either to **approve and finalize** or to **send it to their own jefe**; the next jefe chooses the same way, up the chain. "Send to my jefe" is offered only while the approver has an active jefe who is not on leave. See "Manager-chain approval" under the approval rules below. Each role's approval level (`AREA_DIRECTOR` for AreaDirector, `VICE_RECTOR` for ViceRector) is implied by the role itself and set automatically by the backend the moment Admin assigns that role on the Users screen — it is not a separate field Admin chooses, unlike Management's approval level (RECTORATE or GENERAL_MANAGEMENT), which remains admin-editable.
 
@@ -538,6 +544,22 @@ SOURCES S01 S02 S03 S16 S18 S26 S27
 
 <!-- pagebreak -->
 
+## Gerencia de Administración Financiera (GAF)
+
+**Stored role GAF.** Holds `request:view-all`, `request:approve`, `supplier:bank-view`, `budget:view`, `report:view`, `audit:view`, `management-portal:view` and `bank-file:verify`.
+
+- **Approves by tier:** every request above `GAF_APPROVAL_UIT` (5 UIT) after the manager chain, and step 2 of every Track D transfer. Any active GAF user can decide the step from Approvals; nobody approves their own request. When the requester's superior is the GAF, the GAF tier is recorded as SKIPPED.
+- **Approves bank files (lotes):** in Bank File Verification, like Accounting, never a file they generated.
+- Reads every submitted request (not drafts), the suppliers of every department, budgets, reports, the management portal and the Track D transfers. It registers no request, posts nothing and pays nothing.
+
+## Asesoría Legal and Gestión de Personas
+
+**Stored roles Legal and HumanResources.** Requesters of their own area, with the Solicitor's controls (own requests, authorized cost centers): `request:create`, `employee-bank:manage-own`, `supplier:propose`, plus `report:view` for Gestión de Personas. They approve only as someone's jefe in the roster. The manual's E (Devolución) and H (Honorarios) tracks they own are not built yet.
+
+## Auditor
+
+**Stored role Auditor.** Read-only oversight: `request:view-all`, `budget:view`, `report:view`, `audit:view`. On every GET the backend lets it pass any route guard an Admin passes (like the Super Admin), with bank numbers masked; it refuses every write except its own notification settings (`READ_ONLY_ROLE`). It never approves, is never a jefe or substitute, and has no tasks.
+
 ## Super Admin
 
 **Stored role SuperAdmin.** The Super Admin decides who the administrators are and oversees the platform, but never acts in a financial process. It is not one of the ten operational profiles: it holds only read permissions (`request:view-all`, `budget:view`, `report:view`, `management-portal:view`, `audit:view`, `user:manage`) and cannot be granted any other.
@@ -579,7 +601,9 @@ SLAs count Peruvian working days: weekends, national holidays and any `UMA_EXTRA
 
 ### Manager-chain approval
 
-When the requester has a jefe in the organizational roster, the route starts with their nearest available jefe (inactive or on-leave managers are skipped; if nobody is available, submission is refused with a message to contact the Admin). At each step the jefe either **approves and finalizes** — the chain is complete at that level — or **sends it to their own jefe**, who then chooses the same way. Managers who were never asked do not appear on the route. Configured approval rules that match the request still follow the chain, unless someone who approved in the chain already holds that role and approval level.
+When the requester has a jefe in the organizational roster, the route starts with their nearest available jefe (inactive or on-leave managers are skipped; if nobody is available, submission is refused with a message to contact the Admin). That first jefe is the cost center's responsible: their approval always goes to **their own superior** (Vicerrector or Gerente) while one is available — "approve and finalize" is not offered to them. From the superior on, each jefe either **approves and finalizes** — the chain is complete at that level — or **sends it to their own jefe**, who then chooses the same way. Managers who were never asked do not appear on the route.
+
+**Amount tiers (UIT).** After the chain, role-based steps follow by amount in PEN equivalent: above `GAF_APPROVAL_UIT` UIT the **GAF**, above `GENERAL_MANAGEMENT_APPROVAL_UIT` UIT the **Gerencia General** (Management). Each is decided by any active user of that role other than the requester, and is SKIPPED when someone who approved earlier on the route holds that role. Defaults: UIT PEN 5,500, GAF above 5 UIT (PEN 27,500), Gerencia General above 20 UIT (PEN 110,000); all four values are Finance Configurations.
 
 - **Absence.** Admin can mark a user *On leave*, and anyone can record their own leave from the account menu (*My leave*), which shows beforehand who will take their approvals and what moves to them. A leave with a last day ends by itself the day after (the approvals come back), and the substitute is told when coverage starts and ends. Putting an approver on leave, or deactivating them, moves every pending chain approval waiting on them to their **substitute** (*Substitute during leave* in Users, e.g. the encargado/a de la Gerencia General), or without one to their nearest available jefe. New requests that would reach them go the same way. The substitute approves *on behalf of* the absent manager, and "send to my jefe" continues above that manager. When the manager is back, the approvals the substitute still holds return to them. Each move is audited and the new approver is notified. A substitute cannot approve their own request: while the manager they cover is away, it goes above that manager, or is refused when there is nobody above.
 - **Observe, return, reject.** An approver can always observe, return or reject, even when the request fails a submission check that would block approval.
@@ -599,6 +623,7 @@ Seed examples include area Director rules, Vice Rector, and a CAPEX Rectorate th
 | A2 invoice batches | Requester or Accounting uploads a batch against an eligible order; the worker validates invoices and provisions valid items. Accounting/Admin resolves observed items. An upload permission does not authorize overriding duplicate, SUNAT or order-ceiling controls. |
 | B direct payment | Chosen by the requester (no eligibility rule by area, expense nature or amount). Requester supplies a quote or the invoice (at least one); express approval is selected by rule. Final approval reserves the applicable budget; with a validated invoice it also provisions CXP right away, otherwise the request waits until the requester registers the invoice, which must match the approved amounts and then provisions CXP (also capable of a PARTIALLY_PAID state before full payment). Treasury performs the payment. |
 | C advance and rendition | Requester obtains advance approval and later submits the rendition. The workflow provisions the advance and Treasury pays. Accounting validates the final expense treatment and any non-deductible balance; eligible settlement can be recorded by Accounting/Treasury/Admin. |
+| D transfer between UMA accounts | Treasury (or Admin) registers it in Payments › Transfers: source and destination among UMA's own accounts, same currency. Another Treasury user (Jefe de Tesorería) then the GAF approve. No budget, supplier or payable. Treasury makes the transfer at the bank and records its operation number (journal: debit destination, credit source), then reconciles it with the statement, which closes it. |
 
 ### Decisions that stop or defer progress
 

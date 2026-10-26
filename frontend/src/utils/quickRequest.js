@@ -17,7 +17,8 @@ export const QUICK_TRACK_TEXT = Object.freeze({
   A1: "Standard purchase: it goes to approval, then Procurement places the order and the invoice is registered.",
   B: "Direct payment: it goes to approval and is paid once its invoice is checked. Only a quote now? Upload the invoice when it arrives.",
   ENTREGA_RENDIR: "Advance: UMA pays you first and you present the receipts afterwards.",
-  REEMBOLSO_SIN_SUSTENTO: "Reimbursement without receipt: after approval you sign a declaration and Treasury pays you."
+  REEMBOLSO_SIN_SUSTENTO: "Reimbursement without receipt: after approval you sign a declaration and Treasury pays you.",
+  D: "Transfer between UMA's own accounts: the Head of Treasury and the GAF approve it, then Treasury makes it at the bank and reconciles it."
 });
 
 export function quickTrackText({ flowType, requestType }) {

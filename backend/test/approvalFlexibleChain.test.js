@@ -16,6 +16,7 @@ import { listRequestsPage, submitFinancialRequest, withdrawFinancialRequest } fr
 import { deleteUser, listMyTeam, updateMyLeave, updateUser } from "../src/controllers/userController.js";
 import { EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
+import { approveThroughChain } from "./approvalFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
@@ -64,15 +65,19 @@ test("flexible manager-chain approval, absence reassignment, withdrawal and My T
       return request;
     }
 
-    await t.test("the first jefe can finalize: the chain completes and the budget commits automatically", async () => {
+    await t.test("the first jefe cannot finalize alone: their superior finalizes and the budget commits automatically", async () => {
       const request = await makeRequest();
       assert.equal(String(activeApprovalStep(request).approverUser), String(mid._id));
       const options = await getApprovalDecisionOptions(request._id, mid);
       assert.equal(options.canForward, true);
+      assert.equal(options.canFinalize, false, "the cost center's responsible always sends it to their superior");
       assert.equal(String(options.forwardTo._id), String(root._id));
-      const result = await decideApproval({ id: request._id, action: "APPROVE", forward: false, comments: "Final at level 1", user: mid, req });
+      const sentUp = await decideApproval({ id: request._id, action: "APPROVE", forward: false, comments: "Final at level 1", user: mid, req });
+      assert.equal(sentUp.request.status, REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(String(activeApprovalStep(sentUp.request).approverUser), String(root._id));
+      const result = await decideApproval({ id: request._id, action: "APPROVE", forward: false, comments: "Final at level 2", user: root, req });
       assert.equal(result.request.status, REQUEST_STATUS.BUDGET_COMMITTED, `manager-chain approvals auto-commit like every other route ${JSON.stringify(result.budgetWarning)}`);
-      assert.equal(result.request.approvalRouteSnapshot.length, 1, "root was never asked");
+      assert.equal(result.request.approvalRouteSnapshot.length, 2, "the jefe and their superior");
       const approved = await Notification.findOne({ user: requester._id, type: "REQUEST_APPROVED", entityId: request._id });
       assert.ok(approved, "the requester is told the request is fully approved");
     });
@@ -83,7 +88,7 @@ test("flexible manager-chain approval, absence reassignment, withdrawal and My T
       const request = await makeRequest();
       request.lines[0].costCenter = tight._id;
       await request.save();
-      const result = await decideApproval({ id: request._id, action: "APPROVE", forward: false, user: mid, req });
+      const result = await approveThroughChain({ id: request._id, user: mid, req });
       assert.ok(result.budgetWarning?.code === "INSUFFICIENT_BUDGET", JSON.stringify(result.budgetWarning));
       assert.ok([REQUEST_STATUS.REJECTED, REQUEST_STATUS.OBSERVED_BUDGET].includes(result.request.status));
       assert.equal(await Notification.countDocuments({ user: requester._id, type: "REQUEST_APPROVED", entityId: request._id }), result.budgetWarning.hardReject ? 0 : 1);
@@ -94,7 +99,7 @@ test("flexible manager-chain approval, absence reassignment, withdrawal and My T
       const forwarded = await decideApproval({ id: request._id, action: "APPROVE", forward: true, comments: "Up to root", user: mid, req });
       assert.equal(forwarded.request.status, REQUEST_STATUS.PENDING_APPROVAL);
       assert.ok(forwarded.request.approvalHistory.some((event) => event.action === "CHAIN_APPROVED_FORWARDED"));
-      assert.equal(await Notification.countDocuments({ user: root._id, type: "APPROVAL_PENDING", resolvedAt: null }), 1);
+      assert.equal(await Notification.countDocuments({ user: root._id, type: "APPROVAL_PENDING", entityId: request._id, resolvedAt: null }), 1);
       const inbox = await listApprovalInbox({}, root);
       const row = inbox.data.find((item) => String(item._id) === String(request._id));
       assert.equal(row.approvalOptions.canForward, false, "root has no jefe, so only finalize is offered");

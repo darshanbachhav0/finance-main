@@ -66,8 +66,8 @@ assert.match(read("../src/layouts/AppLayout.jsx"), /to=\{item\.path \|\| "\/"\}[
 
 // 2. Accounting mappings configuration resource for Admin and Accounting (the Super Admin reads it;
 //    ResourceManager hides the actions for it).
-assert.deepEqual(configurationAccess["accounting-mappings"], ["Admin", "Accounting", "SuperAdmin"]);
-for (const role of ["Admin", "Accounting", "SuperAdmin"]) assert.equal(canAccessNavigation(role, "/configuration/accounting-mappings"), true);
+assert.deepEqual(configurationAccess["accounting-mappings"], ["Admin", "Accounting", "SuperAdmin", "Auditor"]);
+for (const role of ["Admin", "Accounting", "SuperAdmin", "Auditor"]) assert.equal(canAccessNavigation(role, "/configuration/accounting-mappings"), true);
 for (const role of ["Treasury", "Solicitor"]) assert.equal(canAccessNavigation(role, "/configuration/accounting-mappings"), false);
 const master = read("../src/pages/MasterConfiguration.jsx");
 const block = master.slice(master.indexOf(`"accounting-mappings": {`), master.indexOf(`"bank-formats": {`));

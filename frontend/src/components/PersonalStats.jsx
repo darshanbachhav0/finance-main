@@ -4,7 +4,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatNumber } from "../utils/formatters.js";
 import CountUp from "./CountUp.jsx";
 
-const APPROVER_ROLES = ["AreaDirector", "ViceRector", "Management"];
+const APPROVER_ROLES = ["AreaDirector", "ViceRector", "Management", "GAF"];
 
 function hoursLabel(hours, t, language) {
   if (hours === null || hours === undefined) return "-";
@@ -19,7 +19,7 @@ export default function PersonalStats({ personal, role }) {
   const { requests = {}, payments = {}, approvals = {} } = personal;
   const showApprovals = approvals.decidedThisMonth > 0 || APPROVER_ROLES.includes(role);
   // Someone who only decides (a director who never raises requests) is not shown rows of zeros.
-  const showRequests = role === "Solicitor" || requests.submittedThisYear > 0 || requests.inProgress > 0 || requests.drafts > 0 || payments.paidThisYearPen > 0;
+  const showRequests = ["Solicitor", "Legal", "HumanResources"].includes(role) || requests.submittedThisYear > 0 || requests.inProgress > 0 || requests.drafts > 0 || payments.paidThisYearPen > 0;
   const money = (value) => formatCurrency(value, "PEN", language);
   const next = payments.next;
 

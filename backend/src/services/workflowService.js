@@ -73,8 +73,20 @@ const roleTargets = Object.freeze({
   [REQUEST_STATUS.VOIDED]: [ROLES.ADMIN, ROLES.ACCOUNTING]
 });
 
-export function allowedTransitions(status) { return [...(transitionGraph[canonicalRequestStatus(status)] || [])]; }
-export function canTransition(from, to) { return allowedTransitions(from).includes(canonicalRequestStatus(to)); }
+// Track D has no budget commitment, payable or bank file: once approved Treasury executes the
+// transfer (PAGADO), reconciles it with the statement (CONCILIADO) and it closes.
+const treasuryTransferGraph = Object.freeze({
+  APROBADO: ["PAGADO", "RECHAZADO", "ANULADO"],
+  PAGADO: ["CONCILIADO"],
+  CONCILIADO: ["CERRADO"]
+});
+
+export function allowedTransitions(status, flowType) {
+  const canonical = canonicalRequestStatus(status);
+  const graph = flowType === FLOW_TYPE.D && treasuryTransferGraph[canonical] ? treasuryTransferGraph : transitionGraph;
+  return [...(graph[canonical] || [])];
+}
+export function canTransition(from, to, flowType) { return allowedTransitions(from, flowType).includes(canonicalRequestStatus(to)); }
 
 function requesterId(request) {
   return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
@@ -121,7 +133,7 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
   });
   assertRequestLines(request.lines);
 
-  const supplierNotRequired = request.flowType === FLOW_TYPE.C;
+  const supplierNotRequired = [FLOW_TYPE.C, FLOW_TYPE.D].includes(request.flowType);
   if (!supplierNotRequired && ![
     REQUEST_STATUS.DRAFT, REQUEST_STATUS.VALIDATION, REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL,
     REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.VOIDED,
@@ -130,6 +142,12 @@ async function assertTransitionControls(request, targetStatus, context = {}) {
     const supplier = request.supplier?.homologationStatus ? request.supplier : await Supplier.findById(request.supplier);
     const valid = supplier && ((supplier.homologationStatus === "HOMOLOGATED" && supplier.active) || supplier.status === "ACTIVE");
     if (!valid) throw new AppError(422, "The supplier is not active and homologated.", { supplier: request.supplier }, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
+  }
+
+  if (request.flowType === FLOW_TYPE.D) {
+    if (targetStatus === REQUEST_STATUS.PAID && !request.treasuryTransfer?.executedAt) throw new AppError(422, "Record the transfer's bank operation before marking it paid.", undefined, ERROR_CODES.VALIDATION_ERROR);
+    if (targetStatus === REQUEST_STATUS.RECONCILED && !request.reconciliation) throw new AppError(422, "A reconciliation record is required before CONCILIADO.", undefined, ERROR_CODES.VALIDATION_ERROR);
+    return;
   }
 
   if ([REQUEST_STATUS.SENT, REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.BUDGET_COMMITTED].includes(targetStatus)) {
@@ -156,17 +174,20 @@ export async function transitionRequest({ request, targetStatus, user, req, acti
   targetStatus = canonicalRequestStatus(targetStatus);
   if (isTerminalRequest(from)) throw new AppError(409, "Terminal requests cannot transition.", { from, to: targetStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   if (from === targetStatus) return request;
-  if (!canTransition(from, targetStatus)) throw new AppError(409, `Invalid request status transition from ${from} to ${targetStatus}.`, { from, to: targetStatus, allowed: allowedTransitions(from) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  if (!canTransition(from, targetStatus, request.flowType)) throw new AppError(409, `Invalid request status transition from ${from} to ${targetStatus}.`, { from, to: targetStatus, allowed: allowedTransitions(from, request.flowType) }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   assertTransitionPermission(request, targetStatus, user, { approvalStage, adminOverrideReason, skipRoleCheck });
   // Period and financial evidence are mandatory, including internal recovery/batch calls.
   if (!FINANCIAL_EVIDENCE_MILESTONES.has(targetStatus)) await ensurePeriodOpen(request.accountingPeriod, { user, req, action: "UPDATE", requestId: request._id });
+  // A Track D transfer's evidence is its own execution and reconciliation (assertTransitionControls),
+  // not payables.
+  const transfer = request.flowType === FLOW_TYPE.D;
   if (targetStatus === "CONTABILIZADO") await assertPostingAllowed(request, { user, req });
-  if (["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"].includes(targetStatus)) {
+  if (!transfer && ["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"].includes(targetStatus)) {
     const progress = await getFinancialProgress(request, { session });
     const stages = ["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO"];
     if (!progress.status || stages.indexOf(progress.status) < stages.indexOf(targetStatus)) throw new AppError(422, "Child financial evidence does not satisfy this milestone.", progress, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
-  if (targetStatus === "CERRADO") await assertClosureAllowed(request, { session });
+  if (targetStatus === "CERRADO" && !transfer) await assertClosureAllowed(request, { session });
   if (!skipControls) await assertTransitionControls(request, targetStatus, { user, req, periodAction: [REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED].includes(targetStatus) ? "APPROVE" : undefined });
 
   const oldValues = { status: from, approvalStage: request.approvalStage, approvalDueAt: request.approvalDueAt };

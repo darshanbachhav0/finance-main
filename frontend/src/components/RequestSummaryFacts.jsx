@@ -17,7 +17,9 @@ export function receiptIssueDate(request, vouchers = []) {
 // "Resumen de la solicitud": the dates (in Lima), priority, frequency and where the supplier is paid.
 export default function RequestSummaryFacts({ request, vouchers, payables = [] }) {
   const { t, language } = useLanguage();
-  const trackC = request.flowType === "C";
+  // Track C (advances, reimbursements) and Track D (transfers between UMA's accounts) have no
+  // supplier invoice, credit days or supplier account.
+  const trackC = ["C", "D"].includes(request.flowType);
   const issued = receiptIssueDate(request, vouchers);
   const terms = request.quotations?.find(q => q.recommended && q.paymentCondition) || request.supplierPaymentTerms;
   const due = payables.find(row => row.status !== "CANCELLED" && row.dueDate)?.dueDate || invoiceDueDate(issued, terms?.paymentCondition ? terms : { option: "CUSTOM", days: request.supplierCreditDaysSnapshot });

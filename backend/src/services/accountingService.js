@@ -539,6 +539,33 @@ export async function createPaymentJournal(request, accountsPayable, userId, { b
   });
 }
 
+// Track D: the money leaves one of UMA's accounts and arrives in another (both class 10, same
+// currency), so the entry debits the destination's ledger account and credits the source's.
+export async function createTreasuryTransferJournal(request, userId, { executedAt, operationNumber, session } = {}) {
+  const transfer = request.treasuryTransfer || {};
+  const amount = roundMoney(request.totalAmount);
+  const rate = Number(request.exchangeRate || 1);
+  const amountPen = roundMoney(multiplyMoney(amount, rate));
+  const reference = String(operationNumber || request.requestNumber).trim();
+  const label = `${transfer.sourceAccount?.code} -> ${transfer.destinationAccount?.code} ${request.requestNumber} op. ${reference}`;
+  return createJournal({
+    request,
+    entryType: "TRANSFER",
+    period: periodFromDate(executedAt || new Date()),
+    sourceTransaction: `TRANSFER:${request.requestNumber}:${reference}`,
+    lines: [
+      debitLine({ accountNumber: transfer.destinationAccount?.ledgerAccount, description: `Transfer in ${label}`, amount: amountPen }),
+      creditLine({ accountNumber: transfer.sourceAccount?.ledgerAccount, description: `Transfer out ${label}`, amount: amountPen })
+    ],
+    userId,
+    originalAmount: amount,
+    currency: request.currency,
+    exchangeRate: rate,
+    penEquivalent: amountPen,
+    session
+  });
+}
+
 function sunatValidationSnapshot(evidence) {
   if (!evidence) return undefined;
   if (hasManualSunatException(evidence)) {

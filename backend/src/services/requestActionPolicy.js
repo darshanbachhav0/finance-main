@@ -51,6 +51,8 @@ function approvalActionsAllowed(request, user) {
   if (step?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN) {
     return user.role === ROLES.ADMIN || isActiveChainApprover(request, user);
   }
+  // An amount tier or a Track D step: decided by any user of the step's role.
+  if (step?.tier) return user.role === ROLES.ADMIN || step.role === user.role;
   if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) return false;
   if (!canApproveStage(request, user)) return false;
   if (step?.role && user.role !== ROLES.ADMIN && step.role !== user.role) return false;

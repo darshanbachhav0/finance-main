@@ -34,7 +34,7 @@ for (const [resource, roles] of Object.entries(configurationAccess)) {
 // Report history: download buttons only for roles the backend lets download stored reports.
 const fileAccess = read("../../backend/src/services/fileAccessService.js");
 const backendReportRoles = fileAccess.match(/reports: \[([^\]]+)\]/)[1].split(",").map((item) => item.trim().replace("ROLES.", ""));
-const roleNames = { ADMIN: "Admin", AREA_DIRECTOR: "AreaDirector", VICE_RECTOR: "ViceRector", ACCOUNTING: "Accounting", TREASURY: "Treasury", MANAGEMENT: "Management", PROCUREMENT: "Procurement", SUPER_ADMIN: "SuperAdmin" };
+const roleNames = { ADMIN: "Admin", AREA_DIRECTOR: "AreaDirector", VICE_RECTOR: "ViceRector", ACCOUNTING: "Accounting", TREASURY: "Treasury", MANAGEMENT: "Management", PROCUREMENT: "Procurement", GAF: "GAF", SUPER_ADMIN: "SuperAdmin", AUDITOR: "Auditor" };
 assert.deepEqual([...reportDownloadRoles].sort(), backendReportRoles.map((role) => roleNames[role]).sort());
 assert.equal(reportDownloadRoles.includes("Procurement"), false);
 assert.match(read("../src/pages/ManagementReports.jsx"), /canDownloadReportFiles \? <ProtectedAssetButton/);

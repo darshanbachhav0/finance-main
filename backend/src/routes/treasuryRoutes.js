@@ -26,6 +26,7 @@ import { authorize, protect } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { advancesDueSummary, nextPaymentRunSummary, getPaymentBatchSummary } from "../services/treasuryService.js";
 import { useCurrentBankAccountForAdvance } from "../services/advanceDestinationService.js";
+import { createTreasuryTransfer, executeTreasuryTransfer, listTreasuryAccounts, listTreasuryTransfers, reconcileTreasuryTransfer, resubmitTreasuryTransfer, saveTreasuryAccount } from "../services/treasuryTransferService.js";
 import { uploadFields } from "../middleware/upload.js";
 import { ROLES } from "../utils/constants.js";
 
@@ -36,11 +37,23 @@ const router = Router();
 router.get("/spot-categories", protect, authorize(ROLES.ADMIN, ROLES.TREASURY, ROLES.ACCOUNTING), spotCategories);
 router.put("/spot-categories/:code", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), saveSpotCategory);
 router.put("/suppliers/:id/detraction-account", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING), saveSupplierDetractionAccount);
-router.get("/bank-files/:id/summary", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY), asyncHandler(async (req, res) => {
+router.get("/bank-files/:id/summary", protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.GAF), asyncHandler(async (req, res) => {
   const data = await getPaymentBatchSummary(req.params.id, { csv: req.query.format === "csv" });
   if (req.query.format === "csv") return res.type("text/csv; charset=utf-8").attachment(data.fileName).send(data.content);
   res.json({ data });
 }));
+
+// Track D: UMA's own bank accounts and the transfers between them. Treasury registers and executes
+// them; the GAF (who approves them) and Accounting read them.
+const TRANSFER_READERS = [ROLES.ADMIN, ROLES.TREASURY, ROLES.GAF, ROLES.ACCOUNTING];
+router.get("/accounts", protect, authorize(...TRANSFER_READERS), asyncHandler(async (req, res) => res.json({ data: await listTreasuryAccounts({ includeInactive: req.query.includeInactive === "true" }) })));
+router.post("/accounts", protect, authorize(ROLES.ADMIN, ROLES.TREASURY), asyncHandler(async (req, res) => res.status(201).json({ data: await saveTreasuryAccount({ body: req.body, user: req.user, req }) })));
+router.put("/accounts/:id", protect, authorize(ROLES.ADMIN, ROLES.TREASURY), asyncHandler(async (req, res) => res.json({ data: await saveTreasuryAccount({ id: req.params.id, body: req.body, user: req.user, req }) })));
+router.get("/transfers", protect, authorize(...TRANSFER_READERS), asyncHandler(async (req, res) => res.json(await listTreasuryTransfers(req.query))));
+router.post("/transfers", protect, authorize(ROLES.ADMIN, ROLES.TREASURY), asyncHandler(async (req, res) => res.status(201).json({ data: await createTreasuryTransfer({ body: req.body, user: req.user, req }) })));
+router.post("/transfers/:id/resubmit", protect, authorize(ROLES.ADMIN, ROLES.TREASURY), asyncHandler(async (req, res) => res.json({ data: await resubmitTreasuryTransfer({ id: req.params.id, body: req.body, user: req.user, req }) })));
+router.post("/transfers/:id/execute", protect, authorize(ROLES.ADMIN, ROLES.TREASURY), asyncHandler(async (req, res) => res.json({ data: await executeTreasuryTransfer({ id: req.params.id, body: req.body, user: req.user, req }) })));
+router.post("/transfers/:id/reconcile", protect, authorize(ROLES.ADMIN, ROLES.TREASURY), asyncHandler(async (req, res) => res.json({ data: await reconcileTreasuryTransfer({ id: req.params.id, body: req.body, user: req.user, req }) })));
 
 router.use(protect, authorize(ROLES.ADMIN, ROLES.TREASURY));
 router.get("/queue", paymentQueue);

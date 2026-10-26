@@ -121,9 +121,10 @@ export default function Suppliers() {
   const canPropose =
     user.role !== "ManagementViewer" && !readOnly;
 
-  // Everyone sees their own department's list; the Admin and the Super Admin see every department.
+  // Everyone sees their own department's list; the Admin, the GAF, the Super Admin and the Auditor
+  // see every department (backend supplierVisibilityService).
   const departmentScoped =
-    !["Admin", "SuperAdmin"].includes(user.role);
+    !["Admin", "GAF", "SuperAdmin", "Auditor"].includes(user.role);
   const userArea =
     String(user.area || "").trim() || "General";
 

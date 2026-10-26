@@ -3,6 +3,7 @@ import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { activeApprovalStep, nearestAvailableSupervisor } from "./approvalRuleService.js";
+import { APPROVAL_TIERS } from "../utils/constants.js";
 import { allowedRequestActions } from "./requestActionPolicy.js";
 import { classifyApprovalSla, escalationCandidateCutoff, isApprovalEscalated, slaConfiguration } from "./slaPolicy.js";
 import { recordAudit } from "./auditService.js";
@@ -68,7 +69,8 @@ async function escalationRecipients(request, approvers, users) {
 
 export async function checkApprovalSlas({ now = new Date(), config = slaConfiguration() } = {}) {
   const assigned = await FinancialRequest.distinct("approvalRouteSnapshot.approverUser", { status: { $in: ACTIVE_STATUSES } });
-  const users = await User.find({ active: true, $or: [{ role: { $in: ["AreaDirector", "ViceRector", "Management", "Admin"] } }, { _id: { $in: assigned } }] }).lean();
+  // Tier steps (GAF, Gerencia General, Track D's Treasury step) wait on everyone of their role.
+  const users = await User.find({ active: true, $or: [{ role: { $in: ["AreaDirector", "ViceRector", "Management", "Admin", ...Object.values(APPROVAL_TIERS)] } }, { _id: { $in: assigned } }] }).lean();
   const liveEvents = new Map();
   const summary = { checked: 0, delivered: 0, escalations: 0 };
   // Stream requests so the scan does not load the whole approval queue into memory.

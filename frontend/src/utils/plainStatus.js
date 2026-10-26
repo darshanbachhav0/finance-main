@@ -58,4 +58,5 @@ export function plainNextStep(request) {
 }
 
 // Plain statuses for the people who ask for money; everyone else keeps the workflow detail.
-export const usesPlainStatuses = (user) => user?.role === "Solicitor";
+// Solicitor, Legal and Human Resources (backend REQUESTER_ROLES) raise their area's requests.
+export const usesPlainStatuses = (user) => ["Solicitor", "Legal", "HumanResources"].includes(user?.role);

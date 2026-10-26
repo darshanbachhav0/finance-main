@@ -99,7 +99,7 @@ export default function MasterConfiguration() {
 
   const configs = useMemo(() => ({
     "approval-rules": {
-      label: "Approval Rules", roles: ["Admin", "SuperAdmin"], endpoint: "/approval-rules",
+      label: "Approval Rules", roles: ["Admin", "SuperAdmin", "Auditor"], endpoint: "/approval-rules",
       description: "Configure approval sequence, role, amount range, area, and SLA without hard-coding workflow decisions in the UI.",
       fields: [
         { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "approvalLevel", label: "Approval level", type: "select", required: true, options: approvalLevels },
@@ -111,10 +111,10 @@ export default function MasterConfiguration() {
       columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "flowType", label: "Track" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
     },
     "finance-configurations": {
-      label: "Finance Configurations", roles: ["Admin", "Accounting", "SuperAdmin"], endpoint: "/finance-configurations",
+      label: "Finance Configurations", roles: ["Admin", "Accounting", "SuperAdmin", "Auditor"], endpoint: "/finance-configurations",
       description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",
       fields: [
-        { type: "section", label: "Value" }, { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS", "BUDGET_CHANGE_APPROVAL_THRESHOLD", "CAPEX_DETAILS_THRESHOLD", "ADVANCE_PAYMENT_CUTOFF_HOUR", "ADVANCE_RETURN_ACCOUNT"], hint: "ADVANCE_PAYMENT_CUTOFF_HOUR: Lima hour (0-24) from which an approved advance is paid the next working day (default 15). ADVANCE_RETURN_ACCOUNT: write the UMA account in Text value; employees see it to return unspent advance money (Value 0). BUDGET_CHANGE_APPROVAL_THRESHOLD: budget plan changes that move more than this amount (PEN) need Management approval. 0 or no record: every change applies immediately. CAPEX_DETAILS_THRESHOLD: request total from which requesters see the CAPEX planning fields (default 50000)." },
+        { type: "section", label: "Value" }, { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS", "BUDGET_CHANGE_APPROVAL_THRESHOLD", "CAPEX_DETAILS_THRESHOLD", "ADVANCE_PAYMENT_CUTOFF_HOUR", "ADVANCE_RETURN_ACCOUNT", "UIT_VALUE", "SUPERIOR_APPROVAL_UIT", "GAF_APPROVAL_UIT", "GENERAL_MANAGEMENT_APPROVAL_UIT"], hint: "ADVANCE_PAYMENT_CUTOFF_HOUR: Lima hour (0-24) from which an approved advance is paid the next working day (default 15). ADVANCE_RETURN_ACCOUNT: write the UMA account in Text value; employees see it to return unspent advance money (Value 0). BUDGET_CHANGE_APPROVAL_THRESHOLD: budget plan changes that move more than this amount (PEN) need Management approval. 0 or no record: every change applies immediately. CAPEX_DETAILS_THRESHOLD: request total from which requesters see the CAPEX planning fields (default 50000). UIT_VALUE: PEN value of one UIT (default 5500). SUPERIOR_APPROVAL_UIT: above this many UIT the jefe's superior must also approve (default 0 = always). GAF_APPROVAL_UIT: above this many UIT the GAF also approves (default 5). GENERAL_MANAGEMENT_APPROVAL_UIT: above this many UIT the Gerencia General also approves (default 20)." },
         { name: "numericValue", label: "Value", type: "number", min: 0, step: "0.01", required: true },
         { name: "textValue", label: "Text value", hint: "Only for text settings, such as ADVANCE_RETURN_ACCOUNT (bank, account number and CCI)." },
         { name: "currency", label: "Currency", type: "select", defaultValue: "PEN", options: currencies },
@@ -126,7 +126,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value", render: (row) => row.textValue || row.numericValue }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? formatDate(row.effectiveFrom) : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? formatDate(row.effectiveTo) : t("No end date") }, { key: "active", label: "Status" }]
     },
     "budget-rules": {
-      label: "Budget Rules", roles: ["Admin", "Treasury", "SuperAdmin"], endpoint: "/budget-rules",
+      label: "Budget Rules", roles: ["Admin", "Treasury", "SuperAdmin", "Auditor"], endpoint: "/budget-rules",
       description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
       fields: [
         { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
@@ -141,7 +141,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "active", label: "Status" }]
     },
     "budget-allocations": {
-      label: "Budget Allocations", roles: ["Admin", "Treasury", "SuperAdmin"], endpoint: "/budget-allocations",
+      label: "Budget Allocations", roles: ["Admin", "Treasury", "SuperAdmin", "Auditor"], endpoint: "/budget-allocations",
       description: "Maintain assigned budget by period, Cost Center, and project.",
       fields: [
         { name: "period", label: "Period / year", required: true, placeholder: "YYYY or YYYY-MM" },
@@ -151,7 +151,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
     },
     "accounting-mappings": {
-      label: "Accounting Mappings", roles: ["Admin", "Accounting", "SuperAdmin"], endpoint: "/accounting-mappings",
+      label: "Accounting Mappings", roles: ["Admin", "Accounting", "SuperAdmin", "Auditor"], endpoint: "/accounting-mappings",
       description: "GL accounts used by automatic postings that expense types do not cover: accounts payable, bank, advances in transit, IGV, returns, supplier credits and exchange differences. The most specific active mapping for the request type, expense nature, bank and currency wins; * matches any value. Every change is audited.",
       fields: [
         { type: "section", label: "Mapping" }, { name: "code", label: "Code", required: true, placeholder: "AP-PEN" }, { name: "name", label: "Name", required: true },
@@ -169,7 +169,7 @@ export default function MasterConfiguration() {
       // Treasury can see this section to use the certification panel below, but only Admin may
       // create/edit/delete a format's field configuration - certification is a separate, narrower
       // permission (see BankFormatCertificationPanel), not general configuration access.
-      label: "Bank Formats", roles: ["Admin", "Treasury", "SuperAdmin"], writeRoles: ["Admin"], endpoint: "/bank-formats",
+      label: "Bank Formats", roles: ["Admin", "Treasury", "SuperAdmin", "Auditor"], writeRoles: ["Admin"], endpoint: "/bank-formats",
       description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format. Certification is managed separately below.",
       transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [

@@ -39,6 +39,9 @@ export async function notifyApprovalStep(request) {
     path: `/approvals?request=${request._id}`, entityType: "FinancialRequest", entityId: request._id
   };
   if (step.approverUser) return notifyUser({ ...message, userId: step.approverUser?._id || step.approverUser });
+  // A tier step (GAF, Gerencia General, Track D's Treasury step) is everyone of that role's task
+  // except the requester's.
+  if (step.tier) return notifyRoles({ ...message, roles: [step.role], excludeUserId: request.requester?._id || request.requester || request.solicitor });
   return notifyRoles({ ...message, roles: [step.role], approvalLevel: step.approvalLevel,
     areas: step.approvalLevel === "AREA_DIRECTOR" ? [request.requesterArea || request.requestingArea] : undefined });
 }

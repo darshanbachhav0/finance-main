@@ -13,12 +13,14 @@ import { celebrate } from "../utils/celebrate.js";
 import { formatIsoMonth } from "../utils/dateInput.js";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 import { quickTrackText } from "../utils/quickRequest.js";
-import { requestFrequencyLabels } from "../utils/options.js";
+import { requestFrequencyLabels, transferPurposeLabels } from "../utils/options.js";
 import { bankAccountLabel } from "../utils/bankAccounts.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { receiptIssueDate } from "../components/RequestSummaryFacts.jsx";
 import CostAllocationSummary from "../components/CostAllocationSummary.jsx";
 import { isOnBehalf } from "../utils/costAllocation.js";
+import { laterStagesText, mustSendUp } from "../utils/approvalOptions.js";
+import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
 
 // One page, made for the phone, that the approval email's "Aprobar ahora" opens (after sign-in):
 // what is asked, by whom, for how much, the documents, who approved before, and three decisions -
@@ -76,6 +78,10 @@ export default function ApprovalDecision() {
   const steps = [...(request.approvalRouteSnapshot || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   const pending = steps.find((step) => step.status === "PENDING");
   const chain = pending?.source === "MANAGER_CHAIN";
+  // Above the superior-approval threshold the jefe cannot finalize: the approval goes up.
+  const sendUp = chain && mustSendUp(options);
+  const laterStages = laterStagesText(options, t);
+  const transfer = isTransfer(request) ? request.treasuryTransfer || {} : null;
   const approvedBefore = steps.filter((step) => step.status === "APPROVED");
   const supplier = request.supplier?.legalName || request.supplier?.name || request.supplierSnapshot?.legalName;
   const centers = [...new Set((request.lines || []).map((line) => line.costCenterSnapshot?.code ? `${line.costCenterSnapshot.code} - ${line.costCenterSnapshot.name || ""}` : "").filter(Boolean))];
@@ -93,7 +99,7 @@ export default function ApprovalDecision() {
     try {
       // "observe" sends it back to the requester: one action for both former Observe and Return.
       const type = choice === "observe" && !actions.has("OBSERVE") ? "return" : choice;
-      const body = choice === "approve" ? { comments, ...(chain && { forward: Boolean(forward && options?.canForward) }) } : { comments };
+      const body = choice === "approve" ? { comments, ...(chain && { forward: sendUp || Boolean(forward && options?.canForward) }) } : { comments };
       const response = await api.post(`/approvals/${id}/${type}`, body);
       const finished = choice === "approve" && response.data.data?.status && response.data.data.status !== "PENDIENTE_APROBACION";
       if (finished) celebrate("Request approved");
@@ -119,9 +125,10 @@ export default function ApprovalDecision() {
           <div><dt>{t("Priority")}</dt><dd><PriorityBadge priority={request.priority} /></dd></div>
           <div><dt>{t("Frequency")}</dt><dd>{t(requestFrequencyLabels[request.frequency || request.opexDetails?.expenseFrequency || "ONE_OFF"])}</dd></div>
           {supplier && <div><dt>{t("Supplier")}</dt><dd>{supplier}</dd></div>}
+          {transfer && <div><dt>{t("Transfer")}</dt><dd>{transferRoute(request)}{transfer.purpose ? ` · ${t(transferPurposeLabels[transfer.purpose] || transfer.purpose)}` : ""}</dd></div>}
           {request.paymentAccount?.currency && <div><dt>{t("Paid into")}</dt><dd>{bankAccountLabel(request.paymentAccount, t)}{request.paymentAccount.currency !== request.currency && <span className="text-danger"> · {t("Currency differs from the request")}</span>}</dd></div>}
           <div><dt>{t("Requirement date")}</dt><dd>{formatDate(request.issueDate, language)}</dd></div>
-          {request.flowType !== "C" && <div><dt>{t("Receipt issue date")}</dt><dd>{receiptIssueDate(request) ? formatDate(receiptIssueDate(request), language) : t("Pending")}</dd></div>}
+          {!["C", "D"].includes(request.flowType) && <div><dt>{t("Receipt issue date")}</dt><dd>{receiptIssueDate(request) ? formatDate(receiptIssueDate(request), language) : t("Pending")}</dd></div>}
           {request.businessJustification && <div><dt>{t("Why is it needed?")}</dt><dd>{request.businessJustification}</dd></div>}
           {/* Por Encargo: the requesting area (above) buys for another school or department, whose CECOs bear the expense. */}
           {isOnBehalf(request)
@@ -139,7 +146,8 @@ export default function ApprovalDecision() {
       </div>}
 
 
-      {approvedBefore.length > 0 && <p className="muted-text">{t("Already approved by")}: {approvedBefore.map((step) => step.approverSnapshot?.name || t(step.approvalLevel)).join(", ")}</p>}
+      {approvedBefore.length > 0 && <p className="muted-text">{t("Already approved by")}: {approvedBefore.map((step) => step.approverSnapshot?.name || t(step.tier || step.approvalLevel)).join(", ")}</p>}
+      {canDecide && laterStages && <p className="muted-text">{t("Then")}: {laterStages}</p>}
 
       <Message type="error">{error}</Message>
 
@@ -156,8 +164,9 @@ export default function ApprovalDecision() {
         </div>
         {choice && <div className="approval-confirm">
           <label className="field"><span>{t(DECISIONS[choice].input)}{choice !== "approve" ? " *" : ""}</span><textarea rows="3" value={comments} onChange={(event) => setComments(event.target.value)} /></label>
-          {choice === "approve" && chain && options?.canForward && <label className="quick-check"><input type="checkbox" checked={forward} onChange={(event) => setForward(event.target.checked)} /><Forward size={16} aria-hidden="true" /><span>{t("Also send it to my jefe for a further decision")}{options.forwardTo?.name ? ` (${options.forwardTo.name})` : ""}</span></label>}
-          <button type="button" className={DECISIONS[choice].className} disabled={processing} onClick={confirm}>{t(processing ? "Saving..." : "Confirm")}</button>
+          {choice === "approve" && sendUp && <p className="muted-text"><Forward size={16} aria-hidden="true" /> {t("Above this amount your approval cannot finalize the request: it goes to your superior, who decides next.")}{options.forwardTo?.name ? ` (${options.forwardTo.name})` : ""}</p>}
+          {choice === "approve" && chain && !sendUp && options?.canForward && <label className="quick-check"><input type="checkbox" checked={forward} onChange={(event) => setForward(event.target.checked)} /><Forward size={16} aria-hidden="true" /><span>{t("Also send it to my jefe for a further decision")}{options.forwardTo?.name ? ` (${options.forwardTo.name})` : ""}</span></label>}
+          <button type="button" className={DECISIONS[choice].className} disabled={processing} onClick={confirm}>{processing ? t("Saving...") : choice === "approve" && sendUp && options.forwardTo?.name ? t("Approve and send to {name}").replace("{name}", options.forwardTo.name) : t("Confirm")}</button>
         </div>}
       </div> : <div className="approval-done"><strong>{t("This request is no longer waiting for your approval.")}</strong><StatusBadge status={request.status} /><Link className="secondary-button" to={`/requests/${id}`}>{t("Open the request")}</Link></div>}
     </section>

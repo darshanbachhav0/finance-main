@@ -47,6 +47,7 @@ import "./feedback.test.js";
 import "./requestWizard.test.js";
 import "./requestDraftKeys.test.js";
 import "./costCenterType.test.js";
+import "./trackDRoles.test.js";
 
 import "./dateInput.test.js";
 import "./uxFormsContracts.test.js";

@@ -10,12 +10,12 @@ import { isCurrentSupplierApprover } from "./supplierService.js";
 import { SUPPLIER_OVERSIGHT_ROLES, canOpenSupplier } from "./supplierVisibilityService.js";
 import { assertBankFileReleased } from "../utils/bankFileVerification.js";
 
-// The Super Admin reads what an Admin reads; an unverified bank file stays closed to it (it does
-// not hold bank-file:verify).
+// The Super Admin and the Auditor read what an Admin reads; an unverified bank file stays closed
+// to them (they do not hold bank-file:verify). The GAF verifies bank files and reads reports.
 const generatedAccess = Object.freeze({
-  "bank-files": [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.SUPER_ADMIN],
-  reports: [ROLES.ADMIN, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT, ROLES.SUPER_ADMIN],
-  accounting: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SUPER_ADMIN]
+  "bank-files": [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.GAF, ROLES.SUPER_ADMIN, ROLES.AUDITOR],
+  reports: [ROLES.ADMIN, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT, ROLES.GAF, ROLES.SUPER_ADMIN, ROLES.AUDITOR],
+  accounting: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SUPER_ADMIN, ROLES.AUDITOR]
 });
 
 function forbidden(message = "You do not have permission to access this file.") {

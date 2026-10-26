@@ -15,6 +15,9 @@ const STEPS = {
 
 const ROLE_STEPS = {
   Solicitor: ["pulse", "newRequest", "tasks", "navigation", "search", "notifications", "account"],
+  Legal: ["pulse", "newRequest", "tasks", "navigation", "search", "notifications", "account"],
+  HumanResources: ["pulse", "newRequest", "tasks", "navigation", "search", "notifications", "account"],
+  GAF: ["pulse", "approvals", "navigation", "search", "notifications", "account"],
   AreaDirector: ["pulse", "approvals", "navigation", "search", "notifications", "account"],
   ViceRector: ["pulse", "approvals", "navigation", "search", "notifications", "account"],
   Management: ["pulse", "approvals", "navigation", "search", "notifications", "account"]

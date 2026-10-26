@@ -15,7 +15,8 @@ import {
   nextChainApprover,
   reassignChainStep,
   slaStatus,
-  stopApprovalRoute
+  stopApprovalRoute,
+  superiorApprovalRequired
 } from "./approvalRuleService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { reserveBudget } from "./budgetService.js";
@@ -36,6 +37,7 @@ import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_ROUTING_MODE,
   APPROVAL_STAGES,
+  APPROVAL_TIERS,
   DOCUMENT_PHASE,
   ERROR_CODES,
   FLOW_TYPE,
@@ -87,6 +89,11 @@ function assertApprovalActor(request, user, step, adminOverrideReason) {
     if (user.role !== ROLES.ADMIN && String(step.approverUser) !== String(user._id)) {
       throw new AppError(403, "This approval step is assigned to a different manager.", undefined, ERROR_CODES.FORBIDDEN);
     }
+  } else if (step.tier) {
+    // An amount tier or a Track D step: any user of the step's role decides it.
+    if (user.role !== ROLES.ADMIN && step.role !== user.role) {
+      throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role, approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
+    }
   } else {
     if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) {
       throw new AppError(403, "You do not have approval permission.", undefined, ERROR_CODES.FORBIDDEN);
@@ -122,6 +129,12 @@ async function validateApprovalControls(request, user) {
     entityId: request._id,
     requestId: request._id
   });
+  // A transfer between UMA's own accounts has no supplier, invoice or budget dimension.
+  if (request.flowType === FLOW_TYPE.D) {
+    await applyExchangeRate(request);
+    await request.validate();
+    return;
+  }
   // The dimensions themselves are re-validated; CECO authorization is not. It is a
   // requester control, enforced at submission, and a manager-chain jefe (often a
   // plain Solicitor) must not need the requester's cost centers to approve.
@@ -160,13 +173,20 @@ export async function listApprovalInbox(queryParams, user) {
     // role/area. An Area Director/Vice-Rector/Management user additionally
     // keeps the original role+area-scoped pool visibility for rule-based requests.
     const chainMatch = { "approvalRouteSnapshot": { $elemMatch: { approverUser: user._id, status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN } } };
+    // Tier steps (GAF, Gerencia General, Track D's Treasury step) wait on everyone of that role,
+    // except on their own requests.
+    const tierMatch = Object.values(APPROVAL_TIERS).includes(user.role)
+      ? { approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: user.role, status: "PENDING" } }, requester: { $ne: user._id } }
+      : null;
     if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
       const legacyMatch = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
       if (legacyMatch.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
         const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
         if (!areas.includes("*")) legacyMatch.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
       }
-      query.$or = [legacyMatch, chainMatch];
+      query.$or = [legacyMatch, chainMatch, ...(tierMatch ? [tierMatch] : [])];
+    } else if (tierMatch) {
+      query.$or = [chainMatch, tierMatch];
     } else {
       Object.assign(query, chainMatch);
     }
@@ -284,6 +304,20 @@ export async function resolveBudgetCommitmentFailure({ request, error, user, req
   return { code: error.code, message: error.message, details: error.details, hardReject };
 }
 
+async function notifyTransferApproved(request) {
+  await notifyRoles({
+    roles: [ROLES.TREASURY],
+    eventKey: `request:${request._id}:transfer-execute`,
+    type: "TREASURY_PAYMENT",
+    title: notificationText("Transfer approved"),
+    message: notificationText("{requestNumber} was approved by Treasury and the GAF. Make the transfer at the bank and record its operation number.", { requestNumber: request.requestNumber }),
+    path: `/treasury/transfers?request=${request._id}`,
+    entityType: "FinancialRequest",
+    entityId: request._id
+  });
+  return request;
+}
+
 // automatic: the commitment runs as the system consequence of the final approval,
 // so the approver's own role (often a Solicitor jefe) is not what authorizes it.
 export async function commitApprovedRequestBudget({ request, user, req, automatic = false }) {
@@ -297,6 +331,8 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     throw new AppError(409, "Financial handoff can only run after every required approval is complete or after a budget observation is resolved.", { status: request.status, approvalStage: request.approvalStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
 
+  // Track D moves money between UMA's own accounts: no budget, no payable. Treasury executes it.
+  if (request.flowType === FLOW_TYPE.D) return notifyTransferApproved(request);
   if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req, automatic });
   if (request.flowType === FLOW_TYPE.C) {
     let result;
@@ -424,6 +460,8 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   const step = activeApprovalStep(request);
   assertApprovalActor(request, user, step, adminOverrideReason);
   const isChainStep = step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+  // The cost center's responsible never finalizes alone: their approval goes to their superior.
+  if (isChainStep && decision === "APPROVE" && await superiorApprovalRequired(request, step)) forward = true;
   if (isChainStep && decision === "APPROVE" && typeof forward !== "boolean") {
     throw new AppError(422, "You must specify whether to forward this approval to the next manager or finalize it here.", { field: "forward" }, ERROR_CODES.VALIDATION_ERROR);
   }
@@ -454,7 +492,8 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       approvalStage: step.approvalLevel,
       eventDueAt: step.dueAt,
       adminOverrideReason,
-      skipRoleCheck: isChainStep
+      // assertApprovalActor already checked who decides a chain or tier step.
+      skipRoleCheck: isChainStep || Boolean(step.tier)
     });
     await resolveNotification(`request:${request._id}:approval:${step.approvalLevel}`);
     await notifyUser({
@@ -502,7 +541,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
       return route;
     }
 
-    const route = advanceApprovalRoute(request, user._id);
+    const route = await advanceApprovalRoute(request, user._id);
 
     // Intermediate approval levels never change the parent status — the frozen
     // route/approval history is the record of who approved what, at which
@@ -663,7 +702,8 @@ export async function bulkApproveRequests({ ids, comments, forward, user, req })
   for (const request of loaded) {
     if (!allowedRequestActions(request, user).includes("APPROVE")) continue;
     const chain = activeApprovalStep(request)?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
-    if (chain && typeof forward !== "boolean") needsDecision.push(request);
+    // A step that must go to the superior needs no choice: it is always sent up.
+    if (chain && typeof forward !== "boolean" && !(await superiorApprovalRequired(request))) needsDecision.push(request);
     if (forward === true && (!chain || !(await approvalDecisionOptions(request)).canForward)) cannotForward.push(request);
   }
   const listed = (requests) => requests.map((request) => ({ id: String(request._id), requestNumber: request.requestNumber }));
@@ -699,20 +739,32 @@ export async function bulkApproveRequests({ ids, comments, forward, user, req })
   return { results, summary: { requested: uniqueIds.length, approved, failed: uniqueIds.length - approved } };
 }
 
-const noChainOptions = Object.freeze({ chain: false, canForward: false, forwardTo: null, remainingPolicyStages: [] });
+const noChainOptions = Object.freeze({ chain: false, canForward: false, canFinalize: true, superiorRequired: false, forwardTo: null, remainingPolicyStages: [] });
+
+// The tier steps still open after the current one (GAF, Gerencia General, Track D's GAF).
+function remainingTierStages(request, step) {
+  return [...(request.approvalRouteSnapshot || [])]
+    .sort((a, b) => a.sequence - b.sequence)
+    .filter((item) => item.tier && item.sequence > (step?.sequence ?? 0) && ["PENDING", "NOT_REACHED"].includes(item.status))
+    .map((item) => item.approvalLevel);
+}
 
 // What the current approver can choose at a chain step: "Approve and finalize"
-// always; "Send to my jefe" only while the current approver has an available jefe.
-// remainingPolicyStages lists configured stages that still follow the chain.
+// unless the cost center's responsible must send it to their superior (canFinalize
+// false); "Send to my jefe" only while the current approver has an available jefe.
+// remainingPolicyStages lists the tier stages that still follow (GAF, Gerencia General).
 export async function approvalDecisionOptions(request) {
   const step = activeApprovalStep(request);
-  if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) return { ...noChainOptions };
+  if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) return { ...noChainOptions, remainingPolicyStages: remainingTierStages(request, step) };
   const nextApprover = await nextChainApprover(request, step);
+  const superiorRequired = Boolean(step.superiorRequired && nextApprover);
   return {
     chain: true,
     canForward: Boolean(nextApprover),
+    canFinalize: !superiorRequired,
+    superiorRequired,
     forwardTo: nextApprover ? { _id: nextApprover._id, name: nextApprover.name, jobTitle: nextApprover.jobTitle } : null,
-    remainingPolicyStages: []
+    remainingPolicyStages: remainingTierStages(request, step)
   };
 }
 

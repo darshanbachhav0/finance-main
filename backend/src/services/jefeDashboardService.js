@@ -5,14 +5,14 @@ import AccountsPayable from "../models/AccountsPayable.js";
 import { budgetOverview } from "./budgetReportingService.js";
 import { listApprovalInbox } from "./approvalService.js";
 import { requestVisibilityFilter } from "../utils/permissions.js";
-import { ROLES, AP_STATUS, ERROR_CODES } from "../utils/constants.js";
+import { ROLES, AP_STATUS, ERROR_CODES, REQUESTER_ROLES } from "../utils/constants.js";
 import { limaToday } from "../../../shared/businessCalendar.mjs";
 import { AppError } from "../utils/AppError.js";
 import { parsePagination, paginatedPayload } from "./queryService.js";
 
 export async function isJefe(user) {
   if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR].includes(user.role)) return true;
-  if (user.role !== ROLES.SOLICITOR) return false;
+  if (!REQUESTER_ROLES.includes(user.role)) return false;
   return Boolean(await User.exists({ $or: [{ jefe: user._id }, { substitute: user._id }] })
     || await FinancialRequest.exists({ approvalRouteSnapshot: { $elemMatch: { approverUser: user._id, status: "PENDING", source: "MANAGER_CHAIN" } } }));
 }

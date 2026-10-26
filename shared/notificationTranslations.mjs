@@ -183,6 +183,9 @@ export default {
   "Verify a bank account to release an advance": "Verifica una cuenta bancaria para liberar un anticipo",
   "{requestNumber}: the advance is approved and waits for the employee's bank account to be verified.": "{requestNumber}: el anticipo está aprobado y espera que se verifique la cuenta bancaria del colaborador.",
   "Advance to pay now": "Anticipo por pagar ahora",
+  // Track D
+  "Transfer approved": "Traspaso aprobado",
+  "{requestNumber} was approved by Treasury and the GAF. Make the transfer at the bank and record its operation number.": "{requestNumber} fue aprobado por Tesorería y la GAF. Realiza el traspaso en el banco y registra su número de operación.",
   "{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.": "{requestNumber}: paga el anticipo de {amount} a {name} el {date}. Los anticipos se pagan el mismo día hábil, fuera del ciclo del 15 y 30.",
   "Verify today: bank file with an advance": "Verifica hoy: archivo bancario con un anticipo",
   "{batchNumber} ({count} payments) includes {advances} advance(s) to pay today. Verify it so Treasury can send it.": "{batchNumber} ({count} pagos) incluye {advances} anticipo(s) por pagar hoy. Verifícalo para que Tesorería pueda enviarlo.",

@@ -10,9 +10,22 @@ export const ROLES = Object.freeze({
   PROCUREMENT: "Procurement",
   MANAGEMENT: "Management",
   MANAGEMENT_VIEWER: "ManagementViewer",
+  // Gerencia de Administración Financiera: approves requests above GAF_APPROVAL_UIT, every Track D
+  // transfer, and the bank files Treasury generates (never one they generated).
+  GAF: "GAF",
+  // Asesoría Legal and Gestión de Personas register their area's requests like a Solicitor.
+  LEGAL: "Legal",
+  HUMAN_RESOURCES: "HumanResources",
+  // Auditoría: reads every workspace, changes nothing (middleware/auth.js readOnlyOversight).
+  AUDITOR: "Auditor",
   // Manages administrator accounts and oversees the platform read-only; never acts in a process.
   SUPER_ADMIN: "SuperAdmin"
 });
+
+// Roles that raise their own area's requests (requester controls apply to them).
+export const REQUESTER_ROLES = Object.freeze([ROLES.SOLICITOR, ROLES.LEGAL, ROLES.HUMAN_RESOURCES]);
+// Roles that read every workspace and never act in a process.
+export const READ_ONLY_OVERSIGHT_ROLES = Object.freeze([ROLES.SUPER_ADMIN, ROLES.AUDITOR]);
 
 // Accounts only the Super Admin creates, edits, deactivates or resets.
 // Roles that no longer exist and the role that took over their work. The Budget role was folded
@@ -131,7 +144,23 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.BUDGET_MANAGE
   ],
   [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
+  // Management is the Gerencia General: it approves above GENERAL_MANAGEMENT_APPROVAL_UIT.
   [ROLES.MANAGEMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
+  [ROLES.GAF]: [
+    PERMISSIONS.REQUEST_VIEW_ALL,
+    PERMISSIONS.REQUEST_APPROVE,
+    PERMISSIONS.SUPPLIER_BANK_VIEW,
+    PERMISSIONS.BUDGET_VIEW,
+    PERMISSIONS.REPORT_VIEW,
+    PERMISSIONS.AUDIT_VIEW,
+    PERMISSIONS.MANAGEMENT_PORTAL_VIEW,
+    // Approves each bank file (lote) before Treasury downloads it, as Accounting does.
+    PERMISSIONS.BANK_FILE_VERIFY
+  ],
+  [ROLES.LEGAL]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],
+  [ROLES.HUMAN_RESOURCES]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.REPORT_VIEW],
+  // Read-only oversight, bank details masked. Do not add write permissions here.
+  [ROLES.AUDITOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.AUDIT_VIEW],
   // Management portal only: the aggregate /api/management/v1 API and nothing internal (no
   // Reports, dashboards, audit or request data). Enforced for custom grants too - see
   // MANAGEMENT_VIEWER_PERMISSIONS below. Do not add permissions here.
@@ -146,7 +175,7 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
 // The portal-only ManagementViewer and the read-only Super Admin cannot.
 export const ROLE_PERMISSIONS = Object.freeze(Object.fromEntries(Object.entries(ROLE_BASE_PERMISSIONS).map(([role, permissions]) => [
   role,
-  [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN].includes(role) ? permissions : [...new Set([...permissions, PERMISSIONS.SUPPLIER_PROPOSE])]
+  [ROLES.MANAGEMENT_VIEWER, ...READ_ONLY_OVERSIGHT_ROLES].includes(role) ? permissions : [...new Set([...permissions, PERMISSIONS.SUPPLIER_PROPOSE])]
 ])));
 
 // The only permissions a ManagementViewer account may ever hold, including per-user extras.
@@ -159,7 +188,9 @@ export const REQUEST_TYPE = Object.freeze({
   ENTREGA_RENDIR: "ENTREGA_RENDIR",
   REEMBOLSO_CON_SUSTENTO: "REEMBOLSO_CON_SUSTENTO",
   REEMBOLSO_SIN_SUSTENTO: "REEMBOLSO_SIN_SUSTENTO",
-  PAGO_CON_COTIZACION: "PAGO_CON_COTIZACION"
+  PAGO_CON_COTIZACION: "PAGO_CON_COTIZACION",
+  // Track D: funding between UMA's own bank accounts (or a placement), registered by Treasury.
+  TRASPASO: "TRASPASO"
 });
 
 export const REQUEST_TYPES = Object.freeze(Object.values(REQUEST_TYPE));
@@ -168,8 +199,14 @@ export const FLOW_TYPE = Object.freeze({
   A1: "A1",
   A2: "A2",
   B: "B",
-  C: "C"
+  C: "C",
+  D: "D"
 });
+
+// Track D: why the money moves between UMA's own accounts.
+export const TREASURY_TRANSFER_PURPOSES = Object.freeze(["FUNDING", "INVESTMENT"]);
+// UMA's own bank accounts: an operating account, or one that holds placements (DPF, funds).
+export const TREASURY_ACCOUNT_KINDS = Object.freeze(["OPERATING", "INVESTMENT"]);
 
 export const FLOW_TYPES = Object.freeze(Object.values(FLOW_TYPE));
 
@@ -211,7 +248,17 @@ export const APPROVAL_STAGES = Object.freeze({
   VICE_RECTOR: "VICE_RECTOR",
   RECTORATE: "RECTORATE",
   GENERAL_MANAGEMENT: "GENERAL_MANAGEMENT",
+  GAF: "GAF",
+  TREASURY_HEAD: "TREASURY_HEAD",
   COMPLETE: "COMPLETE"
+});
+
+// Policy steps a route adds by role (not by person): the amount tiers in UIT and Track D's
+// Treasury + GAF pair. Any active user of the step's role other than the requester decides it.
+export const APPROVAL_TIERS = Object.freeze({
+  [APPROVAL_STAGES.TREASURY_HEAD]: ROLES.TREASURY,
+  [APPROVAL_STAGES.GAF]: ROLES.GAF,
+  [APPROVAL_STAGES.GENERAL_MANAGEMENT]: ROLES.MANAGEMENT
 });
 
 export const APPROVAL_ACTIONS = Object.freeze(["APPROVE", "OBSERVE", "RETURN", "REJECT"]);
@@ -373,8 +420,20 @@ export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   // Lima hour (0-24). An advance approved from this hour is paid the next working day.
   ADVANCE_PAYMENT_CUTOFF_HOUR: "ADVANCE_PAYMENT_CUTOFF_HOUR",
   // Text: where employees deposit unspent advance money (bank, account, CCI).
-  ADVANCE_RETURN_ACCOUNT: "ADVANCE_RETURN_ACCOUNT"
+  ADVANCE_RETURN_ACCOUNT: "ADVANCE_RETURN_ACCOUNT",
+  // PEN. The Unidad Impositiva Tributaria the approval tiers are counted in.
+  UIT_VALUE: "UIT_VALUE",
+  // UIT. Above it the jefe's own superior (Vicerrector / Gerente) must also approve; 0: always.
+  SUPERIOR_APPROVAL_UIT: "SUPERIOR_APPROVAL_UIT",
+  // UIT. Above it the Gerencia de Administración Financiera also approves.
+  GAF_APPROVAL_UIT: "GAF_APPROVAL_UIT",
+  // UIT. Above it the Gerencia General also approves.
+  GENERAL_MANAGEMENT_APPROVAL_UIT: "GENERAL_MANAGEMENT_APPROVAL_UIT"
 });
+export const DEFAULT_UIT_VALUE = 5500;
+export const DEFAULT_SUPERIOR_APPROVAL_UIT = 0;
+export const DEFAULT_GAF_APPROVAL_UIT = 5;
+export const DEFAULT_GENERAL_MANAGEMENT_APPROVAL_UIT = 20;
 export const DEFAULT_ADVANCE_PAYMENT_CUTOFF_HOUR = 15;
 export const DEFAULT_RENDITION_OVERDUE_DAYS = 10;
 export const DEFAULT_CAPEX_DETAILS_THRESHOLD = 50000;

@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import { asyncHandler } from "./asyncHandler.js";
 import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
-import { ADMINISTRATOR_ROLES, ERROR_CODES, ROLES } from "../utils/constants.js";
+import { ADMINISTRATOR_ROLES, ERROR_CODES, READ_ONLY_OVERSIGHT_ROLES, ROLES } from "../utils/constants.js";
 import { hasPermission } from "../utils/permissions.js";
 import { getPlatformSettings, passwordExpired } from "../services/platformSettingsService.js";
 
@@ -69,11 +69,11 @@ export const protect = asyncHandler(async (req, _res, next) => {
   }
 });
 
-// Read-only oversight: on GET/HEAD the Super Admin passes every route guard an Admin passes, so it
-// sees what an Admin sees. It never passes a guard on a write (superAdminReadOnly below refuses
-// those before any guard runs, outside its own account-administration routes).
+// Read-only oversight: on GET/HEAD the Super Admin and the Auditor pass every route guard an Admin
+// passes, so they see what an Admin sees. They never pass a guard on a write (superAdminReadOnly
+// below refuses those before any guard runs, outside their own personal settings).
 function superAdminReads(req, roles = [ROLES.ADMIN]) {
-  return req.user?.role === ROLES.SUPER_ADMIN && isSafeMethod(req) && roles.includes(ROLES.ADMIN);
+  return READ_ONLY_OVERSIGHT_ROLES.includes(req.user?.role) && isSafeMethod(req) && roles.includes(ROLES.ADMIN);
 }
 
 export function authorize(...roles) {
@@ -119,8 +119,22 @@ export function superAdminMayCall(method, rawPath) {
   return SUPER_ADMIN_WRITE_PATHS.some((allowed) => path === allowed.replace(/\/$/, "") || path.startsWith(allowed));
 }
 
-// Mounted after protect() on the internal API: the Super Admin never takes part in a process.
+// The Auditor writes only its own notification settings.
+export const AUDITOR_WRITE_PATHS = Object.freeze(["/api/notifications/", "/api/users/me/notification-preferences"]);
+
+export function auditorMayCall(method, rawPath) {
+  const path = String(rawPath || "").toLowerCase();
+  if (SAFE_METHODS.includes(String(method || "GET").toUpperCase())) return !SUPER_ADMIN_BLOCKED_READS.some((blocked) => path === blocked || path.startsWith(`${blocked}/`));
+  return AUDITOR_WRITE_PATHS.some((allowed) => path === allowed.replace(/\/$/, "") || path.startsWith(allowed));
+}
+
+// Mounted after protect() on the internal API: the Super Admin and the Auditor never take part in
+// a process.
 export function superAdminReadOnly(req, _res, next) {
+  if (req.user?.role === ROLES.AUDITOR) {
+    if (auditorMayCall(req.method, requestPath(req))) return next();
+    throw new AppError(403, "The Auditor account is read-only: it can view but not change the work of the platform.", undefined, ERROR_CODES.READ_ONLY_ROLE);
+  }
   if (req.user?.role !== ROLES.SUPER_ADMIN || superAdminMayCall(req.method, requestPath(req))) return next();
   throw new AppError(403, "The Super Admin account is read-only here: it can view but not change the work of the platform.", undefined, ERROR_CODES.READ_ONLY_ROLE);
 }

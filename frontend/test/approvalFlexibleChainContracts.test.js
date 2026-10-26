@@ -12,9 +12,12 @@ const users = read("../src/pages/AdminUsers.jsx");
 
 // Finalize is always offered on a chain step; "Send to my jefe" only when the server says so.
 assert.ok(inbox.includes("row.approvalOptions?.canForward"));
-assert.ok(inbox.includes('openDecision(row, "approve", true)') && inbox.includes('openDecision(row, "approve", isChainRow(row) ? false : undefined)'));
+assert.ok(inbox.includes('openDecision(row, "approve", true)') && inbox.includes('openDecision(row, "approve", approveForward(row))'));
+// Above the superior threshold (canFinalize false) the chain step is always sent up, never finalized.
+assert.ok(inbox.includes("row.approvalOptions?.canFinalize === false") && inbox.includes("(isChainRow(row) ? mustForward(row) : undefined)"));
 assert.ok(inbox.includes('t("Send to my jefe")'), "the inbox column shows both buttons");
-assert.ok(detail.includes("/approvals/${id}/options") && detail.includes('decision("approve", true)') && detail.includes('decision("approve", false)'));
+assert.ok(detail.includes("/approvals/${id}/options") && detail.includes('decision("approve", true)') && detail.includes('decision("approve", approveForward)'));
+assert.ok(detail.includes("const approveForward = isChainApprovalStep ? sendUp : undefined;"), "finalize unless the step must go up to the superior");
 // Withdrawal from the detail page and the list row menu.
 assert.ok(detail.includes("/requests/${id}/withdraw") && detail.includes('actions.has("WITHDRAW")'));
 assert.ok(list.includes("/withdraw") && list.includes('includes("WITHDRAW")'));

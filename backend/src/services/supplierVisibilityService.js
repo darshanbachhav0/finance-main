@@ -20,7 +20,7 @@ import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 export const DEFAULT_DEPARTMENT = "General";
 // Who sees the suppliers of every department.
-export const SUPPLIER_OVERSIGHT_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
+export const SUPPLIER_OVERSIGHT_ROLES = Object.freeze([ROLES.ADMIN, ROLES.GAF, ROLES.SUPER_ADMIN, ROLES.AUDITOR]);
 // Who processes every request once it is sent (invoice, purchase order, payment), so they open
 // the supplier of any submitted request.
 const REQUEST_PROCESSING_ROLES = Object.freeze([ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT]);

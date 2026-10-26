@@ -95,7 +95,7 @@ assert.match(shellCss, /\.app-shell:has\(\.mobile-bottom-nav:not\(\.is-hidden\)\
 // 6. Request detail: the page's main action in a bar above the bottom navigation.
 const detail = source("../src/pages/RequestDetail.jsx");
 assert.match(detail, /const stickyAction = permissions\.canApprove/);
-assert.match(detail, /onClick: \(\) => decision\("approve", false\)/, "reuses the approval handler");
+assert.match(detail, /onClick: \(\) => decision\("approve", approveForward\)/, "reuses the approval handler");
 assert.match(detail, /onClick: submitRequest/, "reuses the submit handler");
 assert.match(detail, /onClick=\{confirmCommitBudget\}/, "the action panel and the bar share one handler");
 assert.match(detail, /className="request-sticky-actions"/);

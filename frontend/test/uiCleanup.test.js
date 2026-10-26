@@ -5,13 +5,15 @@ import { displayedRequestStatus } from "../src/utils/requestPresentation.js";
 for (const [role, items] of Object.entries(roleNavigation)) {
   // Admin runs the whole system from the grouped menu; Accounting's daily work spans invoices,
   // payables, bank-file verification, entries, periods and SIRE. Everyone else keeps a short list.
-  // The Super Admin oversees the same workspaces read-only, after its own console.
-  if (!["Admin", "SuperAdmin"].includes(role)) assert.ok(items.length <= (role === "Accounting" ? 9 : 5), `${role}: primary menu stays focused`);
+  // The Super Admin and the Auditor oversee the same workspaces read-only (the Super Admin after
+  // its own console). The GAF approves, verifies bank files and transfers, and reads budget,
+  // reports and the management portal.
+  if (!["Admin", "SuperAdmin", "Auditor"].includes(role)) assert.ok(items.length <= ({ Accounting: 9, GAF: 7 }[role] || 5), `${role}: primary menu stays focused`);
   assert.equal(new Set(items.map(([, path]) => path)).size, items.length);
   items.forEach(([, path]) => assert.ok(canAccessNavigation(role, path), `${role}: ${path}`));
 }
 assert.ok(roleNavigation.Admin.some(([, path]) => path === "/accounting/payables"), "Admin opens workspaces from the menu, not from a hub page");
-assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/budget"], "Treasury also runs Budget Control");
+assert.deepEqual(roleNavigation.Treasury.map(([, path]) => path), ["/", "/treasury", "/treasury/history", "/treasury/transfers", "/budget"], "Treasury also runs Budget Control and the Track D transfers");
 assert.equal(canAccessNavigation("Solicitor", "/suppliers"), true, "Contextual supplier workflow remains accessible");
 assert.equal(canAccessNavigation("Solicitor", "/settings"), false);
 assert.equal(requestStage("TXT_GENERADO"), 4, "TXT generation does not complete Payment");

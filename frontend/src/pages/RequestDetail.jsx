@@ -65,8 +65,12 @@ import {
   flowTypeLabels,
   optionLabel,
   requestFrequencyLabels,
-  requestTypeLabels
+  requestTypeLabels,
+  transferPurposeLabels,
+  treasuryAccountKindLabels
 } from "../utils/options.js";
+import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
+import { bankDisplayName } from "../../../shared/peruBanks.mjs";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import RequestSummaryFacts from "../components/RequestSummaryFacts.jsx";
 import CostAllocationSummary from "../components/CostAllocationSummary.jsx";
@@ -83,6 +87,7 @@ import RenditionCountdown from "../components/RenditionCountdown.jsx";
 import RequestComments from "../components/RequestComments.jsx";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import { celebrate } from "../utils/celebrate.js";
+import { laterStagesText, mustSendUp } from "../utils/approvalOptions.js";
 
 const workflow = REQUEST_LIFECYCLE;
 const documentPhaseOrder = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
@@ -135,6 +140,13 @@ function capexProjectLabel(capexDetails = {}) {
 
 function hasValue(value) {
   return value !== undefined && value !== null && value !== "";
+}
+
+// Track D: one of UMA's own accounts as it was when the transfer was registered.
+function TransferAccount({ account }) {
+  const { t } = useLanguage();
+  if (!account) return "-";
+  return <div className="primary-cell"><strong>{account.code || "-"}</strong><span>{[bankDisplayName(account.bank), account.currency, account.accountNumber].filter(Boolean).join(" · ")}</span>{(account.cci || account.ledgerAccount) && <small>{[account.cci && `CCI ${account.cci}`, account.ledgerAccount && `${t("Ledger account")} ${account.ledgerAccount}`, account.kind && t(treasuryAccountKindLabels[account.kind] || account.kind)].filter(Boolean).join(" · ")}</small>}</div>;
 }
 
 function requesterName(request) {
@@ -285,6 +297,11 @@ export default function RequestDetail() {
   }, [id, permissions.canApprove, activeApprovalStep?._id]);
   const canForwardChain = isChainApprovalStep && Boolean(approvalOptions?.canForward);
   const forwardToName = approvalOptions?.forwardTo?.name || "";
+  // Above the superior-approval threshold the jefe cannot finalize: "Approve" sends it up.
+  const sendUp = isChainApprovalStep && mustSendUp(approvalOptions);
+  // The approve button's forward choice: finalize (false) unless it must go up; none outside a chain.
+  const approveForward = isChainApprovalStep ? sendUp : undefined;
+  const laterStages = laterStagesText(approvalOptions, t);
 
   const attachments = request?.attachments || [];
   const missingDocuments = useMemo(() => requirements
@@ -426,7 +443,14 @@ export default function RequestDetail() {
   function decision(type, forward) {
     const details = { label: "Request", value: request.requestNumber };
     const actions = {
-      approve: isChainApprovalStep ? (forward ? {
+      approve: isChainApprovalStep ? (forward && sendUp ? {
+        title: forwardToName ? t("Approve and send to {name}?").replace("{name}", forwardToName) : "Approve and send to your jefe?",
+        description: "Above this amount your approval cannot finalize the request: it goes to your superior, who decides next.",
+        confirmLabel: forwardToName ? t("Approve and send to {name}").replace("{name}", forwardToName) : "Send to my jefe",
+        tone: "success",
+        inputLabel: "Approval comments",
+        details: [details, ...(forwardToName ? [{ label: "Next approver", value: forwardToName }] : []), ...(laterStages ? [{ label: "Then", value: laterStages }] : []), { label: "Result", value: "This step is marked approved and your superior decides next." }]
+      } : forward ? {
         title: "Approve and send to your jefe?",
         description: "This records your approval and sends the request to your jefe for a further decision.",
         confirmLabel: "Send to my jefe",
@@ -444,7 +468,7 @@ export default function RequestDetail() {
         description: "Record an authenticated electronic sign-off and advance the configured route.",
         confirmLabel: "Approve request",
         inputLabel: "Approval comments",
-        details: [details, { label: "Result", value: "The configured route advances; budget remains a separate controlled stage." }]
+        details: [details, ...(laterStages ? [{ label: "Then", value: laterStages }] : []), { label: "Result", value: transfer ? "The next approval step follows; once both approvals are in, Treasury makes the transfer." : "The configured route advances; budget remains a separate controlled stage." }]
       },
       observe: {
         title: "Send this request back?",
@@ -481,6 +505,7 @@ export default function RequestDetail() {
   if (!request) return <section><Message type="error">{error || "Request not found."}</Message></section>;
 
   const supplier = request.supplier;
+  const transfer = isTransfer(request) ? request.treasuryTransfer || {} : null;
   const order = request.purchaseOrder;
   const invoiceCorrection = Boolean(order) && ["OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(request.status);
   const approvedExceptionAfterObservation = request.status === "OBSERVADO_SUNAT"
@@ -536,7 +561,7 @@ export default function RequestDetail() {
     }));
   };
   const runStep = (run) => ({
-    approve: () => (isChainApprovalStep ? decision("approve", false) : decision("approve")),
+    approve: () => decision("approve", approveForward),
     observe: () => decision("observe"),
     budget: confirmCommitBudget,
     submit: submitRequest,
@@ -547,20 +572,22 @@ export default function RequestDetail() {
   // navigation. It reuses the action panel's handlers; the full panel stays at #request-actions.
   const stickyAction = permissions.canApprove
     ? (isChainApprovalStep
-      ? { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve", false), className: "primary-button approve-button" }
+      ? { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve", approveForward), className: "primary-button approve-button" }
       : { label: "Approve", icon: CheckCircle2, onClick: () => decision("approve") })
     : permissions.canCommitBudget ? { label: "Commit budget", icon: CheckCircle2, onClick: confirmCommitBudget }
-    : permissions.modifiable && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
+    : permissions.modifiable && !transfer && !missingDocuments.length ? { label: "Submit", icon: Send, onClick: submitRequest, disabled: processing }
     : permissions.canIssueOrder ? { label: "Issue order", icon: ShoppingCart, onClick: confirmIssueOrder }
     : permissions.canClose ? { label: "Close request", icon: CheckCircle2, onClick: confirmClose }
     : step?.mine && step.review ? { label: "Review receipts", icon: FileText, href: "#next-step", onClick: () => openStep({ target: "next-step" }) }
     : step?.mine && step.action?.open ? { label: step.action.label, icon: FileText, href: `#${step.action.open.target || "next-step"}`, onClick: () => openStep(step.action.open) }
     : null;
-  const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain, permissions.canApprove && (permissions.canObserve || permissions.canReturn), permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
+  const availableActionCount = [permissions.canWithdraw, permissions.modifiable, permissions.canApprove, permissions.canApprove && isChainApprovalStep && canForwardChain && !sendUp, permissions.canApprove && (permissions.canObserve || permissions.canReturn), permissions.canApprove && permissions.canReject, permissions.canCommitBudget, permissions.canIssueOrder, permissions.canClose, permissions.canVoid].filter(Boolean).length;
   const StickyIcon = stickyAction?.icon;
-  const requestDescription = request.flowType === "C"
-    ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
-    : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
+  const requestDescription = transfer
+    ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${transferRoute(request)}`
+    : request.flowType === "C"
+      ? `${t(optionLabel(request.requestType, requestTypeLabels))} - ${requesterName(request)}`
+      : `${t(optionLabel(request.requestType, requestTypeLabels))} - ${entityName(supplier, "")}`;
 
   return (
     <DetailTab.Provider value={activeTab}><section className="focused-request-detail">
@@ -599,7 +626,7 @@ export default function RequestDetail() {
       {simpleAdvance || usesPlainStatuses(user) ? null : <div className="stage-row" role="group" aria-label={t("Current status")}>
         <FinancialProgressSummary request={request} financialProgress={related.financialProgress} renditionRequirements={trackCRenditionRequirements} compact />
         <RequestStageIndicator request={request} financialProgress={related.financialProgress} />
-        {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}
+        {request.status === "PENDIENTE_APROBACION" && activeApprovalStep && <p className="muted-text"><strong>{t("Pending with")}:</strong> {activeApprovalStep.approverSnapshot?.name || t(activeApprovalStep.tier || activeApprovalStep.approvalLevel)}{activeApprovalStep.coveringForSnapshot?.name ? ` · ${t("on behalf of {name}").replace("{name}", activeApprovalStep.coveringForSnapshot.name)}` : ""}</p>}
         <InfoPopover label="What do these statuses mean?" align="end"><div className="workflow-details"><RequestStatusFlow request={{ ...request, status: displayedRequestStatus(request, related.financialProgress) }} /></div></InfoPopover>
       </div>}
       <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={simpleAdvance
@@ -633,7 +660,7 @@ export default function RequestDetail() {
               <Definition label="Track">{t(flowTypeLabels[request.flowType] || request.flowType)}</Definition>
               <Definition label="Expense nature">{t(optionLabel(request.expenseNature, expenseNatureLabels))}</Definition>
               <Definition label="Area / School">{request.schoolOrDepartment || request.requesterArea || request.requestingArea || "-"}</Definition>
-              {request.flowType !== "C" && <Definition label="Cost center type">{t(costCenterTypeLabels[isOnBehalf(request) ? "POR_ENCARGO" : "PROPIO"])}</Definition>}
+              {!["C", "D"].includes(request.flowType) && <Definition label="Cost center type">{t(costCenterTypeLabels[isOnBehalf(request) ? "POR_ENCARGO" : "PROPIO"])}</Definition>}
               {isOnBehalf(request) && <>
                 <Definition label="Requesting area">{[request.requesterArea || request.requestingArea, request.requesterCostCenterSnapshot?.code && `${request.requesterCostCenterSnapshot.code} - ${request.requesterCostCenterSnapshot.name || ""}`].filter(Boolean).join(" · ") || "-"}</Definition>
                 <Definition label="Charged to"><CostAllocationSummary allocations={request.costAllocations} currency={request.currency} /></Definition>
@@ -650,6 +677,22 @@ export default function RequestDetail() {
             </DefinitionGrid>
           </Section>
 
+          {transfer && (
+            <Section title="Transfer" description="Money moved between two of UMA's own bank accounts in the same currency. No supplier, budget or invoice is involved.">
+              <DefinitionGrid>
+                <Definition label="From account"><TransferAccount account={transfer.sourceAccount} /></Definition>
+                <Definition label="To account"><TransferAccount account={transfer.destinationAccount} /></Definition>
+                <Definition label="Amount">{formatCurrency(request.totalAmount, request.currency, language)}</Definition>
+                <Definition label="Purpose">{t(transferPurposeLabels[transfer.purpose] || transfer.purpose || "-")}</Definition>
+                {transfer.instrument && <Definition label="Instrument">{transfer.instrument}</Definition>}
+                {transfer.reference && <Definition label="Reference">{transfer.reference}</Definition>}
+                <Definition label="Operation number">{transfer.operationNumber || t("Not executed yet")}</Definition>
+                {transfer.executedAt && <Definition label="Execution date">{formatDate(transfer.executedAt, language)}</Definition>}
+              </DefinitionGrid>
+              {["Admin", "Treasury", "GAF", "Accounting"].includes(user.role) && <Link className="text-link" to={`/treasury/transfers?request=${request._id}`}>{t("Open in Transfers")}</Link>}
+            </Section>
+          )}
+
           {request.requestType === "CAPEX" && (
             <Section title="CAPEX financial information" description="Investment classification and financial evaluation captured in the official request.">
               <DefinitionGrid>
@@ -662,7 +705,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <Section skip={simpleAdvance} title="Item / service breakdown" description="All accounting dimensions and immutable commercial totals are shown per line.">
+          <Section skip={simpleAdvance || Boolean(transfer)} title="Item / service breakdown" description="All accounting dimensions and immutable commercial totals are shown per line.">
             <DataTable
               controls={false}
               rows={request.lines || []}
@@ -684,7 +727,7 @@ export default function RequestDetail() {
             </div>
           </Section>
 
-          {request.flowType !== "C" && (
+          {!["C", "D"].includes(request.flowType) && (
             <Section title="Supplier quotations" description="The supplier comparison and recommendation remain linked to uploaded evidence.">
               <DefinitionGrid>
                 <Definition label="Supplier">{entityName(supplier)}</Definition>
@@ -710,12 +753,12 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <Section title="Budget commitment"><DefinitionGrid>              <Definition label="Budget status"><StatusBadge status={request.budgetCommitment?.status || "NO_BUDGET"} /></Definition>
+          <Section skip={Boolean(transfer)} title="Budget commitment"><DefinitionGrid>              <Definition label="Budget status"><StatusBadge status={request.budgetCommitment?.status || "NO_BUDGET"} /></Definition>
               <Definition label="Budget amount">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.totalAmount, "PEN", language) : "-"}</Definition>
               <Definition label="Executed budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.executedAmount, "PEN", language) : "-"}</Definition>
               <Definition label="Paid budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.paidAmount, "PEN", language) : "-"}</Definition>
 </DefinitionGrid></Section>
-          <Section title="Budget preview" description="This is a current read-only calculation; the authoritative commitment remains in the budget ledger.">
+          <Section skip={Boolean(transfer)} title="Budget preview" description="This is a current read-only calculation; the authoritative commitment remains in the budget ledger.">
             <div className="budget-preview">
               <div className="budget-preview-summary">
                 <StatusBadge status={related.budgetPreview?.status || "PENDING_VALIDATION"} />
@@ -769,7 +812,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          <Section skip={simpleAdvance} title="Documents and fiscal validation" description="Original evidence is protected and fiscal amounts come from server-side XML parsing.">
+          <Section skip={simpleAdvance || Boolean(transfer)} title="Documents and fiscal validation" description="Original evidence is protected and fiscal amounts come from server-side XML parsing.">
             <div className="document-phase-heading">
               <span>{t("Current document phase")}</span>
               <StatusBadge status={documentStatus.currentPhase || "SUBMISSION"} />
@@ -920,7 +963,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
-          {!simpleAdvance && <div hidden={activeTab !== "Documents"}><FinancialValidationSummary request={request} related={related} /></div>}
+          {!simpleAdvance && !transfer && <div hidden={activeTab !== "Documents"}><FinancialValidationSummary request={request} related={related} /></div>}
           <Section title="Financial control records" description="Budget, purchase order, CXP, journals, bank batches, payment, and reconciliation remain independently traceable.">
             <DefinitionGrid>
               <Definition label="Purchase / Service Order">{order?.poNumber || "-"}</Definition>
@@ -1027,7 +1070,7 @@ export default function RequestDetail() {
                   <button type="button" className="secondary-button" disabled={processing} onClick={() => decision("withdraw")}><Undo2 size={16} /><span>{t("Withdraw")}</span></button>
                 </div>
               )}
-              {permissions.modifiable && (
+              {permissions.modifiable && !transfer && (
                 <div className="action-item">
                   <div><strong>{t("Submit for approval")}</strong><span id="request-submit-reason">{missingDocuments.length ? t("Upload the required documents before submission.") : t("Starts the configured approval route.")}</span></div>
                   <div className="action-item-buttons">
@@ -1040,10 +1083,11 @@ export default function RequestDetail() {
                   stays available as a link under them. */}
               {permissions.canApprove && (
                 <div className="action-buttons">
-                  <button type="button" className="primary-button approve-button" onClick={() => decision("approve", isChainApprovalStep ? false : undefined)}><CheckCircle2 size={16} /><span>{t("Approve")}</span></button>
+                  <button type="button" className="primary-button approve-button" onClick={() => decision("approve", approveForward)}><CheckCircle2 size={16} /><span>{sendUp && forwardToName ? t("Approve and send to {name}").replace("{name}", forwardToName) : t("Approve")}</span></button>
                   {(permissions.canObserve || permissions.canReturn) && <button type="button" className="secondary-button" onClick={() => decision("observe")}><MessageSquareWarning size={16} /><span>{t("Send back")}</span></button>}
                   {permissions.canReject && <button type="button" className="danger-button subtle" onClick={() => decision("reject")}><XCircle size={16} /><span>{t("Reject")}</span></button>}
-                  {isChainApprovalStep && canForwardChain && <button type="button" className="text-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Approve and send it to my jefe")}</span></button>}
+                  {laterStages && <p className="muted-text">{t("Then")}: {laterStages}</p>}
+                  {isChainApprovalStep && canForwardChain && !sendUp && <button type="button" className="text-button" title={forwardToName ? `${t("Send to my jefe")}: ${forwardToName}` : undefined} onClick={() => decision("approve", true)}><Forward size={16} /><span>{t("Approve and send it to my jefe")}</span></button>}
                 </div>
               )}
               {permissions.canCommitBudget && (

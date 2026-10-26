@@ -56,8 +56,8 @@ const detail = source("../src/pages/RequestDetail.jsx");
 assert.match(detail, /const simpleAdvance = isOwner && request\.flowType === "C" && request\.requestType === "ENTREGA_RENDIR" && RENDITION_STAGES\.includes/);
 assert.match(detail, /simpleAdvance \? <AdvanceRenditionCard request=\{request\} onOpen=\{openReceipts\} \/>/);
 assert.match(detail, /\{ id: "General", label: "Summary"[^}]*\}, \{ id: "Documents", label: "Receipts"[^}]*\}, \{ id: "Approvals", label: "History"/);
-assert.match(detail, /<Section skip=\{simpleAdvance\} title="Documents and fiscal validation"/, "no invoice validation or document phases for the employee's advance");
-assert.match(detail, /\{!simpleAdvance && <div hidden=\{activeTab !== "Documents"\}><FinancialValidationSummary/);
+assert.match(detail, /<Section skip=\{simpleAdvance \|\| Boolean\(transfer\)\} title="Documents and fiscal validation"/, "no invoice validation or document phases for the employee's advance");
+assert.match(detail, /\{!simpleAdvance && !transfer && <div hidden=\{activeTab !== "Documents"\}><FinancialValidationSummary/);
 assert.match(detail, /<SimpleRenditionForm request=\{request\} onReload=\{load\} \/>/);
 // "Repeat this request" was removed from the request page.
 assert.doesNotMatch(detail, /Repeat this request|\/requests\/new\?from=/, "no Repeat action");

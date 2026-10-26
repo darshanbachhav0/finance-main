@@ -13,7 +13,7 @@ for (const path of ["/reports", "/my-team", "/requests", "/approvals", "/budget"
   assert.equal(canAccessNavigation("ManagementViewer", path), false, `${path} is outside the read-only viewer scope`);
 }
 assert.match(app, /user\?\.role === "ManagementViewer"/);
-assert.match(app, /roles=\{\["Admin", "Management", "ManagementViewer", "SuperAdmin"\]\}/);
+assert.match(app, /roles=\{\["Admin", "Management", "ManagementViewer", "GAF", "SuperAdmin", "Auditor"\]\}/);
 // The portal route is the only one that names ManagementViewer.
 assert.equal(app.match(/ManagementViewer/g).length, 2);
 assert.match(app, /roles=\{internalRoles\}/);

@@ -82,6 +82,8 @@ test("a request carrying a supplier that waits for its proposer's jefe", { timeo
       const supplier = await waitingSupplier(); const request = await requestWith(supplier);
       const result = await bulkApproveRequests({ ids: [request._id], forward: false, user: jefe, req });
       assert.equal(result.results[0].ok, true);
+      // The jefe's approval goes to their superior, who finalizes it.
+      assert.equal((await bulkApproveRequests({ ids: [request._id], forward: false, user: root, req })).results[0].ok, true);
       assert.equal((await Supplier.findById(supplier._id)).homologationStatus, "PENDING_VALIDATION");
       assert.notEqual(await statusOf(request), REQUEST_STATUS.PENDING_APPROVAL);
       assert.equal(await AuditLog.countDocuments({ entityId: supplier._id, action: "APPROVED_BY_JEFE" }),0);
