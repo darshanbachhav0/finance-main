@@ -7,6 +7,7 @@ import CostCenter from "../models/CostCenter.js";
 import { AppError } from "../utils/AppError.js";
 import { BUDGET_STATUS, ERROR_CODES } from "../utils/constants.js";
 import { addMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
+import { distributeAcrossCostCenters, sharedCostAllocations } from "../../../shared/costCenterAllocation.mjs";
 import { budgetLimits, changeAllocationUsage, findBudgetAllocation as findAllocation, isBudgetPlan } from "./budgetAllocationService.js";
 
 // Budget is controlled per Cost Center (and optional project); the accounting account of a line
@@ -35,8 +36,10 @@ export function groupBudgetLines(lines = [], project = "") {
   return [...grouped.values()].map((line) => ({ ...line, amount: roundMoney(line.amount) }));
 }
 
+// A Por Encargo request shared across several CECOs draws on each beneficiary's budget by its
+// percentage; any other request draws on the CECO its lines carry.
 export function groupedRequestLines(request) {
-  return groupBudgetLines(request.lines || [], request.project);
+  return distributeAcrossCostCenters(groupBudgetLines(request.lines || [], request.project), sharedCostAllocations(request), "amount");
 }
 
 export async function previewBudget(request) {
