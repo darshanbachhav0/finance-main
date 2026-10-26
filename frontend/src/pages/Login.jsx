@@ -14,13 +14,8 @@ const DEMO_LOGIN_ENABLED = import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
 
 const demos = DEMO_LOGIN_ENABLED ? [
   { key: "admin", role: "Admin", dni: "10000001", password: "UMA-Demo-2026!" },
-  { key: "solicitor", role: "Solicitor", dni: "10000002", password: "UMA-Demo-2026!" },
-  { key: "director", role: "Area Director", dni: "10000003", password: "UMA-Demo-2026!" },
-  { key: "vice", role: "Vice Rector", dni: "10000004", password: "UMA-Demo-2026!" },
   { key: "accounting", role: "Accounting", dni: "10000005", password: "UMA-Demo-2026!" },
-  { key: "treasury", role: "Treasury", dni: "10000006", password: "UMA-Demo-2026!" },
-  { key: "management", role: "Management", dni: "10000008", password: "UMA-Demo-2026!" },
-  { key: "procurement", role: "Procurement", dni: "10000013", password: "UMA-Demo-2026!" }
+  { key: "treasury", role: "Treasury", dni: "10000006", password: "UMA-Demo-2026!" }
 ] : [];
 
 // The authenticator setup key, in groups of four so it is easy to type into the app.

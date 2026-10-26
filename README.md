@@ -66,9 +66,11 @@ environment-variable reference, background workers, migrations, and backup proce
 
 ## Development demo data
 
-`npm run seed` creates a fictional, internally-consistent UMA demo dataset covering all nine role
-profiles. The demo password is generated fresh per run (or read from `SEED_DEMO_PASSWORD` if set) —
-it is **not** a fixed value anywhere in source. Capture it from the seed command's final JSON
+`npm run seed` creates a fictional UMA demo dataset (cost centers, budgets, suppliers, rules) with
+four staff accounts: Admin (DNI 10000001), Accounting (10000005), Treasury (10000006) and
+Treasury - Budget (10000007). It creates no requests; the demo accounts and requests of earlier
+seeds are removed with `npm run demo:remove-accounts` (see docs/OPERATIONS.md).
+The demo password is generated fresh per run (or read from `SEED_DEMO_PASSWORD` if set) — it is **not** a fixed value anywhere in source. Capture it from the seed command's final JSON
 summary output (`password` field). To wipe and recreate:
 
 ```powershell

@@ -19,11 +19,10 @@ test("a required approval step SKIPPED by manager-chain finalization does not le
   assert.equal(hasOpenRequiredApprovalStep([{ status: "PENDING", required: false }]), false);
 });
 
-// The development seed drives every scenario through the real services, so it breaks whenever a
-// business rule changes and the seed is not updated. It runs in a child process so its upload and
-// bank-file storage (fixed at import time) goes to a throwaway directory, against a throwaway
-// database, offline (no SUNAT endpoint, no reference-rate fallback).
-test("development seed completes and builds every demo scenario", { timeout: 240000 }, async () => {
+// The development seed builds the demo master data and the four staff accounts. It runs in a child
+// process so its storage and backups (fixed at import time) go to a throwaway directory, against a
+// throwaway database, offline (no SUNAT endpoint, no reference-rate fallback).
+test("development seed completes with the four staff accounts and no demo requests", { timeout: 240000 }, async () => {
   const databaseName = `erp_seed_smoke_${process.pid}_${Date.now()}`;
   const uri = `mongodb://127.0.0.1:${Number(process.env.TEST_MONGODB_PORT || 27017)}/${databaseName}`;
   const storageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "uma-seed-smoke-"));
@@ -31,6 +30,7 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     ...process.env,
     MONGODB_URI: uri,
     UMA_STORAGE_ROOT: storageRoot,
+    BACKUP_DIR: path.join(storageRoot, "backups"),
     SEED_DEMO_PASSWORD: "UMA-Demo-2026!",
     NODE_ENV: "development",
     SUNAT_PROVIDER_MODE: "MOCK",
@@ -51,35 +51,10 @@ test("development seed completes and builds every demo scenario", { timeout: 240
   try {
     const summary = await seedOnce();
     assert.equal(summary.success, true);
-    const byKey = Object.fromEntries(summary.scenarios.map((item) => [item.key, item]));
-    const expected = {
-      UMA_01_BORRADOR_SALUD: "BORRADOR",
-      UMA_02_PENDIENTE_DIRECTOR: "PENDIENTE_APROBACION",
-      UMA_03_PENDIENTE_VICERRECTOR: "PENDIENTE_APROBACION",
-      // Legacy scenario key: jefe finalization no longer appends Rectorate approval.
-      UMA_04_PENDIENTE_RECTORADO: "COMPROMISO_PRESUPUESTAL",
-      UMA_05_COMPROMISO_PRESUPUESTAL: "COMPROMISO_PRESUPUESTAL",
-      UMA_06_CONTABILIZADO: "CONTABILIZADO",
-      UMA_07_PROGRAMADO: "PROGRAMADO",
-      UMA_08_TXT_SCOTIABANK: "TXT_GENERADO",
-      UMA_09_TXT_INTERBANK_USD: "TXT_GENERADO",
-      UMA_10_PAGADO_BBVA: "PAGADO",
-      UMA_11_CERRADO_BCP: "CERRADO",
-      UMA_12_RENDICION_PENDIENTE: "PAGADO",
-      UMA_13_RENDICION_CERRADA: "CERRADO",
-      UMA_14_REEMBOLSO_NO_DEDUCIBLE: "CONTABILIZADO",
-      UMA_15_OBSERVADO: "OBSERVADO",
-      UMA_16_RECHAZADO: "RECHAZADO",
-      UMA_17_EXCEPCION_PRESUPUESTAL: "OBSERVADO_PRESUPUESTO",
-      UMA_18_PERIODO_CERRADO: "BORRADOR",
-      UMA_19_VIA_B_CONCILIADO: "CONCILIADO",
-      UMA_20_DETRACCION_DEPOSITADA: "PAGADO",
-      UMA_21_A2_LOTE_FACTURAS: "CONTABILIZADO"
-    };
-    assert.equal(summary.scenarios.length, Object.keys(expected).length, JSON.stringify(summary.scenarios));
-    for (const [key, status] of Object.entries(expected)) assert.equal(byKey[key]?.status, status, key);
-    assert.equal(byKey.UMA_19_VIA_B_CONCILIADO.flowType, "B");
-    assert.equal(byKey.UMA_13_RENDICION_CERRADA.flowType, "C");
+    assert.deepEqual(summary.demoAccounts.map((line) => line.split(" ")[0]).sort(), ["10000001", "10000005", "10000006", "10000007"]);
+    assert.equal(summary.users, 4);
+    assert.equal(summary.requests, 0);
+    assert.deepEqual(summary.removedDemoAccounts, []);
 
     // A separate connection with no models registered, so no auto-index build recreates
     // collections after the drop below.
@@ -87,18 +62,6 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     const db = connection.db;
     const rates = await db.collection("exchangerates").find({ authoritative: true, providerMode: "SUNAT" }).toArray();
     assert.ok(rates.length > 0 && rates.every((rate) => /^DEMO/.test(rate.sourceLabel)), "demo rates are labelled as demo data");
-    const batch = await db.collection("massuploadbatches").findOne({});
-    assert.equal(batch?.status, "COMPLETED");
-    assert.equal(batch?.processedSuccess, 2);
-    const detraction = await db.collection("accountspayables").findOne({ "detraction.status": "DEPOSITED" });
-    assert.equal(detraction?.status, "PAID");
-    // The manager chain finalized above configured rule stages the approvers already hold
-    // (recorded SKIPPED); the Purchase Order and the closure must still accept that route.
-    const closed = await db.collection("financialrequests").findOne({ developmentScenarioKey: "UMA_11_CERRADO_BCP" });
-    assert.ok(closed.purchaseOrder);
-    assert.ok(closed.approvalRouteSnapshot.some((step) => step.status === "APPROVED"));
-    assert.ok(closed.approvalRouteSnapshot.every((step) => step.required === false || ["APPROVED", "SKIPPED"].includes(step.status)));
-
     // A database seeded by an earlier seed version keeps that version's demo account (another
     // number) as the supplier's preferred one. Seeding again retires it instead of failing on
     // "one active preferred account per currency and type" (E11000).
@@ -110,22 +73,15 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     assert.deepEqual(preferred.map((account) => account.accountNumber), [current.accountNumber], "the current demo account is the preferred one");
     assert.equal((await accounts.findOne({ accountNumber: "00119999000200000123" })).active, false, "the older one is kept, inactive");
 
-    // A seed run in an earlier month left a scenario waiting for approval in that month, which the
-    // seed has since closed: it is created again in this month instead of failing on the closed
-    // period (ACCOUNTING_PERIOD_CLOSED).
-    const today = new Date();
-    const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
-    const requests = db.collection("financialrequests");
-    const stale = await requests.findOne({ developmentScenarioKey: "UMA_02_PENDIENTE_DIRECTOR" });
-    await requests.updateOne({ _id: stale._id }, { $set: { accountingPeriod: lastMonth } });
+    // A database seeded by an earlier seed version still has a retired demo account (here a
+    // requester with a draft request): seeding again removes both.
+    const requester = await db.collection("users").insertOne({ name: "Solicitante Ciencias de la Salud (Demo)", email: "demo.solicitante.salud@uma.edu.pe", dni: "10000002", role: "Solicitor", active: true });
+    await db.collection("financialrequests").insertOne({ requestNumber: "SOL-2026-30001", requester: requester.insertedId, status: "BORRADOR", developmentScenarioKey: "UMA_01_BORRADOR_SALUD" });
     const rerun = await seedOnce();
-    assert.equal(rerun.success, true, "the seed runs again over last month's unfinished demo data");
-    const recreated = await requests.findOne({ developmentScenarioKey: "UMA_02_PENDIENTE_DIRECTOR" });
-    assert.notEqual(String(recreated._id), String(stale._id), "created again");
-    assert.deepEqual([recreated.accountingPeriod, recreated.status, recreated.requestNumber], [today.toISOString().slice(0, 7), "PENDIENTE_APROBACION", stale.requestNumber]);
-    // One that went past approval cannot be redone: the seed says what to do instead.
-    await requests.updateOne({ developmentScenarioKey: "UMA_11_CERRADO_BCP" }, { $set: { accountingPeriod: lastMonth } });
-    await assert.rejects(seedOnce(), (error) => /UMA_11_CERRADO_BCP.*seed:reset/s.test(`${error.stderr || ""}${error.message}`));
+    assert.deepEqual(rerun.removedDemoAccounts, ["10000002 Solicitante Ciencias de la Salud (Demo)"]);
+    assert.equal(await db.collection("users").countDocuments({ dni: "10000002" }), 0);
+    assert.equal(await db.collection("financialrequests").countDocuments(), 0);
+    assert.ok(await db.collection("auditlogs").findOne({ action: "DEMO_ACCOUNTS_REMOVED" }), "the removal is audited");
   } finally {
     connection ||= await mongoose.createConnection(uri).asPromise();
     await connection.dropDatabase();

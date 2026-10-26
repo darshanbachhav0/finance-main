@@ -76,6 +76,7 @@ import "./accountingFixes.test.js";
 import "./retiredRoles.test.js";
 import "./plainClone.test.js";
 import "./seedSmoke.test.js";
+import "./demoAccountRemoval.test.js";
 import "./notificationLinks.test.js";
 import "./globalSearch.test.js";
 

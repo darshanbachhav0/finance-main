@@ -22,6 +22,7 @@
     "verify:uma-demo": "node scripts/verifyUmaDemoData.js",
     "rotate:deployment-passwords": "node scripts/rotateDeploymentPasswords.js",
     "account:recover": "node scripts/recoverAccount.js",
+    "demo:remove-accounts": "node scripts/removeDemoAccounts.js",
     "superadmin:create": "node scripts/superAdmin.js create",
     "superadmin:list": "node scripts/superAdmin.js list",
     "superadmin:reset-2fa": "node scripts/superAdmin.js reset-2fa",
