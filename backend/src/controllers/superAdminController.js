@@ -14,7 +14,6 @@ import {
   resetAdministratorPassword,
   setAdministratorActive,
   signOutAdministrator,
-  unlockAdministrator,
   updateAdministrator
 } from "../services/adminAccountService.js";
 import { lastSuccessfulBackup, listBackupRuns, startBackup } from "../services/backupService.js";
@@ -51,7 +50,7 @@ export const overview = asyncHandler(async (req, res) => {
     lastSuccessfulBackup(),
     currentSettings(),
     safely(() => platformWorkload(req.user), []),
-    AuditLog.countDocuments({ module: "AUTH", action: { $in: ["LOGIN_FAILED", "TWO_FACTOR_FAILED", "ACCOUNT_LOCKED"] }, createdAt: { $gte: since } })
+    AuditLog.countDocuments({ module: "AUTH", action: { $in: ["LOGIN_FAILED", "TWO_FACTOR_FAILED"] }, createdAt: { $gte: since } })
   ]);
   res.json({
     data: {
@@ -77,7 +76,6 @@ export const editAdministrator = asyncHandler(async (req, res) => res.json(await
 export const activateAdministrator = asyncHandler(async (req, res) => res.json(await setAdministratorActive(req.params.id, true, context(req))));
 export const deactivateAdministrator = asyncHandler(async (req, res) => res.json(await setAdministratorActive(req.params.id, false, context(req))));
 export const resetPassword = asyncHandler(async (req, res) => res.json(await resetAdministratorPassword(req.params.id, context(req))));
-export const unlock = asyncHandler(async (req, res) => res.json(await unlockAdministrator(req.params.id, context(req))));
 export const signOutEverywhere = asyncHandler(async (req, res) => res.json(await signOutAdministrator(req.params.id, context(req))));
 export const promote = asyncHandler(async (req, res) => res.json(await promoteToAdministrator(req.body?.userId, context(req))));
 export const demote = asyncHandler(async (req, res) => res.json(await demoteAdministrator(req.params.id, req.body || {}, context(req))));

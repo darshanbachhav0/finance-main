@@ -13,8 +13,8 @@ import { auditSubject, securityAlertLabels } from "../../utils/superAdmin.js";
 import { formatDateTime } from "../../utils/formatters.js";
 import "../../styles/superAdmin.css";
 
-// Sensitive changes made by administrators (and administrator lockouts). Each one also reached the
-// Super Admin's bell when it happened.
+// Sensitive changes made by administrators. Each one also reached the Super Admin's bell when it
+// happened.
 export default function SuperAdminAlerts() {
   const { t, language } = useLanguage();
   const deepLink = useDeepLink(["record"]);
@@ -26,7 +26,7 @@ export default function SuperAdminAlerts() {
     <section className="super-admin-page">
       <PageHeader
         title="Security alerts"
-        description="Reopened accounting periods, changes to approval rules, bank formats and permissions, finance roles given and locked administrator accounts."
+        description="Reopened accounting periods, changes to approval rules, bank formats and permissions, and finance roles given."
         actions={<button type="button" className="secondary-button" onClick={table.reload} disabled={table.loading}><RefreshCw className={table.loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>}
       />
       {deepLink.active && <DeepLinkNotice title="Showing the alert from your notification" missing={!table.loading && !table.rows.length} missingDescription="This alert could not be found." clearLabel="Show all alerts" onClear={deepLink.clear} />}
@@ -44,7 +44,7 @@ export default function SuperAdminAlerts() {
           emptyDescription="Sensitive administrator changes will appear here."
           columns={[
             { key: "createdAt", label: "When", render: (row) => formatDateTime(row.createdAt, language) },
-            { key: "kind", label: "Alert", render: (row) => <span className={`badge badge-${row.kind === "ADMIN_ACCOUNT_LOCKED" ? "danger" : "warning"}`}><span className="badge-label">{t(securityAlertLabels[row.kind] || row.kind)}</span></span> },
+            { key: "kind", label: "Alert", render: (row) => <span className="badge badge-warning"><span className="badge-label">{t(securityAlertLabels[row.kind] || row.kind)}</span></span> },
             { key: "actorName", label: "Who", render: (row) => <div className="primary-cell"><strong>{row.actorName || t("System")}</strong><span>{t(row.role || "")}</span></div> },
             { key: "subject", label: "Record", sortable: false, render: (row) => auditSubject(row) || "-" },
             { key: "comments", label: "Comment", sortable: false, render: (row) => row.comments || row.message || "-" }

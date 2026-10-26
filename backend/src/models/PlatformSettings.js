@@ -8,9 +8,7 @@ const platformSettingsSchema = new mongoose.Schema(
     passwordPolicy: {
       minLength: { type: Number, min: 10, max: 72 },
       // 0: passwords never expire.
-      expiryDays: { type: Number, min: 0, max: 365 },
-      maxFailedAttempts: { type: Number, min: 1, max: 20 },
-      lockoutMinutes: { type: Number, min: 1, max: 1440 }
+      expiryDays: { type: Number, min: 0, max: 365 }
     },
     session: {
       userMinutes: { type: Number, min: 15, max: 1440 },

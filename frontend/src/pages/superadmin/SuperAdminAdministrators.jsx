@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Copy, History, KeyRound, LockOpen, LogOut, Pencil, Power, RefreshCw, Save, UserPlus, UserRoundCheck } from "lucide-react";
+import { ArrowDownToLine, Copy, History, KeyRound, LogOut, Pencil, Power, RefreshCw, Save, UserPlus, UserRoundCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import api from "../../api/client.js";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
@@ -109,7 +109,6 @@ export default function SuperAdminAdministrators() {
     setActionError("");
     const options = {
       "reset-password": { title: "Reset this administrator's password?", description: "A new temporary password is created and shown once. Their sessions end, and they must choose a new password at the next sign-in.", confirmLabel: "Reset password", tone: "danger", success: "Password reset." },
-      unlock: { title: "Unlock this account?", description: "The sign-in lock after repeated failed attempts is lifted now.", confirmLabel: "Unlock", success: "Account unlocked." },
       "sign-out": { title: "Sign this administrator out everywhere?", description: "Every open session of the account ends. Their password does not change.", confirmLabel: "Sign out everywhere", tone: "danger", success: "Sessions ended." },
       deactivate: { title: "Deactivate this administrator?", description: "They can no longer sign in. Any approvals waiting on them move to their substitute or jefe. At least one active administrator must remain.", confirmLabel: "Deactivate", tone: "danger", success: "Administrator deactivated." },
       activate: { title: "Activate this administrator?", description: "They can sign in again with their current password.", confirmLabel: "Activate", success: "Administrator activated." }
@@ -120,7 +119,6 @@ export default function SuperAdminAdministrators() {
   const rowActions = (row) => [
     { label: "View activity", icon: History, onClick: () => openActivity(row) },
     { label: "Edit details", icon: Pencil, primary: true, hidden: !row.manageable, onClick: () => { setActionError(""); setForm({ id: row._id, values: Object.fromEntries(Object.keys(emptyForm).map((key) => [key, row[key] || ""])) }); } },
-    { label: "Unlock", icon: LockOpen, hidden: !row.manageable || !row.locked, onClick: () => askConfirm(row, "unlock") },
     { label: "Reset password", icon: KeyRound, hidden: !row.manageable, onClick: () => askConfirm(row, "reset-password") },
     { label: "Sign out everywhere", icon: LogOut, hidden: !row.manageable || !row.active, onClick: () => askConfirm(row, "sign-out") },
     { label: "Return to a previous role", icon: ArrowDownToLine, hidden: !row.manageable, onClick: () => { setActionError(""); setDemote({ row, role: row.previousRole || demotionRoles[0] || "Solicitor" }); } },
@@ -131,7 +129,6 @@ export default function SuperAdminAdministrators() {
     { key: "name", label: "Administrator", render: (row) => <div className="primary-cell"><strong>{row.name}</strong><span>{row.dni ? `DNI ${row.dni}` : t("No DNI linked")}{row.role === "SuperAdmin" ? ` · ${t("SuperAdmin")}` : ""}</span></div> },
     { key: "status", label: "Status", render: (row) => <div className="primary-cell"><StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} />
       <span className="super-admin-flags">
-        {row.locked && <span className="badge badge-danger">{t("Locked")}</span>}
         {row.passwordResetRequired && <span className="badge badge-warning">{t("Password change pending")}</span>}
         {row.twoFactorEnabled && <span className="badge badge-success">{t("Authenticator on")}</span>}
       </span></div> },
@@ -154,7 +151,7 @@ export default function SuperAdminAdministrators() {
         </>}
       />
       <Message type="error">{error}</Message>
-      <p className="super-admin-summary">{t("{active} active, {inactive} inactive, {locked} locked. Activity counts cover the last {days} days.").replace("{active}", summary.activeAdmins ?? 0).replace("{inactive}", summary.inactiveAdmins ?? 0).replace("{locked}", summary.lockedAdmins ?? 0).replace("{days}", summary.activityDays ?? 30)}</p>
+      <p className="super-admin-summary">{t("{active} active, {inactive} inactive. Activity counts cover the last {days} days.").replace("{active}", summary.activeAdmins ?? 0).replace("{inactive}", summary.inactiveAdmins ?? 0).replace("{days}", summary.activityDays ?? 30)}</p>
       <div className="workspace-panel">
         <DataTable rows={rows} loading={loading} columns={columns} rowActions={rowActions} searchPlaceholder="Search name, DNI or email..." filters={[{ key: "role", label: "Role", allLabel: "All roles", options: ["Admin", "SuperAdmin"] }]} emptyTitle="No administrators yet" emptyDescription="Create the first Admin account." />
       </div>

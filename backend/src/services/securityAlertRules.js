@@ -1,5 +1,3 @@
-import { ADMINISTRATOR_ROLES } from "../utils/constants.js";
-
 // Audit events the Super Admin is alerted about. Each rule is both a query over AuditLog (the
 // Alerts page) and a test of a freshly recorded audit (the bell alert, see auditService).
 // Dependency-free on purpose: auditService imports it on every audit.
@@ -25,10 +23,6 @@ export const SECURITY_ALERT_RULES = Object.freeze([
   {
     kind: "FINANCE_ROLE_ASSIGNED",
     query: { entityType: "User", action: "FINANCE_ROLE_ASSIGNED" }
-  },
-  {
-    kind: "ADMIN_ACCOUNT_LOCKED",
-    query: { module: "AUTH", action: "ACCOUNT_LOCKED", role: { $in: ADMINISTRATOR_ROLES } }
   }
 ]);
 

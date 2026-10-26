@@ -196,9 +196,6 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.passwordResetRequired = true;
     user.passwordChangedAt = new Date();
     user.tokenVersion = (user.tokenVersion || 0) + 1;
-    // An administrator's password reset also lifts a sign-in lockout.
-    user.failedLoginAttempts = 0;
-    user.lockedUntil = null;
   }
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, emailNotifications: user.emailNotifications !== false, passwordChanged: Boolean(req.body.password) } });

@@ -8,7 +8,6 @@ import UmaBrand from "../components/UmaBrand.jsx";
 import ThemeControl from "../components/ThemeControl.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { formatDateTime } from "../utils/formatters.js";
 import "../styles/superAdmin.css";
 
 const DEMO_LOGIN_ENABLED = import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
@@ -31,7 +30,7 @@ function groupedKey(secret) {
 
 export default function Login() {
   const { login, changePassword, verifyTwoFactor, cancelTwoFactor, setupTwoFactor, enableTwoFactor, twoFactorPending, logout, user, isAuthenticated } = useAuth();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [selectedDemo, setSelectedDemo] = useState("");
   const [dni, setDni] = useState("");
   const [password, setPassword] = useState("");
@@ -74,15 +73,9 @@ export default function Login() {
         if (result?.twoFactorRequired) setCode("");
       }
     } catch (err) {
-      // A locked account says when it opens again (the server sends lockedUntil).
-      const lockedUntil = err.code === "ACCOUNT_LOCKED" ? new Date(err.details?.lockedUntil) : null;
       // The sign-in step expired: start again from the DNI and password.
       if (twoFactorPending && err.code === "TWO_FACTOR_INVALID" && err.status === 401 && /expired/i.test(err.message || "")) cancelTwoFactor();
-      setError(lockedUntil && !Number.isNaN(lockedUntil.getTime())
-        ? `${err.message}
-${t("You can sign in again from {time}.").replace("{time}", formatDateTime(lockedUntil, language))}`
-        : [err.message, err.details?.message].filter(Boolean).join("\n"));
-      if (lockedUntil) cancelTwoFactor();
+      setError([err.message, err.details?.message].filter(Boolean).join("\n"));
     } finally {
       setLoading(false);
     }

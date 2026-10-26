@@ -10,7 +10,7 @@ import { getSunatProvider } from "./src/services/sunatService.js";
 
 import app from "./src/app.js";
 import { migrateRetiredRoles } from "./src/services/legacyRoleService.js";
-import { DEFAULT_LOCKOUT_MINUTES, migrateLockoutDefault } from "./src/services/platformSettingsService.js";
+import { removeSignInLockout } from "./src/services/platformSettingsService.js";
 import { repairStoredFileNames } from "./src/services/fileNameRepairService.js";
 import { startInProcessWorkers, usesPublicPadron as usesPublicPadronMode } from "./src/workers/inProcessWorkers.js";
 
@@ -61,7 +61,8 @@ connectDB()
     }
     const fileNames = await repairStoredFileNames();
     if (fileNames.repaired) console.log(`[FILES] Repaired ${fileNames.repaired} uploaded file name(s) stored with the wrong encoding.`);
-    if ((await migrateLockoutDefault()).changed) console.log(`[SETTINGS] The saved sign-in lock of 15 minutes was the old default; it is now ${DEFAULT_LOCKOUT_MINUTES} minutes.`);
+    const lockout = await removeSignInLockout();
+    if (lockout.applied) console.log(`[SETTINGS] Sign-in lockout removed; ${lockout.unlocked} locked account(s) can sign in again.`);
     if (
       usesPublicPadron
     ) {

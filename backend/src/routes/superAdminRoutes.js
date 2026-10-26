@@ -19,7 +19,6 @@ import {
   saveSettings,
   settings,
   signOutEverywhere,
-  unlock
 } from "../controllers/superAdminController.js";
 import { authorize, protect } from "../middleware/auth.js";
 import { ROLES } from "../utils/constants.js";
@@ -40,7 +39,6 @@ router.put("/administrators/:id", editAdministrator);
 router.post("/administrators/:id/activate", activateAdministrator);
 router.post("/administrators/:id/deactivate", deactivateAdministrator);
 router.post("/administrators/:id/reset-password", resetPassword);
-router.post("/administrators/:id/unlock", unlock);
 router.post("/administrators/:id/sign-out", signOutEverywhere);
 router.post("/administrators/:id/demote", demote);
 

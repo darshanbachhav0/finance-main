@@ -17,9 +17,6 @@ const userSchema = new mongoose.Schema(
     // it count from createdAt.
     passwordChangedAt: Date,
     tokenVersion: { type: Number, default: 0 },
-    // Per-account sign-in lockout (authController.login).
-    failedLoginAttempts: { type: Number, default: 0, min: 0 },
-    lockedUntil: { type: Date, default: null },
     lastLoginAt: Date,
     lastLoginIp: String,
     // Authenticator-app (TOTP) sign-in, mandatory for the Super Admin. The secrets are encrypted
@@ -108,8 +105,6 @@ userSchema.methods.comparePassword = function comparePassword(password) {
 userSchema.methods.toJSON = function toJSON() {
   const obj = this.toObject();
   delete obj.passwordHash;
-  delete obj.failedLoginAttempts;
-  delete obj.lockedUntil;
   obj.twoFactorEnabled = Boolean(obj.twoFactor?.enabled);
   delete obj.twoFactor;
   return obj;

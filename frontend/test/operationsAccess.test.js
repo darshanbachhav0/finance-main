@@ -71,7 +71,7 @@ assert.match(auth, /<ConfirmDialog/);
 assert.match(auth, /api\.post\("\/auth\/logout"\)/);
 assert.match(auth, /error\?\.status === 401/);
 const spanish = (await import("../src/context/i18n/operations.js")).default;
-for (const text of ["Your session has expired. Sign in again to continue; your drafts were kept.", "Sign out anyway", "Stay signed in", "This account is temporarily locked after repeated failed sign-in attempts. Try again later."]) {
+for (const text of ["Your session has expired. Sign in again to continue; your drafts were kept.", "Sign out anyway", "Stay signed in", "Too many failed sign-in attempts. Try again in 15 minutes."]) {
   assert.ok(spanish[text], `Spanish copy for: ${text}`);
 }
 console.log("PASS operations access: configuration routes, report downloads, drill-downs, URL filters and session expiry");

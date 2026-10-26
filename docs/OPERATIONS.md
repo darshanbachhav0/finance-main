@@ -90,17 +90,18 @@ Background workers (see §4 — in production they run inside the web service pr
   `Accounting,Treasury,Management`) — the weekly Excel report.
 
 Authentication:
-- `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) and `LOGIN_LOCKOUT_MINUTES` (default 5) — per-account
-  lockout after repeated failed sign-ins. Failed, locked-out and successful sign-ins and sign-outs
-  are written to the audit log (module `AUTH`). The lock ends by itself after the lockout time (the
-  sign-in page says when); an administrator's password reset in User Administration also lifts it.
-  Wrong passwords and **inactive accounts** both count as failures.
-- Locked-out administrator and no shell (Render free): from your own computer, with the production
-  `MONGODB_URI` (Render → Environment) set in the terminal:
-  `npm run account:recover -- --dni=<DNI>` shows the account's status (exists, active, locked until)
-  and changes nothing; add `--apply` to unlock, `--activate` to reactivate, and `--reset-password` for
-  a temporary password (printed once; it must be changed at the next sign-in, and existing sessions
-  end). Every recovery is audited (`ACCOUNT_RECOVERED`).
+- Accounts never lock after failed sign-ins: the right password always signs in. The sign-in route
+  only throttles by IP (10 failed attempts per 15 minutes, then "Too many failed sign-in attempts").
+  Failed and successful sign-ins and sign-outs are written to the audit log (module `AUTH`). The
+  first server start of this release clears any lock left on accounts by the removed per-account
+  lockout (`platformSettingsService.removeSignInLockout`, once); `LOGIN_MAX_FAILED_ATTEMPTS` and
+  `LOGIN_LOCKOUT_MINUTES` are no longer read and can be deleted from the environment.
+- Administrator who cannot sign in (inactive, or lost the password) and no shell (Render free): from
+  your own computer, with the production `MONGODB_URI` (Render → Environment) set in the terminal:
+  `npm run account:recover -- --dni=<DNI>` shows the account's status (exists, active) and changes
+  nothing; add `--apply --activate` to reactivate and/or `--apply --reset-password` for a temporary
+  password (printed once; it must be changed at the next sign-in, and existing sessions end). Every
+  recovery is audited (`ACCOUNT_RECOVERED`).
 - Super Admin (manages the Admin accounts and oversees the platform read-only; see the role guide):
   created only from the server, at most two, against the target `MONGODB_URI` like `account:recover`:
   `npm run superadmin:create -- --dni=<DNI> --name="<Name>" [--email=<email>]` prints a temporary
@@ -111,13 +112,9 @@ Authentication:
   secrets. Without it the key derives from `JWT_SECRET`, so rotating `JWT_SECRET` means running
   `superadmin:reset-2fa` for each Super Admin. `SUPER_ADMIN_2FA_REQUIRED=false` skips the
   authenticator for local development only (ignored in production).
-- Platform settings saved by the Super Admin (password minimum length and expiry, failed sign-ins
-  before locking, lock duration, session length, maintenance mode, announcement) override
-  `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES` and `JWT_EXPIRES_IN`; an empty value falls
-  back to the environment. Saving that page stores every value it shows, so the lock duration was
-  often stored as the old 15-minute default: the first server start with the 5-minute default moves
-  a stored 15 to 5, once (`platformSettingsService.migrateLockoutDefault`, audited). A value chosen
-  after that stays as chosen.
+- Platform settings saved by the Super Admin (password minimum length and expiry, session length,
+  maintenance mode, announcement) override `JWT_EXPIRES_IN`; an empty value falls back to the
+  environment.
 - `BACKUP_DIR` (default `backend/backups`) — where `npm run backup` and the Super Admin's "Start
   backup" write. On a host without a persistent disk, copy each backup somewhere safe.
 

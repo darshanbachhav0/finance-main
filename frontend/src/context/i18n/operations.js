@@ -1,12 +1,11 @@
 // Spanish copy for the operations area. Keys are the English UI strings passed to t().
 export default {
-  // Session expiry, sign-out and sign-in lockout
+  // Session expiry, sign-out and sign-in throttling
   "Your session has expired. Sign in again to continue; your drafts were kept.": "Tu sesión expiró. Inicia sesión nuevamente para continuar; tus borradores se conservaron.",
   "Some changes have not reached your account. Stay signed in to retry. Sign out anyway?": "Algunos cambios aún no llegan a tu cuenta. Permanece conectado para reintentar. ¿Cerrar sesión de todos modos?",
   "Sign out anyway": "Cerrar sesión de todos modos",
   "Stay signed in": "Permanecer conectado",
-  "This account is temporarily locked after repeated failed sign-in attempts. Try again later.": "Esta cuenta está bloqueada temporalmente tras varios intentos fallidos de inicio de sesión. Inténtalo más tarde.",
-  "You can sign in again from {time}.": "Podrás iniciar sesión de nuevo desde: {time}.",
+  "Too many failed sign-in attempts. Try again in 15 minutes.": "Demasiados intentos fallidos de inicio de sesión. Inténtalo de nuevo en 15 minutos.",
   "Invalid credentials.": "Credenciales inválidas.",
   "Your credentials changed. Sign in again.": "Tus credenciales cambiaron. Inicia sesión nuevamente.",
   "Invalid or expired authentication token.": "El token de autenticación no es válido o expiró.",

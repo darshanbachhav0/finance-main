@@ -48,8 +48,6 @@ test("the Super Admin role is read-only by permission", () => {
   assert.equal(superAdminMayCall("PUT", "/api/users/me/leave"), false, "the Super Admin is outside the approval hierarchy");
 
   assert.equal(securityAlertKind({ entityType: "AccountingPeriod", action: "REOPENED" }), "PERIOD_REOPENED");
-  assert.equal(securityAlertKind({ module: "AUTH", action: "ACCOUNT_LOCKED", role: ROLES.ADMIN }), "ADMIN_ACCOUNT_LOCKED");
-  assert.equal(securityAlertKind({ module: "AUTH", action: "ACCOUNT_LOCKED", role: ROLES.SOLICITOR }), null);
   assert.equal(securityAlertKind({ entityType: "CostCenter", module: "MASTER_DATA", action: "UPDATED" }), null);
 });
 
@@ -191,11 +189,6 @@ test("Super Admin: sign-in with authenticator, administrator accounts, oversight
       assert.ok((await signIn("70000020", reset.body.temporaryPassword)).token);
       assert.equal((await call(`/superadmin/administrators/${superAdminId}/reset-password`, { method: "POST", token: superToken })).status, 403, "Super Admin rows are read-only");
 
-      await User.updateOne({ _id: newAdminId }, { $set: { lockedUntil: new Date(Date.now() + 600000), failedLoginAttempts: 0 } });
-      const listed = await call("/superadmin/administrators", { token: superToken });
-      assert.equal(listed.body.data.find((row) => row._id === newAdminId).locked, true);
-      await call(`/superadmin/administrators/${newAdminId}/unlock`, { method: "POST", token: superToken });
-      assert.equal((await User.findById(newAdminId).lean()).lockedUntil, null);
       const before = (await User.findById(newAdminId).lean()).tokenVersion;
       await call(`/superadmin/administrators/${newAdminId}/sign-out`, { method: "POST", token: superToken });
       assert.equal((await User.findById(newAdminId).lean()).tokenVersion, before + 1);
