@@ -42,11 +42,14 @@ test("development seed completes and builds every demo scenario", { timeout: 240
   delete env.SUNAT_EXCHANGE_RATE_ENDPOINT;
   delete env.EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK;
   const script = "import('./src/seed/seed.js').then(async (m) => { const s = await m.seed(); console.log('SEED_SUMMARY' + JSON.stringify(s)); }).finally(() => import('mongoose').then((x) => x.default.disconnect()))";
-  try {
+  const seedOnce = async () => {
     const { stdout } = await run(process.execPath, ["--input-type=module", "-e", script], { cwd: backendRoot, env, maxBuffer: 16 * 1024 * 1024 });
     const line = stdout.split(/\r?\n/).find((item) => item.startsWith("SEED_SUMMARY"));
     assert.ok(line, stdout);
-    const summary = JSON.parse(line.slice("SEED_SUMMARY".length));
+    return JSON.parse(line.slice("SEED_SUMMARY".length));
+  };
+  try {
+    const summary = await seedOnce();
     assert.equal(summary.success, true);
     const byKey = Object.fromEntries(summary.scenarios.map((item) => [item.key, item]));
     const expected = {
@@ -95,6 +98,17 @@ test("development seed completes and builds every demo scenario", { timeout: 240
     assert.ok(closed.purchaseOrder);
     assert.ok(closed.approvalRouteSnapshot.some((step) => step.status === "APPROVED"));
     assert.ok(closed.approvalRouteSnapshot.every((step) => step.required === false || ["APPROVED", "SKIPPED"].includes(step.status)));
+
+    // A database seeded by an earlier seed version keeps that version's demo account (another
+    // number) as the supplier's preferred one. Seeding again retires it instead of failing on
+    // "one active preferred account per currency and type" (E11000).
+    const accounts = db.collection("supplierbankaccounts");
+    const current = await accounts.findOne({ active: true, preferred: true, currency: "PEN", accountType: "CURRENT" });
+    await accounts.updateOne({ _id: current._id }, { $set: { accountNumber: "00119999000200000123" } });
+    assert.equal((await seedOnce()).success, true, "the seed runs again over an older seed's data");
+    const preferred = await accounts.find({ supplier: current.supplier, currency: "PEN", accountType: "CURRENT", active: true, preferred: true }).toArray();
+    assert.deepEqual(preferred.map((account) => account.accountNumber), [current.accountNumber], "the current demo account is the preferred one");
+    assert.equal((await accounts.findOne({ accountNumber: "00119999000200000123" })).active, false, "the older one is kept, inactive");
   } finally {
     connection ||= await mongoose.createConnection(uri).asPromise();
     await connection.dropDatabase();
