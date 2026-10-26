@@ -34,6 +34,7 @@ import BankAccountFields from "./BankAccountFields.jsx";
 import { bankAccountPayload, bankAccountProblems, emptyBankAccount } from "../../utils/bankAccounts.js";
 import { bankDisplayName } from "../../../../shared/peruBanks.mjs";
 import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
+import { automaticTaxpayerLookup } from "../../utils/sunatSource.js";
 
 function displayDate(value, language) {
   if (!value) return "-";
@@ -351,7 +352,7 @@ export default function SupplierDetail({
         </div>
       </Section>}
 
-      <Section icon={ShieldCheck} title="Taxpayer Validation" status={provider.configured ? `${t("Provider")}: ${t(provider.state)}` : "SUNAT integration not configured"}>
+      <Section icon={ShieldCheck} title="Taxpayer Validation" status={provider.configured ? `${t("Provider")}: ${t({ CONSULTA_RUC: "SUNAT Consulta RUC", PADRON: "SUNAT public Padrón" }[provider.variant] || provider.state)}` : "SUNAT integration not configured"}>
         {supplier.taxpayerValidation?.returnedIdentifier === supplier.rucDni && supplier.taxpayerValidation?.sunat?.taxpayerStatus && <SupplierSunatEvidence lookup={{ found: true, source: supplier.taxpayerValidation.source, data: supplier.taxpayerValidation.sunat, queriedAt: supplier.taxpayerValidation.sunat.queriedAt, datasetDate: supplier.taxpayerValidation.sunat.datasetDate }} />}
         {supplier.taxpayerValidation?.status === "VALID" && !permissions.canValidateTaxpayer && <p className="cell-note">{t("Verified supplier")}</p>}
         <DetailGrid>
@@ -362,14 +363,14 @@ export default function SupplierDetail({
           <Detail label="Validated At" value={displayDate(supplier.taxpayerValidation?.validatedAt, language)} />
           <Detail label="Validated By" value={supplier.taxpayerValidation?.validatedBy?.name} />
         </DetailGrid>
-        {permissions.canValidateTaxpayer && provider.variant === "PADRON" && (
+        {permissions.canValidateTaxpayer && automaticTaxpayerLookup(provider) && (
           <div className="inline-form-actions">
             <button type="button" className="primary-button" disabled={loading} onClick={() => onTaxValidation({})}>
               <RefreshCw size={15} /><span>{t("Validate automatically with SUNAT")}</span>
             </button>
           </div>
         )}
-        {!permissions.canValidateTaxpayer && permissions.canRevalidateTaxpayer && provider.variant === "PADRON" && <details><summary>{t("Revalidate for a documented risk")}</summary><form className="supplier-inline-form" onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); onTaxValidation({ revalidationReason: data.get("reason") }); }}><label className="field"><span>{t("Revalidation reason")}</span><input name="reason" required minLength={8} /></label><button type="submit" className="secondary-button" disabled={loading}>{t("Validate automatically with SUNAT")}</button></form></details>}
+        {!permissions.canValidateTaxpayer && permissions.canRevalidateTaxpayer && automaticTaxpayerLookup(provider) && <details><summary>{t("Revalidate for a documented risk")}</summary><form className="supplier-inline-form" onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); onTaxValidation({ revalidationReason: data.get("reason") }); }}><label className="field"><span>{t("Revalidation reason")}</span><input name="reason" required minLength={8} /></label><button type="submit" className="secondary-button" disabled={loading}>{t("Validate automatically with SUNAT")}</button></form></details>}
         {(permissions.canValidateTaxpayer || permissions.canRevalidateTaxpayer) && provider.state === "MANUAL" && (
           <details open={permissions.canValidateTaxpayer || undefined} onToggle={event => setRevalidationOpen(event.currentTarget.open)}><summary>{t(permissions.canValidateTaxpayer ? "Taxpayer Validation" : "Revalidate for a documented risk")}</summary><DraftPanel busy={loading} draft={taxDraft} onDiscard={() => setReviewAccount(null)}><form className="supplier-inline-form" onSubmit={submitTax}>
             <div className="form-grid supplier-form-grid">

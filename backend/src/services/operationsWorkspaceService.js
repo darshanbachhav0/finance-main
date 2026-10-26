@@ -6,6 +6,7 @@ import BankFormatConfiguration from "../models/BankFormatConfiguration.js";
 import { durableAssetsEnabled } from "./durableAssetService.js";
 import { cloudTaxpayerMode, TaxpayerProfileCache } from "./taxpayerProfileCache.js";
 import { getSunatPadronStatus } from "./sunatPadronService.js";
+import { usesPublicPadron } from "../config/sunatMode.js";
 
 // Configuration checks the Super Admin console shows under System health.
 export async function configurationHealth() {
@@ -38,7 +39,7 @@ export async function configurationHealth() {
   if (cloudTaxpayerMode()) {
     const expired = await TaxpayerProfileCache.countDocuments({ expiresAt: { $lte: new Date() } });
     if (expired) issues.push({ message: `${expired} cached taxpayer profiles require fresh official evidence.`, owner: "Accounting / Admin", path: "/suppliers" });
-  } else if (["PADRON", "PUBLIC_PADRON", "PUBLIC-PADRON"].includes(String(process.env.SUNAT_PROVIDER_MODE).toUpperCase())) {
+  } else if (usesPublicPadron()) {
     const status = await getSunatPadronStatus();
     if (!status.ready || !status.fresh) issues.push({ message: "SUNAT Padrón is missing or stale. Check the refresh worker.", owner: "Admin", path: "/settings" });
   }

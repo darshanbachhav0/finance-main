@@ -1,4 +1,5 @@
 import { cloudTaxpayerMode } from "../services/taxpayerProfileCache.js";
+import { usesPublicPadron } from "../config/sunatMode.js";
 import { notificationEmailConfiguration } from "../services/notificationEmailService.js";
 // Background workers that run inside the web service process.
 //
@@ -12,9 +13,7 @@ function boolFromEnv(value, fallback) {
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
 }
 
-export function usesPublicPadron(env = process.env) {
-  return ["PADRON", "PUBLIC_PADRON", "PUBLIC-PADRON"].includes(String(env.SUNAT_PROVIDER_MODE || "").trim().toUpperCase());
-}
+export { usesPublicPadron };
 
 // Defaults: on in production, off elsewhere (development runs batches inline and the workers
 // through their npm scripts). The batch worker is never started while inline processing is on,

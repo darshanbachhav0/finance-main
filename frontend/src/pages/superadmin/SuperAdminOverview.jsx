@@ -107,6 +107,7 @@ export default function SuperAdminOverview() {
                 <dd>
                   {sunat?.mode}
                   {sunat?.mode === "PADRON" && <small className="super-admin-note">{t(sunat.ready && sunat.fresh ? "Padrón up to date" : sunat.ready ? "Padrón loaded but stale" : "Padrón missing")}</small>}
+                  {sunat?.mode === "CONSULTA_RUC" && <small className="super-admin-note">{t("Supplier RUCs are verified on SUNAT Consulta RUC")}</small>}
                   {sunat?.error && <small className="super-admin-note">{sunat.error}</small>}
                 </dd>
               </div>

@@ -412,10 +412,10 @@ set "JWT_EXPIRES_IN=8h"
 
 
 rem ============================================================
-rem SUNAT PUBLIC PADRON CONFIGURATION
+rem SUNAT CONSULTA RUC CONFIGURATION (verifies RUCs on SUNAT Consulta RUC; the Padron settings below apply only to PADRON mode)
 rem ============================================================
 
-set "SUNAT_PROVIDER_MODE=PADRON"
+set "SUNAT_PROVIDER_MODE=CONSULTA_RUC"
 
 set "SUNAT_PADRON_INFO_URL=https://www.sunat.gob.pe/descargaPRR/mrc137_padron_reducido.html"
 

@@ -24,6 +24,27 @@ export function SunatRepresentativeNote({ representative, queriedAt }) {
   ].filter(Boolean).join(" · ")}</p>;
 }
 
+const listed = (values) => (Array.isArray(values) ? values.filter(Boolean) : []);
+
+// The rest of the Consulta RUC profile, only what SUNAT reported (the Padrón has none of it).
+function profileRows(data, t, language) {
+  const activity = (item) => [item.kind, item.code, item.description].filter(Boolean).join(" · ");
+  return [
+    ["Taxpayer type", data.taxpayerType],
+    ["Identity document", data.identityDocument],
+    ["Economic activities", listed(data.economicActivities).map(activity)],
+    ["Voucher issuing system", data.voucherIssuanceSystem],
+    ["Accounting system", data.accountingSystem],
+    ["Foreign trade activity", data.foreignTradeActivity],
+    ["Electronic issuer since", sunatDateLabel(data.electronicIssuerSince, language)],
+    ["Electronic vouchers", listed(data.electronicVouchers)],
+    ["Electronic issuing system", listed(data.electronicIssuanceSystems)],
+    ["Vouchers authorized for printing", listed(data.printedVoucherTypes)],
+    ["PLE affiliate since", sunatDateLabel(data.pleAffiliationDate, language)],
+    ["SUNAT registries (padrones)", data.registries ? (listed(data.registries).length ? listed(data.registries) : [t("None")]) : undefined]
+  ].filter(([, value]) => (Array.isArray(value) ? value.length : value));
+}
+
 export default function SupplierSunatEvidence({ lookup }) {
   const { t, language } = useLanguage();
   if (!lookup?.found) return null;
@@ -35,6 +56,7 @@ export default function SupplierSunatEvidence({ lookup }) {
     ["Dataset", lookup.datasetDate],
     ["SUNAT consulted at", lookup.queriedAt, true]
   ].filter(([, value]) => value);
+  const profile = profileRows(data, t, language);
   return <div className={`supplier-sunat-evidence ${data.taxpayerStatus === "ACTIVO" && data.domicileCondition === "HABIDO" ? "is-valid" : "needs-review"}`}>
     <p role="status"><strong>{t("SUNAT taxpayer status")}: {data.taxpayerStatus || t("Not reported")}</strong><span>{t("Domicile condition")}: {data.domicileCondition || t("Not reported")}</span></p>
     <details><summary>{t("SUNAT dates and source")}</summary>
@@ -44,5 +66,10 @@ export default function SupplierSunatEvidence({ lookup }) {
       </dl>
       {lookup.fallback && <small>{t("Consulta RUC unavailable. Official Padrón fallback used.")}</small>}
     </details>
+    {profile.length > 0 && <details><summary>{t("SUNAT taxpayer profile")}</summary>
+      <dl className="supplier-detail-grid">
+        {profile.map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{Array.isArray(value) ? <ul className="supplier-sunat-list">{value.map((item) => <li key={item}>{item}</li>)}</ul> : value}</dd></div>)}
+      </dl>
+    </details>}
   </div>;
 }

@@ -13,5 +13,32 @@ export default {
   "Not reported": "No informado",
   "SUNAT public Padrón": "Padrón público SUNAT",
   "SUNAT Consulta RUC": "Consulta RUC SUNAT",
-  "Supplier saved. SUNAT legal representatives could not be retrieved; complete the representative manually.": "Proveedor guardado. No se pudieron obtener sus representantes SUNAT; completa el representante manualmente."
+  "Supplier saved. SUNAT legal representatives could not be retrieved; complete the representative manually.": "Proveedor guardado. No se pudieron obtener sus representantes SUNAT; completa el representante manualmente.",
+  // The rest of the Consulta RUC profile (components/suppliers/SupplierSunatEvidence.jsx).
+  "SUNAT taxpayer profile": "Ficha RUC SUNAT",
+  "Taxpayer type": "Tipo de contribuyente",
+  "Identity document": "Documento de identidad",
+  "Economic activities": "Actividades económicas",
+  "Voucher issuing system": "Sistema de emisión de comprobantes",
+  "Accounting system": "Sistema de contabilidad",
+  "Foreign trade activity": "Actividad de comercio exterior",
+  "Electronic issuer since": "Emisor electrónico desde",
+  "Electronic vouchers": "Comprobantes electrónicos",
+  "Electronic issuing system": "Sistema de emisión electrónica",
+  "Vouchers authorized for printing": "Comprobantes con autorización de impresión",
+  "PLE affiliate since": "Afiliado al PLE desde",
+  "SUNAT registries (padrones)": "Padrones SUNAT",
+  "None": "Ninguno",
+  "Consulta RUC mode": "Modo Consulta RUC",
+  "SUNAT Consulta RUC checks the supplier's RUC status but never verifies an individual invoice, so every invoice needs a manual SUNAT exception.": "Consulta RUC SUNAT verifica el estado del RUC del proveedor, pero nunca valida un comprobante individual; cada factura necesita una excepción SUNAT manual.",
+  "Supplier RUCs are verified on SUNAT Consulta RUC": "Los RUC de proveedores se verifican en Consulta RUC SUNAT",
+  // Server messages of the Consulta RUC lookup.
+  "Supplier information loaded from SUNAT Consulta RUC.": "Datos del proveedor obtenidos de Consulta RUC SUNAT.",
+  "SUNAT Consulta RUC does not recognize this RUC.": "Consulta RUC SUNAT no reconoce este RUC.",
+  "SUNAT Consulta RUC validates 11-digit RUC values only.": "Consulta RUC SUNAT valida solo RUC de 11 dígitos.",
+  "Automatic lookup is not configured on the server: Chromium is missing. Administration must redeploy with the SUNAT browser build check.": "La consulta automática no está configurada en el servidor: falta Chromium. Administración debe volver a desplegar con la verificación del navegador SUNAT.",
+  "The server is missing browser system dependencies. Administration must correct the deployment.": "Al servidor le faltan dependencias del navegador. Administración debe corregir el despliegue.",
+  "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now.": "SUNAT está restringiendo el acceso automático desde este servidor. La consulta no puede obtener la ficha en este momento.",
+  "Consulta RUC did not respond within the lookup time limit.": "Consulta RUC no respondió dentro del tiempo límite de la consulta.",
+  "Consulta RUC could not return a usable supplier profile.": "Consulta RUC no pudo devolver una ficha de proveedor utilizable."
 };

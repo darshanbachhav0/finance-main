@@ -86,6 +86,7 @@ import "./supplierDepartments.test.js";
 import "./sessionRefresh.test.js";
 
 import "./supplierAutomaticLookup.test.js";
+import "./consultaRucVerification.test.js";
 
 import "./taxpayerProfileCache.test.js";
 import "./operationsAutomation.test.js";

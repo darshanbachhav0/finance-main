@@ -155,6 +155,20 @@ const supplierSchema = new mongoose.Schema(
         registrationDate: String,
         activityStartDate: String,
         deregistrationDate: String,
+        // The rest of the SUNAT Consulta RUC profile the supplier was verified on (absent for
+        // Padrón evidence and for validations made before these fields existed).
+        taxpayerType: String,
+        identityDocument: String,
+        voucherIssuanceSystem: String,
+        foreignTradeActivity: String,
+        accountingSystem: String,
+        economicActivities: { type: [{ _id: false, kind: String, code: String, description: String }], default: undefined },
+        printedVoucherTypes: { type: [String], default: undefined },
+        electronicIssuanceSystems: { type: [String], default: undefined },
+        electronicIssuerSince: String,
+        electronicVouchers: { type: [String], default: undefined },
+        pleAffiliationDate: String,
+        registries: { type: [String], default: undefined },
         queriedAt: Date,
         datasetDate: String
       },

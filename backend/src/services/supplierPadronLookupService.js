@@ -1,4 +1,5 @@
 import { cachedTaxpayerProfile, cloudTaxpayerMode } from "./taxpayerProfileCache.js";
+import { usesConsultaRucOnly } from "../config/sunatMode.js";
 import { lookupSunatTaxpayerProfile } from "./sunatConsultaRucRepresentativesService.js";
 import { lookupSunatPadronRuc } from "./sunatPadronService.js";
 import { AppError } from "../utils/AppError.js";
@@ -182,6 +183,7 @@ export async function getSupplierPadronPrefill(rucValue) {
 }
 
 // Public web profile first. A fallback never turns absence/unavailability into validation.
+// In CONSULTA_RUC mode (the default) the Consulta RUC page is the only source: no Padrón fallback.
 export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
   if (cloudTaxpayerMode() && !options.consulta && !options.padron) {
     return cachedTaxpayerProfile(normalizeRuc(rucValue), () => lookupAutomaticProfile(rucValue));
@@ -189,13 +191,16 @@ export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
   return lookupAutomaticProfile(rucValue, options);
 }
 
-async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill } = {}) {
+async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill, consultaOnly = usesConsultaRucOnly() } = {}) {
   const ruc = normalizeRuc(rucValue);
   if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
   try { return await consulta(ruc); }
   catch (error) {
     const failure = classifyConsultaFailure(error);
     console.warn(`[SUNAT LOOKUP] Consulta RUC failed: ${failure.code}`);
+    if (consultaOnly) {
+      throw new AppError(503, failure.message, { consultaFailure: failure.code, requiresConfiguration: failure.requiresConfiguration, source: "SUNAT_CONSULTA_RUC" });
+    }
     try {
       const result = await padron(ruc);
       return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: failure.code, queriedAt: new Date().toISOString() };
