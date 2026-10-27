@@ -68,7 +68,6 @@ export default {
   "New supplier: approval goes on and the payment waits until its account in {currency} is verified.": "Proveedor nuevo: la aprobación sigue y el pago espera a que se valide su cuenta en {currency}.",
   "The supplier has no verified account in {currency}: Accounting must verify one before payment.": "El proveedor no tiene una cuenta validada en {currency}: Contabilidad debe validarla antes del pago.",
   // Users: job category
-  "Job category (Portal de Personas)": "Categoría del puesto (Portal de Personas)",
   "Category 1": "Categoría 1", "Category 2": "Categoría 2", "Category 3": "Categoría 3", "Category 4": "Categoría 4",
   "Category 5": "Categoría 5", "Category 6": "Categoría 6", "Category 7": "Categoría 7", "Category 8": "Categoría 8",
   "Only categories 3, 5 and 6 may charge a request to other cost centers (Por Encargo).": "Solo las categorías 3, 5 y 6 pueden cargar un requerimiento a otros centros de costo (Por encargo).",
