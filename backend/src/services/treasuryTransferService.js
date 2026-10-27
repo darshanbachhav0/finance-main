@@ -1,3 +1,4 @@
+import { normalizeRequestPriority } from "../../../shared/requestPriority.mjs";
 import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import CostCenter from "../models/CostCenter.js";
 import FinancialRequest from "../models/FinancialRequest.js";
@@ -99,7 +100,8 @@ export async function createTreasuryTransfer({ body = {}, user, req }) {
   if (!TREASURY_TRANSFER_PURPOSES.includes(purpose)) throw invalid("Choose why the money moves: funding or a placement.", { field: "purpose" });
   const description = String(body.description || "").trim();
   if (!description) throw invalid("Describe the transfer (what it funds or which placement).", { field: "description" });
-  const priority = String(body.priority || "ALTA").toUpperCase();
+  // A transfer funds a payment run or a placement: urgent (P2) unless Treasury says otherwise.
+  const priority = normalizeRequestPriority(body.priority || "P2");
   if (!REQUEST_PRIORITIES.includes(priority)) throw invalid("Choose a valid priority.", { field: "priority" });
   if (!body.sourceAccount || !body.destinationAccount) throw invalid("Choose the source and the destination account.", { field: !body.sourceAccount ? "sourceAccount" : "destinationAccount" });
   if (String(body.sourceAccount) === String(body.destinationAccount)) throw invalid("The source and destination must be different accounts.", { field: "destinationAccount" });

@@ -1,7 +1,7 @@
 // Spanish copy for the treasury area. Keys are the English UI strings passed to t().
 export default {
   // Payment cycle (15th / 30th)
-  "Payments run on the 15th and the 30th of each month.": "Los pagos se realizan los días 15 y 30 de cada mes.",
+  "Payments run on the 15th and the 30th of each month.": "Los pagos se realizan el día 15 y el último día hábil de cada mes.",
   "Reason for paying off the payment cycle": "Motivo para pagar fuera del ciclo de pagos",
   "Payment cycles": "Ciclos de pago",
   "Payment cycle": "Ciclo de pago",
@@ -131,7 +131,7 @@ export default {
   "Accounting rejected this bank file.": "Contabilidad rechazó este archivo bancario.",
   "Waiting for Accounting to verify the bank file.": "A la espera de que Contabilidad verifique el archivo bancario.",
   "Download a payment file once Accounting has verified it, then send it to the bank.": "Descarga un archivo de pago cuando Contabilidad lo haya verificado y luego envíalo al banco.",
-  "Advances are paid the same working day, outside the 15th/30th cycle.": "Los anticipos se pagan el mismo día hábil, fuera del ciclo del 15 y 30.",
+  "Advances are paid the same working day, outside the fortnightly payment days.": "Los anticipos se pagan el mismo día hábil, fuera de las quincenas.",
   "Pay now": "Pagar ahora",
   "{count} advances to pay today are selected. Generate the bank file dated today.": "{count} anticipos por pagar hoy están seleccionados. Genera el archivo bancario con fecha de hoy.",
   "Advances are paid the same working day; no reason is needed.": "Los anticipos se pagan el mismo día hábil; no hace falta un motivo.",

@@ -117,7 +117,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
 export const costCenters = resourceController({
   Model: CostCenter,
   label: "CostCenter",
-  fields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode", "annualBudget", "budgetMode", "active"],
+  fields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode", "annualBudget", "budgetMode", "active", "parentCode", "level", "line", "responsible"],
   searchFields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode"],
   sortFields: ["code", "name", "area", "organizationalUnit", "organizationalUnitCode", "annualBudget", "active"],
   defaultSort: { code: 1 }

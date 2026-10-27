@@ -10,6 +10,7 @@ import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import CostCenter from "../src/models/CostCenter.js";
 import Counter from "../src/models/Counter.js";
 import ExpenseType from "../src/models/ExpenseType.js";
+import FinanceConfiguration from "../src/models/FinanceConfiguration.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import JournalEntry from "../src/models/JournalEntry.js";
 import Notification from "../src/models/Notification.js";
@@ -18,8 +19,10 @@ import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
 import { getConsolidation, processAccountsPayable } from "../src/services/accountingService.js";
 import { approveThroughChain } from "./approvalFixtures.js";
+import { activeApprovalStep } from "../src/services/approvalRuleService.js";
 import { groupedRequestLines } from "../src/services/budgetService.js";
 import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
+import { decideApproval, getApprovalDecisionOptions } from "../src/services/approvalService.js";
 import {
   createFinancialRequest,
   getRequestDetail,
@@ -76,17 +79,26 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
     const person = (name, extra = {}) => User.create({ name, email: `${name.toLowerCase().replace(/\W+/g, ".")}@test.local`, passwordHash: "unused", role: ROLES.SOLICITOR, ...extra });
     const vicerector = await person("Vicerrector", { role: ROLES.VICE_RECTOR, approvalLevel: "VICE_RECTOR", area: "Rectorado" });
     const itJefe = await person("Jefe TI", { area: "Tecnología de la Información", costCenter: it._id, jefe: vicerector._id });
-    const requester = await person("Analista TI", { area: "Tecnología de la Información", costCenter: it._id, authorizedCostCenters: [it._id], jefe: itJefe._id });
+    // A category 5 position: only categories 3, 5 and 6 may charge other cost centers (Por Encargo).
+    const requester = await person("Analista TI", { area: "Tecnología de la Información", costCenter: it._id, authorizedCostCenters: [it._id], jefe: itJefe._id, jobCategory: 5 });
+    const juniorRequester = await person("Asistente TI", { area: "Tecnología de la Información", costCenter: it._id, jefe: itJefe._id, jobCategory: 2 });
     // Medicine's head is its top jefe in the roster; Nursing's is its Area Director, known by area
     // only (no CECO on the profile, as the demo directors). An approver of every area ("*") is neither.
     const dean = await person("Decana de Medicina", { area: "Escuela de Medicina", costCenter: medicine._id, jefe: vicerector._id });
     const medicineStaff = await person("Docente de Medicina", { area: "Escuela de Medicina", costCenter: medicine._id, jefe: dean._id });
     const nursingDirector = await person("Directora de Enfermería", { role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", area: "Escuela de Enfermería", approvalAreas: ["Escuela de Enfermería"] });
     await person("Director de todas las áreas", { role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", area: "Rectorado", approvalAreas: ["*"] });
+    // Odontología has no head in the roster: its responsible is set on the CECO.
+    const dentistryHead = await person("Director de Odontología", { role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", area: "Rectorado" });
+    await CostCenter.updateOne({ _id: dentistry._id }, { $set: { responsible: dentistryHead._id } });
+    const noHead = await center("CT-ARQ", "Escuela de Arquitectura", "Escuela de Arquitectura");
     const accounting = await User.create({ name: "Contabilidad", email: "ct.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Contabilidad" });
     const admin = await User.create({ name: "Admin TI", email: "ct.admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Tecnología de la Información", costCenter: it._id, jefe: itJefe._id });
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20777000001", normalizedIdentifier: "20777000001", legalName: "Computadoras del Perú SAC", name: "Computadoras del Perú SAC", supplierCode: "PRV-7701", taxpayerStatus: "MANUALLY_VALIDATED", complianceStatus: "COMPLIANT", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
     await AccountingPeriod.create({ period, status: "OPEN" });
+    // These requests are sent with one quotation: the A1 three-quotation rule has its own tests.
+    await FinanceConfiguration.create({ key: "A1_MINIMUM_QUOTATIONS", numericValue: 1, effectiveFrom: new Date("2020-01-01T00:00:00Z"), active: true });
+    await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000007701", cci: "00219100000000007701", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: accounting._id });
     for (const [purpose, accountNumber] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"]]) {
       await AccountingMapping.create({ code: `CT-${purpose}`, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: "*", currency: "*", accountNumber, active: true });
     }
@@ -135,18 +147,36 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
       assert.deepEqual(single.costCenterReviewers.map((reviewer) => String(reviewer._id || reviewer)), [String(dean._id)], "Medicine's head reviews it; its staff and IT do not");
       assert.ok(await Notification.exists({ user: dean._id, type: "COST_CENTER_ON_BEHALF", entityId: single._id }));
       assert.equal(await Notification.exists({ user: medicineStaff._id, type: "COST_CENTER_ON_BEHALF" }), null);
-      // The approval route is unchanged: the requester's own jefe, no extra level.
-      assert.deepEqual(single.approvalRouteSnapshot.map((step) => String(step.approverUser)), [String(itJefe._id)]);
+      // Manual técnico, "Ruta de aprobación": after the requester's jefe chain, Medicine's head gives
+      // the visto as a fixed approval step (BEN:<ceco>).
+      const route = [...single.approvalRouteSnapshot].sort((a, b) => a.sequence - b.sequence);
+      assert.deepEqual(route.map((step) => [String(step.approverUser?._id || step.approverUser), step.fixed ? step.costCenterRole : "JEFE"]), [[String(itJefe._id), "JEFE"], [String(dean._id), "BENEFICIARY"]]);
+      assert.equal(route[1].costCenterCode, "CT-MED");
     });
 
-    await t.test("the beneficiary's head can review it but not approve it; nobody approves their own request", async () => {
+    await t.test("only job categories 3, 5 and 6 may charge other cost centers", async () => {
+      const draft = await createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: allocations([medicine]) }), files: {}, user: juniorRequester, req });
+      await assert.rejects(() => sendWithQuote(draft, juniorRequester), (error) => error.statusCode === 422 && error.details.check === "ENCARGO_JOB_CATEGORY");
+      const own = await createFinancialRequest({ payload: payload(), files: {}, user: juniorRequester, req });
+      assert.equal((await sendWithQuote(own, juniorRequester)).status, REQUEST_STATUS.PENDING_APPROVAL, "Propio needs no category");
+    });
+
+    await t.test("a beneficiary CECO without a head or responsible cannot give the visto: the sending is refused", async () => {
+      const draft = await createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: allocations([noHead]) }), files: {}, user: requester, req });
+      await assert.rejects(() => sendWithQuote(draft), (error) => error.code === ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED && error.details.code === "CT-ARQ");
+    });
+
+    await t.test("the beneficiary's head approves only at their own step; nobody approves their own request", async () => {
       const stored = await FinancialRequest.findById(single._id);
       assert.equal(canViewRequest(stored, dean), true);
-      assert.equal(canViewRequest(stored, medicineStaff), false);
-      assert.equal(allowedRequestActions(stored, dean).includes("APPROVE"), false);
+      // Medicine's staff read the requests charged to their own cost center (alcance de lectura).
+      assert.equal(canViewRequest(stored, medicineStaff), true);
+      assert.equal(canViewRequest(stored, nursingDirector), false, "another school's Director does not");
+      assert.equal(allowedRequestActions(stored, dean).includes("APPROVE"), false, "not yet: the jefe chain approves first");
       assert.ok((await getRequestDetail(single._id, dean)).request, "the head opens the request page");
       assert.deepEqual((await listRequestsPage({}, dean)).data.map((row) => row.requestNumber), [single.requestNumber]);
-      assert.equal((await listRequestsPage({}, medicineStaff)).data.length, 0);
+      assert.deepEqual((await listRequestsPage({}, medicineStaff)).data.map((row) => row.requestNumber), [single.requestNumber]);
+      assert.equal(allowedRequestActions(stored, medicineStaff).includes("APPROVE"), false);
       await assert.rejects(() => approve(single, dean), (error) => error.statusCode === 403);
       await assert.rejects(() => approve(single, requester), (error) => error.statusCode === 403);
       assert.equal(allowedRequestActions(stored, requester).includes("APPROVE"), false);
@@ -154,7 +184,17 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
 
     await t.test("on approval the budget is committed against Medicine, not IT", async () => {
       const itBefore = (await CostCenter.findById(it._id)).committedAmount;
-      await approve(single, itJefe);
+      // The jefe sends it to the Vice-Rector, who finalizes the chain; then Medicine's head approves.
+      await decideApproval({ id: single._id, action: "APPROVE", comments: "Conforme", user: itJefe, req });
+      const atViceRector = await FinancialRequest.findById(single._id);
+      assert.equal(String(activeApprovalStep(atViceRector).approverUser), String(vicerector._id));
+      await decideApproval({ id: single._id, action: "APPROVE", comments: "Conforme", forward: false, user: vicerector, req });
+      const atDean = await FinancialRequest.findById(single._id);
+      assert.equal(atDean.status, REQUEST_STATUS.PENDING_APPROVAL, "the beneficiary's visto is still due");
+      assert.equal(String(activeApprovalStep(atDean).approverUser), String(dean._id));
+      assert.equal(allowedRequestActions(atDean, dean).includes("APPROVE"), true);
+      assert.deepEqual((await getApprovalDecisionOptions(single._id, dean)).chain, false, "a fixed step offers no 'send to my jefe'");
+      await decideApproval({ id: single._id, action: "APPROVE", comments: "Visto bueno de Medicina", user: dean, req });
       assert.equal((await FinancialRequest.findById(single._id)).status, REQUEST_STATUS.BUDGET_COMMITTED);
       assert.deepEqual(await commitmentLines(single), [[String(medicine._id), 10000]]);
       assert.equal((await CostCenter.findById(medicine._id)).committedAmount, 10000);
@@ -172,7 +212,9 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
       assert.deepEqual(preview.lines.map((line) => [line.costCenterSnapshot.code, line.amount]), [["CT-MED", 6000], ["CT-ENF", 3000], ["CT-ODO", 1000]], "the form previews each school's budget");
 
       shared = await sendWithQuote(draft);
-      assert.deepEqual(shared.costCenterReviewers.map((reviewer) => String(reviewer._id || reviewer)).sort(), [String(dean._id), String(nursingDirector._id)].sort(), "Odontología has no head in the roster: nobody to tell there");
+      assert.deepEqual(shared.costCenterReviewers.map((reviewer) => String(reviewer._id || reviewer)).sort(), [String(dean._id), String(nursingDirector._id), String(dentistryHead._id)].sort(), "Odontología's responsible is set on its CECO");
+      const vistos = [...shared.approvalRouteSnapshot].sort((a, b) => a.sequence - b.sequence).filter((step) => step.costCenterRole === "BENEFICIARY");
+      assert.deepEqual(vistos.map((step) => [step.costCenterCode, String(step.approverUser?._id || step.approverUser)]), [["CT-MED", String(dean._id)], ["CT-ENF", String(nursingDirector._id)], ["CT-ODO", String(dentistryHead._id)]], "one visto per school, in the order of the distribution");
       await approve(shared, itJefe);
       assert.deepEqual(await commitmentLines(shared), [[String(medicine._id), 6000], [String(nursing._id), 3000], [String(dentistry._id), 1000]].sort());
     });
@@ -254,7 +296,7 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
 
     await t.test("the beneficiary list is the active CECO master, without budgets", async () => {
       const list = await requestBeneficiaryCostCenters();
-      assert.deepEqual(list.map((item) => item.code), ["CT-ENF", "CT-MED", "CT-ODO", "CT-TI"]);
+      assert.deepEqual(list.map((item) => item.code), ["CT-ARQ", "CT-ENF", "CT-MED", "CT-ODO", "CT-TI"]);
       assert.equal(list[0].annualBudget, undefined);
     });
   } finally {

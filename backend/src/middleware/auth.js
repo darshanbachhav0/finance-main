@@ -4,8 +4,9 @@ import { asyncHandler } from "./asyncHandler.js";
 import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
 import { ADMINISTRATOR_ROLES, ERROR_CODES, READ_ONLY_OVERSIGHT_ROLES, ROLES } from "../utils/constants.js";
-import { hasPermission } from "../utils/permissions.js";
+import { COST_CENTER_SCOPED_VIEWERS, hasPermission } from "../utils/permissions.js";
 import { getPlatformSettings, passwordExpired } from "../services/platformSettingsService.js";
+import { visibleCostCenterIdsFor } from "../services/costCenterCascadeService.js";
 
 // What a session that must first change its password (or enrol its authenticator app) may call.
 const PASSWORD_CHANGE_PATHS = ["/api/auth/me", "/api/auth/change-password", "/api/auth/logout", "/api/auth/platform-status"];
@@ -61,6 +62,8 @@ export const protect = asyncHandler(async (req, _res, next) => {
       throw new AppError(403, "Set up your authenticator app before using the platform.", undefined, ERROR_CODES.TWO_FACTOR_SETUP_REQUIRED);
     }
 
+    // The cost centers whose requests a Director, Vicerrector or requester reads (their cascade).
+    if (COST_CENTER_SCOPED_VIEWERS.includes(user.role)) user.$locals.visibleCostCenterIds = await visibleCostCenterIdsFor(user);
     req.user = user;
     next();
   } catch (error) {

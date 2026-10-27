@@ -17,6 +17,7 @@ import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import BudgetException from "../src/models/BudgetException.js";
 import BudgetRule from "../src/models/BudgetRule.js";
 import CostCenter from "../src/models/CostCenter.js";
+import FinanceConfiguration from "../src/models/FinanceConfiguration.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import JournalEntry from "../src/models/JournalEntry.js";
 import PaymentBatch from "../src/models/PaymentBatch.js";
@@ -103,6 +104,8 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       active: true,
       status: "ACTIVE"
     });
+    // This lifecycle is sent with one quotation: the A1 three-quotation rule has its own tests.
+    await FinanceConfiguration.create({ key: "A1_MINIMUM_QUOTATIONS", numericValue: 1, effectiveFrom: new Date("2020-01-01T00:00:00Z"), active: true });
     await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000000001", cci: "00219100000000000001", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: users.admin._id });
     await AccountingPeriod.create({ period, status: "OPEN", openedBy: users.accounting._id, history: [{ action: "CREATED", by: users.accounting._id }] });
     const mappings = [

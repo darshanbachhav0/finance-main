@@ -1,3 +1,4 @@
+import { normalizeRequestPriority } from "../../../shared/requestPriority.mjs";
 import mongoose from "mongoose";
 import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
@@ -12,6 +13,7 @@ import {
   initializeApprovalRoute,
   approverFor,
   isAvailableApprover,
+  isChoiceChainStep,
   nextChainApprover,
   reassignChainStep,
   slaStatus,
@@ -193,7 +195,7 @@ export async function listApprovalInbox(queryParams, user) {
   }
   if (queryParams.stage) query.approvalStage = queryParams.stage;
   if (queryParams.requestType) query.requestType = queryParams.requestType;
-  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => value.trim().toUpperCase()).filter(Boolean) };
+  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => normalizeRequestPriority(value)).filter(Boolean) };
   if (queryParams.search) {
     const search = new RegExp(escapedRegex(queryParams.search), "i");
     const [supplierIds, userIds] = await Promise.all([
@@ -214,7 +216,7 @@ export async function listApprovalInbox(queryParams, user) {
   withDeepLink(query, queryParams, { request: "_id" });
   const { page, pageSize, skip } = parsePagination(queryParams);
   let sort = parseSort(queryParams, ["requestNumber", "requestType", "priority", "approvalStage", "status", "totalPENEquivalent", "approvalDueAt", "createdAt"], { approvalDueAt: 1, createdAt: 1 });
-  // Priority sorts Alta > Media > Baja (its rank), the oldest due first within each.
+  // Priority sorts P1 > P2 > P3 > P4 (its rank), the oldest due first within each.
   if (sort.priority) sort = { priorityRank: sort.priority, approvalDueAt: 1, createdAt: 1 };
   const [requests, total, summaryRows] = await Promise.all([
     FinancialRequest.find(query).select(requestListSelect).populate(requestListPopulate).sort(sort).skip(skip).limit(pageSize),
@@ -239,7 +241,7 @@ export async function listApprovalInbox(queryParams, user) {
 }
 
 async function appendApprovalWithoutStatusTransition({ request, step, routeResult, user, req, comments, adminOverrideReason, session, forwarded = false }) {
-  const action = forwarded ? "CHAIN_APPROVED_FORWARDED" : `${step.approvalLevel}_APPROVED`;
+  const action = forwarded ? "CHAIN_APPROVED_FORWARDED" : step.fixed ? `COST_CENTER_${step.costCenterRole}_APPROVED` : `${step.approvalLevel}_APPROVED`;
   request.approvalHistory.push(workflowEvent({
     action,
     from: request.status,
@@ -460,9 +462,11 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   const step = activeApprovalStep(request);
   assertApprovalActor(request, user, step, adminOverrideReason);
   const isChainStep = step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+  // A cost-center step is fixed: approving it opens the next step, there is nothing to choose.
+  const isChoiceStep = isChoiceChainStep(step);
   // The cost center's responsible never finalizes alone: their approval goes to their superior.
-  if (isChainStep && decision === "APPROVE" && await superiorApprovalRequired(request, step)) forward = true;
-  if (isChainStep && decision === "APPROVE" && typeof forward !== "boolean") {
+  if (isChoiceStep && decision === "APPROVE" && await superiorApprovalRequired(request, step)) forward = true;
+  if (isChoiceStep && decision === "APPROVE" && typeof forward !== "boolean") {
     throw new AppError(422, "You must specify whether to forward this approval to the next manager or finalize it here.", { field: "forward" }, ERROR_CODES.VALIDATION_ERROR);
   }
   // Submission controls gate an approval only. An approver can always send a
@@ -513,9 +517,9 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
 
   // Chain decisions resolve the next jefe / the chain approvers' authority first,
   // outside the transaction; the transaction only persists the outcome.
-  const chainRoute = isChainStep
-    ? (forward ? await activateNextChainStep(request, step, user) : await finalizeChainApproval(request, step, user))
-    : null;
+  const chainRoute = !isChainStep ? null
+    : !isChoiceStep ? await advanceApprovalRoute(request, user._id)
+      : (forward ? await activateNextChainStep(request, step, user) : await finalizeChainApproval(request, step, user));
   const routeResult = await runFinancialOperation(async (session) => {
     if (isChainStep) {
       const route = chainRoute;
@@ -536,7 +540,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
           session
         });
       } else {
-        await appendApprovalWithoutStatusTransition({ request, step, routeResult: route, user, req, comments, adminOverrideReason, session, forwarded: Boolean(forward) });
+        await appendApprovalWithoutStatusTransition({ request, step, routeResult: route, user, req, comments, adminOverrideReason, session, forwarded: isChoiceStep && Boolean(forward) });
       }
       return route;
     }
@@ -701,7 +705,7 @@ export async function bulkApproveRequests({ ids, comments, forward, user, req })
   const cannotForward = [];
   for (const request of loaded) {
     if (!allowedRequestActions(request, user).includes("APPROVE")) continue;
-    const chain = activeApprovalStep(request)?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+    const chain = isChoiceChainStep(activeApprovalStep(request));
     // A step that must go to the superior needs no choice: it is always sent up.
     if (chain && typeof forward !== "boolean" && !(await superiorApprovalRequired(request))) needsDecision.push(request);
     if (forward === true && (!chain || !(await approvalDecisionOptions(request)).canForward)) cannotForward.push(request);
@@ -755,7 +759,7 @@ function remainingTierStages(request, step) {
 // remainingPolicyStages lists the tier stages that still follow (GAF, Gerencia General).
 export async function approvalDecisionOptions(request) {
   const step = activeApprovalStep(request);
-  if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) return { ...noChainOptions, remainingPolicyStages: remainingTierStages(request, step) };
+  if (!isChoiceChainStep(step)) return { ...noChainOptions, remainingPolicyStages: remainingTierStages(request, step) };
   const nextApprover = await nextChainApprover(request, step);
   const superiorRequired = Boolean(step.superiorRequired && nextApprover);
   return {

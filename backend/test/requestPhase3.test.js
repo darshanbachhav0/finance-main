@@ -12,9 +12,11 @@ import BudgetCommitment from "../src/models/BudgetCommitment.js";
 import CostCenter from "../src/models/CostCenter.js";
 import DocumentRule from "../src/models/DocumentRule.js";
 import ExpenseType from "../src/models/ExpenseType.js";
+import FinanceConfiguration from "../src/models/FinanceConfiguration.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import Project from "../src/models/Project.js";
 import Supplier from "../src/models/Supplier.js";
+import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
 import { validateStructuredQuotationComparison } from "../src/services/documentRuleService.js";
 import {
@@ -71,6 +73,10 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       { rucDni: "20655555555", legalName: "Inactive Phase 3 SAC", name: "Inactive Phase 3 SAC", homologationStatus: "INACTIVE", status: "INACTIVE", active: false },
       { rucDni: "20666666666", legalName: "Recommended Phase 3 SAC", name: "Recommended Phase 3 SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-8106" }
     ]);
+    // An approved supplier is paid into an account verified in the request's currency.
+    for (const supplier of [suppliers[0], suppliers[5]]) {
+      await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: `19100${supplier.rucDni.slice(-7)}`, cci: `0021910${supplier.rucDni.slice(-7)}000000`, active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: solicitor._id });
+    }
     // The official A1 document recommends an approved supplier; the other quotations may come from any supplier.
     const quoted = [suppliers[0], suppliers[5], suppliers[1]];
     await DocumentRule.create({
@@ -264,11 +270,15 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       }
     });
 
+    // A1 is sent with three quotations (Manual del usuario); UMA may lower it with A1_MINIMUM_QUOTATIONS.
+    const minimumQuotations = (numericValue) => FinanceConfiguration.create({ key: "A1_MINIMUM_QUOTATIONS", numericValue, effectiveFrom: new Date("2026-01-01T00:00:00Z"), active: true });
+
     await t.test("the simple form's request: no title, risk or selection reason for one quotation", async () => {
+      const setting = await minimumQuotations(1);
       const request = await officialDocument({ title: "", nonApprovalRisk: "", supplierSelectionReason: "" });
       request.quotations = [request.quotations.find((quotation) => quotation.recommended).toObject()];
       await request.save();
-      const submitted = await submitFinancialRequest({ id: request._id, user: solicitor, req });
+      const submitted = await submitFinancialRequest({ id: request._id, user: solicitor, req }).finally(() => setting.deleteOne());
       assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
       assert.equal(submitted.title, titleFromDescription(request.detailedDescription));
       assert.equal(titleFromDescription("  \nFirst line\nSecond"), "First line");
@@ -288,11 +298,14 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       await assert.rejects(() => submitFinancialRequest({ id: mismatch._id, user: solicitor, req }), (error) => error.code === "RECOMMENDED_SUPPLIER_MISMATCH");
     });
 
-    await t.test("a single recommended quotation with evidence is enough (three quotations are not compulsory)", async () => {
+    await t.test("A1 needs three quotations by default; with A1_MINIMUM_QUOTATIONS 1 a single recommended one is enough", async () => {
       const single = await officialDocument();
       single.quotations = [single.quotations.find((quotation) => quotation.recommended).toObject()];
       await single.save();
-      const submitted = await submitFinancialRequest({ id: single._id, user: solicitor, req, comments: "One quotation" });
+      await assert.rejects(() => submitFinancialRequest({ id: single._id, user: solicitor, req, comments: "One quotation" }),
+        (error) => error.statusCode === 422 && error.details.check === "A1_QUOTATIONS" && /1 of 3/.test(error.message));
+      const setting = await minimumQuotations(1);
+      const submitted = await submitFinancialRequest({ id: single._id, user: solicitor, req, comments: "One quotation" }).finally(() => setting.deleteOne());
       assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
       assert.equal(submitted.quotations.length, 1);
     });

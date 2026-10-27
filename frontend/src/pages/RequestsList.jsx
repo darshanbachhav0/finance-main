@@ -17,7 +17,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { expenseNatureLabels, expenseNatures, requestFlowTypes, requestPriorityLabels, requestStatuses, requestTypes } from "../utils/options.js";
+import { expenseNatureLabels, expenseNatures, requestFlowTypes, requestPriorities, requestPriorityLabels, requestStatuses, requestTypes } from "../utils/options.js";
 import { requesterRoles } from "../utils/navigationAccess.js";
 import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
@@ -63,7 +63,7 @@ export default function RequestsList() {
   const canCreate = ["Admin", ...requesterRoles].includes(user.role);
   // Requesters get a short list: what, how much, its plain status and what is needed from them.
   const plain = usesPlainStatuses(user);
-  const priorityOptions = ["ALTA", "MEDIA", "BAJA"].map((value) => ({ value, label: requestPriorityLabels[value] }));
+  const priorityOptions = requestPriorities.map((value) => ({ value, label: requestPriorityLabels[value] }));
   const allColumns = [
     { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
     ...(plain ? [{ key: "title", type: "name", label: "What", sortable: false, getValue: (row) => row.title || row.description, render: (row) => <div className="primary-cell"><strong>{row.title || row.description || "-"}</strong><span>{row.supplier?.name || ""}</span></div> }] : []),
@@ -71,7 +71,7 @@ export default function RequestsList() {
     { key: "requestType", label: "Type", plainHidden: true },
     { key: "expenseNature", label: "Expense nature", plainHidden: true, render: (row) => t(expenseNatureLabels[row.expenseNature] || row.expenseNature) },
     // Everyone sees the priority, requesters included; sorting by it puts Alta first.
-    { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "MEDIA"]), render: (row) => <PriorityBadge priority={row.priority} /> },
+    { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "P3"]), render: (row) => <PriorityBadge priority={row.priority} /> },
     { key: "supplier", type: "name", label: "Supplier", plainHidden: true, sortable: false, getValue: (row) => (isTransfer(row) ? `${t("Transfer")}: ${transferRoute(row)}` : row.supplier?.name), render: (row) => isTransfer(row) ? <div className="primary-cell"><strong>{t("Transfer")}</strong><span>{transferRoute(row)}</span></div> : <div className="primary-cell"><strong>{row.supplier?.name || "-"}</strong><span>{row.supplier?.rucDni}</span></div> },
     { key: "solicitor", label: "Solicitor", plainHidden: true, sortable: false, getValue: (row) => row.solicitor?.name, render: (row) => row.solicitor?.name || "-" },
     { key: "accountingPeriod", type: "code", label: "Period", plainHidden: true },

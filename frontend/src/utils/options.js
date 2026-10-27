@@ -110,8 +110,15 @@ export const expenseNatures = [
 // they stay only for older requests, filters and reports.
 export const creationExpenseNatures = expenseNatures.filter((item) => !["PETTY_CASH", "REIMBURSEMENT_LIQUIDATION"].includes(item));
 
-export const requestPriorities = ["BAJA", "MEDIA", "ALTA"];
-export const requestPriorityLabels = { ALTA: "High", MEDIA: "Medium", BAJA: "Low" };
+// Payment priority (shared/requestPriority.mjs): it sets the payment window Treasury is offered.
+export const requestPriorities = ["P1", "P2", "P3", "P4"];
+export const requestPriorityLabels = { P1: "P1 Critical", P2: "P2 Urgent", P3: "P3 Normal", P4: "P4 Scheduled", ALTA: "P2 Urgent", MEDIA: "P3 Normal", BAJA: "P3 Normal" };
+export const requestPriorityHints = {
+  P1: "Taxes, payroll, a service about to be cut or a regulatory requirement: paid the same day.",
+  P2: "Documented operational or academic risk: paid in the weekly urgency window (Wednesday).",
+  P3: "Day-to-day purchases: paid on the fortnightly payment day (the 15th and the last working day).",
+  P4: "Contracts with a payment schedule: paid on the last payment day before the due date."
+};
 
 // How often the need recurs (recorded with the request; nothing is repeated automatically).
 export const requestFrequencies = ["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"];

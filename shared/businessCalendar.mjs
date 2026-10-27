@@ -113,17 +113,73 @@ export function businessDaysBetween(from, to, options) {
   return count;
 }
 
-// University payment cycle: payments run on the 15th and the 30th (the last day in a
-// shorter month). Returns the first cycle date on or after `value`, as a Lima date key.
-export function nextPaymentCycleDate(value) {
-  const key = limaDateKey(value);
-  const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7)), day = Number(key.slice(8, 10));
+// University payment cycle (Manual técnico, "Programación de pagos"): payments run on the 15th and
+// on the last day of the month, each moved back to the previous working day when it falls on a
+// weekend or holiday. Returns the first cycle date on or after `value`, as a Lima date key.
+const noonOf = (key) => new Date(`${key}T12:00:00.000Z`);
+
+function previousBusinessDayKey(key, options) {
+  let time = noonOf(key).getTime();
+  while (!isBusinessDay(time, options)) time -= DAY_MS;
+  return limaDateKey(time);
+}
+
+// The two payment days of a month (1-12), as Lima date keys.
+export function paymentCycleDatesOfMonth(year, month, options) {
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const secondRun = Math.min(30, lastDay);
-  if (day <= 15) return `${year}-${pad(month)}-15`;
-  if (day <= secondRun) return `${year}-${pad(month)}-${pad(secondRun)}`;
-  const next = new Date(Date.UTC(year, month, 15));
-  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-15`;
+  return [previousBusinessDayKey(`${year}-${pad(month)}-15`, options), previousBusinessDayKey(`${year}-${pad(month)}-${pad(lastDay)}`, options)];
+}
+
+// The next `count` payment days on or after `value`.
+export function paymentCycleDatesFrom(value, count = 6, options) {
+  const key = limaDateKey(value);
+  let year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7));
+  const out = [];
+  while (out.length < count) {
+    for (const date of paymentCycleDatesOfMonth(year, month, options)) if (date >= key && out.length < count) out.push(date);
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return out;
+}
+
+export function nextPaymentCycleDate(value, options) {
+  return paymentCycleDatesFrom(value, 1, options)[0];
+}
+
+export function isPaymentCycleDate(value, options) {
+  const key = limaDateKey(value);
+  return paymentCycleDatesOfMonth(Number(key.slice(0, 4)), Number(key.slice(5, 7)), options).includes(key);
+}
+
+// The weekly urgency window: the next Wednesday after `value` (the next working day if that
+// Wednesday is a holiday).
+export function nextUrgencyPaymentDate(value, options) {
+  let time = noonOf(limaDateKey(value)).getTime() + DAY_MS;
+  while (new Date(time).getUTCDay() !== 3) time += DAY_MS;
+  return limaDateKey(nextBusinessDay(time, options));
+}
+
+export function isUrgencyPaymentDate(value, options) {
+  const time = noonOf(limaDateKey(value));
+  return time.getUTCDay() === 3 && isBusinessDay(time, options);
+}
+
+// The payment day the platform proposes for a request (ventanaSug in the GAF pilot): P1 today, P2
+// the next urgency Wednesday, otherwise the first payment day at least `cutoffWorkingDays` working
+// days away; with a due date, P3 and P4 move to the last payment day on or before it.
+export function suggestedPaymentDate({ priority = "P3", dueDate = null, now = new Date(), cutoffWorkingDays = 3, ...options } = {}) {
+  const today = limaDateKey(now);
+  if (priority === "P1") return limaDateKey(nextBusinessDay(noonOf(today), options));
+  if (priority === "P2") return nextUrgencyPaymentDate(now, options);
+  const upcoming = paymentCycleDatesFrom(now, 10, options);
+  const first = upcoming.find((date) => businessDaysBetween(noonOf(today), noonOf(date), options) >= cutoffWorkingDays) || upcoming.at(-1);
+  if (dueDate) {
+    const due = calendarDateKey(dueDate);
+    const beforeDue = paymentCycleDatesFrom(noonOf(first), 8, options).filter((date) => date <= due);
+    if (beforeDue.length) return beforeDue.at(-1);
+  }
+  return first;
 }
 
 // Advances to render are paid the same working day they are approved: today (Lima) when it is a
@@ -135,11 +191,4 @@ export function advancePaymentDate(value = new Date(), { cutoffHour = ADVANCE_CU
   const limaHour = new Date(time + LIMA_OFFSET_MS).getUTCHours();
   const afterCutoff = isBusinessDay(time, options) && limaHour >= cutoffHour;
   return limaDateKey(nextBusinessDay(afterCutoff ? time + DAY_MS : time, options));
-}
-
-export function isPaymentCycleDate(value) {
-  const key = limaDateKey(value);
-  const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7)), day = Number(key.slice(8, 10));
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return day === 15 || day === Math.min(30, lastDay);
 }

@@ -1,4 +1,5 @@
 import ReadinessPanel from "../components/ReadinessPanel.jsx";
+import SubmissionPreviewPanel from "../components/SubmissionPreviewPanel.jsx";
 import MotionSurface from "../components/MotionSurface.jsx";
 import { validationSummary } from "../utils/validationMessages.js";
 import MotionList from "../components/MotionList.jsx";
@@ -72,6 +73,7 @@ import {
   requestFrequencies,
   requestFrequencyLabels,
   requestPriorities,
+  requestPriorityHints,
   requestPriorityLabels,
   requestTypeForFlow,
   trackCRequestTypeLabels,
@@ -135,7 +137,9 @@ function initialForm() {
     flowType: "A1",
     requestType: "OPEX",
     expenseNature: "SERVICES",
-    priority: "MEDIA",
+    priority: "P3",
+    urgencyJustification: "",
+    dueDate: "",
     frequency: "ONE_OFF",
     requesterCostCenter: "",
     // Propio: the requester's own CECO. Por Encargo: another school or department's (costAllocations).
@@ -159,6 +163,7 @@ function initialForm() {
 }
 
 const initialCapex = {
+  businessCaseCode: "",
   projectPep: "",
   projectId: "",
   assetCategory: "",
@@ -324,7 +329,9 @@ export default function RequestCreate() {
             flowType,
             requestType: requestTypeForFlow(flowType, request.requestType),
             expenseNature: request.expenseNature || "SERVICES",
-            priority: request.priority || "MEDIA",
+            priority: ({ ALTA: "P2", MEDIA: "P3", BAJA: "P3" })[request.priority] || request.priority || "P3",
+            urgencyJustification: request.urgencyJustification || "",
+            dueDate: request.dueDate ? request.dueDate.slice(0, 10) : "",
             frequency: request.frequency || request.opexDetails?.expenseFrequency || "ONE_OFF",
             requesterCostCenter: idOf(request.requesterCostCenter),
             costCenterType: request.costCenterType === "POR_ENCARGO" ? "POR_ENCARGO" : "PROPIO",
@@ -346,6 +353,7 @@ export default function RequestCreate() {
           });
           const capexDetails = request.capexDetails || {};
           setCapex({
+            businessCaseCode: capexDetails.businessCaseCode || "",
             projectPep: capexDetails.projectPep || "",
             projectId: idOf(capexDetails.projectSnapshot?.id),
             assetCategory: capexDetails.assetCategory || "",
@@ -841,7 +849,9 @@ export default function RequestCreate() {
       if (!String(form.detailedDescription || "").trim()) next.detailedDescription = "Describe the requirement.";
       if (submitting && form.flowType === "A1" && !String(form.businessJustification || "").trim()) next.businessJustification = "Tell us why it is needed.";
       if (!form.expenseNature) next.expenseNature = "This field is required.";
-      if (!requestPriorities.includes(form.priority)) next.priority = "Choose the priority.";
+      if (!requestPriorities.includes(form.priority)) next.priority = "Choose the payment priority.";
+      if (submitting && ["P1", "P2"].includes(form.priority) && !String(form.urgencyJustification || "").trim()) next.urgencyJustification = "Explain why it cannot wait for the fortnightly payment.";
+      if (submitting && form.requestType === "CAPEX" && payee === "supplier" && !/^CN-\d{4}-\d{3}$/.test(String(capex.businessCaseCode || "").trim().toUpperCase())) next.businessCaseCode = "Enter the business case code, for example CN-2026-014.";
       if (!requestFrequencies.includes(form.frequency)) next.frequency = "Choose how often it is needed.";
       if (payee === "supplier" && !quotations.some(q => q.recommended && q.paymentCondition)) {
         for (const problem of validatePaymentTerms({ ...(form.supplierPaymentTerms || {}), amount: totals.total })) next[`supplierPaymentTerms.${problem.field}`] = problem.message;
@@ -955,6 +965,7 @@ export default function RequestCreate() {
     const receipt = invoicePayload();
     if (receipt) data.append("invoiceDetails", JSON.stringify(receipt));
     data.append("capexDetails", JSON.stringify(form.requestType === "CAPEX" ? {
+      businessCaseCode: String(capex.businessCaseCode || "").trim().toUpperCase(),
       projectPep: capex.projectPep,
       projectSnapshot: { id: capex.projectId || undefined },
       assetCategory: capex.assetCategory || undefined,
@@ -991,6 +1002,23 @@ export default function RequestCreate() {
       setSaving(false);
     }
   }
+
+  // What the live panel checks: the manual's online validations, the approval route and the payment day.
+  const previewPayload = useMemo(() => ({
+    ...budgetPayload,
+    id: isEditing ? id : undefined,
+    requesterCostCenter: form.requesterCostCenter || undefined,
+    costCenterType: onBehalf ? "POR_ENCARGO" : "PROPIO",
+    priority: form.priority,
+    urgencyJustification: form.urgencyJustification,
+    dueDate: form.dueDate || undefined,
+    supplier: payee === "supplier" ? form.supplier || undefined : undefined,
+    paymentAccount: payee === "supplier" ? form.paymentAccount || undefined : undefined,
+    invoiceDetails: payee === "supplier" ? (invoiceAttached ? { status: "ATTACHED", ...invoiceDetails, ruc: digits(invoiceDetails.ruc) } : { status: "PENDING" }) : undefined,
+    capexDetails: form.requestType === "CAPEX" ? { businessCaseCode: capex.businessCaseCode } : {},
+    quotations: quotations.filter(quotationHasData).map((quotation) => ({ ...quotation, clientId: undefined, attachment: quotationFiles[quotation.clientId] ? undefined : quotation.attachment })),
+    quotationFileCount: quotations.filter((quotation) => quotationFiles[quotation.clientId] || quotation.attachment).length
+  }), [budgetPayload, isEditing, id, form.requesterCostCenter, onBehalf, form.priority, form.urgencyJustification, form.dueDate, payee, form.supplier, form.paymentAccount, invoiceAttached, invoiceDetails, form.requestType, capex.businessCaseCode, quotations, quotationFiles]);
 
   const fieldError = (key) => errors[key] && <small className="field-error-text">{t(errors[key])}</small>;
   const fieldClass = (key, base = "field") => `${base}${errors[key] ? " field-error" : ""}`;
@@ -1176,15 +1204,17 @@ export default function RequestCreate() {
             </div>
           </WizardSection>
 
-          <WizardSection title="Priority and frequency">
+          <WizardSection title="Payment priority and frequency">
             <div className="form-grid two-column-form">
               <div className={fieldClass("priority")}>
-                <span id="request-priority-label">{t("Priority")} *</span>
+                <span id="request-priority-label">{t("Payment priority")} *</span>
                 <div className="segmented-control priority-control" role="radiogroup" aria-labelledby="request-priority-label">
-                  {["ALTA", "MEDIA", "BAJA"].map((value) => <label key={value} data-level={value.toLowerCase()} className={form.priority === value ? "active" : undefined}><input type="radio" className="sr-only" name="request-priority" value={value} checked={form.priority === value} onChange={() => changeForm({ priority: value })} /><span>{t(requestPriorityLabels[value])}</span></label>)}
+                  {requestPriorities.map((value) => <label key={value} data-level={value.toLowerCase()} className={form.priority === value ? "active" : undefined}><input type="radio" className="sr-only" name="request-priority" value={value} checked={form.priority === value} onChange={() => changeForm({ priority: value })} /><span>{t(requestPriorityLabels[value])}</span></label>)}
                 </div>
-                {fieldError("priority") || <small className="field-hint">{t("Priority orders the work; it never skips an approval or a control.")}</small>}
+                {fieldError("priority") || <small className="field-hint">{t(requestPriorityHints[form.priority] || requestPriorityHints.P3)} {t("It never skips an approval or a control.")}</small>}
               </div>
+              <label className={fieldClass("dueDate")}><span>{t("Due date")}</span><DateInput min={todayIso()} value={form.dueDate} onChange={(event) => changeForm({ dueDate: event.target.value })} />{fieldError("dueDate") || <small className="field-hint">{t("When the supplier must be paid. P4 (and P3 when it comes first) is paid on the last payment day before it.")}</small>}</label>
+              {["P1", "P2"].includes(form.priority) && <label className={`${fieldClass("urgencyJustification")} form-span-two`}><span>{t("Justification of the urgency")} *</span><textarea rows="2" value={form.urgencyJustification} onBlur={() => validateField("urgencyJustification")} onChange={(event) => changeForm({ urgencyJustification: event.target.value })} />{fieldError("urgencyJustification") || <small className="field-hint">{t("Why it cannot wait for the fortnightly payment. Urgent payments should stay at 10% or less.")}</small>}</label>}
               <label className={fieldClass("frequency")}><span>{t("Frequency")} *</span><select value={form.frequency} onChange={(event) => changeForm({ frequency: event.target.value })}>{requestFrequencies.map((value) => <option key={value} value={value}>{t(requestFrequencyLabels[value])}</option>)}</select>{fieldError("frequency") || <small className="field-hint">{t("Recorded with the request. Nothing is requested or paid again automatically.")}</small>}</label>
             </div>
           </WizardSection>
@@ -1235,6 +1265,9 @@ export default function RequestCreate() {
               : <SupplierPaymentCondition value={form.supplierPaymentTerms} onChange={value => changeForm({ supplierPaymentTerms: value })} amount={totals.total} currency={form.currency} />}
             {Object.entries(errors).filter(([key]) => key.startsWith("supplierPaymentTerms.")).map(([key, message]) => <small key={key} className="field-error-text">{t(message)}</small>)}
           </div>}
+          {form.requestType === "CAPEX" && payee === "supplier" && <div className="form-grid two-column-form">
+            <label className={fieldClass("businessCaseCode")}><span>{t("Business case code")} *</span><input value={capex.businessCaseCode} placeholder="CN-2026-014" onChange={(event) => { clearErrors(["businessCaseCode"]); setCapex((current) => ({ ...current, businessCaseCode: event.target.value.toUpperCase() })); }} />{fieldError("businessCaseCode") || <small className="field-hint">{t("From the business case app, with the decision Viable or Ejecutar.")}</small>}</label>
+          </div>}
           {form.requestType === "CAPEX" && <details className="official-subsection capex-details" open={capexOpen || undefined}><summary><strong>{t("CAPEX financial information")}</strong><small>{t(capexOpen ? "Planning information is recorded only; no depreciation or NPV calculation is generated." : "Optional for this amount: Budget or Accounting can complete it.")}</small></summary><div className="form-grid three-column-form">
             <label className="field"><span>{t("Project / PEP")}</span><select value={capex.projectId} onChange={(event) => { const project = masters.projects.find((item) => item._id === event.target.value); setCapex((current) => ({ ...current, projectId: event.target.value, projectPep: project?.code || current.projectPep })); }}><option value="">{t("No project")}</option>{masters.projects.map((project) => <option key={project._id} value={project._id}>{project.code} - {project.name}</option>)}</select></label>
             <label className="field"><span>{t("Fixed asset category")}</span><select value={capex.assetCategory} onChange={(event) => setCapex((current) => ({ ...current, assetCategory: event.target.value }))}><option value="">{t("Select")}</option>{["INFRASTRUCTURE", "MACHINERY", "IT_HARDWARE", "SOFTWARE_LICENSES"].map((value) => <option key={value} value={value}>{t(value)}</option>)}</select></label>
@@ -1272,6 +1305,7 @@ export default function RequestCreate() {
         </div>}
 
         </MotionSurface>
+      {["details", "review"].includes(stepId) && <SubmissionPreviewPanel payload={previewPayload} enabled={hydrated && totals.total > 0} />}
       <div className="wizard-error"><Message type="error">{error}</Message></div>
       <footer className="wizard-actions"><button type="button" className="secondary-button" disabled={step === 0 || saving} onClick={() => goToStep(stepIds[Math.max(0, step - 1)])}><ChevronLeft size={16} /><span>{t("Back")}</span></button><div className="wizard-actions-right"><button type="button" className="secondary-button" disabled={saving || !draft.ready || draft.status === "conflict"} onClick={() => save(false)}><Save size={16} /><span>{t(saving ? "Saving..." : "Save draft")}</span></button>{stepId !== "review" ? <button type="button" className="primary-button" onClick={nextStep}><span>{t("Continue")}</span><ChevronRight size={16} /></button> : <button type="button" className="primary-button" disabled={saving || !draft.ready || draft.status === "conflict"} onClick={() => save(true)}><Send size={16} /><span>{t(saving ? "Submitting..." : "Submit request")}</span></button>}</div></footer>
       </div>

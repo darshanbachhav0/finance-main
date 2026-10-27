@@ -39,7 +39,7 @@ import PageHeader from "../components/PageHeader.jsx";
 import Tabs, { tabPanelProps } from "../components/Tabs.jsx";
 import PaymentTermsSummary from "../components/PaymentTermsSummary.jsx";
 import { paymentTermsSummary } from "../../../shared/paymentTerms.mjs";
-import { isPaymentCycleDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
+import { isPaymentCycleDate, isUrgencyPaymentDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
 import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import RequestQuickView from "../components/RequestQuickView.jsx";
 import StatCard from "../components/StatCard.jsx";
@@ -61,7 +61,8 @@ const historicalSourceBanks = ["BBVA", "BCP", "INTERBANK", "SCOTIABANK"];
 const amountOf = (row) => Number(row.accountsPayable?.outstandingAmount ?? row.outstandingAmount ?? row.totalAmount ?? 0);
 // What goes to the supplier through BBVA: outstanding minus a pending SPOT detraccion.
 const netAmountOf = (row) => Number(row.accountsPayable?.netPayableAmount ?? amountOf(row));
-const onPaymentCycle = (dateKey) => Boolean(dateKey) && isPaymentCycleDate(new Date(`${dateKey}T12:00:00.000Z`));
+// A fortnightly payment day or the Wednesday urgency window: no reason needed (treasuryService).
+const onPaymentCycle = (dateKey) => Boolean(dateKey) && (isPaymentCycleDate(new Date(`${dateKey}T12:00:00.000Z`)) || isUrgencyPaymentDate(new Date(`${dateKey}T12:00:00.000Z`)));
 const requestIdOf = (row) => row.requestId || row.request?._id || row._id;
 const payableIdOf = (row) => row.accountsPayable?._id || row._id;
 const PAYMENT_VIEWS = ["prepare", "confirm", "detractions", "reconcile", "returned"];
@@ -623,7 +624,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       <AlertTriangle size={20} aria-hidden="true" />
       <div>
         <strong>{t("Advances to pay now")}: {advancesDue.count}</strong>
-        <span>{Object.entries(advancesDue.totalsByCurrency || {}).map(([code, item]) => money(code, item.total)).join(" · ")} · {t("Advances are paid the same working day, outside the 15th/30th cycle.")}</span>
+        <span>{Object.entries(advancesDue.totalsByCurrency || {}).map(([code, item]) => money(code, item.total)).join(" · ")} · {t("Advances are paid the same working day, outside the fortnightly payment days.")}</span>
       </div>
       {!readOnly && (advanceRun ? <button type="button" className="text-button" onClick={() => { setAdvanceRun(false); setSelected([]); }}>{t("Show every pending payment")}</button> : <button type="button" className="secondary-button" onClick={payAdvancesNow}>{t("Pay now")}</button>)}
     </div>}

@@ -1,4 +1,5 @@
 import { PERU_BANK_CODES } from "../../../shared/peruBanks.mjs";
+import { LEGACY_REQUEST_PRIORITY_MAP, REQUEST_PRIORITIES, REQUEST_PRIORITY_RANK } from "../../../shared/requestPriority.mjs";
 
 export const ROLES = Object.freeze({
   ADMIN: "Admin",
@@ -239,9 +240,16 @@ export const EXPENSE_NATURE = Object.freeze({
 });
 
 export const EXPENSE_NATURES = Object.freeze(Object.values(EXPENSE_NATURE));
-export const REQUEST_PRIORITIES = Object.freeze(["BAJA", "MEDIA", "ALTA"]);
-// Sorting by priority sorts by this rank (the stored codes are not in order alphabetically).
-export const REQUEST_PRIORITY_RANK = Object.freeze({ BAJA: 1, MEDIA: 2, ALTA: 3 });
+// Payment priority P1-P4 (shared/requestPriority.mjs). The former Alta / Media / Baja codes are
+// still read from older requests and mapped to P2 / P3 / P3.
+export { REQUEST_PRIORITIES, REQUEST_PRIORITY_RANK };
+export const LEGACY_REQUEST_PRIORITIES = Object.freeze(Object.keys(LEGACY_REQUEST_PRIORITY_MAP));
+
+// Line of cost or expense of a CECO in the Motor de Ingresos cascade.
+export const COST_CENTER_LINE = Object.freeze({ COST_OF_SERVICE: "COST_OF_SERVICE", ADMINISTRATION: "ADMINISTRATION", SALES: "SALES" });
+export const COST_CENTER_LINES = Object.freeze(Object.values(COST_CENTER_LINE));
+// The cascade level of a Vicerrectorado: the superior who approves after a CECO's responsible.
+export const VICE_RECTORATE_LEVEL = 4;
 
 export const APPROVAL_STAGES = Object.freeze({
   AREA_DIRECTOR: "AREA_DIRECTOR",
@@ -428,8 +436,18 @@ export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   // UIT. Above it the Gerencia de Administración Financiera also approves.
   GAF_APPROVAL_UIT: "GAF_APPROVAL_UIT",
   // UIT. Above it the Gerencia General also approves.
-  GENERAL_MANAGEMENT_APPROVAL_UIT: "GENERAL_MANAGEMENT_APPROVAL_UIT"
+  GENERAL_MANAGEMENT_APPROVAL_UIT: "GENERAL_MANAGEMENT_APPROVAL_UIT",
+  // Text, comma-separated job categories (categoría del puesto, Portal de Personas) that may charge
+  // a request to other cost centers (Por Encargo). Default "3,5,6".
+  ENCARGO_JOB_CATEGORIES: "ENCARGO_JOB_CATEGORIES",
+  // Working days. A P3 request is paid on the first fortnightly payment day at least this far away.
+  PAYMENT_CUTOFF_WORKING_DAYS: "PAYMENT_CUTOFF_WORKING_DAYS",
+  // Quotations (with their file) an A1 purchase is sent with. Default 3 (Manual del usuario, A1).
+  A1_MINIMUM_QUOTATIONS: "A1_MINIMUM_QUOTATIONS"
 });
+export const DEFAULT_A1_MINIMUM_QUOTATIONS = 3;
+export const DEFAULT_ENCARGO_JOB_CATEGORIES = Object.freeze([3, 5, 6]);
+export const DEFAULT_PAYMENT_CUTOFF_WORKING_DAYS = 3;
 export const DEFAULT_UIT_VALUE = 5500;
 export const DEFAULT_SUPERIOR_APPROVAL_UIT = 0;
 export const DEFAULT_GAF_APPROVAL_UIT = 5;

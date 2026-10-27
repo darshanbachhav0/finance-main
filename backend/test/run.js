@@ -29,6 +29,7 @@ import "./advanceBankRefresh.test.js";
 import "./simpleRendition.test.js";
 import "./cecoBudget.test.js";
 import "./costCenterType.test.js";
+import "./paymentsManualRoute.test.js";
 import "./bankFileVerification.test.js";
 import "./leaveSubstitute.test.js";
 import "./notificationBell.test.js";

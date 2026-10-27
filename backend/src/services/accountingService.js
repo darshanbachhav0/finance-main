@@ -1,3 +1,4 @@
+import { requestSuggestedPaymentDate } from "./paymentWindowService.js";
 import mongoose from "mongoose";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import { assertBudgetBeforePosting, executeBudgetAmount, reverseBudgetExecution } from "./budgetService.js";
@@ -653,8 +654,10 @@ export async function createAccountsPayableFromVoucher({
   }
   const paymentTermsSnapshot = await resolvePayablePaymentTerms({ request, supplier, purchaseOrder, session });
   const penEquivalent = multiplyMoney(total, exchangeRate);
+  const suggestedPaymentDate = await requestSuggestedPaymentDate(request);
   const [accountsPayable] = await AccountsPayable.create([{
     request: request._id,
+    suggestedPaymentDate,
     purchaseOrder: purchaseOrder?._id || purchaseOrder,
     sunatVoucher: sunatVoucher?._id || sunatVoucher,
     sourceBatch: sourceBatch?._id || sourceBatch,
@@ -1038,8 +1041,10 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     // A cancelled CXP never counts as the existing payable of the request.
     let accountsPayable = await AccountsPayable.findOne({ request: request._id, status: { $ne: AP_STATUS.CANCELLED } }).session(session || null);
     if (!accountsPayable) {
+      const suggestedPaymentDate = await requestSuggestedPaymentDate(request);
       [accountsPayable] = await AccountsPayable.create([{
         request: request._id,
+        suggestedPaymentDate,
         flowType: request.flowType,
         purchaseOrder: purchaseOrder?._id,
         supplier: request.supplier._id,

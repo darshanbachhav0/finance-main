@@ -4,6 +4,7 @@ import { bankAccountLabel, bankAccountPayload, bankAccountProblems, emptyBankAcc
 import { creationExpenseNatures, requestFrequencies, requestFrequencyLabels, requestPriorityLabels } from "../src/utils/options.js";
 import { PERU_BANKS, cciBankProblem } from "../../shared/peruBanks.mjs";
 import requestWizardSpanish from "../src/context/i18n/requestWizard.js";
+import paymentsManualSpanish from "../src/context/i18n/paymentsManual.js";
 import simpleSpanish from "../src/context/i18n/simple.js";
 
 // Line endings are normalized: a Windows checkout (core.autocrlf) has CRLF files.
@@ -50,11 +51,13 @@ assert.match(page, /setInvoiceDetails\(\(current\) => \(\{ \.\.\.current, \.\.\.
 
 // 4. Step 3, the details: priority, frequency, dates, amounts and the budget check beside them.
 const detailsStep = stepBody("details");
-for (const piece of ["Priority and frequency", "requestFrequencies.map", "Requirement date", "<BudgetRemainingSummary ", "creationExpenseNatures", "form.observations"]) assert.ok(detailsStep.includes(piece), `details: ${piece}`);
+for (const piece of ["Payment priority and frequency", "requestFrequencies.map", "Requirement date", "<BudgetRemainingSummary ", "creationExpenseNatures", "form.observations"]) assert.ok(detailsStep.includes(piece), `details: ${piece}`);
 assert.deepEqual(requestFrequencies, ["ONE_OFF", "MONTHLY_RECURRING", "EVERY_3_MONTHS", "ANNUAL_RENEWAL"]);
 assert.deepEqual(Object.values(requestFrequencyLabels), ["Once", "Monthly", "Every 3 months", "Yearly"]);
 assert.deepEqual(["Once", "Monthly", "Yearly"].map((label) => requestWizardSpanish[label]), ["Única vez", "Mensual", "Anual"]);
-assert.deepEqual(["ALTA", "MEDIA", "BAJA"].map((value) => requestWizardSpanish[requestPriorityLabels[value]]), ["Alta", "Media", "Baja"]);
+// Payment priority P1-P4 (Manual técnico, "Programación de pagos"); older Alta / Media / Baja read as P2 / P3.
+assert.deepEqual(["P1", "P2", "P3", "P4"].map((value) => paymentsManualSpanish[requestPriorityLabels[value]]), ["P1 Crítica", "P2 Urgente", "P3 Normal", "P4 Programada"]);
+assert.deepEqual(["ALTA", "MEDIA", "BAJA"].map((value) => requestPriorityLabels[value]), ["P2 Urgent", "P3 Normal", "P3 Normal"]);
 // Petty cash and reimbursements are Track C's, not expense types of a new request.
 assert.ok(!creationExpenseNatures.includes("PETTY_CASH") && !creationExpenseNatures.includes("REIMBURSEMENT_LIQUIDATION"));
 

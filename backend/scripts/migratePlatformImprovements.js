@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { pathToFileURL } from "node:url";
 import { connectDB } from "../src/config/db.js";
 import { limaDateKey } from "../../shared/businessCalendar.mjs";
+import { DEFAULT_REQUEST_PRIORITY, LEGACY_REQUEST_PRIORITY_MAP, REQUEST_PRIORITY_RANK } from "../../shared/requestPriority.mjs";
 
 // Brings existing records in line with the October 2026 request / supplier improvements. It only
 // adds missing values: nothing is renumbered, deleted or overwritten, and running it again changes
@@ -24,7 +25,7 @@ import { limaDateKey } from "../../shared/businessCalendar.mjs";
 
 const apply = process.argv.includes("--apply");
 const assignAreas = process.argv.includes("--assign-areas");
-const PRIORITY_RANK = { BAJA: 1, MEDIA: 2, ALTA: 3 };
+
 const UNASSIGNED_AREAS = new Set(["", "GENERAL", "*"]);
 
 const codeNumber = (code) => {
@@ -72,15 +73,20 @@ export async function migratePlatformImprovements(db, { apply = false, assignAre
     report.suppliersNumbered.push({ supplier: String(supplier._id), rucDni: supplier.rucDni, legalName: supplier.legalName || supplier.name, supplierCode });
   }
 
-  // 2. Priority rank and frequency on requests.
-  for (const [priority, rank] of Object.entries(PRIORITY_RANK)) {
+  // 2. Payment priority (P1-P4; Alta / Media / Baja move to P2 / P3), its rank, and frequency.
+  for (const [legacy, priority] of Object.entries(LEGACY_REQUEST_PRIORITY_MAP)) {
+    const filter = { priority: legacy };
+    report.requestsRanked += await requests.countDocuments(filter);
+    if (apply) await requests.updateMany(filter, { $set: { priority, priorityRank: REQUEST_PRIORITY_RANK[priority] } });
+  }
+  for (const [priority, rank] of Object.entries(REQUEST_PRIORITY_RANK)) {
     const filter = { priority, priorityRank: { $ne: rank } };
     report.requestsRanked += await requests.countDocuments(filter);
     if (apply) await requests.updateMany(filter, { $set: { priorityRank: rank } });
   }
   const unranked = { $or: [{ priority: { $exists: false } }, { priority: null }], priorityRank: { $exists: false } };
   report.requestsRanked += await requests.countDocuments(unranked);
-  if (apply) await requests.updateMany(unranked, { $set: { priorityRank: PRIORITY_RANK.MEDIA } });
+  if (apply) await requests.updateMany(unranked, { $set: { priorityRank: REQUEST_PRIORITY_RANK[DEFAULT_REQUEST_PRIORITY] } });
   const withoutFrequency = { frequency: { $exists: false } };
   report.requestsWithFrequency = await requests.countDocuments(withoutFrequency);
   if (apply) {

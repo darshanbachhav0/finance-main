@@ -18,7 +18,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
-import { requestFlowTypes, requestPriorityLabels, requestTypes } from "../utils/options.js";
+import { requestFlowTypes, requestPriorities, requestPriorityLabels, requestTypes } from "../utils/options.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 import RequestDocumentsDrawer from "../components/RequestDocumentsDrawer.jsx";
@@ -304,7 +304,7 @@ export default function ApprovalInbox() {
           filters={[
             { key: "flowType", label: "tracks", allLabel: "All tracks", options: requestFlowTypes.filter((item) => item !== "A2") },
             { key: "requestType", label: "types", allLabel: "All types", options: requestTypes },
-            { key: "priority", label: "priorities", allLabel: "All priorities", options: ["ALTA", "MEDIA", "BAJA"].map((value) => ({ value, label: requestPriorityLabels[value] })) }
+            { key: "priority", label: "priorities", allLabel: "All priorities", options: requestPriorities.map((value) => ({ value, label: requestPriorityLabels[value] })) }
           ]}
           searchPlaceholder="Search request, supplier, or solicitor..."
           onRowClick={(row) => setQuickViewId(row._id)}
@@ -317,7 +317,7 @@ export default function ApprovalInbox() {
           ]}
           columns={[
             { key: "requestNumber", type: "name", primary: true, label: "Request", render: (row) => <div className="primary-cell"><Link to={`/requests/${row._id}`}>{row.requestNumber}</Link><span>{row.title || row.description || ""}</span></div> },
-            { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "MEDIA"]), render: (row) => <PriorityBadge priority={row.priority} /> },
+            { key: "priority", label: "Priority", exportValue: (row) => t(requestPriorityLabels[row.priority || "P3"]), render: (row) => <PriorityBadge priority={row.priority} /> },
             { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => (isTransfer(row) ? counterparty(row) : row.supplier?.name), render: counterparty },
             { key: "approvalStage", type: "name", minWidth: "150px", label: "Current stage", render: (row) => { const covering = activeStepOf(row)?.coveringForSnapshot?.name; const later = laterStagesText(row.approvalOptions, t); return covering || later ? <span className="primary-cell"><span>{t(row.approvalStage || "AREA_DIRECTOR")}</span>{covering && <small>{t("on behalf of {name}").replace("{name}", covering)}</small>}{later && <small>{t("Then")}: {later}</small>}</span> : t(row.approvalStage || "AREA_DIRECTOR"); } },
             { key: "area", label: "Area", sortable: false, render: row => row.solicitor?.area || row.requesterArea || "—" },

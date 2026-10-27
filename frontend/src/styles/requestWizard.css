@@ -35,9 +35,10 @@
 /* Step 3: priority as three buttons. */
 .priority-control label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px; border-radius: var(--radius-xs); color: var(--gray-700); font-size: var(--font-xs); font-weight: 700; cursor: pointer; }
 .priority-control label::before { width: 8px; height: 8px; border-radius: 50%; background: var(--gray-400); content: ""; }
-.priority-control label[data-level="alta"]::before { background: var(--red-700); }
-.priority-control label[data-level="media"]::before { background: var(--amber-700); }
-.priority-control label[data-level="baja"]::before { background: var(--green-700); }
+.priority-control label[data-level="p1"]::before { background: var(--red-700); }
+.priority-control label[data-level="p2"]::before { background: var(--amber-700); }
+.priority-control label[data-level="p3"]::before { background: var(--blue-700); }
+.priority-control label[data-level="p4"]::before { background: var(--gray-500); }
 .priority-control label.active { color: var(--gray-950); background: var(--surface-panel); box-shadow: var(--shadow-sm); }
 .priority-control label:has(input:focus-visible) { outline: 2px solid var(--uma-primary); outline-offset: 2px; }
 /* The generic field-input width must not expand visually hidden radio controls. */
@@ -73,3 +74,22 @@
   .cost-allocation-row.is-shared { grid-template-columns: minmax(0, 1fr) auto auto; }
   .cost-allocation-row.is-shared > .search-select-field { grid-column: 1 / -1; }
 }
+
+/* Live panel of the request form: online validation, approval route and estimated payment. */
+.submission-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); margin: 0 24px 16px; padding: 14px 16px; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); background: var(--gray-50); }
+.submission-preview section { min-width: 0; }
+.submission-preview h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: var(--font-sm); }
+.submission-preview p { margin: 0 0 6px; font-size: var(--font-sm); }
+.submission-preview-error { color: var(--red-700); }
+.submission-checks, .submission-route { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.submission-check { display: flex; gap: 8px; align-items: flex-start; font-size: var(--font-sm); }
+.submission-check > svg { flex: none; margin-top: 2px; }
+.submission-check span, .submission-route li { display: grid; gap: 1px; min-width: 0; }
+.submission-check small, .submission-route small { color: var(--gray-700); overflow-wrap: anywhere; }
+.submission-check-ok > svg { color: var(--green-700); }
+.submission-check-warning > svg { color: var(--amber-700); }
+.submission-check-fail > svg { color: var(--red-700); }
+.submission-route { counter-reset: route; }
+.submission-route li { position: relative; padding-left: 26px; font-size: var(--font-sm); }
+.submission-route li::before { position: absolute; left: 0; top: 1px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--ink-800); font-size: var(--font-2xs); font-weight: 800; counter-increment: route; content: counter(route); }
+@media (max-width: 768px) { .submission-preview { margin: 0 12px 12px; } }

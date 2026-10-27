@@ -41,7 +41,8 @@ import {
 import { ensureDetraction, pendingDetractionAmount, resolveSupplierDetractionAccount } from "./detractionService.js";
 import { notifyBouncedAccountReview } from "./bankNotificationService.js";
 import { ADVANCE_PAYMENT_REASON, advanceReturnAccount, isAdvancePayable } from "./advancePaymentService.js";
-import { isPaymentCycleDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
+import { isPaymentCycleDate, isUrgencyPaymentDate, limaDateKey, nextPaymentCycleDate } from "../../../shared/businessCalendar.mjs";
+import { normalizeRequestPriority, REQUEST_PRIORITY } from "../../../shared/requestPriority.mjs";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
 import { nextPaymentBatchNumber } from "./sequenceService.js";
 import { cleanupUploadedFiles, generatedRoot, persistUploadedFiles } from "./storageService.js";
@@ -181,23 +182,31 @@ function dateKeyOf(value, field) {
   return limaDateKey(date);
 }
 
-// University payment schedule: payments run on the 15th and the 30th (last day of February).
-// The default is the next cycle date; any other date needs a reason (audited) and a date in the
-// past is never accepted. Advances to render are paid the same working day: a file holding only
-// advances defaults to today and needs no typed reason (the platform records why).
-export function resolvePaymentSchedule({ paymentDate, reason, now = new Date(), advancesOnly = false } = {}) {
+// University payment schedule: payments run on the 15th and on the last day of the month (each moved
+// back to the previous working day), urgent (P2) payments on the weekly Wednesday window and
+// critical (P1) ones the same day. The default is the next cycle date; any other date needs a reason
+// (audited) and a date in the past is never accepted. Advances to render are paid the same working
+// day: a file holding only advances (or only P1 requests) may be dated today without a typed reason.
+export function resolvePaymentSchedule({ paymentDate, reason, now = new Date(), advancesOnly = false, criticalOnly = false } = {}) {
   const cycleDate = nextPaymentCycleDate(now);
-  const date = paymentDate ? dateKeyOf(paymentDate, "paymentDate") : advancesOnly ? limaDateKey(now) : cycleDate;
+  const sameDay = advancesOnly || criticalOnly;
+  const date = paymentDate ? dateKeyOf(paymentDate, "paymentDate") : sameDay ? limaDateKey(now) : cycleDate;
   if (date < limaDateKey(now)) {
     throw new AppError(422, "A payment cannot be scheduled on a past date.", { field: "paymentDate", paymentDate: date, today: limaDateKey(now) }, ERROR_CODES.VALIDATION_ERROR);
   }
   // Noon UTC is 07:00 in Lima, so the Lima calendar date is the key itself.
-  const onCycle = isPaymentCycleDate(new Date(`${date}T12:00:00.000Z`));
+  const noon = new Date(`${date}T12:00:00.000Z`);
+  const onCycle = isPaymentCycleDate(noon) || isUrgencyPaymentDate(noon) || (criticalOnly && date === limaDateKey(now));
   const overrideReason = String(reason || "").trim() || (advancesOnly ? ADVANCE_PAYMENT_REASON : "");
   if (!onCycle && !overrideReason) {
-    throw new AppError(422, `Payments follow the 15th/30th cycle (next: ${cycleDate}). A reason is required to schedule on another date.`, { field: "paymentDateReason", paymentDate: date, cycleDate }, ERROR_CODES.VALIDATION_ERROR);
+    throw new AppError(422, `Payments run on the fortnightly payment days or the Wednesday urgency window (next payment day: ${cycleDate}). A reason is required to schedule on another date.`, { field: "paymentDateReason", paymentDate: date, cycleDate }, ERROR_CODES.VALIDATION_ERROR);
   }
   return { paymentDate: date, cycleDate, override: onCycle ? null : { reason: overrideReason, cycleDate } };
+}
+
+// Every payment of the selection belongs to a P1 (critical) request: it may be paid today.
+function allCritical(items) {
+  return items.length > 0 && items.every((item) => normalizeRequestPriority(item.request?.priority) === REQUEST_PRIORITY.CRITICAL);
 }
 
 export function paymentCycleOf(accountsPayable, now = new Date()) {
@@ -212,6 +221,12 @@ export function paymentCycleOf(accountsPayable, now = new Date()) {
   // Treasury's planned date (Excel payment schedule) wins over the due date of the payment terms.
   const planned = accountsPayable.plannedPaymentDate ? new Date(accountsPayable.plannedPaymentDate) : null;
   if (planned) return nextPaymentCycleDate(planned > now ? planned : now);
+  // The date proposed from the request's priority when it was provisioned (suggestedPaymentDate).
+  if (accountsPayable.suggestedPaymentDate) {
+    const today = limaDateKey(now);
+    const suggested = new Date(accountsPayable.suggestedPaymentDate).toISOString().slice(0, 10);
+    return suggested >= today ? suggested : nextPaymentCycleDate(now);
+  }
   const due = accountsPayable.dueDate ? new Date(accountsPayable.dueDate) : null;
   return nextPaymentCycleDate(due && due > now ? due : now);
 }
@@ -643,7 +658,7 @@ export async function schedulePayments({ requestIds = [], payableIds = [], bank,
   if ((!Array.isArray(requestIds) || !requestIds.length) && (!Array.isArray(payableIds) || !payableIds.length)) throw new AppError(422, "Select at least one payable CXP.", undefined, ERROR_CODES.VALIDATION_ERROR);
   const normalizedBank = String(bank || "").toUpperCase();
   const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
-  const schedule = resolvePaymentSchedule({ paymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && items.every((item) => isAdvancePayable(item.accountsPayable)) });
+  const schedule = resolvePaymentSchedule({ paymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && items.every((item) => isAdvancePayable(item.accountsPayable)), criticalOnly: allCritical(items) });
   await runFinancialOperation(async (session) => {
     for (const item of items) await scheduleLoadedItem(item, schedule, user, req, session);
   });
@@ -673,7 +688,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
   };
   const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
   const advanceCount = items.filter((item) => isAdvancePayable(item.accountsPayable)).length;
-  const schedule = resolvePaymentSchedule({ paymentDate: requestedPaymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && advanceCount === items.length });
+  const schedule = resolvePaymentSchedule({ paymentDate: requestedPaymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && advanceCount === items.length, criticalOnly: allCritical(items) });
   const { paymentDate } = schedule;
   adapter.validateBatch(items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot })));
   const batchNumber = await nextPaymentBatchNumber(paymentDate);

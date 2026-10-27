@@ -121,6 +121,9 @@ const accountsPayableSchema = new mongoose.Schema(
     // Treasury's planned payment date (from its Excel payment schedule): the payable joins that
     // payment run instead of the one its due date gives. Only a plan; scheduling still validates.
     plannedPaymentDate: Date,
+    // The payment day proposed from the request's priority (P1-P4) and due date when the CXP was
+    // created; Treasury's default date until it schedules the payment (treasuryService.paymentCycleOf).
+    suggestedPaymentDate: Date,
     plannedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     plannedAt: Date,
     // Payments follow the university cycle (15th / 30th). A date off that cycle needs an audited reason.

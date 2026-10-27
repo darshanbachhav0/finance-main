@@ -125,8 +125,11 @@ below the `CAPEX_DETAILS_THRESHOLD` finance configuration (default PEN 50,000). 
 plain statuses (Draft, Waiting for approval, In process, Paid, plus "Needs your changes" / Rejected /
 Cancelled) with one line saying what is needed from them; Finance roles keep the detailed statuses.
 
-Every request records `priority` (+ `priorityRank`, so lists sort Alta > Media > Baja; it never
-skips an approval or control), `frequency` (`ONE_OFF`, `MONTHLY_RECURRING`, `EVERY_3_MONTHS`,
+Every request records its payment `priority` P1 Crítica / P2 Urgente / P3 Normal / P4 Programada
+(`shared/requestPriority.mjs`; + `priorityRank`, so lists sort P1 first; it never skips an approval
+or control). P1 and P2 need an `urgencyJustification`; an optional `dueDate` (fecha de vencimiento)
+moves P3/P4 to the last payment day before it (§5, payment cycle). Older Alta / Media / Baja are read
+as P2 / P3 / P3 and moved once at server start (`legacyPriorityService`). `frequency` (`ONE_OFF`, `MONTHLY_RECURRING`, `EVERY_3_MONTHS`,
 `ANNUAL_RENEWAL` — recorded only, nothing is repeated or paid automatically; OPEX keeps
 `opexDetails.expenseFrequency` in step), `observations`, `paymentAccount` (the supplier account the
 requester chose: bank, type, currency and last four digits only) and `invoiceDetails` (the receipt
@@ -235,6 +238,17 @@ two people saving at once never share a number and a refused request takes none.
 
 One engine, two identity sources, resolved in `backend/src/services/approvalRuleService.js`:
 
+0. **Cost-center cascade (Manual técnico, "Ruta de aprobación").** When the request's CECO has a
+   `responsible` (CostCenter: `parentCode`, `level` 2-7, `line`, `responsible`; loaded from
+   `data/ceco-cascade.json` with `npm run import:ceco-cascade`), the route is fixed when it is sent
+   (`resolveCostCenterRoute`): the CECO's responsible (`RESPONSIBLE`), then in a Por Encargo request
+   the "visto" of each beneficiary CECO (`BENEFICIARY`), then the superior in the cascade
+   (`SUPERIOR`: the Vicerrectorado, level 4, it depends on, else its parent's responsible; the
+   responsible's jefe when the cascade names nobody), then the UIT tiers below. These are person
+   steps (`source: MANAGER_CHAIN`, `fixed: true`, `costCenterRole`, `costCenterCode`), so leave,
+   substitutes and SLA escalation work as for jefes, but their approver only approves: there is no
+   "send to my jefe" and approving opens the next step. Each person once; a later fixed step whose
+   person already approved is SKIPPED. Without a responsible on the CECO the jefe chain below applies.
 1. **Manager chain (primary, flexible).** If the requester has a `jefe` (supervisor) set in the
    organizational roster, the route starts with the requester's nearest *available* jefe (inactive
    or on-leave managers are skipped going up; if nobody is available, submission fails with a
@@ -303,6 +317,22 @@ return or reject.
   existing exception/observation/rejection behaviour; any other failure leaves the commitment to
   Treasury's manual retry. The requester is notified that the request was approved.
 
+### 3.4 Online validations and who sees which request
+
+Sending a request runs the manual's online validations (`requestSubmissionChecks.js`), and the form
+shows them live with the approval route and the estimated payment day (`POST
+/requests/submission-preview`, `SubmissionPreviewPanel`): P1/P2 justification, the Por Encargo job
+category, the CAPEX business-case code (`capexDetails.businessCaseCode`, CN-AAAA-NNN), A1's
+quotations from different suppliers (`A1_MINIMUM_QUOTATIONS`, default 3), a unique invoice (RUC +
+series + number) and a payment account verified in the request's currency (a supplier still waiting
+for its review is a warning: approval goes on and the payment waits).
+
+Read scope (`utils/permissions.js`): the GAF, Gerencia General and the Auditor read every submitted
+request; Accounting, Treasury and Procurement everything; a requester the submitted requests of
+their own CECO; an Area Director or Vice-Rector those of every CECO they are responsible for (or
+their own) and all below it in the cascade (`visibleCostCenterIdsFor`, computed at sign-in). Everyone
+keeps their own requests and those routed to them.
+
 ## 4. Budget
 
 `backend/src/services/budgetService.js`. A `BudgetRule` per dimension (cost center / expense type /
@@ -369,10 +399,13 @@ service and the model, and each share's amount follows the request total to the 
 carry the first beneficiary's CECO; a request shared by several CECOs reserves each one's budget
 by its percentage (`groupedRequestLines`) and books each expense debit to each CECO
 (`shareExpenseLines`), so the month-end consolidation shows each school. Track C stays `PROPIO`.
-The approval route does not change (the requester's manager chain): when a Por Encargo request is
-sent, the beneficiary CECOs' heads (their Area Director or Vice-Rector by area, or the CECO's top
-jefe in the roster) are recorded in `costCenterReviewers`, notified, and may open and comment on
-the request; they are not an approval step. Type and distribution are in the request's
+Each beneficiary CECO's responsible (else its head: its Area Director or Vice-Rector by area, or
+the CECO's top jefe in the roster, `costCenterHeads`) gives its "visto" as a fixed approval step
+after the requesting CECO's approvers (§3.3); they are also recorded in `costCenterReviewers`,
+notified, and may open and comment on the request. A beneficiary CECO with nobody to approve
+refuses the sending (`APPROVAL_ROUTE_NOT_CONFIGURED`). Only job categories 3, 5 and 6
+(`User.jobCategory`, FinanceConfiguration `ENCARGO_JOB_CATEGORIES`) may send a Por Encargo request;
+the category is kept on the request (`requesterJobCategory`). Type and distribution are in the request's
 CREATED/UPDATED audit entries.
 
 ## 5. Accounting, Accounts Payable & Treasury
@@ -414,8 +447,14 @@ CREATED/UPDATED audit entries.
   (`AP_STATUS.PARTIALLY_PAID`); each confirmation posts a journal for exactly that amount, in the
   actual payment date's month, keyed on the CXP + bank operation number (a repeated operation
   number is refused with 409). Treasury can put the unpaid remainder into a new BBVA file.
-- **Payment cycle**: payments run on the 15th and 30th (last day in February). Scheduling defaults
-  to the next cycle date; another date needs an audited reason; past dates are refused.
+- **Payment cycle** (Manual técnico, "Programación de pagos"): payments run on the 15th and on the
+  last day of the month, each moved back to the previous working day (`shared/businessCalendar.mjs`),
+  and urgent ones on the Wednesday urgency window. A CXP is created with `suggestedPaymentDate` from
+  its request's priority (`suggestedPaymentDate`: P1 today, P2 the next Wednesday, P3 the first
+  payment day at least `PAYMENT_CUTOFF_WORKING_DAYS` (3) away, P3/P4 with a due date the last payment
+  day before it), Treasury's default until it schedules. A payment day or a Wednesday needs no reason,
+  nor today when every selected payment is P1; another date needs an audited reason; past dates are
+  refused.
   **Advances to render are the exception**: they are paid the same working day they are approved
   (`advancePaymentService`, shared `advancePaymentDate`): today in Lima, or the next working day
   when approved from the cut-off hour (`FinanceConfiguration` key `ADVANCE_PAYMENT_CUTOFF_HOUR`,

@@ -67,7 +67,8 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     const expense = await ExpenseType.create({ code: "PH5-GOODS", name: "Medical supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
     const users = {
       solicitor: await User.create({ name: "Phase 5 Requester", email: "phase5.requester@uma.edu.pe", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id }),
-      approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR" }),
+      // The Director of Health Sciences reads its requests (alcance de lectura: their cascade).
+      approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR", costCenter: center._id }),
       budget: await User.create({ name: "Phase 5 Budget", email: "phase5.budget@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
       procurement: await User.create({ name: "Phase 5 Procurement", email: "phase5.procurement@uma.edu.pe", passwordHash: "unused", role: ROLES.PROCUREMENT, area: "Procurement" }),
       treasury: await User.create({ name: "Phase 5 Treasury", email: "phase5.treasury@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),

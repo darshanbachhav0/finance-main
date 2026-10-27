@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
 import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, READ_ONLY_OVERSIGHT_ROLES, REQUEST_STATUS, REQUESTER_ROLES, ROLE_PERMISSIONS, ROLES } from "./constants.js";
@@ -8,8 +9,27 @@ export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASUR
 // only the Admin, the GAF and the read-only overseers see every department.
 export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.GAF, ...READ_ONLY_OVERSIGHT_ROLES];
 export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ...REQUESTER_ROLES];
-// Approval-pool roles that see every submitted request but never other people's drafts.
-const SUBMITTED_REQUEST_VIEWERS = [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT, ROLES.GAF, ROLES.AUDITOR];
+// Who sees which requests (Manual técnico, "Seguridad, perfiles y auditoría": alcance de lectura).
+// The GAF, the Gerencia General and Auditoría read every submitted request of the university, never
+// other people's drafts.
+const SUBMITTED_REQUEST_VIEWERS = [ROLES.MANAGEMENT, ROLES.GAF, ROLES.AUDITOR];
+// A Director or Vicerrector reads the submitted requests of their cascade, and a requester those of
+// their own cost center (services/costCenterCascadeService.js, computed when they sign in).
+export const CASCADE_REQUEST_VIEWERS = [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR];
+export const COST_CENTER_SCOPED_VIEWERS = [...CASCADE_REQUEST_VIEWERS, ...REQUESTER_ROLES];
+
+const idString = (value) => String(value?._id || value || "");
+
+// The cost centers whose submitted requests this person reads besides their own.
+export function visibleCostCenterIds(user) {
+  const computed = user?.$locals?.visibleCostCenterIds || user?.visibleCostCenterIds;
+  if (Array.isArray(computed)) return computed.map(idString).filter(Boolean);
+  return user?.costCenter ? [idString(user.costCenter)] : [];
+}
+
+function requestCostCenterIds(request) {
+  return [request.requesterCostCenter, ...(request.costAllocations || []).map((allocation) => allocation.costCenter)].map(idString).filter(Boolean);
+}
 
 export function isSuperAdmin(user) {
   return user?.role === ROLES.SUPER_ADMIN;
@@ -134,10 +154,14 @@ export function canViewRequest(request, user) {
   if ((request.approvalRouteSnapshot || []).some((step) => step.approverUser && String(step.approverUser?._id || step.approverUser) === String(user._id))) return true;
   // The heads of the CECOs a Por Encargo request is charged to review it (they are not approvers).
   if ((request.costCenterReviewers || []).some((reviewer) => String(reviewer?._id || reviewer) === String(user._id))) return true;
-  // Preserves the Area Director/Vice-Rector/Management carve-out exactly: broad but
-  // never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
-  // (Accounting, Treasury, Budget) keeps its original unrestricted access.
+  // Broad but never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
+  // (Accounting, Treasury, Procurement) keeps its unrestricted access.
   if (SUBMITTED_REQUEST_VIEWERS.includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
+  if (COST_CENTER_SCOPED_VIEWERS.includes(user.role)) {
+    if (request.status === REQUEST_STATUS.DRAFT) return false;
+    const visible = new Set(visibleCostCenterIds(user));
+    return requestCostCenterIds(request).some((id) => visible.has(id));
+  }
   return hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL);
 }
 
@@ -147,13 +171,16 @@ export function requestVisibilityFilter(user) {
   if (SUBMITTED_REQUEST_VIEWERS.includes(user.role)) {
     return { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
   }
-  if (hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL)) return {};
+  const scoped = COST_CENTER_SCOPED_VIEWERS.includes(user.role);
+  if (!scoped && hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL)) return {};
+  const centers = scoped ? visibleCostCenterIds(user).filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id)) : [];
   return {
     $or: [
       { requester: user._id },
       { solicitor: user._id },
       { "approvalRouteSnapshot.approverUser": user._id },
-      { costCenterReviewers: user._id }
+      { costCenterReviewers: user._id },
+      ...(centers.length ? [{ status: { $ne: REQUEST_STATUS.DRAFT }, $or: [{ requesterCostCenter: { $in: centers } }, { "costAllocations.costCenter": { $in: centers } }] }] : [])
     ]
   };
 }

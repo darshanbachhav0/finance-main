@@ -29,13 +29,16 @@ test("global search: grouped records, strictly scoped to what the caller may ope
     const accounting = await person("Carla Accounting", "71000005", ROLES.ACCOUNTING);
     const treasury = await person("Tomas Treasury", "71000006", ROLES.TREASURY);
     const viewer = await person("Vera Viewer", "71000007", ROLES.MANAGEMENT_VIEWER);
-    const center = await CostCenter.create({ code: "CC-SRCH", name: "Search", area: "Operations", active: true });
+    const center = await CostCenter.create({ code: "CC-SRCH", name: "Search", area: "Operations", active: true, responsible: director._id });
+    // A Director reads the requests of the cost centers they lead (their cascade).
+    director.costCenter = center._id;
+    await User.updateOne({ _id: director._id }, { $set: { costCenter: center._id } });
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20999999981", normalizedIdentifier: "20999999981", legalName: "Globex Search SAC", name: "Globex Search SAC", commercialName: "Globex", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-9981", paymentTerms: { option: "CREDIT_30", days: 30 } });
 
     const makeRequest = (owner, requestNumber, status, title) => FinancialRequest.create({
       requestNumber, title, requestType: REQUEST_TYPE.OPEX, expenseNature: EXPENSE_NATURE.SERVICES,
       issueDate: "2026-09-10", accountingPeriod: "2026-09", currency: "PEN",
-      solicitor: owner._id, requester: owner._id, status, supplier: supplier._id, description: "Global search scoping",
+      solicitor: owner._id, requester: owner._id, requesterCostCenter: center._id, status, supplier: supplier._id, description: "Global search scoping",
       lines: [{ costCenter: center._id, expenseType: new mongoose.Types.ObjectId(), netAmount: 100, igvAmount: 18, totalAmount: 118 }]
     });
     const aliceRequest = await makeRequest(alice, "REQ-2026-97001", REQUEST_STATUS.PENDING_APPROVAL, "Lab laptops");
@@ -70,7 +73,7 @@ test("global search: grouped records, strictly scoped to what the caller may ope
       assert.deepEqual(ids(await globalSearch("REQ-2026-970", bruno), "requests").sort(), [String(brunoRequest._id), String(brunoDraft._id)].sort(), "own drafts are visible");
     });
 
-    await t.test("a Director sees other people's requests but never their drafts", async () => {
+    await t.test("a Director sees the requests of their cost center but never other people's drafts", async () => {
       const result = await globalSearch("REQ-2026-970", director);
       assert.deepEqual(ids(result, "requests").sort(), [String(aliceRequest._id), String(brunoRequest._id)].sort());
       assert.deepEqual(ids(await globalSearch("20999999981", director), "vouchers"), [String(voucher._id)]);
