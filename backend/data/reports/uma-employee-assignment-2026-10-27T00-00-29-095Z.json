@@ -1,0 +1,13 @@
+{
+  "mode": "VALIDATE_ONLY",
+  "sourceFile": "C:\\Users\\TI-SJL-0010\\Downloads\\finance-main-triple-track-updated\\finance-main\\data\\uma-employee-assignments.json",
+  "createdAt": "2026-10-27T00:00:29.094Z",
+  "sourceRows": 266,
+  "sourceSupervisorLinks": 265,
+  "categoryPolicy": "FILL_UNSET_WITH_RESTRICTED_TEMPORARY_1",
+  "warning": "Numeric HR categories are not in either source. Category 1 is a restricted temporary placeholder; categories 3/5/6 are never guessed.",
+  "planned": [],
+  "skipped": [],
+  "conflicts": [],
+  "updated": []
+}

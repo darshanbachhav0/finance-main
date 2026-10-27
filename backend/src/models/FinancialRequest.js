@@ -303,6 +303,29 @@ const treasuryAccountSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// The receiver signs on issue; responsible CECO manager and (above 5 UIT) Vice-Rector sign next.
+// Signatures are authenticated application attestations with immutable document hash and audit;
+// they are NOT certificate-based or legally qualified digital signatures.
+const digitalActaSchema = new mongoose.Schema({
+  status: { type: String, enum: ["PENDING", "COMPLETE", "OBSERVED"], required: true },
+  conformity: { type: String, enum: ["TOTAL", "PARTIAL", "NON_CONFORMING"], required: true },
+  description: { type: String, required: true, trim: true },
+  milestone: { type: String, trim: true, default: "" },
+  receiver: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  responsible: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  viceRector: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  issuedAt: { type: Date, required: true },
+  documentHash: { type: String, required: true },
+  signatures: [{
+    signer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    as: { type: String, enum: ["RECEIVER", "RESPONSIBLE", "VICE_RECTOR"], required: true },
+    signature: { type: String, required: true },
+    signedAt: { type: Date, required: true },
+    documentHash: { type: String, required: true }
+  }],
+  completedAt: Date
+}, { _id: true });
+
 const financialRequestSchema = new mongoose.Schema(
   {
     workflowVersion: { type: Number, default: 2 },
@@ -473,6 +496,7 @@ const financialRequestSchema = new mongoose.Schema(
       validate: { validator: (lines) => Array.isArray(lines) && lines.length > 0, message: "At least one request line is required." }
     },
     attachments: [attachmentSchema],
+    digitalActa: { type: digitalActaSchema, default: undefined },
     xmlValidation: { type: xmlValidationSchema, default: () => ({}) },
     xmlValidationHistory: { type: [xmlValidationSchema], default: [] },
     approvalHistory: [workflowHistorySchema],

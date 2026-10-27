@@ -155,8 +155,8 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
     });
 
     await t.test("only job categories 3, 5 and 6 may charge other cost centers", async () => {
-      const draft = await createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: allocations([medicine]) }), files: {}, user: juniorRequester, req });
-      await assert.rejects(() => sendWithQuote(draft, juniorRequester), (error) => error.statusCode === 422 && error.details.check === "ENCARGO_JOB_CATEGORY");
+      await assert.rejects(() => createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: allocations([medicine]) }), files: {}, user: juniorRequester, req }),
+        (error) => error.statusCode === 403 && error.details.field === "jobCategory", "refused as soon as it is saved");
       const own = await createFinancialRequest({ payload: payload(), files: {}, user: juniorRequester, req });
       assert.equal((await sendWithQuote(own, juniorRequester)).status, REQUEST_STATUS.PENDING_APPROVAL, "Propio needs no category");
     });

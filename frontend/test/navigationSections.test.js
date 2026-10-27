@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { authenticatedRoles, groupNavigation, navigationForUser, navigationSections, pageLabels, pageTrail, settingsPagesFor, settingsPaths } from "../src/utils/navigationAccess.js";
 
 // The sidebar groups every role's menu into the same fixed sections, in the same order.
@@ -14,7 +14,7 @@ for (const role of authenticatedRoles) {
 }
 const accounting = grouped({ role: "Accounting" });
 assert.deepEqual(accounting.map((group) => group.label), ["Overview", "Invoices and payables", "Accounting", "Master Data"]);
-assert.deepEqual(accounting.find((group) => group.label === "Invoices and payables").items.map((item) => item.path), ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files"]);
+assert.deepEqual(accounting.find((group) => group.label === "Invoices and payables").items.map((item) => item.path), ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables"]);
 // Accounting verifies bank files; Treasury downloads them afterwards and has no verification page.
 assert.ok(!navigationForUser({ role: "Treasury" }).some(([, path]) => path === "/accounting/bank-files"));
 assert.deepEqual(accounting.find((group) => group.label === "Accounting").items.map((item) => item.path), ["/accounting", "/accounting/periods", "/accounting/sire"]);
@@ -56,3 +56,4 @@ assert.deepEqual(trail("/configuration/bank-formats", { role: "Solicitor", permi
 assert.deepEqual(trail("/configuration/bank-formats", { role: "Treasury" }), [["Dashboard", "/"], ["Settings", "/settings"], ["Bank Formats", undefined]], "Treasury has several settings pages");
 assert.deepEqual(trail("/budget/"), trail("/budget"), "a trailing slash is ignored");
 console.log("PASS The sidebar groups every role's menu into fixed sections in a stable order; Settings is one entry; breadcrumbs follow the page hierarchy.");
+

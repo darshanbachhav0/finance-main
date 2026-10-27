@@ -404,8 +404,9 @@ the CECO's top jefe in the roster, `costCenterHeads`) gives its "visto" as a fix
 after the requesting CECO's approvers (§3.3); they are also recorded in `costCenterReviewers`,
 notified, and may open and comment on the request. A beneficiary CECO with nobody to approve
 refuses the sending (`APPROVAL_ROUTE_NOT_CONFIGURED`). Only job categories 3, 5 and 6
-(`User.jobCategory`, FinanceConfiguration `ENCARGO_JOB_CATEGORIES`) may send a Por Encargo request;
-the category is kept on the request (`requesterJobCategory`). Type and distribution are in the request's
+(`User.jobCategory`, `permissions.mayChargeAnotherCostCenter`) may send a Por Encargo request or
+charge a CECO authorized on their profile; the draft is refused when saved, and the category is
+kept on the request when it is sent (`requesterJobCategory`). Type and distribution are in the request's
 CREATED/UPDATED audit entries.
 
 ## 5. Accounting, Accounts Payable & Treasury

@@ -21,7 +21,8 @@ for (const role of ["GAF", "Legal", "HumanResources", "Auditor"]) assert.ok(auth
 assert.equal(isReadOnlyRole("Auditor"), true);
 assert.equal(internalRoles.includes("Auditor"), false, "the Auditor never acts in a process");
 for (const path of ["/super-admin", "/requests/new", "/approvals", "/my-team", "/reimbursement-bank"]) assert.equal(canAccessNavigation("Auditor", path, { role: "Auditor", hasTeam: true }), false, `Auditor has no ${path}`);
-for (const path of ["/requests", "/treasury", "/treasury/transfers", "/accounting", "/accounting/bank-files", "/budget", "/reports", "/management-view", "/suppliers", "/users"]) assert.equal(canAccessNavigation("Auditor", path), true, `Auditor reads ${path}`);
+for (const path of ["/requests", "/treasury", "/treasury/transfers", "/accounting", "/budget", "/reports", "/management-view", "/suppliers", "/users"]) assert.equal(canAccessNavigation("Auditor", path), true, `Auditor reads ${path}`);
+assert.equal(canAccessNavigation("Auditor", "/accounting/bank-files"), false, "Auditor cannot access GAF-only bank approval");
 assert.equal(homePath("Auditor"), "/requests");
 assert.deepEqual(pageTrail("/requests/abc", { role: "Auditor" }).map((item) => item.label), ["Requests", "Request details"], "no repeated Requests level");
 assert.equal(readOnlyMayCall("post", "/notifications/abc/read", "Auditor"), true);

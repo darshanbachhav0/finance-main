@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import "../src/config/timeZone.js";
-import { addBusinessDays, businessDaysBetween, calendarDateKey, isBusinessDay, isPaymentCycleDate, isUrgencyPaymentDate, limaDateKey, limaToday, nextBusinessDay, nextPaymentCycleDate, nextUrgencyPaymentDate, paymentCycleDatesFrom, peruHolidays, suggestedPaymentDate } from "../../shared/businessCalendar.mjs";
+import { addBusinessDays, businessDaysBetween, calendarDateKey, isBusinessDay, isPaymentCycleDate, isUrgencyPaymentDate, lastWorkingDayOfMonth, limaDateKey, limaToday, nextBusinessDay, nextPaymentCycleDate, nextUrgencyPaymentDate, paymentCycleDatesFrom, peruHolidays, suggestedPaymentDate } from "../../shared/businessCalendar.mjs";
 
 const lima = (date, time = "09:00") => new Date(`${date}T${time}:00-05:00`);
 
@@ -57,4 +57,7 @@ test("business calendar: Peruvian holidays, weekends, Lima time, the fortnightly
   assert.equal(suggestedPaymentDate({ priority: "P3", now: lima("2026-10-28") }), "2026-11-13", "under 3 working days: the next one");
   assert.equal(suggestedPaymentDate({ priority: "P4", now, dueDate: "2026-12-20" }), "2026-12-15", "P4: the last payment day before the due date");
   assert.equal(suggestedPaymentDate({ priority: "P3", now, dueDate: "2026-11-01" }), "2026-10-30", "a due date before the next window keeps the next window");
+  assert.equal(nextPaymentCycleDate(lima("2026-10-16")), "2026-10-30", "Saturday 31st is moved to Friday 30th");
+  assert.equal(nextPaymentCycleDate(lima("2026-12-16")), "2026-12-31", "Thursday last day remains month end");
+  assert.equal(lastWorkingDayOfMonth(2026, 10), "2026-10-30");
 });

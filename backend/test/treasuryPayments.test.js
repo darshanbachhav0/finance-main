@@ -64,6 +64,7 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
     const admin = await User.create({ name: "Admin", email: "admin-pay@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" });
     const accounting = await User.create({ name: "Accounting", email: "accounting-pay@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" });
     const treasury = await User.create({ name: "Treasury", email: "treasury-pay@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" });
+    const gaf = await User.create({ name: "GAF", email: "gaf-pay@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
     const solicitor = await User.create({ name: "Employee", email: "employee-pay@test.local", dni: "41234567", employeeCode: "UMA-PAY-1", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id });
     await installBbvaTestConfiguration("PEN");
     await installBbvaTestConfiguration("USD");
@@ -123,8 +124,8 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
     async function makeFile(payables, { currency = "PEN", paymentDate = cycle, paymentDateReason, verify = true } = {}) {
       const result = await generatePaymentBatch({ payableIds: payables.map((ap) => String(ap._id)), bank: "BBVA", currency, paymentDate, paymentDateReason, user: treasury, req });
       cleanupPaths.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
-      // Accounting releases the TXT before Treasury sends it to the bank.
-      if (verify) await verifyBankFile({ batchId: result.batch._id, user: accounting, req });
+      // GAF approves the TXT before Treasury sends it to the bank.
+      if (verify) await verifyBankFile({ batchId: result.batch._id, user: gaf, req });
       return result.batch;
     }
     const confirm = (ap, operationNumber, confirmedAmount, paidAt = today) => confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { operationNumber, paidAt, confirmedAmount }, user: treasury, req });

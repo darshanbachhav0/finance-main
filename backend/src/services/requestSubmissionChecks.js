@@ -7,9 +7,9 @@ import { AppError } from "../utils/AppError.js";
 import { canonicalSeries, voucherNumberPattern } from "../utils/voucherIdentity.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { isEligibleSupplierPaymentAccount } from "./paymentDestinationService.js";
+import { ENCARGO_JOB_CATEGORIES, mayChargeAnotherCostCenter } from "../utils/permissions.js";
 import {
   DEFAULT_A1_MINIMUM_QUOTATIONS,
-  DEFAULT_ENCARGO_JOB_CATEGORIES,
   ERROR_CODES,
   FINANCE_CONFIGURATION_KEYS,
   FLOW_TYPE,
@@ -26,11 +26,6 @@ import {
 const BUSINESS_CASE_CODE = /^CN-\d{4}-\d{3}$/;
 const idOf = (value) => String(value?._id || value || "");
 
-export async function encargoJobCategories() {
-  const configuration = await getEffectiveFinanceConfiguration(FINANCE_CONFIGURATION_KEYS.ENCARGO_JOB_CATEGORIES).catch(() => null);
-  const configured = String(configuration?.textValue || "").split(/[,;\s]+/).map(Number).filter((value) => Number.isInteger(value) && value > 0);
-  return configured.length ? configured : [...DEFAULT_ENCARGO_JOB_CATEGORIES];
-}
 
 const fill = (template, params = {}) => String(template).replace(/\{(\w+)\}/g, (_, key) => String(params[key] ?? ""));
 
@@ -58,12 +53,14 @@ function urgencyCheck(request) {
     [given ? "Provided" : "P1 and P2 requests must explain why they cannot wait for the fortnightly payment."], { field: "urgencyJustification" });
 }
 
-async function encargoCheck(request, user, categories) {
+// The rule itself is permissions.mayChargeAnotherCostCenter (job categories 3, 5 and 6), which also
+// refuses such a draft when it is saved; the form shows it here.
+function encargoCheck(request, user) {
   if (request.costCenterType !== COST_CENTER_TYPE.ON_BEHALF) return null;
   if (user?.role === ROLES.ADMIN) return null;
   const category = Number(user?.jobCategory) || null;
-  const allowed = category !== null && categories.includes(category);
-  const title = ["Charge to other cost centers (job categories {list} only)", { list: categories.join(", ") }];
+  const allowed = mayChargeAnotherCostCenter(user);
+  const title = ["Charge to other cost centers (job categories {list} only)", { list: ENCARGO_JOB_CATEGORIES.join(", ") }];
   const detail = allowed ? ["Registered by a category {category} position (Portal de Personas)", { category }]
     : category ? ["Your position is category {category}: you may charge only your own cost center.", { category }]
       : ["Your position has no job category: you may charge only your own cost center."];
@@ -127,10 +124,10 @@ async function paymentAccountCheck(request, supplier) {
 }
 
 export async function requestSubmissionChecks(request, { user, supplier } = {}) {
-  const [categories, minimumQuotations] = await Promise.all([encargoJobCategories(), a1MinimumQuotations()]);
+  const minimumQuotations = await a1MinimumQuotations();
   const results = [
     urgencyCheck(request),
-    await encargoCheck(request, user, categories),
+    encargoCheck(request, user),
     businessCaseCheck(request),
     quotationCheck(request, minimumQuotations),
     await duplicateInvoiceCheck(request),

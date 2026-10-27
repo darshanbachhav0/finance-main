@@ -62,6 +62,7 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     const accounting = await User.create({ name: "Track C Accounting", email: "tc.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const accounting2 = await User.create({ name: "Track C Accounting 2", email: "tc.accounting2@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "Track C Treasury", email: "tc.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
+    const gaf = await User.create({ name: "Track C GAF", email: "tc.gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
     const admin = await User.create({ name: "Track C Admin", email: "tc.admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" });
     await AccountingPeriod.create({ period, status: "OPEN" });
     for (const [purpose, accountNumber, bank] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101", "BCP"], ["BANK", "104102", "BBVA"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) {
@@ -72,8 +73,8 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     const makeBatch = async (payable) => {
       const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
-      // Accounting releases the TXT before Treasury sends it to the bank.
-      await verifyBankFile({ batchId: result.batch._id, user: accounting, req });
+      // The PDF requires GAF to approve the TXT before Treasury sends it.
+      await verifyBankFile({ batchId: result.batch._id, user: gaf, req });
       return result;
     };
     const createTrackC = (requestType, amount, expenseType = opex, extra = {}) => createFinancialRequest({

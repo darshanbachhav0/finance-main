@@ -52,6 +52,7 @@ test("an advance is rendered with receipts, transport and the money returned", {
     const owner = await User.create({ name: "SR Employee", dni: "44556611", employeeCode: "UMA-SR-1", email: "sr.owner@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id, authorizedCostCenters: [center._id], jefe: director._id });
     const accounting = await User.create({ name: "SR Accounting", email: "sr.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "SR Treasury", email: "sr.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
+    const gaf = await User.create({ name: "SR GAF", email: "sr.gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
     await AccountingPeriod.create({ period, status: "OPEN" });
     for (const [purpose, accountNumber, bank] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101", "BCP"], ["BANK", "104102", "BBVA"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) {
       await AccountingMapping.create({ code: `SR-${purpose}-${bank || "ALL"}`, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: bank || "*", currency: "*", accountNumber, active: true });
@@ -77,7 +78,7 @@ test("an advance is rendered with receipts, transport and the money returned", {
     const payable = await AccountsPayable.findOne({ request: created._id });
     const batch = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
     files.push(path.join(generatedRoot, "bank-files", batch.batch.fileName));
-    await verifyBankFile({ batchId: batch.batch._id, user: accounting, req });
+    await verifyBankFile({ batchId: batch.batch._id, user: gaf, req });
     await confirmTreasuryPayable({ accountsPayableId: payable._id, payload: { operationNumber: "SR-OP-1", paidAt: "2026-09-18", confirmedAmount: 100 }, user: treasury, req });
 
     const lines = (total, igv = 0) => JSON.stringify([{ costCenter: String(center._id), netAmount: Math.round((total - igv) * 100) / 100, igvAmount: igv, totalAmount: total }]);

@@ -139,8 +139,10 @@ test("Manual técnico: approvals follow the cost-center cascade, Por Encargo add
       await assert.rejects(() => submitFinancialRequest({ id: urgent._id, user: requester, req }), (error) => error.details.check === "URGENCY_JUSTIFICATION");
       const capex = await withQuotes(await createFinancialRequest({ payload: payload({ requestType: REQUEST_TYPE.CAPEX, capexDetails: JSON.stringify({ businessCaseCode: "CASO-1" }) }), files: {}, user: requester, req }));
       await assert.rejects(() => submitFinancialRequest({ id: capex._id, user: requester, req }), (error) => error.details.check === "CAPEX_BUSINESS_CASE");
-      const encargo = await withQuotes(await createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: JSON.stringify([{ costCenter: String(nutrition._id), percentage: 100 }]) }), files: {}, user: colleague, req }));
-      await assert.rejects(() => submitFinancialRequest({ id: encargo._id, user: colleague, req }), (error) => error.details.check === "ENCARGO_JOB_CATEGORY");
+      await assert.rejects(() => createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: JSON.stringify([{ costCenter: String(nutrition._id), percentage: 100 }]) }), files: {}, user: colleague, req }),
+        (error) => error.statusCode === 403 && error.details.field === "jobCategory", "a category 2 position cannot even save a Por Encargo draft");
+      const encargoChecks = await requestSubmissionChecks(new FinancialRequest({ flowType: "A1", costCenterType: "POR_ENCARGO", currency: "PEN", priority: "P3" }), { user: colleague });
+      assert.equal(encargoChecks.find((item) => item.code === "ENCARGO_JOB_CATEGORY").ok, false, "the form says why before saving");
 
       const draft = await withQuotes(await createFinancialRequest({ payload: payload({ priority: "P2", urgencyJustification: "El laboratorio abre el lunes", dueDate: "2026-11-30" }), files: {}, user: requester, req }));
       sent = await submitFinancialRequest({ id: draft._id, user: requester, req });

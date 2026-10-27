@@ -69,6 +69,7 @@ test("an approved advance goes to Treasury to pay now, and the employee is told 
     const employee = await User.create({ name: "Ruth Camila", dni: "44556699", employeeCode: "UMA-AT-1", email: "at.employee@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id, authorizedCostCenters: [center._id], jefe: director._id });
     const accounting = await User.create({ name: "AT Accounting", email: "at.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "AT Treasury", email: "at.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
+    const gaf = await User.create({ name: "AT GAF", email: "at.gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
     await EmployeeReimbursementBankAccount.create({ user: employee._id, bank: "BCP", currency: "PEN", accountHolderName: employee.name, accountNumber: "194100000099", cci: "00219410000000000099", active: true, preferred: true, verificationStatus: "VERIFIED", createdBy: employee._id });
     for (const [purpose, accountNumber, bank] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101", "BCP"], ["BANK", "104102", "BBVA"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) {
       await AccountingMapping.create({ code: `AT-${purpose}-${bank || "ALL"}`, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: bank || "*", currency: "*", accountNumber, active: true });
@@ -124,14 +125,14 @@ test("an approved advance goes to Treasury to pay now, and the employee is told 
       assert.match(sent.issues[0]?.message || "", /immutable rendition bank snapshot/);
     });
 
-    await t.test("Treasury pays it today without a reason; Accounting is asked to verify the file today", async () => {
+    await t.test("Treasury pays it today without a reason; GAF approves the file today", async () => {
       const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: today, user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       const scheduled = await AccountsPayable.findById(payable._id);
       if (!isPaymentCycleDate(new Date(`${today}T12:00:00Z`))) assert.equal(scheduled.scheduleOverride.reason, ADVANCE_PAYMENT_REASON, "the platform records why it is off the cycle");
-      const task = await Notification.findOne({ user: accounting._id, type: "BANK_FILE_VERIFICATION" });
+      const task = await Notification.findOne({ user: gaf._id, type: "BANK_FILE_VERIFICATION" });
       assert.equal(task.title, "Verify today: bank file with an advance");
-      await verifyBankFile({ batchId: result.batch._id, user: accounting, req });
+      await verifyBankFile({ batchId: result.batch._id, user: gaf, req });
       await confirmTreasuryPayable({ accountsPayableId: payable._id, payload: { operationNumber: "ADV-TODAY-1", paidAt: today, confirmedAmount: 56 }, user: treasury, req });
       const paid = await FinancialRequest.findById(advance._id);
       assert.equal(paid.rendition.status, "PENDING", "the 10 working days start at the payment");

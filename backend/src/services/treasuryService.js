@@ -244,7 +244,7 @@ export function paymentRunFilter(cycleDate) {
 
 const PAYMENT_RUN_STATUSES = [AP_STATUS.OPEN, AP_STATUS.PARTIALLY_PAID];
 
-// The next payment run (15th / 30th) and what falls into it: the payables the payment terms (or
+// The next payment run (15th / last working day) and what falls into it: the payables the payment terms (or
 // Treasury's plan) put there, by currency. Treasury prepares it in one click and only confirms.
 export async function nextPaymentRunSummary(now = new Date()) {
   const date = nextPaymentCycleDate(now);
@@ -828,7 +828,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
       return { batch, content };
     });
     await notifyRoles({
-      roles: [ROLES.ACCOUNTING],
+      roles: [ROLES.GAF],
       eventKey: bankFileVerificationTaskKey(result.batch._id),
       type: "BANK_FILE_VERIFICATION",
       title: advanceCount ? notificationText("Verify today: bank file with an advance") : notificationText("Bank file awaiting verification"),

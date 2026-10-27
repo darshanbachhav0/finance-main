@@ -87,6 +87,7 @@ export default function AdminUsers() {
         const payload = { ...form, jefe: form.jefe || null, substitute: form.substitute || null, jobCategory: form.jobCategory ? Number(form.jobCategory) : null };
         if (!payload.password) delete payload.password;
         if (!payload.costCenter) delete payload.costCenter;
+        if (payload.jobCategory === "" || payload.jobCategory === null) delete payload.jobCategory;
         if (!payload.onLeave || !payload.leaveUntil) payload.leaveUntil = null;
         return payload;
       }}

@@ -62,7 +62,7 @@ export default {
   "Bank file awaiting verification": "Archivo bancario por verificar",
   "{batchNumber} ({count} payments) must be verified before Treasury can download it.": "{batchNumber} ({count} pagos) debe verificarse antes de que Tesorería pueda descargarlo.",
   "Bank file verified": "Archivo bancario verificado",
-  "Accounting verified {batchNumber}. You can download it and send it to the bank.": "Contabilidad verificó {batchNumber}. Puedes descargarlo y enviarlo al banco.",
+  "GAF approved {batchNumber}. You can download it and send it to the bank.": "La GAF aprobó {batchNumber}. Puedes descargarlo y enviarlo al banco.",
   "Bank file rejected by Accounting": "Archivo bancario rechazado por Contabilidad",
   "{batchNumber} was rejected and cancelled: {reason}. Its payments are back in the queue.": "{batchNumber} fue rechazado y anulado: {reason}. Sus pagos volvieron a la cola.",
   "{requestNumber} is in {batchNumber}; confirm it only after bank execution.": "{requestNumber} está en {batchNumber}; confírmala solo después de que el banco ejecute el pago.",
@@ -186,7 +186,7 @@ export default {
   // Track D
   "Transfer approved": "Traspaso aprobado",
   "{requestNumber} was approved by Treasury and the GAF. Make the transfer at the bank and record its operation number.": "{requestNumber} fue aprobado por Tesorería y la GAF. Realiza el traspaso en el banco y registra su número de operación.",
-  "{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.": "{requestNumber}: paga el anticipo de {amount} a {name} el {date}. Los anticipos se pagan el mismo día hábil, fuera del ciclo del 15 y 30.",
+  "{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/last working day cycle.": "{requestNumber}: paga el anticipo de {amount} a {name} el {date}. Los anticipos se pagan el mismo día hábil, fuera del ciclo del día 15 y el último día hábil del mes.",
   "Verify today: bank file with an advance": "Verifica hoy: archivo bancario con un anticipo",
   "{batchNumber} ({count} payments) includes {advances} advance(s) to pay today. Verify it so Treasury can send it.": "{batchNumber} ({count} pagos) incluye {advances} anticipo(s) por pagar hoy. Verifícalo para que Tesorería pueda enviarlo.",
   "{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time). Return any money left over to {account} and attach the deposit slip.": "{requestNumber} fue pagada. Presenta la rendición hasta el {dueDate} (días hábiles, hora de Lima). Devuelve el dinero sobrante a {account} y adjunta el voucher de depósito.",

@@ -1,0 +1,4258 @@
+{
+  "mode": "DRY_RUN",
+  "sourceFile": "C:\\Users\\TI-SJL-0010\\Downloads\\finance-main-triple-track-updated\\finance-main\\data\\uma-employee-assignments.json",
+  "createdAt": "2026-10-27T20:01:14.449Z",
+  "sourceRows": 266,
+  "sourceSupervisorLinks": 265,
+  "categoryPolicy": "FILL_UNSET_WITH_RESTRICTED_TEMPORARY_1",
+  "warning": "Numeric HR categories are not in either source. Category 1 is a restricted temporary placeholder; categories 3/5/6 are never guessed.",
+  "planned": [
+    {
+      "dni": "73641847",
+      "name": "BAZAN CHAVEZ DANNA SHANTAL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESORA DE VENTAS DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72755720",
+      "name": "CALLAN HUAUYA BRISSILA XIOMARA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PROMOTOR EDUCATIVO DE LA GERENCIA COMERCIAL",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41162303",
+      "name": "DÍAZ ORIBE ROSA MARGARITA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESOR DE VENTAS DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41800029",
+      "name": "ENCARNACIÓN CRISTÓBAL DE RÍMAC MARIEL CHARO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESORA DE VENTAS DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74899472",
+      "name": "FERNANDEZ ALVAREZ KATHERINE LISBET",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PROMOTORA EDUCATIVA DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74396484",
+      "name": "FERNANDEZ PAREDES JAHAIRA SUSANA ANTUANETTE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COUNTER DE VENTAS DE LA GERENCIA COMERCIAL",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71962801",
+      "name": "GONZALEZ GAMARRA XIMENA ANELIK",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PROMOTORA EDUCATIVA DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42214240",
+      "name": "LAGOMARSINO GARCÍA TANIA ELIZABETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESORA EDUCATIVA DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47115816",
+      "name": "MASGO VARA MIRIAM",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESORA EDUCATIVA DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70435026",
+      "name": "MONTALVAN EGUSQUIZA MARÍA ISABEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESORA DE VENTAS DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72972025",
+      "name": "PALOMINO GUIZADO SHEGLY SHARON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVA DE LA OFICINA DE ADMISIÓN",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09938560",
+      "name": "PEREZ HUAMAN JESUSA ESPERANZA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COUNTER DE VENTAS DE LA GERENCIA COMERCIAL",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73450023",
+      "name": "QUINTANA CARHUAJULCA ABIGAIL YOSELIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESOR DE VENTAS DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75581503",
+      "name": "YNGA VASQUEZ DIANA MARIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "EJECUTIVA DE VENTAS / CONTROL BACK CALIDAD DE LA OFICINA DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44820703"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40356687",
+      "name": "AVALOS ARANCIBIA JUAN JOSÉ",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ESPECIALISTA EN SIMULACIÓN CLÍNICA Y GESTIÓN DE LABORATORIOS DE LA FACULTAD DE CIENCIAS DE LA SALUD",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72699087",
+      "name": "RIOS CARLOS FABIANA DAMERIS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE DE LA DIRECCIÓN DE LA ESCUELA PROFESIONAL DE MEDICINA.",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09884894",
+      "name": "ROMERO PUCCINELLI JOSE ANTONIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR ACADÉMICO DE LA ESCUELA PROFESIONAL DE MEDICINA HUMANA / DOCENTE TC",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47237985",
+      "name": "CARRANZA VALLEJOS EDILBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR DE SERVICIOS GENERALES",
+        "jobCategory": 1,
+        "jefe": "41123979"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "48000253",
+      "name": "GALLARDO PALACIOS GIAN PIERRE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE(E) DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "41123979"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47129404",
+      "name": "MENDOZA CHUCHON MARCO ANTONIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / JEFE DE LA OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+        "jobCategory": 1,
+        "jefe": "41123979"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41715053",
+      "name": "TARAZONA TARAZONA ANGEL AMERICO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "OPERADOR DE MANTENIMIENTO",
+        "jobCategory": 1,
+        "jefe": "41123979"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75241952",
+      "name": "DIEGO ARTEAGA RUTH CAMILA",
+      "before": {
+        "jobTitle": "",
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA GERENCIA DE ADMINISTRACIÓN FINANCIERA",
+        "jobCategory": 1,
+        "jefe": "10525370"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70988722",
+      "name": "ESPINOZA CARDENAS CINTHIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVA DEL ÁREA DE CAJA - TESORERÍA DE LA OFICINA DE ADMINISTRACIÓN FINANCIERA",
+        "jobCategory": 1,
+        "jefe": "10525370"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08003682",
+      "name": "BACHHAV DARSHAN PRAVIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ESPECIALISTA DE TECNOLOGIA EN INTILIGENCIA ARTIFICIAL",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71740794",
+      "name": "CABEZAS HUANGAL ANGELLO SEBASTIÁN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "SOPORTE TÉCNICO DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47558888",
+      "name": "CAMACHO PEREZ ENZO ADHEMIR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "SOPORTE TÉCNICO DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44305912",
+      "name": "CHIRINOS RUMIN MANUEL WILFREDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR DE SEGURIDAD, INFRAESTRUCTURA Y TECNOLOGÍAS DE LA INFORMACIÓN DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07999930",
+      "name": "GADADE ABHIRAJ SANDEEP",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ESPECIALISTA DE TECNOLOGIA EN INTILIGENCIA ARTIFICIAL",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08003888",
+      "name": "JOSHI YASH MILIND",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ESPECIALISTA DE TECNOLOGÍAS EN INTELIGENCIA ARTIFICIAL",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40868681",
+      "name": "NICHO FLORES CARLOS DANIEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "RESPONSABLE DE LA PLATAFORMA VIRTUAL",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "62049056",
+      "name": "PALOMINO CASTRO RODRIGO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PROGRAMADOR JUNIOR DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75378641",
+      "name": "REVILLA VERGARAY LINDER",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PROGRAMADOR DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75986259",
+      "name": "SINCHE PANDURO VÍCTOR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PROGRAMADOR JUNIOR DE LA OFICINA DE TECNOLOGÍAS DE LA INFORMACIÓN",
+        "jobCategory": 1,
+        "jefe": "48000253"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41274394",
+      "name": "JUAREZ ALVINES EVELYN HERLINDA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA SECRETARIA GENERAL Y SUS DEPENDENCIAS",
+        "jobCategory": 1,
+        "jefe": "40593513"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70887469",
+      "name": "SANTE MELGAR ZULLY GIANINA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA OFICINA DE GRADOS Y TITULOS",
+        "jobCategory": 1,
+        "jefe": "40593513"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42793231",
+      "name": "TAFUR DURAND ERIKA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE DE SECRETARIA GENERAL",
+        "jobCategory": 1,
+        "jefe": "40593513"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74388519",
+      "name": "ROJAS PARILLO LUIS ENRIQUE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ESPECIALISTA DE GESTIÓN DE IMAGEN, REDES Y PUBLICIDAD",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "UNIQUE_ABBREVIATED_NAME_MATCH",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "76133086",
+      "name": "APARICIO RODRÍGUEZ NICOLE ALEXANDRA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DISEÑADOR GRÁFICO DE LA OFICINA DE EDUCACIÓN VIRTUAL Y SEMIPRESENCIAL",
+        "jobCategory": 1,
+        "jefe": "42138206"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74433270",
+      "name": "JOCOPE GUAYANAY TANIA ERIKA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE EN TECNOLOGÍA EDUCATIVA DE LA OFICINA DE EDUCACIÓN VIRTUAL Y SEMIPRESENCIAL",
+        "jobCategory": 1,
+        "jefe": "42138206"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73089540",
+      "name": "LUNA ZAVALA GRETELL STHEFANY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE TECNOPEDAGÓGICO DE LA OFICINA DE EDUCACIÓN VIRTUAL Y SEMIPRESENCIAL",
+        "jobCategory": 1,
+        "jefe": "42138206"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73669675",
+      "name": "MORI ORTIZ JORDI EDU",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DISEÑADOR AUDIOVISUAL EDUCATIVO",
+        "jobCategory": 1,
+        "jefe": "42138206"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10525370",
+      "name": "ESCOBAR CHUQUIHUACCHA VERONICA SOFIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "RESPONSABLE DE TESORERÍA DE LA OFICINA DE ADMINISTRACIÓN FINANCIERA",
+        "jobCategory": 1,
+        "jefe": "09353249"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47265042",
+      "name": "FLORES TITO NAYRUT BRIGIDA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA OFICINA DE ADMINISTRACIÓN FINANCIERA",
+        "jobCategory": 1,
+        "jefe": "09353249"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44441990",
+      "name": "SAAVEDRA RAMIREZ MARIO ANTONIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE CONTABLE DE LA OFICINA DE ADMINISTRACIÓN FINANCIERA",
+        "jobCategory": 1,
+        "jefe": "09353249"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45560495",
+      "name": "BOLAÑOS RUEDA JEANCARLO JOEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR ACADÉMICO DE LA ESCUELA PROFESIONAL DE PSICOLOGÍA Y DE SEGUNDAS ESPECIALIDADES DE PSICOLOGÍA / DOCENTE A TIEMPO COMPLETO DE LA ESCUELA PROFESIONAL DE PSICOLOGÍA",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47761023",
+      "name": "LEON ARGUMEDO CYNTHIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PRACTICANTE PRE PROFESIONALE EN PISICOLOGIA EN LA OFICINA DE RESPONSABILIDAD UNIVERSITARIA",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45225991",
+      "name": "RUBIO LOPEZ GHILMAR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR DE RESPONSABILIDAD SOCIAL UNIVERSITARIA DE LA OFICINA DE BIENESTAR UNIVERSITARIO, PROYECCIÓN Y RESPONSABILIDAD SOCIAL / COORDINADOR DE LA OFICINA DE EMPLEABILIDAD Y SEGUIMIENTO AL EGRESADO",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "76325872",
+      "name": "VIZCARRA ANICAMA CAROLAYN DESSIRE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRÁCTICAS DE LA ESCUELA PROFESIONAL DE PSICOLOGÍA",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72794714",
+      "name": "YARMA ARIAS REBECA SARAHI",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PRACTICANTE DE RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74820217",
+      "name": "ALVAREZ SULCA JASMIN ESTEYSI",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASESORA DE VENTAS DE LA DIRECCIÓN DE EDUCACIÓN CONTINUA",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71298175",
+      "name": "ARENAS ESTRADA MAYRA ALEXANDRA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA GENERAL DE MENTORÍA Y TUTORÍA ESTUDIANTIL",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75096354",
+      "name": "ARONES PEREZ PAOLO PAULINO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR ACADÉMICO DE LAS ESCUELAS PROFESIONALES DE INGENIERÍA DE LA FACULTAD DE INGENIERÍA NEGOCIOS / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42182154",
+      "name": "CIEZA RAMOS DAVID",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DIRECTOR (E) DE LOS PROGRAMAS DE ADMINISTRACIÓN / DIRECTOR DE EMPRENDIMIENTO E INTERNACIONALIZACIÓN / DOCENTE TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72049174",
+      "name": "FLORES MELGAR ANTHONNY GERSON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TIEMPO COMPLETO DE INGIENERIA DE INTELIGENCIA ARTIFICIAL",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40186218",
+      "name": "GAMBOA MOLINA JUAN CARLOS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR ADMINISTRATIVO DEL CENTRO DE EXTENSIÓN DE BIENES Y SERVICIOS",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08711426",
+      "name": "GONZÁLES MATOS MARCELO DANTE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO CON DEDICACIÓN EXCLUSIVA / DIRECTOR DE LA ESCUELA PROFESIONAL DE CONTABILIDAD Y FINANZAS / COORDINADOR DE LA MAESTRÍA EN ADMINISTRACIÓN DE EMPRESAS Y LA MAESTRÍA EN GESTIÓN PÚBLICA",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42138206",
+      "name": "HERNANDEZ SANCHEZ KELLY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TIEMPO COMPLETO / COORDINADORA DE ECOSISTEMA DIGITAL / JEFE (E) DE LA OFICINA DE EDUCACIÓN VIRTUAL Y SEMIPRESENCIAL.",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40542174",
+      "name": "INGA CERDA PATTY SINDY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVA DEL VICERRECTORADO ACADÉMICO",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70676772",
+      "name": "ORDOÑEZ LEON PATRICIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / JEFA DE LA OFICINA DE BIENESTAR UNIVERSITARIO, PROYECCIÓN Y RESPONSABILIDAD SOCIAL",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09394947",
+      "name": "PEREZ SANCHEZ CHRISTIAN JESUS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR DE CONVENIOS INTERINSTITUCIONALES. / RESPONSABLE DE DESERCIÓN ESTUDIANTIL DE LA FACULTAD DE INGENIERÍA Y NEGOCIOS. / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47516862",
+      "name": "SAMANIEGO PUENTE LUDMILIA REDINA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA ACADÉMICA DE LAS ESCUELAS PROFESIONES DE ADMINISTRACIÓN",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75367992",
+      "name": "SOLANO EGOAVIL JAFET DAVID",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE DE MARKETING DE LA DIRECCIÓN DE EDUCACIÓN CONTINUA",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10080908",
+      "name": "ZELA MORAYA WESTER EDISON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DIRECTOR ENCARGADO DE LA ESCUELA PROFESIONAL DE INGENIERÍA EN INTELIGENCIA ARTIFICIAL",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74833507",
+      "name": "RAMOS AQUIJE JENNYFER XIOMARA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO-ACADÉMICO DE LA DIRECCIÓN DE POSGRADO",
+        "jobCategory": 1,
+        "jefe": "42248126"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06661447",
+      "name": "AROSQUIPA RODRÍGUEZ CARLOS CECILIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DIRECTOR ENCARGADO DE LA ESCUELA PROFESIONAL DE MEDICINA / COORDINADOR DE LA MAESTRÍA EN SALUD PÚBLICA",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42897396",
+      "name": "LUYO PACHAS LUIS RONALD",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / DIRECTOR ENCARGADO DE LA ESCUELA DE PSICOLOGÍA /  COORDINADOR DE RESPONSABILIDAD SOCIAL",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43995352",
+      "name": "PAQUILLO TINCO JIMMY MANUEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRÁCTICAS Y COORDINADOR DE LAS PRÁCTICAS PREPROFESIONALES DE LOS ESTUDIANTES DE LA ESCUELA PROFESIONAL DE NUTRICIÓN Y DIETÉTICA / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "02894992",
+      "name": "PURIZACA CURO DE QUILLE ROXANA MARISEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / DIRECTORA ENCARGADA DE LA ESCUELA PROFESIONAL DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40498127",
+      "name": "SAMANIEGO JOAQUIN JHONNEL WILLIAMS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE ORDINARIO PRINCIPAL A TIEMPO COMPLETO / DECANO DE LA FACULTAD DE FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70432387",
+      "name": "VILLALTA HERRERA CARLOS DAVID",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO /  DIRECTOR ENCARGADO DE LA ESCUELA PROFESIONAL DE TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09903842",
+      "name": "VILLANUEVA CUSIHUALLPA JENNY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DIRECTORA DE LA ESCUELA PROFESIONAL DE TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+        "jobCategory": 1,
+        "jefe": "09765702"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71732330",
+      "name": "CARBAJAL BENITES LUZ MIRELLA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA ADMINISTRATIVA DE LA OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS.",
+        "jobCategory": 1,
+        "jefe": "47129404"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47244420",
+      "name": "CHAHUA CHIHUAN LIZ ARACELY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS - OSAR",
+        "jobCategory": 1,
+        "jefe": "47129404"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43835988",
+      "name": "HUAMAN VILCA MABEL MILAGROS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA ADMINISTRATIVA-ACADÉMICA DE LA OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+        "jobCategory": 1,
+        "jefe": "47129404"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75012618",
+      "name": "LAGUNA PARIONA YAMILE KATHERINE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS - OSAR",
+        "jobCategory": 1,
+        "jefe": "47129404"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10729992",
+      "name": "SANTA CRUZ ZUÑIGA MANUEL ARTEMIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "RESPONSABLE DE BIBLIOTECA",
+        "jobCategory": 1,
+        "jefe": "47129404"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74369167",
+      "name": "SOLANO GONZALES ELFER FRANKLIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ANALISTA ESTADÍSTICO JUNIOR DE LA OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+        "jobCategory": 1,
+        "jefe": "47129404"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41123979",
+      "name": "DÁVILA AGUINAGA MIGUEL ARTURO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "GERENTE DE OPERACIONES, INFRAESTRUCTURA Y DESARROLLO / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71569365",
+      "name": "ESPINO BLAIR CRISTINA LUCÍA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA DE INTERNACIONALIZACIÓN Y EMPRENDIMIENTO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73325683",
+      "name": "ESTEBAN TOMAS FELIX MORAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PRACTICANTE DE IA Y ANÁLISIS DE DATOS",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40593513",
+      "name": "GIL CUEVA MARCELA JAQUELINY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE ORDINARIO A TIEMPO COMPLETO / SECRETARÍA GENERAL / JEFA (E) DE LA OFICINA DE GRADOS Y TÍTULOS",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09353249",
+      "name": "LANDAURO CARRASCO RAFAEL MARTIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "GERENTE DE ADMINISTRACIÓN FINANCIERA /  DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "18181483",
+      "name": "MARTIN BOGDANOVICH MARÍA MINI",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "VICERRECTORA(E) DE GESTIÓN ACADÉMICA EN INGENIERÍA Y NEGOCIOS Y SERVICIOS GENERALES ACADÉMICOS / DECANA DE LA FACULTAD DE INGENIERÍA Y NEGOCIOS / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42248126",
+      "name": "MATTA SOLIS EDUARDO PERCY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR DE LA MAESTRÍA EN SALUD PÚBLICA / DOCENTE INVESTIGADOR SENIOR A TIEMPO COMPLETO / DIRECTOR(E) DE POSGRADO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09765702",
+      "name": "MENDIGURE FERNANDEZ JULIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "VICERRECTOR(E) DE GESTIÓN ACADÉMICA EN SALUD / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09378716",
+      "name": "MONTES ITURRIZAGA IVAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE INVESTIGADOR A TIEMPO PARCIAL",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06677714",
+      "name": "MORAN MARQUEZ GREGORIO OSWALDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "GERENTE ADMINISTRATIVO",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06294409",
+      "name": "MORAN PAREDES GLADYS IVONNE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null
+      },
+      "after": {
+        "jobTitle": "GERENTE GENERAL",
+        "jobCategory": 1
+      },
+      "supervisorEvidence": "TOP_OF_HIERARCHY_SELF_REFERENCE_REMOVED",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "18167641",
+      "name": "OBANDO PERALTA ENA CECILIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DIRECTORA DE INVESTIGACIÓN / JEFA DE LA OFICINA DE GESTIÓN DE LA CALIDAD Y ACREDITACIÓN",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06718077",
+      "name": "PAREDES RIVERO DE MORAN LEDDY MIRIAM",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "EMPLEADO DE OFICINA",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42144503",
+      "name": "QUISPE LIZARBE JOAN ALFREDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10583688",
+      "name": "ORBEGOZO CONTRERAS ELIZABETH CAROL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41336465",
+      "name": "ALVARADO SANDOVAL ROBERTS LUIS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43726464",
+      "name": "DAVILA MORAN ROBERTO CARLOS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "23986303",
+      "name": "FLORES RODRIGUEZ MARLENE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40203064",
+      "name": "CELIS ARTEAGA ANIBAL RUBEN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09109114",
+      "name": "FERNÁNDEZ SALAZAR ARTURO ANGEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE EXTRAORDINARIO TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44805247",
+      "name": "LEYVA ATO LADY ANTUANETTE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "22314341",
+      "name": "MEJÍA CACERES CARLOS MARTÍN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10387412",
+      "name": "QUISPE LOPEZ  GASTON MARCOS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46360490",
+      "name": "SÁNCHEZ CORONEL, CARLOS CÉSAR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "21527645",
+      "name": "TOMAIRO LÓPEZ EVA EDITH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "17867114",
+      "name": "VALERIO HARO FELIX JULIAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70866825",
+      "name": "AQUINO CONTRERAS CRISTHIAN JOHAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "02440693",
+      "name": "CUTIMBO UMPIRE JULIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44647124",
+      "name": "POPUCHE CABRERA KARINA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "GERENTE COMERCIAL",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08171506",
+      "name": "GODOY RAMÍREZ JANETT PATRICIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70084304",
+      "name": "ROJAS DÍAZ JHON ROBINSON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ANALISTA DE BUSINESS INTELLIGENCE",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "00487738",
+      "name": "NINAJA SUCAPUCA DIANA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42845969",
+      "name": "SANCHEZ VILCAYAURI INES ESPERANZA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09265802",
+      "name": "SÁENZ GUZMAN FREDY HARBEY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "GERENTE DE INNOVACIÓN ESTRATÉGICA Y TRANSFORMACIÓN DIGITAL",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "TREASURY_EXACT_NAME_CORRECTION"
+    },
+    {
+      "dni": "09874299",
+      "name": "VILLAR BARNUEVO JULIO CESAR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / DIRECTOR DE ESTUDIOS GENERALES / DIRECTOR DE PLANEAMIENTO FINANCIERO.",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40970938",
+      "name": "ZEGARRA CHAPOÑAN ROBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE INVESTIGADOR A TIEMPO PARCIAL",
+        "jobCategory": 1,
+        "jefe": "06294409"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10676704",
+      "name": "CHERO PACHECO VICTOR HUMBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE INVESTIGADOR ORDINARIO ASOCIADO A TIEMPO COMPLETO / COORDINADOR DE INVESTIGACIÓN",
+        "jobCategory": 1,
+        "jefe": "18167641"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40692237",
+      "name": "CRISTOBAL PAREDES YULAN CLAUDIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE ORDINARIO AUXILIAR A TIEMPO COMPLETO / COORDINADORA DE GESTION DE LA CALIDAD",
+        "jobCategory": 1,
+        "jefe": "18167641"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41835622",
+      "name": "HUERTA LEON JENNY ROSALYN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE INVESTIGADORA A TIEMPO COMPLETO / JEFA DE LA UNIDAD DE INVESTIGACIÓN - UDI DE LAS FACULTADES DE SALUD",
+        "jobCategory": 1,
+        "jefe": "18167641"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72387371",
+      "name": "MARIMÓN ORTIZ SEBASTIÁN JOSÉ",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ANALISTA DE PROCESOS DE LA OFICINA DE GESTIÓN DE LA CALIDAD",
+        "jobCategory": 1,
+        "jefe": "18167641"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09334406",
+      "name": "QUIQUIA RAU FERNANDO PELAYO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADOR DE LA OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+        "jobCategory": 1,
+        "jefe": "18167641"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70860716",
+      "name": "CURI NOREÑA RAQUEL ABIGAIL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA DEL SERVICIO PSICOPEDAGÓGICO DE LA OFICINA DE BIENESTAR UNIVERSITARIO, PROYECCIÓN Y RESPONSABILIDAD SOCIAL",
+        "jobCategory": 1,
+        "jefe": "70676772"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43784845",
+      "name": "OSORIO RAMOS LEYDI NATALY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73180060",
+      "name": "ESQUERRE BECERRA EVA GRACIELA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE DEL SERVICIO DE SALUD DE LA OFICINA DE BIENESTAR UNIVERSITARIO, PROYECCIÓN Y RESPONSABILIDAD SOCIAL",
+        "jobCategory": 1,
+        "jefe": "70676772"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42870048",
+      "name": "BAUTISTA DIPAZ  KOLFHER JEFFERSON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43982929",
+      "name": "ZEBALLOS CONISLLA HOLGER ELMER",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "28216843",
+      "name": "ZÁRATE CÁRDENAS ROSARIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43253000",
+      "name": "JULCA GÓMEZ SONIA SUSANA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA DEL SERVICIO DE SALUD",
+        "jobCategory": 1,
+        "jefe": "70676772"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "76298666",
+      "name": "SEVILLANO RODRÍGUEZ EVELYN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "RESPONSABLE DE LA GUARDERÍA “UMACITOS”",
+        "jobCategory": 1,
+        "jefe": "70676772"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70558742",
+      "name": "LÓPEZ YUPANQUI JOSELYN DENISSE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73605710",
+      "name": "HUAMURO CASTILLO EDINSON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41013429",
+      "name": "ANGLAS HANCCO EDGAR GUSTAVO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09090465",
+      "name": "CHIRINOS MALDONADO HUGO ROBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "77158034",
+      "name": "LLOJLLA SINGUÑA YANETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "48154559",
+      "name": "MONTALVO PALOMINO GRACIELA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COORDINADORA ACADÉMICA DE LA ESCUELA PROFESIONAL DE NUTRICIÓN Y DIETÉTICA / DOCENTE A TIEMPO COMPLETO",
+        "jobCategory": 1,
+        "jefe": "43995352"
+      },
+      "supervisorEvidence": "UNIQUE_SURNAME_MATCH",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46088732",
+      "name": "ZAMBRANO BRAÑEZ MARIO ANDRES",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO DE LA ESCUELA PROFESIONAL DE NUTRICIÓN Y DIETÉTICA",
+        "jobCategory": 1,
+        "jefe": "43995352"
+      },
+      "supervisorEvidence": "UNIQUE_SURNAME_MATCH",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44820703",
+      "name": "ARIAS BARON KIMBERLY ALIKA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE ADMISIÓN Y VENTAS",
+        "jobCategory": 1,
+        "jefe": "44647124"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "80384220",
+      "name": "GOMEZ BERROSPI PAUL LEONARDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ESPECIALISTA AUDIOVISUAL SENIOR",
+        "jobCategory": 1,
+        "jefe": "44647124"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45463708",
+      "name": "BERMEJO CABANILLAS ANTHONY GIANPIERRE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41228192",
+      "name": "GAMBOA QUINCHO EDITH ISABEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47161921",
+      "name": "MADUEÑO VENTURA FRESCIA MARIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "74225172",
+      "name": "TOKUMOTO VALERA FIORELLA SUMIKO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73119282",
+      "name": "HUERTA VALDIVIA ADRIANA BELÉN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "PRACTICANTE PRE PROFESIONAL DE MARKETING",
+        "jobCategory": 1,
+        "jefe": "44647124"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42443911",
+      "name": "VENEGAS DIOSES JOHANN CHRISTIAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE LA OFICINA DE MARKETING",
+        "jobCategory": 1,
+        "jefe": "44647124"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "76230703",
+      "name": "CAMPOS LOARTE YESENIA CECILIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRÁCTICA DE LA ESCUELA PROFESIONAL DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44963620",
+      "name": "CARHUACHIN TOLENTINO HECTOR ERWIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / COORDINADORA ACADÉMICA DE PRÁCTICA CLÍNICA E INTERNADO DE LA ESCUELA DE PROFESIONAL DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70993644",
+      "name": "CHICATA VELASQUEZ JHEYSON OCTAVIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE DE SEGUNDAS ESPECIALIDADES EN ENFERMERIA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45499457",
+      "name": "DE PAZ LUJÁN KATHERINE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO EN ESCUELA PROFESIONAL DE ENFERMERIA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "05403224",
+      "name": "DEL CASTILLO MÁRQUEZ HANNES",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TIEMPO COMPLETO DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07039859",
+      "name": "AMAT Y LEON GUEVARA CARMEN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08679701",
+      "name": "HINOJOSA SANCHEZ LOURDES GIOVANNA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "21861852",
+      "name": "PACHECO ATUNCAR ELIZABETH ROXANA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72123766",
+      "name": "MORENO YAURI ARLIE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09903842"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "25776442",
+      "name": "CARRILLO RODRIGUEZ SELENA VILMA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45367788",
+      "name": "GERÓNIMO QUISPE ELIZABETH CRISTELL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10130431",
+      "name": "CHUQUIZUTTA BENAVIDES KARINA VERONICA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10674336",
+      "name": "HUAYTA PEREZ LUZ CARMELA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "01888090",
+      "name": "QUILLE TICONA JOSE MERLIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TIEMPO COMPLETO DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70071066",
+      "name": "ROJAS GUERRERO JIUSEPE IVAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA ESCUELA PROFESIONAL DE ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71951132",
+      "name": "TICONA SANDOVAL FRANCIS AARON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / COORDINADOR GENERAL DE LAS SEGUNDAS ESPECIALIDADES EN ENFERMERÍA",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44286647",
+      "name": "PAREDES VILLEGAS ROSA YARENIS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06166456",
+      "name": "ZAVALETA GRADOS TRANSITO ELENA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TC",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70455522",
+      "name": "AGUIRRE GIHUA MARIO CHRISTIAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICAS  EN FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40165953",
+      "name": "AYALA BAEZ DEYBBIS ROSARIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44660740",
+      "name": "CAPCHA SICCHA MARLENY FLOR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRÁCTICA DE LA ESCUELA PROFESIONAL DE FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75763000",
+      "name": "CRUZ TOLEDO GIANELLA ROSARIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICAS EN FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07498621",
+      "name": "HERNANDEZ CORDERO GIOVANNA OFELIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO-ACADÉMICA DE LA FACULTAD DE FARMACIA Y BIOQUÍMICA Y LA ESCUELA PROFESIONAL DE FARMACIA Y BIOQUÍMICA.",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45059918",
+      "name": "TAFUR PANDURO CLAUDIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09308488",
+      "name": "VALENZUELA ESLAVA NELLY SOLEDAD",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09865747",
+      "name": "UGARTE UBILLUZ OSCAR RAUL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42248126"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "28287377",
+      "name": "LIZARBE CASTRO MARÍA VICTORIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42248126"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "00553485",
+      "name": "GALARCIO PERIÑAN CARLOS MARIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44626932",
+      "name": "VENEGAS DIOSES HUGO FERNANDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07498333",
+      "name": "CONTRERAS PINTO CHRISTIAN BENIGNO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43890091",
+      "name": "WONG ROBALINO MISHELLE ANGELICA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09303322",
+      "name": "MORALES CONTRERAS CARMEN ROSA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41148074",
+      "name": "LOPEZ VEGA IRIS MARGOT",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09904425",
+      "name": "SAN MIGUEL VELASQUEZ YULY VICTORIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73978233",
+      "name": "HUAMANI HUAMANI LISBET YOCELIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICAS  EN FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08377070",
+      "name": "ÁLVAREZ RODRIGUEZ GLORIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44728252",
+      "name": "CHATI CHAHUA KARLA MARILYN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45669439",
+      "name": "COCHACHI MENDOZA NADEZHDA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47072895",
+      "name": "DIAZ MEGO RONALD ELIAS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07682432",
+      "name": "GAMARRA GABANCHO ELIZABETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43859350",
+      "name": "GAMBINI DUEÑAS ISRRAEL SIXTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08353243",
+      "name": "LOYOLA GARCIA NORMA LUZ",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10341898",
+      "name": "MANTILLA ROSALES NOLBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41954311",
+      "name": "NOLAZCO LABAJOS URSULA NOLAZCO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45605596",
+      "name": "PALMA LÓPEZ SARA KEYKO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46208960",
+      "name": "PEÑA TORRES SANTIJESUS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42258988",
+      "name": "POLICIO MARTINEZ  LIZBETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71014505",
+      "name": "VENTURA LOPEZ  MARIA DE LOS ANGELES",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07498822",
+      "name": "ARAUJO CONDOR OSCAR WILFREDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09470046",
+      "name": "MUÑOZ  YUCRA  LUIS ALBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10677018",
+      "name": "PALOMINO KNUTZEN OSCAR ROBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TIEMPO COMPLETO DE FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47271933",
+      "name": "RIVERA GUERRERO MAYELI LIZETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "25806713",
+      "name": "SALAS VILLAYZAN CESAR IVAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45946742",
+      "name": "SANCHEZ SIESQUEN JAVIER ALONSO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRÁCTICAS DE LA ESCUELA PROFESIONAL DE FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45042465",
+      "name": "SOTO PRUDENCIO MARIA CLAUDIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41444851",
+      "name": "TOVAR BACA JUAN CARLOS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / DIRECTOR ENCARGADO DE LA ESCUELA PROFESIONAL DE FARMACIA Y BIOQUÍMICA",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08142913",
+      "name": "ACUÑA SEMINO JUAN JOSÉ",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09578116",
+      "name": "ALGUIAR BERNAOLA LUZ ROCIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41353448",
+      "name": "ALGUIAR BERNAOLA MAGNEY SUSY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09662680",
+      "name": "ATARAMA GALVEZ KARIM ISABEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09127141",
+      "name": "CASAS MELENDEZ MARÍA GUADALUPE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40069261",
+      "name": "COSTILLA GARCIA EDGARD LUIS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06121495",
+      "name": "LA SERNA LA ROSA  PABLO ANTONIO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41949925",
+      "name": "LETO HUAYANCA  CINTHIA FARATH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "25574998",
+      "name": "MALDONADO PEREZ JESSICA YVONNE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46714309",
+      "name": "MARTEL LAURA YONNATAN ALEXANDRO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "06569215",
+      "name": "QUISPE ROJAS ANA MARIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43156546",
+      "name": "RAMOS LAZARO ANDRES",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44645612",
+      "name": "TRINIDAD COLLAZOS RUTH MARISOL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42358609",
+      "name": "VALDERRAMA YTOKAZU MAX",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46985963",
+      "name": "VELASCO CHONG JONAS ROBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "72847601",
+      "name": "UBILLUS BENITES JUAN DIEGO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE EXTRAORDINARIO TP",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44243793",
+      "name": "WU VEGA MARIO ESLY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "47200005",
+      "name": "GODINEZ TELLO CARLOS RAUL ANDRE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41639577",
+      "name": "CAMPOS CHÁVEZ WILLIAM ALEXANDER",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43620635",
+      "name": "ORELLANA PERALTA FIORELLA GUADALUPE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45220336",
+      "name": "VELASQUEZ SOTO SANDRA ESTELA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70752720",
+      "name": "GINEZ CLINTON MISAEL CLINTON",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE EXTRAORDINARIO TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75981720",
+      "name": "VENTURA SOLANO ANGELA ABIGAIL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44270094",
+      "name": "BEINGOLEA BENITES LUIS MIGUEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "23937540",
+      "name": "PAPA DELGADO EMILIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10777331",
+      "name": "RAMIREZ MUCHA JAVIER",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42897396"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09632884",
+      "name": "MARQUINA QUISPE RENZO HERNAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08597036",
+      "name": "QUISPE ASTO CESAR FRANCISCO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73017358",
+      "name": "VICTORIO LOPEZ DANY KEVIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43642702",
+      "name": "YALI RIVERA JUDITH MERCEDES",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09651850",
+      "name": "RAMIREZ CAJO RITA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "09903842"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45849473",
+      "name": "ANTONIO ROJAS ABRAHAM ALBERTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "44633389",
+      "name": "CACHI PÉREZ MASSIEL MADELEINE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41330799",
+      "name": "CERDAN CUEVA HUGO JAVIER",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "40729616",
+      "name": "JULCA CARHUAVILCA JESÚS MATIAS",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "76264528",
+      "name": "RODRIGUEZ CONTRERAS LUIS ENRIQUE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70809226",
+      "name": "ROSPIGLIOSI MORALES MARÍA EDIT",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70436972",
+      "name": "SANTOS RONDÓN KARLA ELIZABETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "43113410",
+      "name": "VÁSQUEZ TELLO PAULA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "32735332",
+      "name": "VELASQUEZ BAUTISTA JAIME MAXIMO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TP",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "42586897",
+      "name": "VILELA MANCHAY DANICSA SOLEDAD",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE PRACTICA TC",
+        "jobCategory": 1,
+        "jefe": "40498127"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07459338",
+      "name": "ACARO CHUQUICAÑA FIDEL ERNESTO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42248126"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "32919696",
+      "name": "ZUÑIGA PRÍNCIPE GISELLE GUADALUPE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "42248126"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75868762",
+      "name": "ALBORNOZ TOYOHAMA ROGER HIROSHI",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "06661447"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "75951739",
+      "name": "CHAVEZ ROJAS GABRIELA BRISETH",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DISEÑADORA GRÁFICA JUNIOR DE LA OFICINA DE MARKETING",
+        "jobCategory": 1,
+        "jefe": "42443911"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "73805452",
+      "name": "GUTIÉRREZ URIARTE SANDRA PAOLA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COMMUNITY MANAGER DE LA OFICINA DE MARKETING",
+        "jobCategory": 1,
+        "jefe": "42443911"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "76157002",
+      "name": "MENDOZA YARLEQUE ADRIANA LISBETH JASMIN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DISEÑADORA GRÁFICA DE LA OFICINA DE MARKETING",
+        "jobCategory": 1,
+        "jefe": "42443911"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "70883659",
+      "name": "QUISPE SAGARBINAGA KAREN BEATRIZ",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "COMUNICADORA AUDIOVISUAL DE LA OFICINA DE MARKETING",
+        "jobCategory": 1,
+        "jefe": "42443911"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45834564",
+      "name": "ANTICONA LOPEZ VICTOR HUGO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "80611476",
+      "name": "ORTIZ COTRINA WILINTON CHILIMAN",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "48158417",
+      "name": "PAULINO MORENO CLEOGE ZENAIDA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "18181483"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46566734",
+      "name": "RAMOS RAMOS LUZ GEORGET",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE LABORATORIO DE LA ESCUELA PROFESIONAL DE TECNOLOGÍA MÉDICA",
+        "jobCategory": 1,
+        "jefe": "70432387"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71295034",
+      "name": "BALLENA SIVIPAUCAR STEFANY ROCÍO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "JEFE DE LABORATORIO DE LA ESCUELA PROFESIONAL DE TECNOLOGÍA MÉDICA",
+        "jobCategory": 1,
+        "jefe": "09903842"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "71507367",
+      "name": "AHUANARI CRUZ SHIRLEY JHEANNETHE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO EN LA DIRECCION DE ESTUDIOS GENERALES",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "25697604",
+      "name": "FAJARDO CANAVAL MARIA DEL PILAR",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09849431",
+      "name": "MEZA QUISPE JORGE",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09648920",
+      "name": "RODRIGUEZ ORMAECHE RITA LUZ",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "41423556",
+      "name": "SANCHEZ QUISPE DIEGO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07808812",
+      "name": "SOLIS MACEDO INES",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "21780523",
+      "name": "TORNERO TASAYCO ESVIA CONSUELO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "46655789",
+      "name": "LAZO CCALLO GIOVANI FERNANDO",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE A TIEMPO COMPLETO / COORDINADOR ACADÉMICO DE ESTUDIOS GENERALES / DEFENSOR UNIVERSITARIO",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "48368688",
+      "name": "PINEDO LABAJOS LETHY",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "ASISTENTE ADMINISTRATIVO DE LA DIRECCIÓN DE ESTUDIOS GENERALES",
+        "jobCategory": 1,
+        "jefe": "09874299"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "08124057",
+      "name": "ROA CAMPOS LAURA PATRICIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "07198696",
+      "name": "SOLIS SOLIS VIRGINIA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "45495040",
+      "name": "ANDIA MONTOYA EVENELYN VERONICA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09235762",
+      "name": "ROJAS DELGADO LUCILA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "09729137",
+      "name": "ESPINOZA SEDANO CLARA YSABEL",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    },
+    {
+      "dni": "10646062",
+      "name": "CHRISTINE GERALDINE SALCEDO ACUÑA",
+      "before": {
+        "jobTitle": null,
+        "jobCategory": null,
+        "jefe": null
+      },
+      "after": {
+        "jobTitle": "DOCENTE TP",
+        "jobCategory": 1,
+        "jefe": "02894992"
+      },
+      "supervisorEvidence": "EXACT_NAME_EMPLOYEE_SHEET",
+      "identityEvidence": "EMPLOYEE_SHEET"
+    }
+  ],
+  "skipped": [
+    {
+      "dni": "70829569",
+      "reason": "ACCOUNT_NOT_FOUND; no account created"
+    }
+  ],
+  "conflicts": [],
+  "updated": [],
+  "database": "erp_financial_system"
+}

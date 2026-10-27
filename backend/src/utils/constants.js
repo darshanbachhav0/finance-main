@@ -72,7 +72,7 @@ export const PERMISSIONS = Object.freeze({
   BATCH_INVOICE_REVIEW: "batch-invoice:review",
   PAYMENT_REPROCESS: "payment:reprocess",
   BANK_FORMAT_CERTIFY: "bank-format:certify",
-  // Accounting checks each generated bank TXT before Treasury may download it. A department
+  // GAF approves each generated bank TXT before Treasury may download it. A department
   // duty (with Admin), so it is not grantable piecemeal.
   BANK_FILE_VERIFY: "bank-file:verify"
 });
@@ -125,7 +125,6 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.RENDITION_REVIEW,
     PERMISSIONS.BATCH_INVOICE_UPLOAD,
     PERMISSIONS.BATCH_INVOICE_REVIEW,
-    PERMISSIONS.BANK_FILE_VERIFY
   ],
   [ROLES.TREASURY]: [
     PERMISSIONS.REQUEST_VIEW_ALL,
@@ -155,7 +154,7 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.MANAGEMENT_PORTAL_VIEW,
-    // Approves each bank file (lote) before Treasury downloads it, as Accounting does.
+    // Approves each bank file (lote) before Treasury downloads it.
     PERMISSIONS.BANK_FILE_VERIFY
   ],
   [ROLES.LEGAL]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],
@@ -437,16 +436,12 @@ export const FINANCE_CONFIGURATION_KEYS = Object.freeze({
   GAF_APPROVAL_UIT: "GAF_APPROVAL_UIT",
   // UIT. Above it the Gerencia General also approves.
   GENERAL_MANAGEMENT_APPROVAL_UIT: "GENERAL_MANAGEMENT_APPROVAL_UIT",
-  // Text, comma-separated job categories (categoría del puesto, Portal de Personas) that may charge
-  // a request to other cost centers (Por Encargo). Default "3,5,6".
-  ENCARGO_JOB_CATEGORIES: "ENCARGO_JOB_CATEGORIES",
   // Working days. A P3 request is paid on the first fortnightly payment day at least this far away.
   PAYMENT_CUTOFF_WORKING_DAYS: "PAYMENT_CUTOFF_WORKING_DAYS",
   // Quotations (with their file) an A1 purchase is sent with. Default 3 (Manual del usuario, A1).
   A1_MINIMUM_QUOTATIONS: "A1_MINIMUM_QUOTATIONS"
 });
 export const DEFAULT_A1_MINIMUM_QUOTATIONS = 3;
-export const DEFAULT_ENCARGO_JOB_CATEGORIES = Object.freeze([3, 5, 6]);
 export const DEFAULT_PAYMENT_CUTOFF_WORKING_DAYS = 3;
 export const DEFAULT_UIT_VALUE = 5500;
 export const DEFAULT_SUPERIOR_APPROVAL_UIT = 0;

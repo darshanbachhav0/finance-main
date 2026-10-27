@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema(
     substitute: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     jobTitle: { type: String, trim: true },
     // Categoría del puesto (Portal de Personas, 1-8). Only the categories configured in
-    // ENCARGO_JOB_CATEGORIES (3, 5 and 6) may charge a request to other cost centers (Por Encargo).
+    // ENCARGO_JOB_CATEGORIES (utils/permissions.js: 3, 5 and 6) may charge another cost center.
     jobCategory: { type: Number, min: 1, max: 8, default: null },
     organizationalUnit: { type: String, trim: true },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.SOLICITOR, required: true },

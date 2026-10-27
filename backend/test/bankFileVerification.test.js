@@ -29,7 +29,7 @@ const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1"
 const period = "2026-09";
 const issueDate = "2026-09-10";
 
-test("Accounting verifies each bank TXT before Treasury can download it", { timeout: 120000 }, async (t) => {
+test("GAF approves each bank TXT before Treasury can download it", { timeout: 120000 }, async (t) => {
   const databaseName = `erp_bank_file_verification_${process.pid}_${Date.now()}`;
   const cleanupPaths = [];
   await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
@@ -40,6 +40,7 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
     const solicitor = await User.create({ name: "Requester", email: "requester-bfv@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: center._id });
     const treasury = await User.create({ name: "Treasury Officer", email: "treasury-bfv@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" });
     const accounting = await User.create({ name: "Accounting Officer", email: "accounting-bfv@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" });
+    const gaf = await User.create({ name: "GAF Officer", email: "gaf-bfv@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
     const admin = await User.create({ name: "Admin", email: "admin-bfv@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" });
     const supplier = await Supplier.create({
       identifierType: "RUC", rucDni: "20999999881", normalizedIdentifier: "20999999881",
@@ -83,15 +84,16 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
     // covered by the lifecycle and treasury payment suites.
     const passesVerificationGate = (ap) => assert.rejects(() => confirm(ap), (error) => error.code !== "BANK_FILE_NOT_VERIFIED");
 
-    await t.test("a new file waits for Accounting: Treasury can neither download it nor settle payments from it", async () => {
+    await t.test("a new file waits for GAF: Treasury can neither download it nor settle payments from it", async () => {
       const ap = await makePayable();
       const { batch } = await makeFile([ap]);
       assert.equal(batch.verification.status, "PENDING");
-      const task = await Notification.findOne({ user: accounting._id, eventKey: `bank-file:${batch._id}:verification`, resolvedAt: null });
+      const task = await Notification.findOne({ user: gaf._id, eventKey: `bank-file:${batch._id}:verification`, resolvedAt: null });
       assert.equal(task?.path, `/accounting/bank-files?record=${batch._id}`);
       await assert.rejects(() => download(batch, treasury), (error) => error.code === "BANK_FILE_NOT_VERIFIED" && error.statusCode === 409);
-      // Accounting and Admin open it to review it.
-      assert.equal((await download(batch, accounting)).checksum, batch.checksum);
+      // GAF and Admin can open a pending TXT; Accounting cannot approve it.
+      assert.equal((await download(batch, gaf)).checksum, batch.checksum);
+      await assert.rejects(() => download(batch, accounting), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
       assert.equal((await download(batch, admin)).checksum, batch.checksum);
       await assert.rejects(() => confirm(ap), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
       await assert.rejects(() => markPaymentBounced({ accountsPayableId: ap._id, payload: { reason: "Bank refused", reasonCategory: "TECHNICAL" }, user: treasury, req }), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
@@ -101,22 +103,23 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
       assert.equal((await listBankFilesForVerification({ verificationStatus: "VERIFIED" })).data.length, 0);
       assert.equal((await reviewBankFile(batch._id)).problems.length, 0);
 
-      await verifyBankFile({ batchId: batch._id, user: accounting, req });
+      await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: accounting, req }), (error) => error.statusCode === 403);
+      await verifyBankFile({ batchId: batch._id, user: gaf, req });
       const stored = await PaymentBatch.findById(batch._id);
       assert.equal(stored.verification.status, "VERIFIED");
-      assert.equal(String(stored.verification.verifiedBy), String(accounting._id));
+      assert.equal(String(stored.verification.verifiedBy), String(gaf._id));
       assert.equal(stored.verification.checksum, batch.checksum);
       assert.ok(await AuditLog.findOne({ entityId: batch._id, action: "BANK_FILE_VERIFIED" }));
-      assert.equal(await Notification.countDocuments({ eventKey: `bank-file:${batch._id}:verification`, resolvedAt: null }), 0, "Accounting's task is closed");
+      assert.equal(await Notification.countDocuments({ eventKey: `bank-file:${batch._id}:verification`, resolvedAt: null }), 0, "GAF task is closed");
       assert.ok(await Notification.findOne({ user: treasury._id, eventKey: `bank-file:${batch._id}:verified` }));
       assert.equal((await download(batch, treasury)).checksum, batch.checksum);
       await passesVerificationGate(ap);
-      await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: accounting, req }), (error) => error.statusCode === 409, "a file is verified once");
+      await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: gaf, req }), (error) => error.statusCode === 409, "a file is verified once");
     });
 
     await t.test("whoever generated a file does not verify it, except Admin", async () => {
-      const { batch } = await makeFile([await makePayable()], accounting);
-      await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: accounting, req }), (error) => error.statusCode === 403);
+      const { batch } = await makeFile([await makePayable()], gaf);
+      await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: gaf, req }), (error) => error.statusCode === 403);
       const own = await makeFile([await makePayable()], admin);
       await verifyBankFile({ batchId: own.batch._id, user: admin, req });
       assert.equal((await PaymentBatch.findById(own.batch._id)).verification.status, "VERIFIED");
@@ -126,11 +129,11 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
     await t.test("a TXT changed after generation, or one still holding a removed payment, fails its checks", async () => {
       const changed = await makeFile([await makePayable()]);
       await fs.appendFile(changed.filePath, "TAMPERED");
-      await assert.rejects(() => verifyBankFile({ batchId: changed.batch._id, user: accounting, req }), (error) => error.code === "BANK_FILE_CHECKS_FAILED" && error.details.problems.some((problem) => problem.code === "FILE_CHANGED"));
+      await assert.rejects(() => verifyBankFile({ batchId: changed.batch._id, user: gaf, req }), (error) => error.code === "BANK_FILE_CHECKS_FAILED" && error.details.problems.some((problem) => problem.code === "FILE_CHANGED"));
       assert.equal((await PaymentBatch.findById(changed.batch._id)).verification.status, "PENDING", "a failed check decides nothing");
       // Nobody downloads a changed file, not even Accounting.
       let downloadError;
-      await downloadStoredFile({ query: { path: changed.batch.url }, user: accounting }, { setHeader() {}, type() {}, send() { throw new Error("a changed file was sent"); } }, (error) => { downloadError = error; });
+      await downloadStoredFile({ query: { path: changed.batch.url }, user: gaf }, { setHeader() {}, type() {}, send() { throw new Error("a changed file was sent"); } }, (error) => { downloadError = error; });
       assert.equal(downloadError?.code, "BANK_FILE_INTEGRITY_FAILED");
 
       const [kept, removed] = [await makePayable(), await makePayable()];
@@ -145,15 +148,15 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
       } finally {
         await SupplierBankAccount.updateOne({ _id: account._id }, { $set: { verificationStatus: "VERIFIED" } });
       }
-      await rejectBankFile({ batchId: changed.batch._id, payload: { reason: "Changed after generation" }, user: accounting, req });
-      await rejectBankFile({ batchId: partial.batch._id, payload: { reason: "Holds a removed payment" }, user: accounting, req });
+      await rejectBankFile({ batchId: changed.batch._id, payload: { reason: "Changed after generation" }, user: gaf, req });
+      await rejectBankFile({ batchId: partial.batch._id, payload: { reason: "Holds a removed payment" }, user: gaf, req });
     });
 
     await t.test("rejecting cancels the file and returns its payments to Treasury's queue with the reason", async () => {
       const ap = await makePayable();
       const { batch } = await makeFile([ap]);
-      await assert.rejects(() => rejectBankFile({ batchId: batch._id, payload: { reason: " " }, user: accounting, req }), (error) => error.statusCode === 422);
-      await rejectBankFile({ batchId: batch._id, payload: { reason: "Amount does not match the invoice" }, user: accounting, req });
+      await assert.rejects(() => rejectBankFile({ batchId: batch._id, payload: { reason: " " }, user: gaf, req }), (error) => error.statusCode === 422);
+      await rejectBankFile({ batchId: batch._id, payload: { reason: "Amount does not match the invoice" }, user: gaf, req });
       const stored = await PaymentBatch.findById(batch._id);
       assert.equal(stored.status, "CANCELLED");
       assert.equal(stored.verification.status, "REJECTED");
@@ -161,18 +164,18 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
       const payable = await AccountsPayable.findById(ap._id);
       assert.equal(payable.status, AP_STATUS.OPEN);
       assert.equal(payable.paymentBatch, undefined);
-      assert.match(payable.history.at(-1).comments, /Rejected by Accounting: Amount does not match the invoice/);
+      assert.match(payable.history.at(-1).comments, /Rejected by GAF: Amount does not match the invoice/);
       assert.ok(await Notification.findOne({ user: treasury._id, eventKey: `bank-file:${batch._id}:rejected` }));
       await assert.rejects(() => download(batch, treasury), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
       // A notification link shows the file whatever its status.
       assert.equal((await listBankFilesForVerification({ record: String(batch._id), verificationStatus: "PENDING" })).data[0]?.verificationStatus, "REJECTED");
-      // The corrected payment goes into a new file, which waits for Accounting again.
+      // The corrected payment goes into a new file, which waits for GAF again.
       const next = await makeFile([payable]);
       assert.equal(next.batch.verification.status, "PENDING");
-      await verifyBankFile({ batchId: next.batch._id, user: accounting, req });
+      await verifyBankFile({ batchId: next.batch._id, user: gaf, req });
     });
 
-    await t.test("Treasury cancelling a waiting file closes Accounting's task", async () => {
+    await t.test("Treasury cancelling a waiting file closes GAF's task", async () => {
       const { batch } = await makeFile([await makePayable()]);
       await cancelPaymentBatch({ batchId: batch._id, payload: { reason: "Generated by mistake" }, user: treasury, req });
       assert.equal(await Notification.countDocuments({ eventKey: `bank-file:${batch._id}:verification`, resolvedAt: null }), 0);
@@ -184,7 +187,7 @@ test("Accounting verifies each bank TXT before Treasury can download it", { time
       await PaymentBatch.updateOne({ _id: batch._id }, { $set: { paymentDate: new Date(Date.now() - 3 * 86400000) } });
       const [row] = (await listBankFilesForVerification({ verificationStatus: "PENDING" })).data;
       assert.equal(row.paymentDateWarning, "PASSED");
-      const result = await verifyBankFile({ batchId: batch._id, user: accounting, req });
+      const result = await verifyBankFile({ batchId: batch._id, user: gaf, req });
       assert.equal(result.paymentDateWarning, "PASSED");
       assert.equal(paymentDateWarning(await PaymentBatch.findById(batch._id)), null, "a verified file is not flagged");
     });

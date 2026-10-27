@@ -64,7 +64,7 @@ import {
   ROLES
 } from "../utils/constants.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
-import { actsAsRequester, canModifyRequest, canUseCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
+import { actsAsRequester, canModifyRequest, canUseCostCenter, mayChargeAnotherCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
 import { multiplyMoney, sumMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
@@ -710,6 +710,9 @@ async function applyCostCenterType(request, user) {
   }
   if (request.flowType === FLOW_TYPE.C) {
     throw new AppError(422, "Advances and reimbursements are charged to your own cost center: choose Propio.", { field: "costCenterType", flowType: request.flowType }, ERROR_CODES.INVALID_COST_ALLOCATION);
+  }
+  if (actsAsRequester(user) && !mayChargeAnotherCostCenter(user)) {
+    throw new AppError(403, "Only job categories 3, 5 and 6 may charge another cost center (Por Encargo).", { field: "jobCategory" }, ERROR_CODES.FORBIDDEN);
   }
   const allocations = request.costAllocations || [];
   const problems = costAllocationProblems(allocations);
@@ -1375,7 +1378,7 @@ export async function requestFormPolicy(query) {
 export async function requestAuthorizedCostCenters(user) {
   const query = { active: true };
   if (user.role !== ROLES.ADMIN && actsAsRequester(user)) {
-    const allowed = [user.costCenter, ...(user.authorizedCostCenters || [])]
+    const allowed = [user.costCenter, ...(mayChargeAnotherCostCenter(user) ? user.authorizedCostCenters || [] : [])]
       .filter(Boolean)
       .map((value) => value?._id || value);
     query._id = { $in: allowed };

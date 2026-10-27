@@ -1,0 +1,851 @@
+import mongoose from "mongoose";
+import { limaDateKey } from "../../../shared/businessCalendar.mjs";
+import FinancialRequest from "../models/FinancialRequest.js";
+import Supplier from "../models/Supplier.js";
+import User from "../models/User.js";
+import { recordAudit, workflowEvent } from "./auditService.js";
+import {
+  activeApprovalStep,
+  advanceApprovalRoute,
+  activateNextChainStep,
+  finalizeChainApproval,
+  initializeApprovalRoute,
+  approverFor,
+  isAvailableApprover,
+  nextChainApprover,
+  reassignChainStep,
+  slaStatus,
+  stopApprovalRoute,
+  superiorApprovalRequired
+} from "./approvalRuleService.js";
+import { validateAccountingDimensions } from "./accountingDimensionService.js";
+import { reserveBudget } from "./budgetService.js";
+import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "./directPaymentService.js";
+import { assertConfiguredDocuments } from "./documentRuleService.js";
+import { commitUndocumentedReimbursementBudget } from "./renditionService.js";
+import { holdAdvanceForBankAccount, resolveBankNotices } from "./advanceBankHoldService.js";
+import { applyExchangeRate } from "./exchangeRateService.js";
+import { guardAccountingPeriod } from "./periodService.js";
+import { notificationText, notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
+import { assertSupplierUsable } from "./supplierService.js";
+import { escapedRegex, paginatedPayload, parsePagination, parseSort, withDeepLink } from "./queryService.js";
+import { requestListPopulate, requestListSelect, requestPopulate } from "./requestService.js";
+import { runFinancialOperation } from "./transactionService.js";
+import { transitionRequest } from "./workflowService.js";
+import { latestInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
+import { AppError } from "../utils/AppError.js";
+import {
+  APPROVAL_ROUTING_MODE,
+  APPROVAL_STAGES,
+  APPROVAL_TIERS,
+  DOCUMENT_PHASE,
+  ERROR_CODES,
+  FLOW_TYPE,
+  PERMISSIONS,
+  REQUEST_STATUS,
+  REQUEST_TYPE,
+  ROLES
+} from "../utils/constants.js";
+import { canApproveStage, hasPermission, observationOwner } from "../utils/permissions.js";
+import { allowedRequestActions } from "./requestActionPolicy.js";
+import AccountsPayable from "../models/AccountsPayable.js";
+import { scheduledPaymentDate } from "../../../shared/invoiceFinance.mjs";
+
+const activeApprovalStatuses = [
+  REQUEST_STATUS.PENDING_APPROVAL,
+  REQUEST_STATUS.DIRECTOR_APPROVED,
+  REQUEST_STATUS.VICE_RECTOR_APPROVED
+];
+
+// Load scheduled dates for a page in one query. A due date is never a payment plan.
+async function attachScheduledPaymentDates(rows) {
+  if (!rows.length) return rows;
+  const payables = await AccountsPayable.find({ request: { $in: rows.map(row => row._id) }, status: { $nin: ["CANCELLED", "PAID"] } })
+    .select("request scheduledFor plannedPaymentDate").lean();
+  const dates = new Map();
+  for (const payable of payables) {
+    const date = scheduledPaymentDate(payable), id = String(payable.request);
+    if (date && (!dates.has(id) || new Date(date) < new Date(dates.get(id)))) dates.set(id, date);
+  }
+  return rows.map(row => ({ ...row, scheduledPaymentDate: dates.get(String(row._id)) || null }));
+}
+
+// Another required step still follows this one, so approving it does not complete the route.
+function laterOpenStep(request, step) {
+  return (request.approvalRouteSnapshot || []).some((item) => item.sequence > step.sequence && item.required !== false && ["PENDING", "NOT_REACHED"].includes(item.status));
+}
+
+function requesterId(request) {
+  return String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
+}
+
+function assertApprovalActor(request, user, step, adminOverrideReason) {
+  if (String(adminOverrideReason || "").trim()) throw new AppError(403, "Emergency approval overrides are disabled. Use the assigned approval route.");
+  if (!step) throw new AppError(409, "This request has no pending approval step.", undefined, ERROR_CODES.INVALID_STATUS_TRANSITION);
+
+  if (step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN) {
+    // Chain steps are assigned to a specific person (the requester's jefe, or
+    // that jefe's own jefe once forwarded) — identity, not role/area pool.
+    if (user.role !== ROLES.ADMIN && String(step.approverUser) !== String(user._id)) {
+      throw new AppError(403, "This approval step is assigned to a different manager.", undefined, ERROR_CODES.FORBIDDEN);
+    }
+  } else if (step.tier) {
+    // An amount tier or a Track D step: any user of the step's role decides it.
+    if (user.role !== ROLES.ADMIN && step.role !== user.role) {
+      throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role, approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
+    }
+  } else {
+    if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) {
+      throw new AppError(403, "You do not have approval permission.", undefined, ERROR_CODES.FORBIDDEN);
+    }
+    if (user.role !== ROLES.ADMIN) {
+      if (!canApproveStage(request, user)) {
+        throw new AppError(403, "This request is assigned to a different approval level.", { approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
+      }
+      if (step.role && step.role !== user.role) {
+        throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role }, ERROR_CODES.FORBIDDEN);
+      }
+      if (step.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR) {
+        const allowedAreas = new Set([user.area, ...(user.approvalAreas || [])].filter(Boolean));
+        const requestArea = request.requesterArea || request.requestingArea;
+        if (requestArea && !allowedAreas.has(requestArea) && !allowedAreas.has("*")) {
+          throw new AppError(403, "This request belongs to another approval area.", { requestArea }, ERROR_CODES.FORBIDDEN);
+        }
+      }
+    }
+  }
+  if (requesterId(request) === String(user._id)) {
+    throw new AppError(403, "A requester cannot approve their own request.", { segregationOfDuties: true }, ERROR_CODES.FORBIDDEN);
+  }
+}
+
+async function validateApprovalControls(request, user) {
+  await guardAccountingPeriod({
+    period: request.accountingPeriod,
+    action: "APPROVE",
+    user,
+    module: "APPROVALS",
+    entityType: "FinancialRequest",
+    entityId: request._id,
+    requestId: request._id
+  });
+  // A transfer between UMA's own accounts has no supplier, invoice or budget dimension.
+  if (request.flowType === FLOW_TYPE.D) {
+    await applyExchangeRate(request);
+    await request.validate();
+    return;
+  }
+  // The dimensions themselves are re-validated; CECO authorization is not. It is a
+  // requester control, enforced at submission, and a manager-chain jefe (often a
+  // plain Solicitor) must not need the requester's cost centers to approve.
+  await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines });
+  const supplier = request.flowType === FLOW_TYPE.C ? null : (request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier));
+  await applyExchangeRate(request);
+  await request.validate();
+  await assertConfiguredDocuments(request, DOCUMENT_PHASE.SUBMISSION);
+  const xmlAttachment = request.flowType === FLOW_TYPE.B ? latestInvoiceEvidence(request.attachments) : latestInvoiceEvidence((request.attachments || []).filter((item) => item.kind === "XML"));
+  if (xmlAttachment) {
+    request.xmlValidation = await validateInvoiceAgainstRequest(xmlAttachment.path, {
+      supplier,
+      fiscalData: request.fiscalData,
+      currency: request.currency,
+      totalNet: request.totalNet,
+      totalIGV: request.totalIGV,
+      totalAmount: request.totalAmount
+    }, { request, requestNumber: request.requestNumber, supplier, user, fileName: xmlAttachment.originalName });
+    request.xmlValidationHistory.push(request.xmlValidation);
+  }
+  // B sent with only its quote: the invoice is registered after approval (registerDirectPaymentInvoice).
+  if (request.flowType === FLOW_TYPE.B && xmlAttachment && !request.xmlValidation?.validated) {
+    throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
+  }
+}
+
+// A B request that carries its verified invoice is paid straight after approval; one sent with only
+// its quote waits, budget reserved, for the invoice.
+export const directInvoiceReady = (request) => request.flowType === FLOW_TYPE.B && Boolean(latestInvoiceEvidence(request.attachments) && request.xmlValidation?.validated);
+
+export async function listApprovalInbox(queryParams, user) {
+  const query = { status: { $in: activeApprovalStatuses } };
+  if (user.role !== ROLES.ADMIN) {
+    // A manager-chain approver (any role, typically Solicitor) sees requests
+    // where they are the pending step's specific approver, regardless of
+    // role/area. An Area Director/Vice-Rector/Management user additionally
+    // keeps the original role+area-scoped pool visibility for rule-based requests.
+    const chainMatch = { "approvalRouteSnapshot": { $elemMatch: { approverUser: user._id, status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN } } };
+    // Tier steps (GAF, Gerencia General, Track D's Treasury step) wait on everyone of that role,
+    // except on their own requests.
+    const tierMatch = Object.values(APPROVAL_TIERS).includes(user.role)
+      ? { approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: user.role, status: "PENDING" } }, requester: { $ne: user._id } }
+      : null;
+    if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
+      const legacyMatch = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
+      if (legacyMatch.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
+        const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
+        if (!areas.includes("*")) legacyMatch.$or = [{ requesterArea: { $in: areas } }, { requestingArea: { $in: areas } }];
+      }
+      query.$or = [legacyMatch, chainMatch, ...(tierMatch ? [tierMatch] : [])];
+    } else if (tierMatch) {
+      query.$or = [chainMatch, tierMatch];
+    } else {
+      Object.assign(query, chainMatch);
+    }
+  }
+  if (queryParams.stage) query.approvalStage = queryParams.stage;
+  if (queryParams.requestType) query.requestType = queryParams.requestType;
+  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => value.trim().toUpperCase()).filter(Boolean) };
+  if (queryParams.search) {
+    const search = new RegExp(escapedRegex(queryParams.search), "i");
+    const [supplierIds, userIds] = await Promise.all([
+      Supplier.distinct("_id", { $or: [{ legalName: search }, { name: search }, { normalizedIdentifier: search }, { rucDni: search }] }),
+      User.distinct("_id", { $or: [{ name: search }, { email: search }, { area: search }] })
+    ]);
+    query.$and = [{ $or: [
+      { requestNumber: search },
+      { description: search },
+      { "supplierSnapshot.legalName": search },
+      { supplier: { $in: supplierIds } },
+      { requester: { $in: userIds } },
+      { solicitor: { $in: userIds } }
+    ] }];
+  }
+  // /approvals?request=<id> (approval notifications) narrows the inbox to that request; the
+  // visibility clauses above still apply, so a link never exposes someone else's approval.
+  withDeepLink(query, queryParams, { request: "_id" });
+  const { page, pageSize, skip } = parsePagination(queryParams);
+  let sort = parseSort(queryParams, ["requestNumber", "requestType", "priority", "approvalStage", "status", "totalPENEquivalent", "approvalDueAt", "createdAt"], { approvalDueAt: 1, createdAt: 1 });
+  // Priority sorts Alta > Media > Baja (its rank), the oldest due first within each.
+  if (sort.priority) sort = { priorityRank: sort.priority, approvalDueAt: 1, createdAt: 1 };
+  const [requests, total, summaryRows] = await Promise.all([
+    FinancialRequest.find(query).select(requestListSelect).populate(requestListPopulate).sort(sort).skip(skip).limit(pageSize),
+    FinancialRequest.countDocuments(query),
+    FinancialRequest.aggregate([
+      { $match: query },
+      { $group: { _id: null, amount: { $sum: "$totalPENEquivalent" }, oldestCreatedAt: { $min: "$createdAt" } } }
+    ])
+  ]);
+  const data = await Promise.all(requests.map(async (request) => {
+    const object = request.toObject();
+    object.sla = slaStatus(request);
+    object.allowedActions = allowedRequestActions(request, user);
+    object.approvalOptions = object.allowedActions.includes("APPROVE") ? await approvalDecisionOptions(request) : { ...noChainOptions };
+    for (const attachment of object.attachments || []) delete attachment.path;
+    return object;
+  }));
+  return {
+    ...paginatedPayload(await attachScheduledPaymentDates(data), total, page, pageSize),
+    summary: { total, amount: summaryRows[0]?.amount || 0, oldestCreatedAt: summaryRows[0]?.oldestCreatedAt || null }
+  };
+}
+
+async function appendApprovalWithoutStatusTransition({ request, step, routeResult, user, req, comments, adminOverrideReason, session, forwarded = false }) {
+  const action = forwarded ? "CHAIN_APPROVED_FORWARDED" : `${step.approvalLevel}_APPROVED`;
+  request.approvalHistory.push(workflowEvent({
+    action,
+    from: request.status,
+    to: request.status,
+    user,
+    req,
+    comments: adminOverrideReason ? `${comments || ""} Admin override: ${adminOverrideReason}`.trim() : comments,
+    stage: step.approvalLevel,
+    dueAt: step.dueAt,
+    request
+  }));
+  await request.save({ session });
+  await recordAudit({
+    entityType: "FinancialRequest",
+    entity: request,
+    action,
+    user,
+    req,
+    comments,
+    module: "APPROVALS",
+    oldValues: { approvalStage: step.approvalLevel },
+    newValues: { approvalStage: routeResult.next?.approvalLevel || APPROVAL_STAGES.COMPLETE, nextApprover: routeResult.next?.approverUser || null },
+    session
+  });
+}
+
+// Shared by decideApproval's automatic handoff and the Budget team's manual
+// commit-retry endpoint, so a hard REJECT-strategy budget gate always
+// resolves the request the same way regardless of who/what triggered the
+// commit attempt.
+export async function resolveBudgetCommitmentFailure({ request, error, user, req }) {
+  if (![ERROR_CODES.INSUFFICIENT_BUDGET, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED, ERROR_CODES.SUPPLIER_REJECTED, ERROR_CODES.SUPPLIER_INACTIVE].includes(error.code)) throw error;
+  const hardReject = error.code === ERROR_CODES.INSUFFICIENT_BUDGET && error.details?.hardReject;
+  if (hardReject) {
+    request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, observedAt: new Date(), observedBy: user._id };
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.REJECTED, user, req, action: "REJECTED", comments: `Budget gate rejection: ${error.message}`, skipControls: true, skipRoleCheck: true });
+    await notifyUser({
+      userId: request.requester?._id || request.requester || request.solicitor,
+      eventKey: `request:${request._id}:budget-rejected:${Date.now()}`,
+      type: "BUDGET_REJECTED",
+      title: notificationText("Request rejected at the budget gate"),
+      message: notificationText("{requestNumber}: {detail}", { requestNumber: request.requestNumber, detail: error.message }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  } else if (error.code === ERROR_CODES.INSUFFICIENT_BUDGET && request.status !== REQUEST_STATUS.OBSERVED_BUDGET) {
+    // Budget/Management decide the exception; the requester is not asked to resubmit meanwhile.
+    request.observation = { code: ERROR_CODES.INSUFFICIENT_BUDGET, detail: error.message, resolver: "BUDGET", observedAt: new Date(), observedBy: user._id };
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.OBSERVED_BUDGET, user, req, action: "BUDGET_OBSERVED", comments: error.message, skipControls: true, skipRoleCheck: true });
+  }
+  await recordAudit({
+    entityType: "FinancialRequest",
+    entity: request,
+    action: hardReject ? "BUDGET_COMMITMENT_REJECTED" : "BUDGET_COMMITMENT_PENDING",
+    user,
+    req,
+    module: "BUDGET",
+    message: error.message,
+    newValues: error.details
+  });
+  return { code: error.code, message: error.message, details: error.details, hardReject };
+}
+
+async function notifyTransferApproved(request) {
+  await notifyRoles({
+    roles: [ROLES.TREASURY],
+    eventKey: `request:${request._id}:transfer-execute`,
+    type: "TREASURY_PAYMENT",
+    title: notificationText("Transfer approved"),
+    message: notificationText("{requestNumber} was approved by Treasury and the GAF. Make the transfer at the bank and record its operation number.", { requestNumber: request.requestNumber }),
+    path: `/treasury/transfers?request=${request._id}`,
+    entityType: "FinancialRequest",
+    entityId: request._id
+  });
+  return request;
+}
+
+// automatic: the commitment runs as the system consequence of the final approval,
+// so the approver's own role (often a Solicitor jefe) is not what authorizes it.
+export async function commitApprovedRequestBudget({ request, user, req, automatic = false }) {
+  // A Track B request observed by SUNAT resumes here once Accounting approved the manual SUNAT
+  // exception; its approvals are already complete and are not repeated.
+  if (request.status === REQUEST_STATUS.OBSERVED_BUDGET && observationOwner(request) === "REQUESTER") {
+    throw new AppError(409, "Management rejected the budget exception. The requester must correct the request and submit it for approval again.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  const resumableStatuses = [REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.APPROVED, REQUEST_STATUS.OBSERVED_BUDGET, ...(request.flowType === FLOW_TYPE.B ? [REQUEST_STATUS.OBSERVED_SUNAT] : [])];
+  if (!resumableStatuses.includes(request.status) || activeApprovalStep(request)) {
+    throw new AppError(409, "Financial handoff can only run after every required approval is complete or after a budget observation is resolved.", { status: request.status, approvalStage: request.approvalStage }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+
+  // Track D moves money between UMA's own accounts: no budget, no payable. Treasury executes it.
+  if (request.flowType === FLOW_TYPE.D) return notifyTransferApproved(request);
+  if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req, automatic });
+  if (request.flowType === FLOW_TYPE.C) {
+    let result;
+    let advancePayable;
+    try {
+      result = await runFinancialOperation(async (session) => {
+        ({ accountsPayable: advancePayable } = await provisionTrackCAdvance({ request, user, req, session, automatic }));
+        return request;
+      });
+    } catch (error) {
+      if (error.code !== ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED) throw error;
+      // No verified bank account yet: the approvals stay and the employee is told what to do;
+      // verifying the account releases the advance. A manual retry still reports why.
+      await holdAdvanceForBankAccount({ request, user, req, error });
+      if (!automatic) throw error;
+      return request;
+    }
+    await resolveBankNotices(request);
+    const payDate = advancePayable?.dueDate ? limaDateKey(advancePayable.dueDate) : limaDateKey(new Date());
+    await notifyRoles({
+      roles: [ROLES.TREASURY],
+      eventKey: `request:${request._id}:treasury`,
+      type: "TREASURY_PAYMENT",
+      title: notificationText("Advance to pay now"),
+      message: notificationText("{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.", {
+        requestNumber: request.requestNumber,
+        amount: `${request.currency} ${Number(request.totalAmount || 0).toFixed(2)}`,
+        name: request.rendition?.beneficiarySnapshot?.name || "",
+        date: payDate.split("-").reverse().join("/")
+      }),
+      path: "/treasury?advances=due",
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+    return result;
+  }
+
+  const supplier = request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier);
+  assertSupplierUsable(supplier);
+  let directPaymentPreflight;
+  const payNow = directInvoiceReady(request);
+  if (payNow) {
+    directPaymentPreflight = await preflightDirectPayment({ request, user, req, observe: true });
+    if (!directPaymentPreflight.valid) {
+      const accountingDecides = directPaymentPreflight.resolver === "ACCOUNTING";
+      await notifyUser({
+        userId: request.requester?._id || request.requester || request.solicitor,
+        eventKey: `request:${request._id}:direct-payment-observed:${Date.now()}`,
+        type: "REQUEST_OBSERVED",
+        title: notificationText("Direct-payment invoice observed"),
+        message: accountingDecides
+          ? notificationText("{requestNumber}: SUNAT could not verify the invoice. Accounting will review it; you do not need to submit the request again.", { requestNumber: request.requestNumber })
+          : notificationText("{requestNumber}: {detail}", { requestNumber: request.requestNumber, detail: directPaymentPreflight.detail }),
+        path: accountingDecides ? `/requests/${request._id}` : `/requests/${request._id}/edit`,
+        entityType: "FinancialRequest",
+        entityId: request._id
+      });
+      if (accountingDecides) {
+        await notifyRoles({
+          roles: [ROLES.ACCOUNTING],
+          eventKey: `request:${request._id}:sunat-exception`,
+          type: "SUNAT_EXCEPTION",
+          title: notificationText("Manual SUNAT exception needed"),
+          message: notificationText("{requestNumber}: SUNAT could not verify the invoice. Review it and approve a manual SUNAT exception so the payment can continue.", { requestNumber: request.requestNumber }),
+          path: "/accounting?view=sunat-exceptions",
+          entityType: "FinancialRequest",
+          entityId: request._id
+        });
+      }
+      return request;
+    }
+  }
+  const result = await runFinancialOperation(async (session) => {
+    const commitment = await reserveBudget(request, user._id, { session });
+    request.budgetCommitment = commitment._id;
+    await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed and budget commitment recorded.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, skipRoleCheck: automatic, session });
+    if (payNow) await provisionDirectPayment({ request, user, req, session, preflight: directPaymentPreflight });
+    return request;
+  });
+  await resolveNotification(`request:${request._id}:budget-exception`);
+  await resolveNotification(`request:${request._id}:sunat-exception`);
+  await resolveNotification(`request:${request._id}:budget-commitment`);
+  if (request.flowType === FLOW_TYPE.B && !payNow) {
+    await notifyUser({
+      userId: request.requester?._id || request.requester || request.solicitor,
+      eventKey: `request:${request._id}:direct-invoice-needed`,
+      type: "INVOICE_NEEDED",
+      title: notificationText("Upload the invoice to get it paid"),
+      message: notificationText("{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives and it goes to payment.", { requestNumber: request.requestNumber }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+    return result;
+  }
+  await notifyRoles({
+    roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.PROCUREMENT],
+    eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,
+    type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "PROCUREMENT_ORDER",
+    title: request.flowType === FLOW_TYPE.B ? notificationText("Priority payment ready") : notificationText("Purchase order required"),
+    message: request.flowType === FLOW_TYPE.B
+      ? notificationText("{requestNumber} was auto-provisioned and is ready for priority Treasury payment.", { requestNumber: request.requestNumber })
+      : notificationText("{requestNumber} is budget committed and ready for Procurement to issue the order.", { requestNumber: request.requestNumber }),
+    path: request.flowType === FLOW_TYPE.B ? `/treasury?tab=prepare&request=${request._id}` : `/requests/${request._id}`,
+    entityType: "FinancialRequest",
+    entityId: request._id
+  });
+  return result;
+}
+
+export async function decideApproval({ id, action, comments, adminOverrideReason, forward, user, req }) {
+  const decision = String(action || "").toUpperCase();
+  if (!["APPROVE", "OBSERVE", "RETURN", "REJECT"].includes(decision)) {
+    throw new AppError(422, "Unsupported approval action.", { action }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (decision !== "APPROVE" && !String(comments || "").trim()) {
+    throw new AppError(422, `${decision} comments are required.`, { field: "comments" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const request = await FinancialRequest.findById(id).select("+attachments.path").populate("supplier");
+  if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
+  if (!activeApprovalStatuses.includes(request.status)) {
+    throw new AppError(409, "Only requests in an active approval stage can receive a decision.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  if (!request.approvalRouteSnapshot?.length) await initializeApprovalRoute(request);
+  const step = activeApprovalStep(request);
+  assertApprovalActor(request, user, step, adminOverrideReason);
+  const isChainStep = step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+  // The cost center's responsible never finalizes alone: their approval goes to their superior.
+  if (isChainStep && decision === "APPROVE" && await superiorApprovalRequired(request, step)) forward = true;
+  if (isChainStep && decision === "APPROVE" && typeof forward !== "boolean") {
+    throw new AppError(422, "You must specify whether to forward this approval to the next manager or finalize it here.", { field: "forward" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  // Submission controls gate an approval only. An approver can always send a
+  // request back (OBSERVE/RETURN) or REJECT it, precisely when it fails them.
+  if (decision === "APPROVE") await validateApprovalControls(request, user);
+
+  if (decision !== "APPROVE") {
+    const targetByDecision = {
+      OBSERVE: REQUEST_STATUS.OBSERVED,
+      RETURN: REQUEST_STATUS.RETURNED,
+      REJECT: REQUEST_STATUS.REJECTED
+    };
+    const stoppedStatus = {
+      OBSERVE: "OBSERVED",
+      RETURN: "RETURNED",
+      REJECT: "REJECTED"
+    }[decision];
+    stopApprovalRoute(request, stoppedStatus);
+    request.rejectionReason = comments;
+    await transitionRequest({
+      request,
+      targetStatus: targetByDecision[decision],
+      user,
+      req,
+      action: decision,
+      comments,
+      approvalStage: step.approvalLevel,
+      eventDueAt: step.dueAt,
+      adminOverrideReason,
+      // assertApprovalActor already checked who decides a chain or tier step.
+      skipRoleCheck: isChainStep || Boolean(step.tier)
+    });
+    await resolveNotification(`request:${request._id}:approval:${step.approvalLevel}`);
+    await notifyUser({
+      userId: request.requester?._id || request.requester || request.solicitor,
+      eventKey: `request:${request._id}:${decision}:${Date.now()}`,
+      type: `REQUEST_${decision}`,
+      // decision is OBSERVE / RETURN / REJECT; "Request observe" read wrongly in English.
+      title: { OBSERVE: notificationText("Request observed"), RETURN: notificationText("Request returned"), REJECT: notificationText("Request rejected") }[decision],
+      message: notificationText("{requestNumber} requires your attention: {comments}", { requestNumber: request.requestNumber, comments }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+    await request.populate(requestPopulate);
+    return { request };
+  }
+
+  // Chain decisions resolve the next jefe / the chain approvers' authority first,
+  // outside the transaction; the transaction only persists the outcome.
+  const chainRoute = isChainStep
+    ? (forward ? await activateNextChainStep(request, step, user) : await finalizeChainApproval(request, step, user))
+    : null;
+  const routeResult = await runFinancialOperation(async (session) => {
+    if (isChainStep) {
+      const route = chainRoute;
+      if (route.complete) {
+        await transitionRequest({
+          request,
+          targetStatus: REQUEST_STATUS.APPROVED,
+          user,
+          req,
+          action: "CHAIN_APPROVED_FINAL",
+          comments: comments || "Approved by the manager chain.",
+          approvalStage: step.approvalLevel,
+          nextApprovalStage: APPROVAL_STAGES.COMPLETE,
+          dueAt: null,
+          eventDueAt: step.dueAt,
+          adminOverrideReason,
+          skipRoleCheck: true,
+          session
+        });
+      } else {
+        await appendApprovalWithoutStatusTransition({ request, step, routeResult: route, user, req, comments, adminOverrideReason, session, forwarded: Boolean(forward) });
+      }
+      return route;
+    }
+
+    const route = await advanceApprovalRoute(request, user._id);
+
+    // Intermediate approval levels never change the parent status — the frozen
+    // route/approval history is the record of who approved what, at which
+    // level. The parent only ever moves once, straight from PENDIENTE_APROBACION
+    // to the canonical APROBADO, when every required step is done — regardless
+    // of which specific approval level happened to be last. This also fixes a
+    // real defect the old level-specific branching had: a configured route
+    // whose final step was any level other than Area Director/Vice Rector
+    // (e.g. Rectorate, General Management) could never reach a valid approved
+    // state at all.
+    if (route.complete) {
+      await transitionRequest({
+        request,
+        targetStatus: REQUEST_STATUS.APPROVED,
+        user,
+        req,
+        action: `${step.approvalLevel}_APPROVED`,
+        comments: comments || `Approved at ${step.approvalLevel}.`,
+        approvalStage: step.approvalLevel,
+        nextApprovalStage: APPROVAL_STAGES.COMPLETE,
+        dueAt: null,
+        eventDueAt: step.dueAt,
+        adminOverrideReason,
+        skipRoleCheck: true,
+        session
+      });
+    } else {
+      await appendApprovalWithoutStatusTransition({ request, step, routeResult: route, user, req, comments, adminOverrideReason, session });
+    }
+
+    if (route.complete && request.status !== REQUEST_STATUS.APPROVED) {
+      throw new AppError(
+        409,
+        "The configured approval route did not finish in an approved lifecycle state.",
+        { status: request.status, approvalLevel: step.approvalLevel },
+        ERROR_CODES.INVALID_STATUS_TRANSITION
+      );
+    }
+    return route;
+  });
+
+  // Every fully approved request - rule-based, manager-chain or Management-final -
+  // runs the same automatic budget commitment. A shortfall keeps the existing
+  // exception/observation handling; any other failure leaves the commitment to
+  // Budget's manual retry rather than losing the approval just recorded.
+  let budgetWarning;
+  let budgetDeferred;
+  let fiscalObservation = false;
+  if (routeResult.complete) {
+    try {
+      await commitApprovedRequestBudget({ request, user, req, automatic: true });
+      fiscalObservation = request.status === REQUEST_STATUS.OBSERVED_SUNAT;
+    } catch (error) {
+      try {
+        budgetWarning = await resolveBudgetCommitmentFailure({ request, error, user, req });
+      } catch (unhandled) {
+        budgetDeferred = { code: unhandled.code, message: unhandled.message };
+        await recordAudit({ entityType: "FinancialRequest", entity: request, action: "BUDGET_COMMITMENT_DEFERRED", user, req, module: "BUDGET", message: unhandled.message, newValues: { code: unhandled.code } });
+      }
+    }
+  }
+  await resolveNotification(`request:${request._id}:approval:${step.approvalLevel}`);
+  if (routeResult.complete && !budgetWarning?.hardReject) {
+    await notifyUser({
+      userId: request.requester?._id || request.requester || request.solicitor,
+      eventKey: `request:${request._id}:approved`,
+      type: "REQUEST_APPROVED",
+      title: notificationText("Request approved"),
+      message: notificationText("{requestNumber} completed its approval route.", { requestNumber: request.requestNumber }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  }
+  if (activeApprovalStep(request)) {
+    await notifyApprovalStep(request);
+  } else if (budgetWarning?.hardReject) {
+    // Terminal - resolveBudgetCommitmentFailure already notified the requester; no Budget task to raise.
+  } else if (budgetWarning) {
+    await notifyRoles({
+      roles: [ROLES.TREASURY, ROLES.ADMIN],
+      eventKey: `request:${request._id}:budget-exception`,
+      type: "BUDGET_EXCEPTION",
+      title: notificationText("Budget exception pending"),
+      message: notificationText("{requestNumber} cannot be committed until its budget exception is resolved.", { requestNumber: request.requestNumber }),
+      path: `/budget?tab=exceptions&request=${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  } else if (request.status === REQUEST_STATUS.OBSERVED_SUNAT) {
+    // preflightDirectPayment already notified the requester; no Accounting/Treasury
+    // handoff is emitted until a corrected XML passes SUNAT and duplicate controls.
+  } else if (fiscalObservation) {
+    // The direct-payment preflight already notified the requester. Do not
+    // create a misleading Accounting/Treasury task while the XML is observed.
+  } else if (budgetDeferred) {
+    await notifyRoles({
+      roles: [ROLES.TREASURY, ROLES.ADMIN],
+      eventKey: `request:${request._id}:budget-commitment`,
+      type: "BUDGET_COMMITMENT",
+      title: notificationText("Budget commitment required"),
+      message: notificationText("{requestNumber} completed its approval route, but the automatic budget commitment could not run: {detail}", { requestNumber: request.requestNumber, detail: budgetDeferred.message }),
+      path: `/requests/${request._id}`,
+      entityType: "FinancialRequest",
+      entityId: request._id
+    });
+  }
+  await request.populate(requestPopulate);
+  return { request, budgetWarning: budgetWarning || budgetDeferred };
+}
+
+export const MAX_BULK_APPROVALS = 50;
+
+function bulkRowFailure(id, requestNumber, error) {
+  // Only an operational (AppError-style) message is passed on; anything else is
+  // reported generically, as the error handler would for a single request.
+  const operational = Boolean(error?.isOperational || error?.statusCode);
+  return {
+    id: String(id),
+    requestNumber: requestNumber || null,
+    ok: false,
+    statusCode: error?.name === "CastError" ? 422 : error?.statusCode || 500,
+    code: typeof error?.code === "string" ? error.code : ERROR_CODES.VALIDATION_ERROR,
+    message: operational ? error.message : "The approval could not be recorded. Try this request individually."
+  };
+}
+
+// Bulk "Approve" for the Approval Inbox: one shared comment and one batch-wide
+// chain decision (forward = "Send to my jefe", otherwise "Approve and finalize").
+// Every request still goes through decideApproval — same actor checks, controls,
+// transaction and notifications — one at a time and independently, so one
+// failure never blocks or rolls back the others. Only approvals are bulk;
+// observe / return / reject stay individual decisions with their own reason.
+export async function bulkApproveRequests({ ids, comments, forward, user, req }) {
+  if (!Array.isArray(ids) || !ids.length) {
+    throw new AppError(422, "Select at least one request to approve.", { field: "ids" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const uniqueIds = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!uniqueIds.length) {
+    throw new AppError(422, "Select at least one request to approve.", { field: "ids" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (uniqueIds.length > MAX_BULK_APPROVALS) {
+    throw new AppError(422, `A bulk approval can include at most ${MAX_BULK_APPROVALS} requests.`, { field: "ids", max: MAX_BULK_APPROVALS, received: uniqueIds.length }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (forward !== undefined && forward !== null && typeof forward !== "boolean") {
+    throw new AppError(422, "forward must be true or false.", { field: "forward" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+
+  const validIds = uniqueIds.filter((id) => mongoose.isValidObjectId(id));
+  const loaded = await FinancialRequest.find({ _id: { $in: validIds } })
+    .select("requestNumber requester solicitor status approvalRouteSnapshot approvalStage requesterArea requestingArea");
+  const byId = new Map(loaded.map((request) => [String(request._id), request]));
+
+  // The chain decision is made once for the whole batch, so it is checked up front
+  // over the rows this user may actually approve (other rows fail individually).
+  const needsDecision = [];
+  const cannotForward = [];
+  for (const request of loaded) {
+    if (!allowedRequestActions(request, user).includes("APPROVE")) continue;
+    const chain = activeApprovalStep(request)?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN;
+    // A step that must go to the superior needs no choice: it is always sent up.
+    if (chain && typeof forward !== "boolean" && !(await superiorApprovalRequired(request))) needsDecision.push(request);
+    if (forward === true && (!chain || !(await approvalDecisionOptions(request)).canForward)) cannotForward.push(request);
+  }
+  const listed = (requests) => requests.map((request) => ({ id: String(request._id), requestNumber: request.requestNumber }));
+  if (needsDecision.length) {
+    throw new AppError(422, "Choose Approve and finalize or Send to my jefe for the manager-chain requests in this batch.", { field: "forward", requests: listed(needsDecision) }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (cannotForward.length) {
+    throw new AppError(422, "Send to my jefe is only possible when every selected request can be sent to your jefe. Approve and finalize them, or remove these requests from the selection.", { field: "forward", reason: "FORWARD_NOT_AVAILABLE", requests: listed(cannotForward) }, ERROR_CODES.VALIDATION_ERROR);
+  }
+
+  const results = [];
+  for (const id of uniqueIds) {
+    const known = byId.get(id);
+    if (!known) {
+      results.push(bulkRowFailure(id, null, new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND)));
+      continue;
+    }
+    try {
+      const result = await decideApproval({ id, action: "APPROVE", comments: typeof comments === "string" ? comments : undefined, forward: typeof forward === "boolean" ? forward : undefined, user, req });
+      results.push({
+        id,
+        requestNumber: result.request.requestNumber,
+        ok: true,
+        status: result.request.status,
+        forwarded: forward === true,
+        warning: result.budgetWarning?.message || null
+      });
+    } catch (error) {
+      results.push(bulkRowFailure(id, known.requestNumber, error));
+    }
+  }
+  const approved = results.filter((item) => item.ok).length;
+  return { results, summary: { requested: uniqueIds.length, approved, failed: uniqueIds.length - approved } };
+}
+
+const noChainOptions = Object.freeze({ chain: false, canForward: false, canFinalize: true, superiorRequired: false, forwardTo: null, remainingPolicyStages: [] });
+
+// The tier steps still open after the current one (GAF, Gerencia General, Track D's GAF).
+function remainingTierStages(request, step) {
+  return [...(request.approvalRouteSnapshot || [])]
+    .sort((a, b) => a.sequence - b.sequence)
+    .filter((item) => item.tier && item.sequence > (step?.sequence ?? 0) && ["PENDING", "NOT_REACHED"].includes(item.status))
+    .map((item) => item.approvalLevel);
+}
+
+// What the current approver can choose at a chain step: "Approve and finalize"
+// unless the cost center's responsible must send it to their superior (canFinalize
+// false); "Send to my jefe" only while the current approver has an available jefe.
+// remainingPolicyStages lists the tier stages that still follow (GAF, Gerencia General).
+export async function approvalDecisionOptions(request) {
+  const step = activeApprovalStep(request);
+  if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) return { ...noChainOptions, remainingPolicyStages: remainingTierStages(request, step) };
+  const nextApprover = await nextChainApprover(request, step);
+  const superiorRequired = Boolean(step.superiorRequired && nextApprover);
+  return {
+    chain: true,
+    canForward: Boolean(nextApprover),
+    canFinalize: !superiorRequired,
+    superiorRequired,
+    forwardTo: nextApprover ? { _id: nextApprover._id, name: nextApprover.name, jobTitle: nextApprover.jobTitle } : null,
+    remainingPolicyStages: remainingTierStages(request, step)
+  };
+}
+
+// Request decisions never approve the supplier. Keep a null legacy field for older clients.
+export async function getApprovalDecisionOptions(id, user) {
+  const request = await FinancialRequest.findById(id).select("requester solicitor status approvalRouteSnapshot approvalStage requesterArea requestingArea flowType supplier");
+  if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
+  if (!allowedRequestActions(request, user).includes("APPROVE")) return { ...noChainOptions, supplierApproval: null };
+  return { ...await approvalDecisionOptions(request), supplierApproval: null };
+}
+
+const REASSIGNMENT_REASONS = Object.freeze({
+  DEACTIVATED: "deactivated",
+  ON_LEAVE: "on leave",
+  RETURNED: "back from leave",
+  SUBSTITUTE_CHANGED: "substitute changed"
+});
+
+// Re-routes every pending manager-chain step that belongs to a person whose availability or
+// substitute changed - steps waiting on them, and steps a substitute holds on their behalf. Each
+// step goes to whoever holds that person's approvals now (approverFor): the person while
+// available, otherwise their substitute, otherwise their nearest available jefe. So an absence
+// never strands a request, and the steps come back when the person returns. When nobody can take
+// a step from an unavailable approver it stays where it is and Admin is told to correct the roster.
+export async function reassignPendingApprovalsFor(personId, { actor, req, reason = "DEACTIVATED" } = {}) {
+  const requests = await FinancialRequest.find({
+    status: { $in: activeApprovalStatuses },
+    approvalRouteSnapshot: { $elemMatch: { status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN, $or: [{ approverUser: personId }, { coveringFor: personId }] } }
+  });
+  const summary = { reassigned: 0, unassigned: 0, requests: [] };
+  const systemActor = actor || { name: "System", role: "SYSTEM" };
+  for (const request of requests) {
+    const step = activeApprovalStep(request);
+    if (!step || step.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN) continue;
+    if (![step.approverUser, step.coveringFor].some((id) => id && String(id) === String(personId))) continue;
+    // The manager whose step this is: the absent one a substitute stands in for, else the holder.
+    const owner = step.coveringFor || step.approverUser;
+    const exclude = [
+      request.requester || request.solicitor,
+      ...request.approvalRouteSnapshot.filter((item) => item.status === "APPROVED" && item.approverUser).map((item) => item.approverUser)
+    ];
+    let target = { approver: null, coveringFor: null };
+    try {
+      target = await approverFor(owner, { exclude });
+    } catch {
+      target = { approver: null, coveringFor: null };
+    }
+    const { approver, coveringFor } = target;
+    if (approver && String(approver._id) === String(step.approverUser) && String(coveringFor?._id || "") === String(step.coveringFor || "")) continue;
+    if (!approver) {
+      // Someone who can still act keeps the step; only a stranded step needs Admin.
+      const holder = await User.findById(step.approverUser).select("active onLeave role").lean();
+      if (isAvailableApprover(holder)) continue;
+      summary.unassigned += 1;
+      await recordAudit({ entityType: "FinancialRequest", entity: request, action: "APPROVAL_REASSIGNMENT_FAILED", user: systemActor, req, module: "APPROVALS", comments: `No available substitute or supervisor for ${step.coveringForSnapshot?.name || step.approverSnapshot?.name || "the approver"} (${reason}).`, oldValues: { approverUser: step.approverUser, approvalStage: step.approvalLevel } });
+      await notifyRoles({ roles: [ROLES.ADMIN], eventKey: `request:${request._id}:approval-unassigned:${step._id}`, type: "APPROVAL_UNASSIGNED", title: notificationText("Approval without an available approver"), message: step.approverSnapshot?.name
+        ? notificationText("{requestNumber} waits on {approverName} and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber, approverName: step.approverSnapshot.name })
+        : notificationText("{requestNumber} waits on an unavailable approver and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+      continue;
+    }
+    const oldNotificationKey = `request:${request._id}:approval:${step.approvalLevel}`;
+    const previous = reassignChainStep(request, step, approver, new Date(), { coveringFor });
+    const onBehalf = coveringFor ? ` on behalf of ${coveringFor.name}` : "";
+    const comments = `Pending approval moved from ${previous.approverSnapshot?.name || "the previous approver"} to ${approver.name}${onBehalf} (${REASSIGNMENT_REASONS[reason] || reason}).`;
+    request.approvalHistory.push(workflowEvent({ action: "APPROVAL_REASSIGNED", from: request.status, to: request.status, user: systemActor, req, comments, stage: step.approvalLevel, dueAt: step.dueAt, request }));
+    await request.save();
+    await recordAudit({
+      entityType: "FinancialRequest",
+      entity: request,
+      action: "APPROVAL_REASSIGNED",
+      user: systemActor,
+      req,
+      module: "APPROVALS",
+      comments,
+      oldValues: { approverUser: previous.approverUser, approverName: previous.approverSnapshot?.name, approvalStage: previous.approvalLevel, coveringFor: previous.coveringFor },
+      newValues: { approverUser: approver._id, approverName: approver.name, approvalStage: step.approvalLevel, dueAt: step.dueAt, coveringFor: coveringFor?._id, coveringForName: coveringFor?.name, reason }
+    });
+    await resolveNotification(oldNotificationKey);
+    await notifyApprovalStep(request);
+    summary.reassigned += 1;
+    summary.requests.push(request._id);
+  }
+  return summary;
+}

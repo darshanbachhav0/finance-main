@@ -36,6 +36,10 @@ test("retired demo accounts go with their requests, and their budget use is give
     await db.collection("notifications").insertMany([{ user: director, eventKey: "a" }, { user: colleague, eventKey: "b", entityId: request }]);
     // 1,000 reserved in month 3, of which 400 executed and 100 paid; a released one holds only its execution.
     await db.collection("budgetallocations").insertOne({ _id: plan, code: "PLAN", committedAmount: 600, executedAmount: 450, paidAmount: 100, months: [{}, {}, { month: 3, committedAmount: 600, executedAmount: 450, paidAmount: 100 }] });
+    // This test models legacy duplicate commitments; only this disposable test DB
+    // relaxes the modern unique index for request so the cleanup routine can be exercised.
+    const bcIndexes = await db.collection("budgetcommitments").indexes();
+    if (bcIndexes.some((idx) => idx.name === "request_1")) await db.collection("budgetcommitments").dropIndex("request_1");
     await db.collection("budgetcommitments").insertMany([
       { request, status: "PARTIALLY_PAID", lines: [{ mode: "ACTIVE", allocation: plan, budgetMonth: 3, amount: 1000, executedAmount: 400, paidAmount: 100 }] },
       { request, status: "RELEASED", lines: [{ mode: "ACTIVE", allocation: plan, budgetMonth: 3, amount: 300, executedAmount: 50, paidAmount: 0 }] }

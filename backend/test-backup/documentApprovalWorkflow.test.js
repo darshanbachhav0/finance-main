@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import mongoose from "mongoose";
+import ApprovalRule from "../src/models/ApprovalRule.js";
+import DocumentRule from "../src/models/DocumentRule.js";
+import {
+  assertDocumentRequirements,
+  configuredDocumentRequirements,
+  defaultDocumentRequirements
+} from "../src/services/documentRuleService.js";
+import {
+  defaultApprovalRouteForFlow,
+  initializeApprovalRoute,
+  resolveApprovalRoute
+} from "../src/services/approvalRuleService.js";
+import { DOCUMENT_PHASE, EXPENSE_NATURE, FLOW_TYPE } from "../src/utils/constants.js";
+
+// An invoice requirement is satisfied by any one of its files ("XML|PDF"); at submission the
+// requester's checklist is satisfied by any one document.
+const ANY_DOCUMENT = "CONTRACT|PURCHASE_ORDER|CONFORMITY|ACTIVITY_REPORT|SUPPORTING|XML|PDF|FEE_RECEIPT";
+function kinds(request, phase) {
+  return defaultDocumentRequirements(request, phase).map((item) => [item.anyOf ? item.anyOf.join("|") : item.kind, item.minCount]);
+}
+
+test("phase-based document and approval workflow rules", { timeout: 120000 }, async t => {
+  await t.test("hydrated document rules serialize correctly and block missing invoice evidence", () => {
+    // A rule stored as "XML + PDF" (before the product decision) asks for either file.
+    const rule = new DocumentRule({ code: "HYDRATED", requirements: [
+      { kind: "XML", minCount: 1, labelKey: "Invoice XML" },
+      { kind: "PDF", minCount: 1, labelKey: "Invoice PDF" },
+      { kind: "CONFORMITY", minCount: 1, labelKey: "Service conformity" }
+    ] });
+    assert.throws(() => assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", []), error => {
+      assert.deepEqual(error.details.missing.map(item => item.kind), ["CONFORMITY", "INVOICE"]);
+      assert.deepEqual(error.details.missing[1].anyOf, ["XML", "PDF"]);
+      const serialized = JSON.parse(JSON.stringify(error.details.requirements));
+      assert.deepEqual(serialized[0], { kind: "CONFORMITY", minCount: 1, labelKey: "Service conformity", present: 0 });
+      assert.equal(JSON.stringify(serialized).includes("$__"), false);
+      return error.code === "MISSING_REQUIRED_DOCUMENT";
+    });
+    for (const invoice of ["XML", "PDF"]) {
+      assert.equal(assertDocumentRequirements({}, rule.requirements, "INVOICE_REGISTRATION", [{ kind: invoice }, { kind: "CONFORMITY" }]).valid, true, `${invoice} alone evidences the invoice`);
+    }
+  });
+  await t.test("A1 goods requirements are enforced at their correct phases", () => {
+    const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS };
+    // Product decision (A1 and B): a quote or the invoice, at least one.
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION|XML|PDF|FEE_RECEIPT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
+  });
+
+  await t.test("A1 services separate contract, invoice, and service conformity", () => {
+    const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.SERVICES };
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION|XML|PDF|FEE_RECEIPT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["CONFORMITY", 1]]);
+  });
+
+  await t.test("professional services require receipt, agreement, and activity report", () => {
+    const request = { flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.PROFESSIONAL_FEES };
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.SUBMISSION), [["QUOTATION|XML|PDF|FEE_RECEIPT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|FEE_RECEIPT", 1]]);
+    assert.deepEqual(kinds(request, DOCUMENT_PHASE.ACCOUNTING), [["ACTIVITY_REPORT", 1]]);
+  });
+
+  await t.test("A1 and B are sent with a quote, the invoice, or both", () => {
+    for (const flowType of [FLOW_TYPE.A1, FLOW_TYPE.B]) {
+      const requirements = defaultDocumentRequirements({ flowType, expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
+      assert.throws(
+        () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, [{ kind: "CONTRACT" }]),
+        error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.missing[0].kind === "QUOTE_OR_INVOICE"
+      );
+      for (const kind of ["QUOTATION", "XML", "PDF"]) {
+        assert.equal(assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.SUBMISSION, [{ kind }]).valid, true, `${flowType}: ${kind} alone is enough`);
+      }
+    }
+    // A B request sent with only its quote registers the invoice after approval.
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.B }, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+  });
+
+  await t.test("missing current-phase evidence blocks progression", () => {
+    const requirements = defaultDocumentRequirements({ flowType: FLOW_TYPE.A1, expenseNature: EXPENSE_NATURE.GOODS }, DOCUMENT_PHASE.INVOICE_REGISTRATION);
+    assert.throws(
+      () => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.INVOICE_REGISTRATION, [{ kind: "CONFORMITY" }]),
+      error => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.phase === DOCUMENT_PHASE.INVOICE_REGISTRATION && error.details.missing[0].kind === "INVOICE"
+    );
+    assert.equal(assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.INVOICE_REGISTRATION, [{ kind: "PDF" }]).valid, true);
+  });
+
+  await t.test("A2 invoice candidates need their invoice evidence (the batch itself reads only XML)", () => {
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.A2 }, DOCUMENT_PHASE.INVOICE_REGISTRATION), [["XML|PDF", 1]]);
+  });
+
+  await t.test("Track C supporting documents belong to rendition", () => {
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.C }, DOCUMENT_PHASE.SUBMISSION), []);
+    assert.deepEqual(kinds({ flowType: FLOW_TYPE.C }, DOCUMENT_PHASE.RENDITION), [["RENDITION", 1]]);
+  });
+
+  await t.test("Track B defaults to Area Director then Vice Rector", () => {
+    assert.deepEqual(defaultApprovalRouteForFlow(FLOW_TYPE.B).map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
+  });
+
+  await t.test("configured rules match flowType instead of being bypassed", async () => {
+    const databaseName = `erp_document_phase_${process.pid}_${Date.now()}`;
+    await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
+    try {
+      await DocumentRule.create({ code: "TEST-B-ACCOUNTING", flowType: FLOW_TYPE.B, phase: DOCUMENT_PHASE.ACCOUNTING, requirements: [{ kind: "SUPPORTING", minCount: 2, labelKey: "configured evidence" }] });
+      await DocumentRule.collection.insertOne({ code: "TEST-LEGACY-SUBMISSION", flowType: "A1", requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES, requirements: [{ kind: "CONTRACT", minCount: 2, labelKey: "legacy submission evidence" }], active: true });
+      const requirements = await configuredDocumentRequirements({ flowType: FLOW_TYPE.B, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);
+      assert.deepEqual(requirements.map((item) => [item.kind, item.minCount]), [["SUPPORTING", 2]]);
+      assert.throws(() => assertDocumentRequirements({}, requirements, DOCUMENT_PHASE.ACCOUNTING, [{ kind: "SUPPORTING" }]), error => error.details.missing[0].required === 2);
+      const legacySubmission = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.SUBMISSION);
+      // At submission A1 asks for a quote or the invoice, whatever a legacy rule carries.
+      assert.deepEqual(legacySubmission.map((item) => [item.kind, item.minCount]), [["QUOTE_OR_INVOICE", 1]]);
+      assert.equal(assertDocumentRequirements({}, legacySubmission, DOCUMENT_PHASE.SUBMISSION, [{ kind: "QUOTATION" }]).valid, true);
+      const legacyAccounting = await configuredDocumentRequirements({ flowType: FLOW_TYPE.A1, requestType: "OPEX", expenseNature: EXPENSE_NATURE.SERVICES }, DOCUMENT_PHASE.ACCOUNTING);
+      assert.deepEqual(legacyAccounting.map((item) => [item.kind, item.minCount]), [["CONFORMITY", 1]]);
+
+      await ApprovalRule.create({ name: "Legacy B director", approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", flowType: FLOW_TYPE.B, sequence: 1, slaHours: 4 });
+      const route = await resolveApprovalRoute({ flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100 });
+      assert.deepEqual(route.map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
+
+      // Product decision: a resubmission re-resolves the route for the request as it
+      // is now (amount, track, area) instead of re-running the historical snapshot.
+      const historicalRule = new mongoose.Types.ObjectId();
+      const resubmitted = {
+        flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100,
+        approvalRouteSnapshot: [{ rule: historicalRule, approvalLevel: "RECTORATE", role: "Management", sequence: 1, slaHours: 12, required: true, status: "RETURNED", completedAt: new Date(), completedBy: new mongoose.Types.ObjectId() }]
+      };
+      await assert.rejects(initializeApprovalRoute(resubmitted), error => error.code === "APPROVAL_ROUTE_NOT_CONFIGURED");
+      assert.equal(String(resubmitted.approvalRouteSnapshot[0].rule), String(historicalRule), "failed submission preserves the previous snapshot");
+    } finally {
+      await mongoose.connection.dropDatabase();
+      await mongoose.disconnect();
+    }
+  });
+});

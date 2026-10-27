@@ -66,8 +66,8 @@ export const navigationAccess = Object.freeze({
   "/batch-invoices": ["Admin", "Solicitor", "Accounting"],
   "/accounting": ["Admin", "Accounting", ...READERS],
   "/accounting/payables": ["Admin", "Accounting", ...READERS],
-  // The GAF approves (verifies) each bank file as Accounting does.
-  "/accounting/bank-files": ["Admin", "Accounting", "GAF", ...READERS],
+  // Only GAF (or an Admin) may approve or reject a Treasury bank-file batch.
+  "/accounting/bank-files": ["Admin", "GAF"],
   "/accounting/invoice-observations": ["Admin", "Accounting", ...READERS],
   "/treasury": ["Admin", "Treasury", ...READERS],
   "/reimbursement-bank": ["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"],
@@ -207,16 +207,16 @@ export const navigationSections = Object.freeze([
 const adminMenu = navigationSections.flatMap(([, paths]) => paths).filter((path) => path !== "/my-team" && !settingsPaths.includes(path) && path !== "/settings" && path !== "/suppliers" && !superAdminConsolePaths.includes(path));
 const roleMenus = {
   // Its console first, then every workspace it oversees (read-only). No dashboard of tasks: it has none.
-  SuperAdmin: [...superAdminConsolePaths, "/requests", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/treasury", "/treasury/history", "/treasury/transfers", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
+  SuperAdmin: [...superAdminConsolePaths, "/requests", "/accounting/invoice-observations", "/accounting/payables", "/treasury", "/treasury/history", "/treasury/transfers", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
   // The same workspaces as the Super Admin, read-only, without its console.
-  Auditor: ["/requests", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/treasury", "/treasury/history", "/treasury/transfers", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
+  Auditor: ["/requests", "/accounting/invoice-observations", "/accounting/payables", "/treasury", "/treasury/history", "/treasury/transfers", "/accounting", "/accounting/periods", "/accounting/sire", "/budget", "/reports", "/management-view", "/suppliers"],
   Solicitor: ["/", "/requests", "/requests/new", "/approvals"],
   Legal: ["/", "/requests", "/requests/new", "/approvals"],
   HumanResources: ["/", "/requests", "/requests/new", "/approvals", "/reports"],
   AreaDirector: ["/", "/approvals", "/requests"],
   ViceRector: ["/", "/approvals", "/requests"],
   Procurement: ["/", "/requests", "/suppliers", "/reports"],
-  Accounting: ["/", "/accounting/payables", "/accounting/bank-files", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire"],
+  Accounting: ["/", "/accounting/payables", "/batch-invoices", "/accounting/invoice-observations", "/accounting", "/accounting/periods", "/accounting/sire"],
   // Treasury also runs the budget (the former Budget role).
   Treasury: ["/", "/treasury", "/treasury/history", "/treasury/transfers", "/budget"],
   // Management (Gerencia General) also decides budget exceptions and budget changes above the

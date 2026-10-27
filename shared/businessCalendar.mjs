@@ -124,6 +124,12 @@ function previousBusinessDayKey(key, options) {
   return limaDateKey(time);
 }
 
+// The last working day of a month (1-12), as a Lima date key.
+export function lastWorkingDayOfMonth(year, month, options = {}) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) throw new RangeError("Invalid payment month");
+  return previousBusinessDayKey(`${year}-${pad(month)}-${pad(new Date(Date.UTC(year, month, 0)).getUTCDate())}`, options);
+}
+
 // The two payment days of a month (1-12), as Lima date keys.
 export function paymentCycleDatesOfMonth(year, month, options) {
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();

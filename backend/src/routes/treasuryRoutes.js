@@ -57,7 +57,7 @@ router.post("/transfers/:id/reconcile", protect, authorize(ROLES.ADMIN, ROLES.TR
 
 router.use(protect, authorize(ROLES.ADMIN, ROLES.TREASURY));
 router.get("/queue", paymentQueue);
-// The next 15th / 30th payment run and what falls into it (Payments page banner).
+// The next 15th / last-working-day payment run and what falls into it (Payments page banner).
 router.get("/next-run", asyncHandler(async (_req, res) => res.json({ data: await nextPaymentRunSummary() })));
 router.get("/advances-due", asyncHandler(async (_req, res) => res.json({ data: await advancesDueSummary() })));
 // An unpaid advance switches to the employee's current verified bank account.

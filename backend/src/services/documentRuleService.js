@@ -11,6 +11,21 @@ import {
   FLOW_TYPE
 } from "../utils/constants.js";
 
+// The 26 Oct 2026 UMA PDF specifies stricter documents than the prior simplified platform.
+// Opt in after the front-end and historical data are checked; the old flow remains available
+// for a safe, controlled migration.
+export const strictPdfDocumentRules = () => process.env.UMA_ENFORCE_PDF_DOCUMENT_RULES === "true";
+function pdfRequirements(request, phase) {
+  const flow = request.flowType || FLOW_TYPE.A1;
+  if (flow === FLOW_TYPE.A1 && phase === DOCUMENT_PHASE.SUBMISSION)
+    return [{ kind: "QUOTATION", minCount: 3, labelKey: "three supplier quotations (PDF)" }];
+  if (flow === FLOW_TYPE.B && phase === DOCUMENT_PHASE.SUBMISSION)
+    return [{ kind: "XML", minCount: 1, labelKey: "invoice XML" }, { kind: "PDF", minCount: 1, labelKey: "invoice PDF" }];
+  if (flow === FLOW_TYPE.A2 && phase === DOCUMENT_PHASE.INVOICE_REGISTRATION)
+    return [{ kind: "XML", minCount: 1, labelKey: "invoice XML" }];
+  return null;
+}
+
 function canonicalType(value) { return LEGACY_REQUEST_TYPE_MAP[value] || value; }
 function canonicalNature(value) { return LEGACY_EXPENSE_NATURE_MAP[value] || value; }
 
@@ -156,6 +171,10 @@ async function matchingRules(request, phase) {
 }
 
 export async function configuredDocumentRequirements(request, phase = DOCUMENT_PHASE.SUBMISSION) {
+  if (strictPdfDocumentRules()) {
+    const required = pdfRequirements(request, phase);
+    if (required) return required;
+  }
   if (phase === DOCUMENT_PHASE.SUBMISSION && quoteOrInvoiceFlow(request)) return [quoteOrInvoiceRequirement()];
   const rules = await matchingRules(request, phase);
   if (!rules.length) return mergeRequirements(defaultDocumentRequirements(request, phase));
@@ -193,6 +212,8 @@ export function defaultQuotationPolicy(request) {
 }
 
 export async function configuredQuotationPolicy(request) {
+  if (strictPdfDocumentRules() && (request.flowType || FLOW_TYPE.A1) === FLOW_TYPE.A1)
+    return { enabled: true, minimumCount: 3, invoiceInstead: false, source: "PROPOSED_UMA_PDF" };
   if (quoteOrInvoiceFlow(request)) return quoteOrInvoicePolicy();
   const rules = await matchingRules(request, DOCUMENT_PHASE.SUBMISSION);
   if (!rules.length) return defaultQuotationPolicy(request);
@@ -210,8 +231,9 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
   // The invoice instead of a quotation: nothing to compare, nothing to recommend.
   if (policy.invoiceInstead && !quotations.length && hasInvoiceEvidence(request)) return { valid: paymentErrors.length === 0, applicable: true, policy, errors: paymentErrors, invoiceInstead: true };
   const errors = [...paymentErrors];
+  const minimum = strictPdfDocumentRules() ? Number(policy.minimumCount || QUOTATION_MINIMUM_COUNT) : QUOTATION_MINIMUM_COUNT;
   const supplierIds = new Set(quotations.map((quotation) => String(quotation.supplier?._id || quotation.supplier || "")).filter(Boolean));
-  if (supplierIds.size < QUOTATION_MINIMUM_COUNT) errors.push({ code: "QUOTATION_MINIMUM_NOT_MET", required: QUOTATION_MINIMUM_COUNT, present: supplierIds.size });
+  if (supplierIds.size < minimum) errors.push({ code: "QUOTATION_MINIMUM_NOT_MET", required: minimum, present: supplierIds.size });
   if (quotations.some((quotation) => !quotation.supplier)) errors.push({ code: "QUOTATION_SUPPLIER_REQUIRED" });
   quotations.forEach((quotation, index) => { if (!quotation.attachment) errors.push({ code: "QUOTATION_ATTACHMENT_REQUIRED", quotation: index + 1 }); });
   const recommended = quotations.filter((quotation) => quotation.recommended);
@@ -221,12 +243,13 @@ export function validateStructuredQuotationComparison(request, policy = defaultQ
   if (recommended.length === 1 && String(recommended[0].supplier?._id || recommended[0].supplier || "") !== selectedSupplier) errors.push({ code: "RECOMMENDED_SUPPLIER_MISMATCH" });
   // A reason is needed only when there was a choice: one quotation has nothing to compare.
   if (supplierIds.size > 1 && !String(request.supplierSelectionReason || "").trim()) errors.push({ code: "SUPPLIER_SELECTION_REASON_REQUIRED" });
-  return { valid: errors.length === 0, applicable: true, policy: { ...policy, minimumCount: QUOTATION_MINIMUM_COUNT }, errors };
+  return { valid: errors.length === 0, applicable: true, policy: { ...policy, minimumCount: minimum }, errors };
 }
 
 export function validateDocumentRequirements(request, requirements, attachments = request.attachments || []) {
   const counts = attachments.reduce((map, attachment) => { map.set(attachment.kind, (map.get(attachment.kind) || 0) + 1); return map; }, new Map());
-  const evaluated = collapseInvoiceEvidence(requirements).map(normalizeRequirement)
+  // Do not collapse XML + PDF or three quotations in strict PDF mode.
+  const evaluated = (strictPdfDocumentRules() ? requirements : collapseInvoiceEvidence(requirements).map(normalizeRequirement))
     .map((item) => ({ ...item, present: (item.anyOf || [item.kind]).reduce((sum, kind) => sum + (counts.get(kind) || 0), 0) }));
   const missing = evaluated.filter((item) => item.present < item.minCount).map((item) => ({ kind: item.kind, ...(item.anyOf ? { anyOf: item.anyOf } : {}), required: item.minCount, present: item.present, label: item.labelKey }));
   return { valid: missing.length === 0, requirements: evaluated, missing };

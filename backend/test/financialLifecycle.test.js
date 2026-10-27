@@ -75,6 +75,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       director: await User.create({ name: "Director", email: "director@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["Operations"], area: "Operations" }),
       vice: await User.create({ name: "Vice", email: "vice@test.local", passwordHash: "unused", role: ROLES.VICE_RECTOR, approvalLevel: "VICE_RECTOR", approvalAreas: ["*"], area: "Rectorate" }),
       accounting: await User.create({ name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" }),
+      gaf: await User.create({ name: "GAF", email: "gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" }),
       treasury: await User.create({ name: "Treasury", email: "treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
       budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
       admin: await User.create({ name: "Admin", email: "admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" })
@@ -346,10 +347,10 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.deepEqual(await fs.readFile(path.join(generatedRoot,"bank-files",batch.fileName)),result.content);
     });
 
-    await t.test("26b. Treasury confirms a payment only after Accounting verifies the TXT", async () => {
+    await t.test("26b. Treasury confirms a payment only after GAF approves the TXT", async () => {
       assert.equal(batch.verification.status, "PENDING");
       await assert.rejects(() => confirmTreasuryPayment({ requestId: request._id, payload: { operationNumber: "OP-100", paidAt: issueDate, confirmedAmount: 118 }, user: users.treasury, req }), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
-      await verifyBankFile({ batchId: batch._id, user: users.accounting, req });
+      await verifyBankFile({ batchId: batch._id, user: users.gaf, req });
       assert.equal((await PaymentBatch.findById(batch._id)).verification.status, "VERIFIED");
     });
 

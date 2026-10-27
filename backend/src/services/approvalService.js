@@ -359,7 +359,7 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
       eventKey: `request:${request._id}:treasury`,
       type: "TREASURY_PAYMENT",
       title: notificationText("Advance to pay now"),
-      message: notificationText("{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/30th cycle.", {
+      message: notificationText("{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/last working day cycle.", {
         requestNumber: request.requestNumber,
         amount: `${request.currency} ${Number(request.totalAmount || 0).toFixed(2)}`,
         name: request.rendition?.beneficiarySnapshot?.name || "",

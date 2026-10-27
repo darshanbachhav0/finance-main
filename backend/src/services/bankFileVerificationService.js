@@ -14,7 +14,7 @@ import { BANK_FILE_VERIFICATION, bankFileVerificationStatus, bankFileVerificatio
 import { AP_STATUS, ERROR_CODES, ROLES } from "../utils/constants.js";
 import { moneyEquals, sumMoney } from "../utils/money.js";
 
-// Accounting verifies each generated bank TXT before Treasury may download it and send it to the
+// GAF approves each generated bank TXT before Treasury may download it and send it to the
 // bank. Verifying re-runs the checks the system can make; rejecting cancels the file, so its CXPs
 // return to Treasury's queue to be corrected and generated again.
 
@@ -101,6 +101,7 @@ export async function reviewBankFile(batchId) {
 }
 
 export async function verifyBankFile({ batchId, user, req }) {
+  if (![ROLES.GAF, ROLES.ADMIN].includes(user?.role)) throw new AppError(403, "Only GAF may approve payment batches.", undefined, ERROR_CODES.FORBIDDEN);
   const batch = await pendingBatch(batchId);
   // Separation of duties: whoever generated the file does not verify it. Admin may.
   if (String(batch.generatedBy) === String(user._id) && user.role !== ROLES.ADMIN) {
@@ -116,8 +117,8 @@ export async function verifyBankFile({ batchId, user, req }) {
   const result = await PaymentBatch.updateOne({ _id: batch._id, status: "GENERATED", "verification.status": BANK_FILE_VERIFICATION.PENDING, checksum: batch.checksum }, { $set: { verification } });
   if (result.modifiedCount !== 1) throw new AppError(409, "The bank file changed while it was being verified. Refresh and try again.", { batchId }, ERROR_CODES.CONFLICT);
   await GeneratedFile.updateOne({ "metadata.batchId": batch._id }, { $set: { "metadata.verification": verification } });
-  await recordAudit({ entityType: "PaymentBatch", entity: batch, action: "BANK_FILE_VERIFIED", user, req, module: "ACCOUNTING",
-    message: "Accounting verified the bank file; Treasury may download it.",
+  await recordAudit({ entityType: "PaymentBatch", entity: batch, action: "BANK_FILE_VERIFIED", user, req, module: "GAF",
+    message: "GAF approved the bank file; Treasury may download it.",
     newValues: { batchNumber: batch.batchNumber, checksum: batch.checksum, totalAmount: batch.totalAmount, itemCount: activeItems(batch).length, ...(warning ? { paymentDateWarning: warning } : {}) } });
   await resolveVerificationTask(batch._id);
   await notifyRoles({
@@ -125,7 +126,7 @@ export async function verifyBankFile({ batchId, user, req }) {
     eventKey: `bank-file:${batch._id}:verified`,
     type: "BANK_FILE_VERIFIED",
     title: notificationText("Bank file verified"),
-    message: notificationText("Accounting verified {batchNumber}. You can download it and send it to the bank.", { batchNumber: batch.batchNumber }),
+    message: notificationText("GAF approved {batchNumber}. You can download it and send it to the bank.", { batchNumber: batch.batchNumber }),
     path: "/treasury/history",
     entityType: "PaymentBatch",
     entityId: batch._id
@@ -136,6 +137,7 @@ export async function verifyBankFile({ batchId, user, req }) {
 // Rejecting cancels the file: its CXPs go back to Treasury's queue to be corrected and generated
 // again, and the reason travels with them.
 export async function rejectBankFile({ batchId, payload = {}, user, req }) {
+  if (![ROLES.GAF, ROLES.ADMIN].includes(user?.role)) throw new AppError(403, "Only GAF may reject payment batches.", undefined, ERROR_CODES.FORBIDDEN);
   const reason = String(payload.reason || "").trim();
   if (!reason) throw new AppError(422, "A rejection reason is required.", { field: "reason" }, ERROR_CODES.VALIDATION_ERROR);
   const batch = await pendingBatch(batchId);
@@ -143,15 +145,15 @@ export async function rejectBankFile({ batchId, payload = {}, user, req }) {
   const claimed = await PaymentBatch.updateOne({ _id: batch._id, status: "GENERATED", "verification.status": BANK_FILE_VERIFICATION.PENDING }, { $set: { verification } });
   if (claimed.modifiedCount !== 1) throw new AppError(409, "The bank file changed while it was being reviewed. Refresh and try again.", { batchId }, ERROR_CODES.CONFLICT);
   try {
-    await cancelPaymentBatch({ batchId: batch._id, payload: { reason: `Rejected by Accounting: ${reason}` }, user, req });
+    await cancelPaymentBatch({ batchId: batch._id, payload: { reason: `Rejected by GAF: ${reason}` }, user, req });
   } catch (error) {
     // The file stays pending when it could not be cancelled, so nothing is left half-decided.
     await PaymentBatch.updateOne({ _id: batch._id, "verification.status": BANK_FILE_VERIFICATION.REJECTED }, { $set: { verification: { status: BANK_FILE_VERIFICATION.PENDING } } });
     throw error;
   }
   await GeneratedFile.updateOne({ "metadata.batchId": batch._id }, { $set: { "metadata.verification": verification } });
-  await recordAudit({ entityType: "PaymentBatch", entity: batch, action: "BANK_FILE_REJECTED", user, req, module: "ACCOUNTING", comments: reason,
-    message: "Accounting rejected the bank file; it was cancelled and its CXPs returned to Treasury.",
+  await recordAudit({ entityType: "PaymentBatch", entity: batch, action: "BANK_FILE_REJECTED", user, req, module: "GAF", comments: reason,
+    message: "GAF rejected the bank file; it was cancelled and its CXPs returned to Treasury.",
     newValues: { batchNumber: batch.batchNumber, reason, returnedPayables: activeItems(batch).map((item) => item.accountsPayable) } });
   await resolveVerificationTask(batch._id);
   await notifyRoles({
