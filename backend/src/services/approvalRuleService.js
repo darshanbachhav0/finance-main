@@ -3,6 +3,8 @@ import User from "../models/User.js";
 import { approvalSlaWorkingDays, classifyApprovalSla } from "./slaPolicy.js";
 import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
+import { costCenterHeads, loadCascade, superiorCostCenterIn } from "./costCenterCascadeService.js";
+import { COST_CENTER_TYPE } from "../../../shared/costCenterAllocation.mjs";
 import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_ROUTING_MODE,
@@ -293,6 +295,116 @@ export async function resolveManagerChain(request, thresholds) {
   return [{ ...chainStep(approver, { sequence: 1, startedAt: new Date(), coveringFor }), superiorRequired }];
 }
 
+const COST_CENTER_ROLE_LABELS = Object.freeze({
+  RESPONSIBLE: "Responsable del centro de costo",
+  BENEFICIARY: "Visto del centro de costo que recibe el cargo",
+  SUPERIOR: "Superior en la cascada"
+});
+
+function fixedStepLabel(step, approver) {
+  return `${COST_CENTER_ROLE_LABELS[step.costCenterRole]} ${step.costCenterCode} (${approver?.name || "?"})`;
+}
+
+// A cost-center step (Manual técnico, "Ruta de aprobación": RES:<ceco>, BEN:<ceco>, SUP:<ceco>):
+// assigned to a person like a jefe step, so leave, substitutes and SLA escalation work the same,
+// but fixed when the request is sent. Only the first step starts at once.
+function fixedStep(approver, { kind, center, sequence, startedAt = null, coveringFor = null }) {
+  const slaHours = approvalStepSlaHours();
+  const step = {
+    approverUser: approver._id,
+    approverSnapshot: approverSnapshotOf(approver),
+    ...(coveringFor ? { coveringFor: coveringFor._id, coveringForSnapshot: approverSnapshotOf(coveringFor) } : {}),
+    role: approver.role,
+    sequence,
+    slaHours,
+    required: true,
+    status: startedAt ? "PENDING" : "NOT_REACHED",
+    ...(startedAt ? { startedAt, dueAt: dueDate(slaHours, startedAt) } : {}),
+    source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN,
+    fixed: true,
+    costCenterRole: kind,
+    costCenterCode: center.code
+  };
+  step.approvalLevel = fixedStepLabel(step, approver);
+  return step;
+}
+
+function costCenterGapError(center, kind) {
+  const what = kind === "BENEFICIARY" ? "the cost center this request is charged to" : "this request's cost center";
+  return new AppError(422,
+    `CECO ${center.code} - ${center.name} has no responsible, so ${what} cannot approve. Ask the Admin to set its responsible in Cost Centers.`,
+    { costCenter: center._id, code: center.code, costCenterRole: kind }, ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED);
+}
+
+// Who approves for a CECO: its responsible while available (else their substitute or nearest jefe).
+// A CECO without a responsible falls back to its head (costCenterHeads); with nobody, the request
+// cannot be sent and the Admin is asked to set the responsible.
+async function costCenterApprover(center, kind, exclude) {
+  const owner = center.responsible || (await costCenterHeads(center, { exclude }))[0];
+  if (!owner) throw costCenterGapError(center, kind);
+  const { approver, coveringFor } = await approverFor(owner, { exclude });
+  if (approver) return { approver, coveringFor };
+  throw noAvailableApproverError({ costCenter: center.code });
+}
+
+// The beneficiary CECOs of a Por Encargo request other than the requesting one, each once.
+function beneficiaryCenters(request, cascade, requestingCenter) {
+  if (request.costCenterType !== COST_CENTER_TYPE.ON_BEHALF) return [];
+  const seen = new Set([idOf(requestingCenter?._id)]);
+  const out = [];
+  for (const allocation of request.costAllocations || []) {
+    const center = cascade.byId.get(idOf(allocation.costCenter));
+    if (!center || seen.has(idOf(center._id))) continue;
+    seen.add(idOf(center._id));
+    out.push(center);
+  }
+  return out;
+}
+
+async function beneficiarySteps(request, cascade, requestingCenter, { exclude, firstSequence, approvedBy = [] }) {
+  const steps = [];
+  const seenApprovers = new Set(approvedBy.map(idOf));
+  for (const center of beneficiaryCenters(request, cascade, requestingCenter)) {
+    const { approver, coveringFor } = await costCenterApprover(center, "BENEFICIARY", exclude);
+    if (seenApprovers.has(idOf(approver._id))) continue;
+    seenApprovers.add(idOf(approver._id));
+    steps.push(fixedStep(approver, { kind: "BENEFICIARY", center, sequence: firstSequence + steps.length, coveringFor }));
+  }
+  return steps;
+}
+
+// Route by the cost-center cascade (Manual técnico, "Ruta de aprobación"), used when the request's
+// CECO has a responsible: (1) the CECO's responsible, (2) in a Por Encargo request the "visto" of each
+// CECO that receives the charge, (3) the superior in the cascade (the Vicerrectorado it depends on,
+// else its Gerente; the responsible's jefe when the cascade names nobody). Each person once; null
+// when the CECO has no responsible and the requester's jefe chain decides instead.
+export async function resolveCostCenterRoute(request, thresholds) {
+  const requesterId = request.requester || request.solicitor;
+  const cascade = await loadCascade();
+  const center = cascade.byId.get(idOf(request.requesterCostCenter));
+  if (!center?.responsible) return null;
+  const exclude = [requesterId];
+  const startedAt = new Date();
+  const first = await costCenterApprover(center, "RESPONSIBLE", exclude);
+  const steps = [fixedStep(first.approver, { kind: "RESPONSIBLE", center, sequence: 1, startedAt, coveringFor: first.coveringFor })];
+  steps.push(...await beneficiarySteps(request, cascade, center, { exclude, firstSequence: 2, approvedBy: [first.approver._id] }));
+  const { uit, superiorUit } = thresholds || await approvalThresholds();
+  if (superiorUit <= 0 || requestAmountInUit(request, uit) > superiorUit) {
+    const onRoute = new Set(steps.map((step) => idOf(step.approverUser)));
+    const superiorCenter = superiorCostCenterIn(cascade, center);
+    let superior = null;
+    if (superiorCenter) superior = { ...await costCenterApprover(superiorCenter, "SUPERIOR", exclude), center: superiorCenter };
+    if (!superior || onRoute.has(idOf(superior.approver._id))) {
+      const above = await nearestAvailableSupervisor(first.coveringFor?._id || first.approver._id, { exclude: [...exclude, ...onRoute] });
+      superior = above.approver ? { approver: above.approver, coveringFor: above.coveringFor, center: superiorCenter || center } : null;
+    }
+    if (superior && !onRoute.has(idOf(superior.approver._id))) {
+      steps.push(fixedStep(superior.approver, { kind: "SUPERIOR", center: superior.center, sequence: steps.length + 1, coveringFor: superior.coveringFor }));
+    }
+  }
+  return steps;
+}
+
 // Track D: a Treasury user other than the requester (the Jefe de Tesorería), then the GAF.
 async function initializeTreasuryTransferRoute(request) {
   const stages = [APPROVAL_STAGES.TREASURY_HEAD, APPROVAL_STAGES.GAF];
@@ -313,7 +425,17 @@ async function initializeTreasuryTransferRoute(request) {
 export async function initializeApprovalRoute(request) {
   if (request.flowType === FLOW_TYPE.D) return initializeTreasuryTransferRoute(request);
   const thresholds = await approvalThresholds();
-  const chain = await resolveManagerChain(request, thresholds);
+  let chain = await resolveCostCenterRoute(request, thresholds);
+  if (!chain) {
+    chain = await resolveManagerChain(request, thresholds);
+    // The jefe chain grows as each jefe forwards; the beneficiaries' "vistos" follow it.
+    if (chain) {
+      const cascade = await loadCascade();
+      chain.push(...await beneficiarySteps(request, cascade, cascade.byId.get(idOf(request.requesterCostCenter)), {
+        exclude: [request.requester || request.solicitor], firstSequence: chain.length + 1, approvedBy: chain.map((step) => step.approverUser)
+      }));
+    }
+  }
   if (chain) {
     const tiers = await amountTierStages(request, thresholds);
     for (const stage of tiers) await assertTierStaffed(stage, request);
@@ -350,6 +472,7 @@ export async function activateNextRouteStep(request, fromSequence, at = new Date
       step.completedAt = at;
       continue;
     }
+    if (step.fixed && await refreshFixedStep(request, step, at)) continue;
     step.status = "PENDING";
     step.startedAt = at;
     step.dueAt = dueDate(step.slaHours, at);
@@ -362,6 +485,29 @@ export async function activateNextRouteStep(request, fromSequence, at = new Date
   return null;
 }
 
+
+// A fixed step reached later goes to whoever holds its owner's approvals now (they may have gone on
+// leave since the request was sent). Returns true when the step is SKIPPED because that person
+// already approved this route.
+async function refreshFixedStep(request, step, at) {
+  const approved = (request.approvalRouteSnapshot || []).filter((item) => item.status === "APPROVED").map((item) => idOf(item.completedBy || item.approverUser));
+  const owner = step.coveringFor || step.approverUser;
+  const { approver, coveringFor } = await approverFor(owner, { exclude: [request.requester || request.solicitor] }).catch(() => ({ approver: null, coveringFor: null }));
+  if (approver && idOf(approver._id) !== idOf(step.approverUser)) {
+    step.approverUser = approver._id;
+    step.approverSnapshot = approverSnapshotOf(approver);
+    step.coveringFor = coveringFor?._id || undefined;
+    step.coveringForSnapshot = coveringFor ? approverSnapshotOf(coveringFor) : undefined;
+    step.role = approver.role;
+    step.approvalLevel = fixedStepLabel(step, approver);
+  }
+  if (approved.includes(idOf(step.approverUser))) {
+    step.status = "SKIPPED";
+    step.completedAt = at;
+    return true;
+  }
+  return false;
+}
 
 export function activeApprovalStep(request) {
   return [...(request.approvalRouteSnapshot || [])]
@@ -397,7 +543,7 @@ function markApproved(step, decidingUser, completedAt) {
 // shows exactly who was (and was not) asked.
 function skipLegacyChainLevels(request, currentStep, completedAt) {
   for (const step of request.approvalRouteSnapshot || []) {
-    if (step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN && step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
+    if (step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN && !step.fixed && step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
       step.status = "SKIPPED";
       step.completedAt = completedAt;
     }
@@ -410,7 +556,7 @@ function skipLegacyChainLevels(request, currentStep, completedAt) {
 // The next chain level above the current step. A substitute stands in the absent manager's
 // position, so "send to my jefe" goes above that manager, not above the substitute.
 export async function nextChainApproval(request, currentStep = activeApprovalStep(request)) {
-  if (!currentStep || currentStep.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN || !currentStep.approverUser) return { approver: null, coveringFor: null };
+  if (!currentStep || currentStep.source !== APPROVAL_ROUTING_MODE.MANAGER_CHAIN || currentStep.fixed || !currentStep.approverUser) return { approver: null, coveringFor: null };
   const exclude = [request.requester || request.solicitor, currentStep.approverUser, ...approvedChainApproverIds(request)];
   try {
     const { approver, coveringFor } = await nearestAvailableSupervisor(currentStep.coveringFor || currentStep.approverUser, { exclude });
@@ -455,7 +601,7 @@ export async function finalizeChainApproval(request, currentStep, decidingUser) 
   // The jefe's final decision supersedes only uncompleted legacy tail steps.
   // Completed sign-offs and the original route remain available for audit.
   for (const step of request.approvalRouteSnapshot || []) {
-    if (!step.tier && step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
+    if (!step.tier && !step.fixed && step.sequence > currentStep.sequence && OPEN_STEP_STATUSES.includes(step.status)) {
       step.status = "SKIPPED";
       step.completedAt = completedAt;
     }
@@ -480,13 +626,19 @@ export function reassignChainStep(request, step, approver, at = new Date(), { co
   step.approverSnapshot = approverSnapshotOf(approver);
   step.coveringFor = coveringFor?._id || undefined;
   step.coveringForSnapshot = coveringFor ? approverSnapshotOf(coveringFor) : undefined;
-  step.approvalLevel = chainStepLabel(approver);
+  step.approvalLevel = step.fixed ? fixedStepLabel(step, approver) : chainStepLabel(approver);
   step.role = approver.role;
   step.startedAt = at;
   step.dueAt = dueDate(step.slaHours, at);
   request.approvalStage = step.approvalLevel;
   request.approvalDueAt = step.dueAt;
   return previous;
+}
+
+// A step the approver can send to their own jefe or finalize (the flexible jefe chain). Cost-center
+// steps are fixed: approving one opens the next step of the route.
+export function isChoiceChainStep(step) {
+  return Boolean(step) && step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN && !step.fixed;
 }
 
 export function stopApprovalRoute(request, status) {

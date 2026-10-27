@@ -1,6 +1,7 @@
 import { canonicalRequestStatus, LEGACY_WORKFLOW_STATUSES, statusAliases } from "../../../shared/workflowStatus.mjs";
 import mongoose from "mongoose";
 import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
+import { DEFAULT_REQUEST_PRIORITY, normalizeRequestPriority } from "../../../shared/requestPriority.mjs";
 import { COST_CENTER_TYPE, COST_CENTER_TYPES, costAllocationProblems, splitByPercentages } from "../../../shared/costCenterAllocation.mjs";
 import { paymentTermFields, validateAndNormalizePaymentTerms } from "./paymentTermFields.js";
 import {
@@ -24,6 +25,7 @@ import {
   RENDITION_LINE_TYPES,
   RENDITION_RECEIPT_TYPES,
   REQUEST_FREQUENCIES,
+  LEGACY_REQUEST_PRIORITIES,
   REQUEST_PRIORITIES,
   REQUEST_PRIORITY_RANK,
   REQUEST_STATUS,
@@ -275,7 +277,13 @@ const approvalRouteSnapshotSchema = new mongoose.Schema(
     // A policy step decided by role (APPROVAL_TIERS): the UIT amount tiers and Track D's pair.
     tier: { type: String, enum: Object.keys(APPROVAL_TIERS) },
     // First manager-chain level only: its approval must go up to the approver's superior.
-    superiorRequired: Boolean
+    superiorRequired: Boolean,
+    // A cost-center step, fixed when the request is sent (services/approvalRuleService.js): the
+    // CECO's responsible, a Por Encargo beneficiary's "visto" or the superior in the cascade. Its
+    // approver only approves: the step is never forwarded or finalized for the steps after it.
+    fixed: Boolean,
+    costCenterRole: { type: String, enum: ["RESPONSIBLE", "BENEFICIARY", "SUPERIOR"] },
+    costCenterCode: String
   },
   { _id: true }
 );
@@ -356,9 +364,19 @@ const financialRequestSchema = new mongoose.Schema(
     flowType: { type: String, enum: FLOW_TYPES, default: FLOW_TYPE.A1, index: true },
     requestType: { type: String, enum: REQUEST_TYPES, required: true, set: (value) => LEGACY_REQUEST_TYPE_MAP[value] || value },
     expenseNature: { type: String, enum: EXPENSE_NATURES, default: EXPENSE_NATURE.SERVICES, set: (value) => LEGACY_EXPENSE_NATURE_MAP[value] || value },
-    priority: { type: String, enum: REQUEST_PRIORITIES, default: "MEDIA" },
-    // Kept with priority so lists sort Alta > Media > Baja.
-    priorityRank: { type: Number, min: 1, max: 3, default: REQUEST_PRIORITY_RANK.MEDIA },
+    // Payment priority P1-P4 (shared/requestPriority.mjs). Older requests stored Alta / Media / Baja:
+    // they are read as P2 / P3 / P3.
+    priority: { type: String, enum: [...REQUEST_PRIORITIES, ...LEGACY_REQUEST_PRIORITIES], default: DEFAULT_REQUEST_PRIORITY, set: normalizeRequestPriority },
+    // Kept with priority so lists sort P1 > P2 > P3 > P4.
+    priorityRank: { type: Number, min: 1, max: 4, default: REQUEST_PRIORITY_RANK[DEFAULT_REQUEST_PRIORITY] },
+    // Why it cannot wait for the fortnightly payment (required for P1 and P2).
+    urgencyJustification: { type: String, trim: true, default: "" },
+    // Fecha de vencimiento: when the supplier must be paid. P4 is paid on the last fortnightly
+    // payment day before it; P3 too when it comes before the next one.
+    dueDate: Date,
+    // The requester's job category (Portal de Personas) when the request was sent: only some
+    // categories may charge other cost centers (ENCARGO_JOB_CATEGORIES).
+    requesterJobCategory: { type: Number, min: 1, max: 8 },
     // How often the need recurs. Recorded only: no request or payment is ever repeated from it.
     frequency: { type: String, enum: REQUEST_FREQUENCIES, default: "ONE_OFF" },
     observations: { type: String, trim: true, default: "" },
@@ -394,6 +412,8 @@ const financialRequestSchema = new mongoose.Schema(
     businessJustification: { type: String, trim: true, default: "" },
     nonApprovalRisk: { type: String, trim: true, default: "" },
     capexDetails: {
+      // Caso de negocio approved (Viable or Ejecutar) in the business-case app: CN-AAAA-NNN.
+      businessCaseCode: { type: String, trim: true, uppercase: true, default: "" },
       projectPep: { type: String, trim: true, default: "" },
       projectSnapshot: {
         id: { type: mongoose.Schema.Types.ObjectId, ref: "Project" },
@@ -684,7 +704,8 @@ financialRequestSchema.pre("validate", async function beforeValidate() {
   // The number is taken when the request is saved: a check that only validates (and may still
   // refuse the request) leaves the sequence untouched, so saved requests are numbered in order.
   if (!this.requestNumber && !this.$locals.deferRequestNumber) this.requestNumber = await nextRequestNumber(this.issueDate || new Date());
-  this.priorityRank = REQUEST_PRIORITY_RANK[this.priority] || REQUEST_PRIORITY_RANK.MEDIA;
+  this.priority = normalizeRequestPriority(this.priority) || DEFAULT_REQUEST_PRIORITY;
+  this.priorityRank = REQUEST_PRIORITY_RANK[this.priority] || REQUEST_PRIORITY_RANK[DEFAULT_REQUEST_PRIORITY];
   // Requests from before the frequency field kept it in opexDetails; OPEX keeps both in step.
   if (this.$isDefault("frequency") && this.opexDetails?.expenseFrequency) this.frequency = this.opexDetails.expenseFrequency;
   if (this.requestType === "OPEX" && this.frequency) {

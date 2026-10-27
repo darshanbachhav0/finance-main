@@ -8,6 +8,7 @@ import {
   getAuthorizedCostCenters,
   getBeneficiaryCostCenters,
   getBudgetPreview,
+  getSubmissionPreview,
   getProcurementReadiness,
   getRequestDocumentRequirements,
   getRequestDocumentStatus,
@@ -49,6 +50,8 @@ router.get("/authorized-cost-centers", authorizePermission(PERMISSIONS.REQUEST_C
 // The schools and departments a request can be made Por Encargo for (the active CECO master).
 router.get("/beneficiary-cost-centers", authorizePermission(PERMISSIONS.REQUEST_CREATE), getBeneficiaryCostCenters);
 router.post("/budget-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), getBudgetPreview);
+// The form's live panel: the manual's checks, the approval route and the estimated payment day.
+router.post("/submission-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), getSubmissionPreview);
 router.post("/invoice-preview", authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, previewRequestInvoice);
 router.route("/").get(listRequests).post(authorizePermission(PERMISSIONS.REQUEST_CREATE), uploadFields, createRequest);
 router.get("/:id/document-requirements", getRequestDocumentStatus);

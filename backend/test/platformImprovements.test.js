@@ -116,8 +116,9 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       await assert.rejects(() => createFinancialRequest({ payload: base({ priority: "URGENTE" }), files: {}, user: it, req }), /priority/);
       await assert.rejects(() => createFinancialRequest({ payload: base({ paymentAccount: String(new mongoose.Types.ObjectId()) }), files: {}, user: it, req }), (error) => error.code === ERROR_CODES.BANK_ACCOUNT_NOT_ELIGIBLE);
       assert.equal((await Counter.findOne({ key: "financial-request" }))?.sequence || 0, before, "a refused request takes no number");
+      // The former Alta is read as P2 Urgente (payment priority P1-P4).
       request = await createFinancialRequest({ payload: base({ priority: "ALTA", frequency: "MONTHLY_RECURRING", observations: "Coordinar con laboratorio", paymentAccount: String(savingsUsd._id), invoiceDetails: JSON.stringify({ status: "PENDING" }) }), files: {}, user: it, req });
-      assert.equal(request.priority, "ALTA");
+      assert.equal(request.priority, "P2");
       assert.equal(request.priorityRank, 3);
       assert.equal(request.frequency, "MONTHLY_RECURRING");
       assert.equal(request.opexDetails.expenseFrequency, "MONTHLY_RECURRING", "OPEX keeps both in step");
@@ -130,13 +131,14 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       assert.equal(requestedAccountCheck({ ...request.toObject(), currency: "PEN" }).currencyMatches, false);
     });
 
-    await t.test("lists filter and sort by priority (Alta first)", async () => {
-      await createFinancialRequest({ payload: base({ priority: "BAJA", title: "Baja" }), files: {}, user: it, req });
-      await createFinancialRequest({ payload: base({ priority: "MEDIA", title: "Media" }), files: {}, user: it, req });
+    await t.test("lists filter and sort by priority (P1 first)", async () => {
+      await createFinancialRequest({ payload: base({ priority: "P4", title: "Programada" }), files: {}, user: it, req });
+      await createFinancialRequest({ payload: base({ priority: "P3", title: "Normal" }), files: {}, user: it, req });
+      await createFinancialRequest({ payload: base({ priority: "P1", title: "Crítica" }), files: {}, user: it, req });
       const sorted = await listRequestsPage({ ownScope: "true", sortBy: "priority", sortDirection: "desc", pageSize: 10 }, it);
-      assert.deepEqual(sorted.data.map((row) => row.priority), ["ALTA", "MEDIA", "BAJA"]);
-      const high = await listRequestsPage({ ownScope: "true", priority: "ALTA", pageSize: 10 }, it);
-      assert.deepEqual(high.data.map((row) => row.priority), ["ALTA"]);
+      assert.deepEqual(sorted.data.map((row) => row.priority), ["P1", "P2", "P3", "P4"]);
+      const urgent = await listRequestsPage({ ownScope: "true", priority: "ALTA", pageSize: 10 }, it);
+      assert.deepEqual(urgent.data.map((row) => row.priority), ["P2"], "an old Alta filter finds P2");
     });
 
     await t.test("the receipt read or typed is checked: no future date, an 11-digit RUC", () => {
@@ -220,7 +222,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       const highest = Math.max(...(await Supplier.find({ supplierCode: /^PRV-/ }).lean()).map((item) => Number(item.supplierCode.slice(4))));
       const applied = await migratePlatformImprovements(mongoose.connection.db, { apply: true });
       assert.deepEqual(applied.suppliersNumbered.map((item) => item.supplierCode), [`PRV-${String(highest + 1).padStart(4, "0")}`, `PRV-${String(highest + 2).padStart(4, "0")}`], "oldest first, after the highest code");
-      assert.deepEqual((await FinancialRequest.find({}).lean()).map((row) => row.priorityRank).every((rank) => rank >= 1 && rank <= 3), true);
+      assert.deepEqual((await FinancialRequest.find({}).lean()).map((row) => row.priorityRank).every((rank) => rank >= 1 && rank <= 4), true);
       assert.equal((await GeneratedFile.findOne({ fileName: "old.txt" })).documentNumber, "DOC-2025-00001");
       const again = await migratePlatformImprovements(mongoose.connection.db, { apply: true });
       assert.equal(again.suppliersNumbered.length, 0, "running it again changes nothing");

@@ -560,9 +560,10 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 
 /* CAPEX/OPEX workflow additions */
 .priority { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border: 1px solid var(--gray-200); border-radius: var(--radius-xs); font-size: var(--font-xs); font-weight: 800; }
-.priority-baja { color: var(--gray-700); background: var(--gray-100); }
-.priority-media { color: #7a5100; border-color: #ead29a; background: var(--amber-100); }
-.priority-alta { color: var(--red-700); border-color: #edc0c0; background: var(--red-100); }
+.priority-p4, .priority-baja { color: var(--gray-700); background: var(--gray-100); }
+.priority-p3, .priority-media { color: var(--blue-700); background: var(--blue-100); }
+.priority-p2, .priority-alta { color: #7a5100; border-color: #ead29a; background: var(--amber-100); }
+.priority-p1 { color: var(--red-700); border-color: #edc0c0; background: var(--red-100); }
 .text-danger { color: var(--red-700) !important; }
 .timeline-evidence { margin-top: 3px; color: var(--gray-500) !important; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 .budget-stats { grid-template-columns: repeat(5, minmax(150px, 1fr)); }

@@ -41,7 +41,7 @@ import { confirmAccountingDetraction, findSpotCategory, listSpotCategories, setS
 import { verifySupplierBankAccount } from "../src/services/supplierService.js";
 import { supplierPaymentBlock } from "../src/services/paymentDestinationService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
-import { nextPaymentCycleDate, limaDateKey } from "../../shared/businessCalendar.mjs";
+import { isPaymentCycleDate, isUrgencyPaymentDate, nextPaymentCycleDate, nextUrgencyPaymentDate, limaDateKey } from "../../shared/businessCalendar.mjs";
 import { AP_STATUS, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { roundMoney, sumMoney } from "../src/utils/money.js";
 
@@ -139,11 +139,21 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       return { cciLetter: [{ fieldname: "cciLetter", originalname: "cci-letter.pdf", filename, path: filePath, mimetype: "application/pdf", size: 30 }] };
     }
 
-    await t.test("payments default to the next 15th/last working day cycle; other dates need a reason and past dates are refused", async () => {
+    await t.test("payments default to the next fortnightly payment day; Wednesdays and P1 same-day need no reason, other dates do, past dates are refused", async () => {
       assert.equal(resolvePaymentSchedule({}).paymentDate, nextPaymentCycleDate(new Date()));
-      assert.equal(resolvePaymentSchedule({ now: new Date("2026-02-20T15:00:00Z") }).paymentDate, "2026-02-27");
+      assert.equal(resolvePaymentSchedule({ now: new Date("2026-02-20T15:00:00Z") }).paymentDate, "2026-02-27", "Saturday 28 February moves to Friday 27");
       assert.throws(() => resolvePaymentSchedule({ paymentDate: "2020-01-15" }), (error) => error.statusCode === 422 && /past/.test(error.message));
-      const offCycle = dayAfter(cycle);
+      // The Wednesday urgency window needs no reason; P1 requests may be paid today.
+      const wednesday = nextUrgencyPaymentDate(new Date());
+      assert.equal(resolvePaymentSchedule({ paymentDate: wednesday }).override, null);
+      const todayKey = limaDateKey(new Date());
+      if (!isPaymentCycleDate(new Date(`${todayKey}T12:00:00.000Z`)) && !isUrgencyPaymentDate(new Date(`${todayKey}T12:00:00.000Z`))) {
+        assert.throws(() => resolvePaymentSchedule({ paymentDate: todayKey }), (error) => error.details.field === "paymentDateReason");
+        assert.equal(resolvePaymentSchedule({ paymentDate: todayKey, criticalOnly: true }).override, null);
+      }
+      // A day that is neither a payment day nor an urgency Wednesday needs a reason.
+      let offCycle = dayAfter(cycle);
+      while (isPaymentCycleDate(new Date(`${offCycle}T12:00:00.000Z`)) || isUrgencyPaymentDate(new Date(`${offCycle}T12:00:00.000Z`))) offCycle = dayAfter(offCycle);
       assert.throws(() => resolvePaymentSchedule({ paymentDate: offCycle }), (error) => error.statusCode === 422 && error.details.field === "paymentDateReason");
 
       const { supplier } = await makeSupplier();

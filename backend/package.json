@@ -35,6 +35,8 @@
     "migrate:platform-improvements:apply": "node scripts/migratePlatformImprovements.js --apply",
     "import:ceco": "node scripts/importUmaCostCenters.js",
     "import:ceco:apply": "node scripts/importUmaCostCenters.js --apply",
+    "import:ceco-cascade": "node scripts/importCecoCascade.js",
+    "import:ceco-cascade:apply": "node scripts/importCecoCascade.js --apply",
     "import:emails": "node scripts/importContractEmails.js",
     "import:emails:apply": "node scripts/importContractEmails.js --apply",
     "worker:batch": "node src/workers/batchInvoiceWorker.js",

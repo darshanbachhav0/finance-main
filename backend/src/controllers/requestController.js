@@ -14,6 +14,7 @@ import {
   getRequestProcurementReadiness,
   listRequestsPage,
   previewFinancialRequestBudget,
+  previewRequestSubmission,
   requestPopulate,
   publicRequestPayload,
   requestAuthorizedCostCenters,
@@ -106,6 +107,10 @@ export const getAuthorizedCostCenters = asyncHandler(async (req, res) => {
 
 export const getBeneficiaryCostCenters = asyncHandler(async (_req, res) => {
   res.json({ data: await requestBeneficiaryCostCenters() });
+});
+
+export const getSubmissionPreview = asyncHandler(async (req, res) => {
+  res.json({ data: await previewRequestSubmission({ payload: req.body, user: req.user }) });
 });
 
 export const getBudgetPreview = asyncHandler(async (req, res) => {

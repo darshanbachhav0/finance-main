@@ -61,7 +61,7 @@ export default function AdminUsers() {
         { name: "jefe", label: "Direct supervisor", type: "search-select", options: peopleOptions, searchPlaceholder: "Search by name or job title...", getValue: row => row.jefe?._id || row.jefe || "", wide: true },
         { name: "substitute", label: "Substitute during leave", type: "search-select", options: peopleOptions, searchPlaceholder: "Search by name or job title...", getValue: row => row.substitute?._id || row.substitute || "", wide: true, hint: (form) => form.substitute ? coverageHint(form) : "Approves on this person's behalf while they are on leave or inactive. Without one, their approvals go to their nearest available jefe." },
         { name: "jobTitle", label: "Job title" },
-        { name: "jobCategory", label: "Job category (Portal de Personas)", type: "number", min: 1, step: 1, getValue: row => row.jobCategory ?? "", hint: "Only categories 3, 5 and 6 can charge expenses to another cost center." },
+        { name: "jobCategory", label: "Job category (Portal de Personas)", type: "select", options: [1, 2, 3, 4, 5, 6, 7, 8].map((value) => ({ value: String(value), label: `Category ${value}` })), getValue: (row) => row.jobCategory ? String(row.jobCategory) : "", hint: "Only categories 3, 5 and 6 may charge a request to other cost centers (Por Encargo)." },
         { name: "organizationalUnit", label: "Organizational unit" },
         { name: "area", label: "Area", defaultValue: "General", required: true },
         { type: "section", label: "Access" },
@@ -84,7 +84,7 @@ export default function AdminUsers() {
         { key: "active", label: "Status", render: (row) => <div className="primary-cell"><StatusBadge status={row.active ? "ACTIVE" : "INACTIVE"} />{row.onLeave && <span>{t("On leave")}{row.leaveUntil ? ` · ${String(row.leaveUntil).slice(0, 10)}` : ""}</span>}{row.substitute?.name && <span>{t("Substitute")}: {row.substitute.name}</span>}</div> }
       ]}
       transformSubmit={(form) => {
-        const payload = { ...form, jefe: form.jefe || null, substitute: form.substitute || null };
+        const payload = { ...form, jefe: form.jefe || null, substitute: form.substitute || null, jobCategory: form.jobCategory ? Number(form.jobCategory) : null };
         if (!payload.password) delete payload.password;
         if (!payload.costCenter) delete payload.costCenter;
         if (payload.jobCategory === "" || payload.jobCategory === null) delete payload.jobCategory;

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import BudgetException from "../models/BudgetException.js";
 import { advanceReturnAccount } from "./advancePaymentService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -15,13 +16,15 @@ import JournalEntry from "../models/JournalEntry.js";
 import PaymentBatch from "../models/PaymentBatch.js";
 import Reconciliation from "../models/Reconciliation.js";
 import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
+import { DEFAULT_REQUEST_PRIORITY, normalizeRequestPriority, priorityNeedsJustification } from "../../../shared/requestPriority.mjs";
 import { COST_CENTER_TYPE, COST_CENTER_TYPES, costAllocationProblems } from "../../../shared/costCenterAllocation.mjs";
 import SunatVoucher from "../models/SunatVoucher.js";
 import MassUploadBatch from "../models/MassUploadBatch.js";
 import InvoiceObservation from "../models/InvoiceObservation.js";
 import { recordAudit, workflowEvent } from "./auditService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
-import { activeApprovalStep, initializeApprovalRoute } from "./approvalRuleService.js";
+import { activeApprovalStep, approvalThresholds, initializeApprovalRoute } from "./approvalRuleService.js";
+import { costCenterHeads } from "./costCenterCascadeService.js";
 import {
   assertConfiguredDocuments,
   configuredDocumentRequirements,
@@ -35,10 +38,12 @@ import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
 import { notificationText, notifyRoles, notifyApprovalStep, notifyUser, resolveApprovalNotifications, resolveNotification, resolveRequestNotifications } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
+import { assertRequestSubmissionChecks, requestSubmissionChecks } from "./requestSubmissionChecks.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
 import { assertSupplierSubmittable } from "./supplierService.js";
 import { assertSupplierSelectable, isDepartmentScoped } from "./supplierVisibilityService.js";
-import { limaToday } from "../../../shared/businessCalendar.mjs";
+import { isPaymentCycleDate, isUrgencyPaymentDate, limaToday } from "../../../shared/businessCalendar.mjs";
+import { requestPaymentDateKey } from "./paymentWindowService.js";
 import { transitionRequest, canTransition } from "./workflowService.js";
 import { assertInvoiceEvidencePair, INVOICE_EVIDENCE_KINDS, latestInvoiceEvidence, parseInvoiceEvidence, validateInvoiceAgainstRequest } from "./xmlValidationService.js";
 import { previewBudget, releaseBudget } from "./budgetService.js";
@@ -60,7 +65,7 @@ import {
 } from "../utils/constants.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { actsAsRequester, canModifyRequest, canUseCostCenter, mayChargeAnotherCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
-import { multiplyMoney } from "../utils/money.js";
+import { multiplyMoney, sumMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
 import { plainClone } from "../utils/plainClone.js";
@@ -268,6 +273,7 @@ function optionalNumber(value) {
 function parseCapexDetails(value) {
   const parsed = parseJson(value, "capexDetails") || {};
   return {
+    businessCaseCode: String(parsed.businessCaseCode || "").trim().toUpperCase(),
     projectPep: parsed.projectPep || "",
     projectSnapshot: { id: parsed.projectSnapshot?.id?._id || parsed.projectSnapshot?.id || parsed.projectId || undefined },
     assetCategory: parsed.assetCategory || undefined,
@@ -288,10 +294,20 @@ function parseOpexDetails(value) {
   return { expenseFrequency: parsed.expenseFrequency || undefined };
 }
 
+// Fecha de vencimiento of the request: a calendar day, or nothing.
+function parseDueDate(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const key = String(value).slice(0, 10);
+  const date = new Date(`${key}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || Number.isNaN(date.getTime())) throw new AppError(422, "Enter a valid due date.", { field: "dueDate", value }, ERROR_CODES.VALIDATION_ERROR);
+  return date;
+}
+
 function parsePriority(value) {
   if (value === undefined || value === null || value === "") return undefined;
-  const priority = String(value).trim().toUpperCase();
-  if (!REQUEST_PRIORITIES.includes(priority)) throw new AppError(422, "Choose the priority: high, medium or low.", { field: "priority", value }, ERROR_CODES.VALIDATION_ERROR);
+  const priority = normalizeRequestPriority(value);
+  if (!REQUEST_PRIORITIES.includes(priority)) throw new AppError(422, "Choose the payment priority: P1, P2, P3 or P4.", { field: "priority", value }, ERROR_CODES.VALIDATION_ERROR);
   return priority;
 }
 
@@ -585,7 +601,9 @@ function applyEditableFields(request, payload) {
     "description"
   ];
   for (const field of fields) if (payload[field] !== undefined) request[field] = payload[field];
-  if (payload.priority !== undefined) request.priority = parsePriority(payload.priority) || "MEDIA";
+  if (payload.priority !== undefined) request.priority = parsePriority(payload.priority) || DEFAULT_REQUEST_PRIORITY;
+  if (payload.urgencyJustification !== undefined) request.urgencyJustification = String(payload.urgencyJustification || "").trim();
+  if (payload.dueDate !== undefined) request.dueDate = parseDueDate(payload.dueDate);
   if (payload.frequency !== undefined) request.frequency = parseFrequency(payload.frequency) || "ONE_OFF";
   if (payload.paymentAccount !== undefined) request.$locals.paymentAccountId = payload.paymentAccount || null;
   if (payload.invoiceDetails !== undefined) request.invoiceDetails = parseInvoiceDetails(payload.invoiceDetails);
@@ -843,6 +861,9 @@ async function prepareRequest(request, { user, files = {}, validateSubmission = 
     if (request.flowType === FLOW_TYPE.B && latestInvoiceEvidence(request.attachments) && !request.xmlValidation?.validated) {
       throw new AppError(422, "A verified invoice is required: upload its XML or its factura PDF.", { requestType: request.requestType }, ERROR_CODES.XML_VALIDATION_FAILED);
     }
+    // The manual's online validations: urgency justification, job category for Por Encargo, CAPEX
+    // business case, A1's three quotations, unique invoice and a verified payment account.
+    await assertRequestSubmissionChecks(request, { user, supplier });
   }
   return { supplier, files };
 }
@@ -861,29 +882,21 @@ function routeAuditSnapshot(route = []) {
   }));
 }
 
-// The heads of the CECOs a Por Encargo request is charged to. Two existing ways of saying who leads
-// an area: the Area Director or Vice-Rector of the CECO's area (their area or approval areas, as the
-// approval inbox reads them; "*" and "General" are not an area), and the CECO's top jefe in the
-// roster (someone whose own CECO it is, with active reports, whose own jefe is outside it). Active
-// people only, never the requester.
+// The heads of the CECOs a Por Encargo request is charged to: each CECO's responsible, else its
+// head (costCenterHeads: the Area Director or Vice-Rector of its area, or its top jefe in the
+// roster). They may open and comment on the request; each gives its "visto" as an approval step.
+// Active people only, never the requester.
 export async function costCenterReviewersFor(request) {
   if (request.costCenterType !== COST_CENTER_TYPE.ON_BEHALF) return [];
-  const allocations = request.costAllocations || [];
-  const centers = allocations.map((allocation) => allocation.costCenter?._id || allocation.costCenter);
-  const areas = [...new Set(allocations.map((allocation) => String(allocation.costCenterSnapshot?.area || "").trim()).filter((area) => area && area !== "*" && area.toUpperCase() !== "GENERAL"))];
   const requester = String(request.requester?._id || request.requester || request.solicitor?._id || request.solicitor || "");
-  const internal = { active: true, role: { $nin: [ROLES.SUPER_ADMIN, ROLES.AUDITOR, ROLES.MANAGEMENT_VIEWER] } };
-  const [directors, people] = await Promise.all([
-    areas.length ? User.find({ ...internal, role: { $in: [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR] }, $or: [{ area: { $in: areas } }, { approvalAreas: { $in: areas } }] }).select("_id").lean() : [],
-    User.find({ ...internal, costCenter: { $in: centers } }).select("role costCenter jefe").lean()
-  ]);
-  const leading = new Set((await User.distinct("jefe", { jefe: { $in: people.map((person) => person._id) }, active: true })).map(String));
-  const jefes = await User.find({ _id: { $in: people.map((person) => person.jefe).filter(Boolean) } }).select("costCenter").lean();
-  const jefeCenter = new Map(jefes.map((jefe) => [String(jefe._id), String(jefe.costCenter || "")]));
-  const heads = people.filter((person) => [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR].includes(person.role)
-    || (leading.has(String(person._id)) && jefeCenter.get(String(person.jefe || "")) !== String(person.costCenter)));
-  const reviewers = new Map([...directors, ...heads].map((person) => [String(person._id), person._id]));
-  reviewers.delete(requester);
+  const ids = (request.costAllocations || []).map((allocation) => allocation.costCenter?._id || allocation.costCenter);
+  const centers = await CostCenter.find({ _id: { $in: ids } }).select("code area responsible").lean();
+  const reviewers = new Map();
+  for (const center of centers) {
+    const people = center.responsible ? [{ _id: center.responsible }] : [];
+    people.push(...await costCenterHeads(center, { exclude: [requester] }));
+    for (const person of people) if (String(person._id) !== requester) reviewers.set(String(person._id), person._id);
+  }
   return [...reviewers.values()];
 }
 
@@ -992,7 +1005,7 @@ export async function listRequestsPage(queryParams, user) {
   if (queryParams.type || queryParams.requestType) query.requestType = queryParams.type || queryParams.requestType;
   if (queryParams.flowType) query.flowType = queryParams.flowType;
   if (queryParams.expenseNature) query.expenseNature = queryParams.expenseNature;
-  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => value.trim().toUpperCase()).filter(Boolean) };
+  if (queryParams.priority) query.priority = { $in: String(queryParams.priority).split(",").map((value) => normalizeRequestPriority(value)).filter(Boolean) };
   if (queryParams.frequency) query.frequency = queryParams.frequency;
   if (queryParams.period) query.accountingPeriod = queryParams.period;
   if (queryParams.currency) query.currency = queryParams.currency;
@@ -1022,7 +1035,7 @@ export async function listRequestsPage(queryParams, user) {
   }
   const { page, pageSize, skip } = parsePagination(queryParams);
   let sort = parseSort(queryParams, ["requestNumber", "flowType", "requestType", "expenseNature", "priority", "issueDate", "accountingPeriod", "status", "totalAmount", "totalPENEquivalent", "createdAt", "updatedAt"], { createdAt: -1 });
-  // Priority sorts Alta > Media > Baja (its rank), newest first within each.
+  // Priority sorts P1 > P2 > P3 > P4 (its rank), newest first within each.
   if (sort.priority) sort = { priorityRank: sort.priority, createdAt: -1 };
   const [data, total] = await Promise.all([
     FinancialRequest.find(query).select(requestListSelect).populate(requestListPopulate).sort(sort).skip(skip).limit(pageSize),
@@ -1112,6 +1125,8 @@ export async function createFinancialRequest({ payload, files, user, req }) {
     requestType: normalizedRequestType,
     expenseNature: payload.expenseNature,
     priority: parsePriority(payload.priority),
+    urgencyJustification: String(payload.urgencyJustification || "").trim(),
+    dueDate: parseDueDate(payload.dueDate) || undefined,
     frequency: parseFrequency(payload.frequency),
     observations: payload.observations,
     invoiceDetails: parseInvoiceDetails(payload.invoiceDetails),
@@ -1428,6 +1443,98 @@ export async function previewFinancialRequestBudget({ payload, user }) {
   });
   return { ...preview, asOf: new Date().toISOString(), period, exchangeRate, exchangeRateDate: snapshot.date,
     scenarioPercentage: percentage, deferredCommitment: flowType === FLOW_TYPE.C };
+}
+
+const PREVIEW_STEP_KINDS = Object.freeze({ RESPONSIBLE: "RESPONSIBLE", BENEFICIARY: "BENEFICIARY", SUPERIOR: "SUPERIOR" });
+
+function previewRouteSteps(route = []) {
+  return [...route].sort((a, b) => a.sequence - b.sequence).map((step) => ({
+    sequence: step.sequence,
+    kind: step.tier ? step.tier : PREVIEW_STEP_KINDS[step.costCenterRole] || "JEFE",
+    costCenterCode: step.costCenterCode,
+    approverName: step.approverSnapshot?.name,
+    approverJobTitle: step.approverSnapshot?.jobTitle,
+    coveringForName: step.coveringForSnapshot?.name,
+    role: step.role,
+    label: step.approvalLevel
+  }));
+}
+
+// "Validación en línea", "Ruta de aprobación" and "Pago estimado" while the request is being filled
+// (Manual del usuario, "Cómo registrar cada tipo de requerimiento"): the manual's checks, who would
+// approve it and the payment day its priority gives, for the form as it is. Nothing is saved.
+export async function previewRequestSubmission({ payload, user }) {
+  const flowType = payload.flowType || FLOW_TYPE.A1;
+  const lines = parseRequestLines(payload.lines);
+  const costCenterType = flowType === FLOW_TYPE.C ? COST_CENTER_TYPE.OWN : parseCostCenterType(payload.costCenterType) || COST_CENTER_TYPE.OWN;
+  const costAllocations = costCenterType === COST_CENTER_TYPE.ON_BEHALF ? parseCostAllocations(payload.costAllocations) : undefined;
+  const request = new FinancialRequest({
+    flowType,
+    requestType: normalizeRequestTypeForTrack(flowType, payload.requestType),
+    expenseNature: payload.expenseNature,
+    priority: parsePriority(payload.priority),
+    urgencyJustification: String(payload.urgencyJustification || "").trim(),
+    dueDate: parseDueDate(payload.dueDate) || undefined,
+    invoiceDetails: parseInvoiceDetails(payload.invoiceDetails),
+    requester: user._id,
+    solicitor: user._id,
+    requesterArea: user.area,
+    requesterCostCenter: payload.requesterCostCenter?._id || payload.requesterCostCenter || user.costCenter,
+    costCenterType,
+    costAllocations,
+    currency: payload.currency || "PEN",
+    supplier: flowType === FLOW_TYPE.C ? undefined : payload.supplier || undefined,
+    capexDetails: parseCapexDetails(payload.capexDetails),
+    quotations: parseQuotations(payload.quotations),
+    issueDate: payload.issueDate || new Date(),
+    lines
+  });
+  if (payload.id && mongoose.isValidObjectId(payload.id)) request._id = new mongoose.Types.ObjectId(String(payload.id));
+  request.paymentAccount = payload.paymentAccount ? { account: payload.paymentAccount } : undefined;
+  // Quotation files chosen in the form but not uploaded yet still count.
+  const chosenFiles = Number(payload.quotationFileCount) || 0;
+  if (chosenFiles) request.quotations = Array.from({ length: Math.max(chosenFiles, request.quotations.length) }, (_, index) => ({ ...(request.quotations[index]?.toObject?.() || {}), attachment: request.quotations[index]?.attachment || new mongoose.Types.ObjectId() }));
+  let exchangeRate = request.currency === "PEN" ? 1 : null;
+  if (!exchangeRate) {
+    try { exchangeRate = Number((await resolveExchangeRateSnapshot(request.currency, request.issueDate)).rate) || null; }
+    catch { exchangeRate = null; }
+  }
+  const total = sumMoney(lines.map((line) => Number(line.totalAmount || 0)));
+  const penTotal = exchangeRate ? multiplyMoney(total, exchangeRate) : null;
+  const supplier = request.supplier && mongoose.isValidObjectId(request.supplier) ? await Supplier.findById(request.supplier) : null;
+  const checks = await requestSubmissionChecks(request, { user, supplier });
+
+  const thresholds = await approvalThresholds();
+  const route = { steps: [], error: null };
+  if (penTotal === null) route.error = "The exchange rate of the issue date is not registered yet, so the approval route cannot be calculated.";
+  else if (!(penTotal > 0)) route.error = "Enter the amount to see who approves it.";
+  else {
+    const draft = {
+      requester: user._id, solicitor: user._id, flowType, requesterCostCenter: request.requesterCostCenter,
+      costCenterType, costAllocations: request.costAllocations, totalPENEquivalent: penTotal, lines: []
+    };
+    try {
+      await initializeApprovalRoute(draft);
+      route.steps = previewRouteSteps(draft.approvalRouteSnapshot);
+    } catch (error) {
+      route.error = error.message;
+    }
+  }
+  const paymentDate = await requestPaymentDateKey(request);
+  return {
+    checks,
+    route,
+    amount: { total, currency: request.currency, penEquivalent: penTotal, uit: thresholds.uit, amountUit: penTotal === null ? null : penTotal / thresholds.uit },
+    payment: paymentDate ? { date: paymentDate, window: paymentWindowKind(paymentDate, request.priority) } : null
+  };
+}
+
+function paymentWindowKind(dateKey, priority) {
+  const noon = new Date(`${dateKey}T12:00:00.000Z`);
+  if (normalizeRequestPriority(priority) === "P1") return "SAME_DAY";
+  if (isPaymentCycleDate(noon)) return "FORTNIGHT";
+  if (isUrgencyPaymentDate(noon)) return "URGENCY";
+  return "AGREED_DATE";
 }
 
 export function publicRequestPayload(value, user, actionContext) {

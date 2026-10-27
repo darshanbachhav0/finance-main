@@ -10,6 +10,7 @@ import { getSunatProvider } from "./src/services/sunatService.js";
 
 import app from "./src/app.js";
 import { migrateRetiredRoles } from "./src/services/legacyRoleService.js";
+import { migrateLegacyPriorities } from "./src/services/legacyPriorityService.js";
 import { removeSignInLockout } from "./src/services/platformSettingsService.js";
 import { repairStoredFileNames } from "./src/services/fileNameRepairService.js";
 import { startInProcessWorkers, usesPublicPadron as usesPublicPadronMode } from "./src/workers/inProcessWorkers.js";
@@ -59,6 +60,9 @@ connectDB()
     for (const [role, moved] of Object.entries(retired)) {
       if (moved.users || moved.previousRoles || moved.approvalRules) console.log(`[ROLES] ${role} retired: ${moved.users} user(s), ${moved.approvalRules} approval rule(s) moved to ${moved.replacement}.`);
     }
+    const priorities = await migrateLegacyPriorities();
+    const movedPriorities = Object.values(priorities).reduce((sum, count) => sum + count, 0);
+    if (movedPriorities) console.log(`[PRIORITY] ${movedPriorities} request(s) moved from Alta/Media/Baja to P2/P3.`);
     const fileNames = await repairStoredFileNames();
     if (fileNames.repaired) console.log(`[FILES] Repaired ${fileNames.repaired} uploaded file name(s) stored with the wrong encoding.`);
     const lockout = await removeSignInLockout();

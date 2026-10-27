@@ -51,6 +51,8 @@
     "migrate:platform-improvements:apply": "npm run migrate:platform-improvements:apply --workspace backend",
     "import:ceco": "npm run import:ceco --workspace backend",
     "import:ceco:apply": "npm run import:ceco:apply --workspace backend",
+    "import:ceco-cascade": "npm run import:ceco-cascade --workspace backend",
+    "import:ceco-cascade:apply": "npm run import:ceco-cascade:apply --workspace backend",
     "import:emails": "npm run import:emails --workspace backend --",
     "import:emails:apply": "npm run import:emails:apply --workspace backend --",
     "sunat:padron:index": "npm run sunat:padron:index --workspace backend",

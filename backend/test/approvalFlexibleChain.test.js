@@ -5,6 +5,8 @@ import AccountingPeriod from "../src/models/AccountingPeriod.js";
 import AuditLog from "../src/models/AuditLog.js";
 import CostCenter from "../src/models/CostCenter.js";
 import ExpenseType from "../src/models/ExpenseType.js";
+import FinanceConfiguration from "../src/models/FinanceConfiguration.js";
+import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import Notification from "../src/models/Notification.js";
 import Supplier from "../src/models/Supplier.js";
@@ -44,6 +46,9 @@ test("flexible manager-chain approval, absence reassignment, withdrawal and My T
     const expenseType = await ExpenseType.create({ code: "EXP-FLEX", name: "Services", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", active: true });
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20999999981", normalizedIdentifier: "20999999981", legalName: "Flex Supplier SAC", name: "Flex Supplier SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-9781", paymentTerms: { option: "CREDIT_30", days: 30 } });
     await AccountingPeriod.create({ period: "2026-09", status: "OPEN" });
+    // Sent with one quotation into a verified account: the A1 three-quotation rule has its own tests.
+    await FinanceConfiguration.create({ key: "A1_MINIMUM_QUOTATIONS", numericValue: 1, effectiveFrom: new Date("2020-01-01T00:00:00Z"), active: true });
+    await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000009781", cci: "00219100000000009781", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH" });
     const admin = await User.create({ name: "Admin", email: "flex.admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Operations" });
     const root = await User.create({ name: "Root Manager", email: "flex.root@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations" });
     const mid = await User.create({ name: "Middle Manager", email: "flex.mid@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", jefe: root._id });

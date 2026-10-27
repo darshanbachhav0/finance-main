@@ -1,0 +1,636 @@
+{
+  "source": "Motor de Ingresos · cascada de centros de costo (Pagos UMA Piloto v1.0, GAF, Oct 2026)",
+  "levels": {
+    "2": "Escuela",
+    "3": "Facultad",
+    "4": "Vicerrectorado",
+    "5": "Académico transversal",
+    "6": "Administración / Marketing",
+    "7": "Gobierno"
+  },
+  "costCenters": [
+    {
+      "code": "10001",
+      "name": "Junta General de Accionistas",
+      "level": 7,
+      "parentCode": null,
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20001",
+      "name": "Gerencia General",
+      "level": 6,
+      "parentCode": "10001",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20002",
+      "name": "Rectorado",
+      "level": 5,
+      "parentCode": "10001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "20003",
+      "name": "Asesoría Legal",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20004",
+      "name": "Secretaría General",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20005",
+      "name": "Vicerrectorado Académico CCSS",
+      "level": 4,
+      "parentCode": "20001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "20006",
+      "name": "Gerencia de Operaciones",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20007",
+      "name": "Gerencia de Administración Financiera",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20008",
+      "name": "Gerencia Comercial",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "SALES"
+    },
+    {
+      "code": "20009",
+      "name": "Vicerrectorado Académico IINN",
+      "level": 4,
+      "parentCode": "20001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "20010",
+      "name": "Gerencia de Innovación Estratégica y Transformación Digital",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "20011",
+      "name": "Gerencia Central de Marketing",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "SALES"
+    },
+    {
+      "code": "20012",
+      "name": "Gerencia de Ventas y Admisión",
+      "level": 6,
+      "parentCode": "20001",
+      "line": "SALES"
+    },
+    {
+      "code": "30001",
+      "name": "Oficina de Administración Financiera",
+      "level": 6,
+      "parentCode": "20007",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "30003",
+      "name": "Oficina de Marketing e Imagen Institucional",
+      "level": 6,
+      "parentCode": "20011",
+      "line": "SALES"
+    },
+    {
+      "code": "30004",
+      "name": "Oficina de Admisión",
+      "level": 6,
+      "parentCode": "20012",
+      "line": "SALES"
+    },
+    {
+      "code": "30005",
+      "name": "Oficina de Bienestar Universitario",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30007",
+      "name": "Oficina de Tecnología de la Información",
+      "level": 6,
+      "parentCode": "20010",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "30009",
+      "name": "Decanatura Facultad de Ciencias de la Salud",
+      "level": 3,
+      "parentCode": "20005",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30010",
+      "name": "Decanatura Facultad de Negocios e Ingenierías",
+      "level": 3,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30011",
+      "name": "Dirección de Investigación",
+      "level": 5,
+      "parentCode": "20001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30012",
+      "name": "Oficina de Gestión de la Calidad y Gestión Docente",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30013",
+      "name": "Oficina de Servicios Académicos y Registros",
+      "level": 5,
+      "parentCode": "20006",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30014",
+      "name": "Oficina de Convenios Internacionales",
+      "level": 5,
+      "parentCode": "20001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30015",
+      "name": "Dirección de Estudios Generales",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30016",
+      "name": "Oficina de Educación Virtual",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30017",
+      "name": "Decanatura Facultad de Farmacia y Bioquímica",
+      "level": 3,
+      "parentCode": "20005",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "30018",
+      "name": "Dirección de Educación Continua",
+      "level": 4,
+      "parentCode": "20001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40001",
+      "name": "Tesorería",
+      "level": 6,
+      "parentCode": "20007",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "40002",
+      "name": "Contabilidad",
+      "level": 6,
+      "parentCode": "20007",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "40004",
+      "name": "Imagen Institucional",
+      "level": 6,
+      "parentCode": "20011",
+      "line": "SALES"
+    },
+    {
+      "code": "40005",
+      "name": "Coordinación de Servicio Psicopedagógico, Proyección y Servicio Social",
+      "level": 5,
+      "parentCode": "30005",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40006",
+      "name": "Coordinación de Servicios de Salud / Tópico",
+      "level": 5,
+      "parentCode": "30005",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40007",
+      "name": "Coordinación de Servicios Deportivos y Culturales",
+      "level": 5,
+      "parentCode": "30005",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40009",
+      "name": "Educación Virtual",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40010",
+      "name": "Administración y Logística",
+      "level": 6,
+      "parentCode": "20006",
+      "line": "ADMINISTRATION"
+    },
+    {
+      "code": "40011",
+      "name": "Unidad de Investigación",
+      "level": 5,
+      "parentCode": "30011",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40013",
+      "name": "Gestión de la Calidad",
+      "level": 5,
+      "parentCode": "30011",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40014",
+      "name": "Gestión Docente",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40015",
+      "name": "Unidad Técnica de Biblioteca Central",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40016",
+      "name": "Unidad de Investigación FCS",
+      "level": 3,
+      "parentCode": "30011",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40017",
+      "name": "Unidad de Investigación FCE",
+      "level": 3,
+      "parentCode": "30011",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40018",
+      "name": "Emprendimiento e Innovación",
+      "level": 5,
+      "parentCode": "20001",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40019",
+      "name": "Grados y Títulos",
+      "level": 5,
+      "parentCode": "20004",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "40020",
+      "name": "Responsabilidad Social Universitaria",
+      "level": 5,
+      "parentCode": "20009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50101",
+      "name": "Escuela de Enfermería",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50102",
+      "name": "Escuela de Farmacia y Bioquímica",
+      "level": 2,
+      "parentCode": "30017",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50103",
+      "name": "Escuela de Psicología",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50104",
+      "name": "Escuela de Nutrición y Dietética",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50105",
+      "name": "Escuela de Tecnología Médica: Laboratorio Clínico",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50106",
+      "name": "Escuela de Tecnología Médica: Terapia Física",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50107",
+      "name": "Tecnologías Médicas",
+      "level": 3,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50108",
+      "name": "Escuela de Medicina Humana",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50109",
+      "name": "Escuela de Tecnología Médica: Optometría",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50110",
+      "name": "Escuela de Obstetricia",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50201",
+      "name": "Segunda Especialidad CCSS",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50202",
+      "name": "Segunda Especialidad Farmacia y Bioquímica",
+      "level": 2,
+      "parentCode": "50102",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50301",
+      "name": "Escuela de Contabilidad y Finanzas",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50302",
+      "name": "Escuela de Administración y Negocios Internacionales",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50303",
+      "name": "Escuela de Administración y Marketing",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50304",
+      "name": "Escuela de Ingeniería Industrial",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50305",
+      "name": "Escuela de Ingeniería de Inteligencia Artificial",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50306",
+      "name": "Escuela de Ingeniería de Sistemas",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50307",
+      "name": "Escuela de Administración de Empresas",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50308",
+      "name": "Escuela de Derecho",
+      "level": 2,
+      "parentCode": "30010",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "50401",
+      "name": "Escuela de Posgrado",
+      "level": 3,
+      "parentCode": "30018",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60102",
+      "name": "2.ª Esp. Enfermería en Emergencias y Desastres",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60103",
+      "name": "2.ª Esp. Enfermería en Cuidados Intensivos",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60104",
+      "name": "2.ª Esp. Enfermería en Salud Familiar y Comunitaria",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60105",
+      "name": "2.ª Esp. Enfermería en Cuidado Integral Infantil",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60106",
+      "name": "2.ª Esp. Enfermería en Centro Quirúrgico",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60107",
+      "name": "2.ª Esp. Enfermería en Urología",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60108",
+      "name": "2.ª Esp. Farmacia en Asuntos Regulatorios",
+      "level": 2,
+      "parentCode": "30017",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60109",
+      "name": "2.ª Esp. Psicología Clínica",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60110",
+      "name": "2.ª Esp. Enfermería en Nefrología",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60111",
+      "name": "2.ª Esp. Enfermería en Geriatría y Gerontología",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60112",
+      "name": "2.ª Esp. Enfermería en Salud Mental y Psiquiatría",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60113",
+      "name": "2.ª Esp. Enfermería en Oncología",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60114",
+      "name": "2.ª Esp. Farmacia en Farmacovigilancia y Tecnovigilancia",
+      "level": 2,
+      "parentCode": "30017",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60115",
+      "name": "2.ª Esp. Psicoterapia Contextual Conductual",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60116",
+      "name": "2.ª Esp. Neuropsicología",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60117",
+      "name": "2.ª Esp. Psicología Social Comunitaria",
+      "level": 2,
+      "parentCode": "30009",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60201",
+      "name": "Maestria en Salud Publica",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60202",
+      "name": "MBA",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60203",
+      "name": "Maestría en Gestión Farmacéutica y Regulación Sanitaria (por crear)",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60204",
+      "name": "Maestría en Gestión de Servicios de Salud (por crear)",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60205",
+      "name": "Maestría en Gestión Pública (por crear)",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60206",
+      "name": "Maestría en Psicología Clínica (por crear)",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    },
+    {
+      "code": "60207",
+      "name": "Maestría en Derecho Penal (por crear)",
+      "level": 2,
+      "parentCode": "50401",
+      "line": "COST_OF_SERVICE"
+    }
+  ]
+}
