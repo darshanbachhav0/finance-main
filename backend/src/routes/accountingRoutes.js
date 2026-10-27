@@ -24,7 +24,7 @@ import { previewAccountingDetraction, confirmAccountingDetraction } from "../ser
 
 const router = Router();
 
-// Bank TXT verification: Treasury downloads a file only after Accounting or the GAF verifies it
+// Bank TXT approval: Treasury downloads a file only after GAF approves it
 // here. Declared before the Accounting-only guard below so the GAF reaches it.
 router.get("/bank-files", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), listBankFiles);
 router.get("/bank-files/:id/checks", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), reviewBankFileChecks);

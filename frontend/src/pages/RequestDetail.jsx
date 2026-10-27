@@ -35,6 +35,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
+import DigitalActaPanel from "../components/DigitalActaPanel.jsx";
 import ApprovalTimeline from "../components/ApprovalTimeline.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -753,6 +754,7 @@ export default function RequestDetail() {
             </Section>
           )}
 
+          {["A1", "A2", "B", "C"].includes(request.flowType) && <Section title="Acta digital" description="Receiver and responsible-area electronic approval; Vice-Rector above 5 UIT."><DigitalActaPanel request={request} user={user} readOnly={readOnly} onSaved={load} /></Section>}
           <Section skip={Boolean(transfer)} title="Budget commitment"><DefinitionGrid>              <Definition label="Budget status"><StatusBadge status={request.budgetCommitment?.status || "NO_BUDGET"} /></Definition>
               <Definition label="Budget amount">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.totalAmount, "PEN", language) : "-"}</Definition>
               <Definition label="Executed budget">{request.budgetCommitment ? formatCurrency(request.budgetCommitment.executedAmount, "PEN", language) : "-"}</Definition>

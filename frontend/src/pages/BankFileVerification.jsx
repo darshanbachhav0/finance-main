@@ -122,7 +122,7 @@ export default function BankFileVerification() {
     <section>
       <PageHeader
         title="Bank file verification"
-        description="Check each bank TXT before Treasury downloads it and sends it to the bank. Rejecting a file cancels it and returns its payments to Treasury's queue."
+        description="GAF approves each bank TXT before Treasury downloads it. Rejecting a file cancels it and returns payments to Treasury."
         actions={<button type="button" className="secondary-button" onClick={table.reload} disabled={table.loading}><RefreshCw className={table.loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button>}
       />
       <Message type="error">{(selected ? "" : error) || table.error}</Message>

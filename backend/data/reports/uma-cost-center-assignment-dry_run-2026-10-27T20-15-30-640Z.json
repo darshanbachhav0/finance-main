@@ -1,0 +1,2386 @@
+{
+  "mode": "DRY_RUN",
+  "timestamp": "2026-10-27T20:15:30.440Z",
+  "source": "C:\\Users\\TI-SJL-0010\\Downloads\\finance-main-triple-track-updated\\finance-main\\data\\uma-cost-center-assignments.json",
+  "checked": {
+    "employeesInSource": 266,
+    "distinctCentersInSource": 43,
+    "crossChecked": 143,
+    "rosterOnly": 122,
+    "disputed": [
+      {
+        "dni": "44647124",
+        "sourceRow": 108,
+        "employeeSheet": "20008",
+        "treasurySheet": "20012"
+      }
+    ],
+    "centersWithDifferentMetadata": [
+      {
+        "code": "30016",
+        "variants": [
+          {
+            "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+            "organizationalUnit": "VICERECTORADO IINN",
+            "count": 4
+          },
+          {
+            "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+            "organizationalUnit": "GERENCIA DE OPERACIONES",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "code": "40020",
+        "variants": [
+          {
+            "area": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+            "organizationalUnit": "VICERECTORADO CCSS",
+            "count": 3
+          },
+          {
+            "area": "VICERRECTORADO DE GESTIÓN ACADÉMICA EN INGENIERÍA Y NEGOCIOS Y SERVICIOS GENERALES ACADÉMICOS",
+            "organizationalUnit": "VICERECTORADO CCSS",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "code": "50103",
+        "variants": [
+          {
+            "area": "EP DE PSICOLOGÍA",
+            "organizationalUnit": "VICERECTORADO CCSS",
+            "count": 7
+          },
+          {
+            "area": "EP DE FARMACIA Y BIOQUÍMICA",
+            "organizationalUnit": "VICERECTORADO CCSS",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "code": "60201",
+        "variants": [
+          {
+            "area": "MAESTRÍA SALUD PUBLICA",
+            "organizationalUnit": "DIRECCION DE INVESTIGACION",
+            "count": 6
+          },
+          {
+            "area": "MAESTRÍA SALUD PUBLICA",
+            "organizationalUnit": "VICERECTORADO CCSS",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  "database": "erp_financial_system",
+  "centersMissing": [
+    {
+      "code": "20001",
+      "name": "GERENCIA GENERAL"
+    },
+    {
+      "code": "20002",
+      "name": "RECTORADO"
+    },
+    {
+      "code": "20004",
+      "name": "SECRETARÍA GENERAL"
+    },
+    {
+      "code": "20005",
+      "name": "VICERRECTORADO ACADÉMICO CCSS"
+    },
+    {
+      "code": "20006",
+      "name": "GERENCIA DE OPERACIONES"
+    },
+    {
+      "code": "20007",
+      "name": "GERENCIA DE ADMINISTRACION FINANCIERA"
+    },
+    {
+      "code": "20008",
+      "name": "GERENCIA COMERCIAL"
+    },
+    {
+      "code": "20009",
+      "name": "VICERRECTORADO ACADÉMICO IINN"
+    },
+    {
+      "code": "20010",
+      "name": "GERENCIA INNOVACION ESTRATEGICA Y TRANSFORMACION DIGITAL"
+    },
+    {
+      "code": "30003",
+      "name": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL"
+    },
+    {
+      "code": "30004",
+      "name": "OFICINA DE ADMISIÓN"
+    },
+    {
+      "code": "30005",
+      "name": "OFICINA DE BIENESTAR UNIVERSITARIO"
+    },
+    {
+      "code": "30007",
+      "name": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN"
+    },
+    {
+      "code": "30011",
+      "name": "DIRECCIÓN DE INVESTIGACIÓN"
+    },
+    {
+      "code": "30012",
+      "name": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE"
+    },
+    {
+      "code": "30013",
+      "name": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS"
+    },
+    {
+      "code": "30014",
+      "name": "OFICINA DE CONVENIOS INTERNACIONALES"
+    },
+    {
+      "code": "30015",
+      "name": "DIRECCION DE ESTUDIOS GENERALES"
+    },
+    {
+      "code": "30016",
+      "name": "OFICINA DE EDUCACIÓN VIRTUAL"
+    },
+    {
+      "code": "30018",
+      "name": "DIRECCION DE EDUCACION CONTINUA"
+    },
+    {
+      "code": "40001",
+      "name": "TESORERÍA"
+    },
+    {
+      "code": "40006",
+      "name": "COORDINACIÓN DE SERVICIOS DE SALUD / TÓPICO"
+    },
+    {
+      "code": "40011",
+      "name": "UNIDAD DE INVESTIGACIÓN"
+    },
+    {
+      "code": "40015",
+      "name": "UNIDAD TÉCNICA DE BIBLIOTECA CENTRAL"
+    },
+    {
+      "code": "40019",
+      "name": "GRADOS Y TITULOS"
+    },
+    {
+      "code": "40020",
+      "name": "RESPONSABILIDAD SOCIAL UNIVERSITARIA"
+    },
+    {
+      "code": "50101",
+      "name": "EP DE ENFERMERÍA"
+    },
+    {
+      "code": "50102",
+      "name": "EP DE FARMACIA Y BIOQUÍMICA"
+    },
+    {
+      "code": "50103",
+      "name": "EP DE PSICOLOGÍA"
+    },
+    {
+      "code": "50104",
+      "name": "EP DE NUTRICIÓN Y DIETÉTICA"
+    },
+    {
+      "code": "50105",
+      "name": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA"
+    },
+    {
+      "code": "50106",
+      "name": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN"
+    },
+    {
+      "code": "50107",
+      "name": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA"
+    },
+    {
+      "code": "50108",
+      "name": "EP DE MEDICINA"
+    },
+    {
+      "code": "50109",
+      "name": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA"
+    },
+    {
+      "code": "50301",
+      "name": "EP DE CONTABILIDAD Y FINANZAS"
+    },
+    {
+      "code": "50302",
+      "name": "EP DE ADM. Y NEGOCIOS INTERNACIONALES"
+    },
+    {
+      "code": "50303",
+      "name": "EP DE ADMINISTRACIÓN Y MARKETING"
+    },
+    {
+      "code": "50305",
+      "name": "EP DE INGENIERÍA IA"
+    },
+    {
+      "code": "50308",
+      "name": "EP DE DERECHO"
+    },
+    {
+      "code": "60102",
+      "name": "SEG. EN EMERG. Y DESA."
+    },
+    {
+      "code": "60109",
+      "name": "SEG. PSICOLOGÍA CLÍNICA"
+    },
+    {
+      "code": "60201",
+      "name": "MAESTRÍA SALUD PUBLICA"
+    }
+  ],
+  "updatesPlanned": [
+    {
+      "dni": "73641847",
+      "name": "BAZAN CHAVEZ DANNA SHANTAL",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 3
+    },
+    {
+      "dni": "72755720",
+      "name": "CALLAN HUAUYA BRISSILA XIOMARA",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 4
+    },
+    {
+      "dni": "41162303",
+      "name": "DÍAZ ORIBE ROSA MARGARITA",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 5
+    },
+    {
+      "dni": "41800029",
+      "name": "ENCARNACIÓN CRISTÓBAL DE RÍMAC MARIEL CHARO",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 6
+    },
+    {
+      "dni": "74899472",
+      "name": "FERNANDEZ ALVAREZ KATHERINE LISBET",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 7
+    },
+    {
+      "dni": "74396484",
+      "name": "FERNANDEZ PAREDES JAHAIRA SUSANA ANTUANETTE",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 8
+    },
+    {
+      "dni": "71962801",
+      "name": "GONZALEZ GAMARRA XIMENA ANELIK",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 9
+    },
+    {
+      "dni": "42214240",
+      "name": "LAGOMARSINO GARCÍA TANIA ELIZABETH",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 10
+    },
+    {
+      "dni": "47115816",
+      "name": "MASGO VARA MIRIAM",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 11
+    },
+    {
+      "dni": "70435026",
+      "name": "MONTALVAN EGUSQUIZA MARÍA ISABEL",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 12
+    },
+    {
+      "dni": "72972025",
+      "name": "PALOMINO GUIZADO SHEGLY SHARON",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 13
+    },
+    {
+      "dni": "09938560",
+      "name": "PEREZ HUAMAN JESUSA ESPERANZA",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 14
+    },
+    {
+      "dni": "73450023",
+      "name": "QUINTANA CARHUAJULCA ABIGAIL YOSELIN",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 15
+    },
+    {
+      "dni": "75581503",
+      "name": "YNGA VASQUEZ DIANA MARIA",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 16
+    },
+    {
+      "dni": "40356687",
+      "name": "AVALOS ARANCIBIA JUAN JOSÉ",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 17
+    },
+    {
+      "dni": "72699087",
+      "name": "RIOS CARLOS FABIANA DAMERIS",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 18
+    },
+    {
+      "dni": "09884894",
+      "name": "ROMERO PUCCINELLI JOSE ANTONIO",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 19
+    },
+    {
+      "dni": "47237985",
+      "name": "CARRANZA VALLEJOS EDILBERTO",
+      "from": null,
+      "to": "20006",
+      "matchedBy": "DNI",
+      "sourceRow": 20
+    },
+    {
+      "dni": "48000253",
+      "name": "GALLARDO PALACIOS GIAN PIERRE",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 21
+    },
+    {
+      "dni": "47129404",
+      "name": "MENDOZA CHUCHON MARCO ANTONIO",
+      "from": null,
+      "to": "30013",
+      "matchedBy": "DNI",
+      "sourceRow": 22
+    },
+    {
+      "dni": "41715053",
+      "name": "TARAZONA TARAZONA ANGEL AMERICO",
+      "from": null,
+      "to": "20006",
+      "matchedBy": "DNI",
+      "sourceRow": 23
+    },
+    {
+      "dni": "75241952",
+      "name": "DIEGO ARTEAGA RUTH CAMILA",
+      "from": null,
+      "to": "40001",
+      "matchedBy": "DNI",
+      "sourceRow": 24
+    },
+    {
+      "dni": "70988722",
+      "name": "ESPINOZA CARDENAS CINTHIA",
+      "from": null,
+      "to": "40001",
+      "matchedBy": "DNI",
+      "sourceRow": 25
+    },
+    {
+      "dni": "08003682",
+      "name": "BACHHAV DARSHAN PRAVIN",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 26
+    },
+    {
+      "dni": "71740794",
+      "name": "CABEZAS HUANGAL ANGELLO SEBASTIÁN",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 27
+    },
+    {
+      "dni": "47558888",
+      "name": "CAMACHO PEREZ ENZO ADHEMIR",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 28
+    },
+    {
+      "dni": "44305912",
+      "name": "CHIRINOS RUMIN MANUEL WILFREDO",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 29
+    },
+    {
+      "dni": "07999930",
+      "name": "GADADE ABHIRAJ SANDEEP",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 30
+    },
+    {
+      "dni": "08003888",
+      "name": "JOSHI YASH MILIND",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 31
+    },
+    {
+      "dni": "40868681",
+      "name": "NICHO FLORES CARLOS DANIEL",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 32
+    },
+    {
+      "dni": "62049056",
+      "name": "PALOMINO CASTRO RODRIGO",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 33
+    },
+    {
+      "dni": "75378641",
+      "name": "REVILLA VERGARAY LINDER",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 34
+    },
+    {
+      "dni": "75986259",
+      "name": "SINCHE PANDURO VÍCTOR",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 35
+    },
+    {
+      "dni": "41274394",
+      "name": "JUAREZ ALVINES EVELYN HERLINDA",
+      "from": null,
+      "to": "20004",
+      "matchedBy": "DNI",
+      "sourceRow": 36
+    },
+    {
+      "dni": "70887469",
+      "name": "SANTE MELGAR ZULLY GIANINA",
+      "from": null,
+      "to": "40019",
+      "matchedBy": "DNI",
+      "sourceRow": 37
+    },
+    {
+      "dni": "42793231",
+      "name": "TAFUR DURAND ERIKA",
+      "from": null,
+      "to": "20004",
+      "matchedBy": "DNI",
+      "sourceRow": 38
+    },
+    {
+      "dni": "74388519",
+      "name": "ROJAS PARILLO LUIS ENRIQUE",
+      "from": null,
+      "to": "20001",
+      "matchedBy": "DNI",
+      "sourceRow": 39
+    },
+    {
+      "dni": "76133086",
+      "name": "APARICIO RODRÍGUEZ NICOLE ALEXANDRA",
+      "from": null,
+      "to": "30016",
+      "matchedBy": "DNI",
+      "sourceRow": 40
+    },
+    {
+      "dni": "74433270",
+      "name": "JOCOPE GUAYANAY TANIA ERIKA",
+      "from": null,
+      "to": "30016",
+      "matchedBy": "DNI",
+      "sourceRow": 41
+    },
+    {
+      "dni": "73089540",
+      "name": "LUNA ZAVALA GRETELL STHEFANY",
+      "from": null,
+      "to": "30016",
+      "matchedBy": "DNI",
+      "sourceRow": 42
+    },
+    {
+      "dni": "73669675",
+      "name": "MORI ORTIZ JORDI EDU",
+      "from": null,
+      "to": "30016",
+      "matchedBy": "DNI",
+      "sourceRow": 43
+    },
+    {
+      "dni": "10525370",
+      "name": "ESCOBAR CHUQUIHUACCHA VERONICA SOFIA",
+      "from": null,
+      "to": "20007",
+      "matchedBy": "DNI",
+      "sourceRow": 44
+    },
+    {
+      "dni": "47265042",
+      "name": "FLORES TITO NAYRUT BRIGIDA",
+      "from": null,
+      "to": "20007",
+      "matchedBy": "DNI",
+      "sourceRow": 45
+    },
+    {
+      "dni": "44441990",
+      "name": "SAAVEDRA RAMIREZ MARIO ANTONIO",
+      "from": null,
+      "to": "20007",
+      "matchedBy": "DNI",
+      "sourceRow": 46
+    },
+    {
+      "dni": "45560495",
+      "name": "BOLAÑOS RUEDA JEANCARLO JOEL",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 47
+    },
+    {
+      "dni": "47761023",
+      "name": "LEON ARGUMEDO CYNTHIA",
+      "from": null,
+      "to": "40020",
+      "matchedBy": "DNI",
+      "sourceRow": 48
+    },
+    {
+      "dni": "45225991",
+      "name": "RUBIO LOPEZ GHILMAR",
+      "from": null,
+      "to": "40020",
+      "matchedBy": "DNI",
+      "sourceRow": 49
+    },
+    {
+      "dni": "76325872",
+      "name": "VIZCARRA ANICAMA CAROLAYN DESSIRE",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 50
+    },
+    {
+      "dni": "72794714",
+      "name": "YARMA ARIAS REBECA SARAHI",
+      "from": null,
+      "to": "40020",
+      "matchedBy": "DNI",
+      "sourceRow": 51
+    },
+    {
+      "dni": "74820217",
+      "name": "ALVAREZ SULCA JASMIN ESTEYSI",
+      "from": null,
+      "to": "30018",
+      "matchedBy": "DNI",
+      "sourceRow": 52
+    },
+    {
+      "dni": "71298175",
+      "name": "ARENAS ESTRADA MAYRA ALEXANDRA",
+      "from": null,
+      "to": "40020",
+      "matchedBy": "DNI",
+      "sourceRow": 53
+    },
+    {
+      "dni": "75096354",
+      "name": "ARONES PEREZ PAOLO PAULINO",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 54
+    },
+    {
+      "dni": "42182154",
+      "name": "CIEZA RAMOS DAVID",
+      "from": null,
+      "to": "50302",
+      "matchedBy": "DNI",
+      "sourceRow": 55
+    },
+    {
+      "dni": "72049174",
+      "name": "FLORES MELGAR ANTHONNY GERSON",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 56
+    },
+    {
+      "dni": "40186218",
+      "name": "GAMBOA MOLINA JUAN CARLOS",
+      "from": null,
+      "to": "30018",
+      "matchedBy": "DNI",
+      "sourceRow": 57
+    },
+    {
+      "dni": "08711426",
+      "name": "GONZÁLES MATOS MARCELO DANTE",
+      "from": null,
+      "to": "50301",
+      "matchedBy": "DNI",
+      "sourceRow": 58
+    },
+    {
+      "dni": "42138206",
+      "name": "HERNANDEZ SANCHEZ KELLY",
+      "from": null,
+      "to": "30016",
+      "matchedBy": "DNI",
+      "sourceRow": 59
+    },
+    {
+      "dni": "40542174",
+      "name": "INGA CERDA PATTY SINDY",
+      "from": null,
+      "to": "20002",
+      "matchedBy": "DNI",
+      "sourceRow": 60
+    },
+    {
+      "dni": "70676772",
+      "name": "ORDOÑEZ LEON PATRICIA",
+      "from": null,
+      "to": "30005",
+      "matchedBy": "DNI",
+      "sourceRow": 61
+    },
+    {
+      "dni": "09394947",
+      "name": "PEREZ SANCHEZ CHRISTIAN JESUS",
+      "from": null,
+      "to": "50301",
+      "matchedBy": "DNI",
+      "sourceRow": 62
+    },
+    {
+      "dni": "47516862",
+      "name": "SAMANIEGO PUENTE LUDMILIA REDINA",
+      "from": null,
+      "to": "50302",
+      "matchedBy": "DNI",
+      "sourceRow": 63
+    },
+    {
+      "dni": "75367992",
+      "name": "SOLANO EGOAVIL JAFET DAVID",
+      "from": null,
+      "to": "30018",
+      "matchedBy": "DNI",
+      "sourceRow": 64
+    },
+    {
+      "dni": "10080908",
+      "name": "ZELA MORAYA WESTER EDISON",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 65
+    },
+    {
+      "dni": "74833507",
+      "name": "RAMOS AQUIJE JENNYFER XIOMARA",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 66
+    },
+    {
+      "dni": "06661447",
+      "name": "AROSQUIPA RODRÍGUEZ CARLOS CECILIO",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 67
+    },
+    {
+      "dni": "42897396",
+      "name": "LUYO PACHAS LUIS RONALD",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 68
+    },
+    {
+      "dni": "43995352",
+      "name": "PAQUILLO TINCO JIMMY MANUEL",
+      "from": null,
+      "to": "50104",
+      "matchedBy": "DNI",
+      "sourceRow": 69
+    },
+    {
+      "dni": "02894992",
+      "name": "PURIZACA CURO DE QUILLE ROXANA MARISEL",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 70
+    },
+    {
+      "dni": "40498127",
+      "name": "SAMANIEGO JOAQUIN JHONNEL WILLIAMS",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 71
+    },
+    {
+      "dni": "70432387",
+      "name": "VILLALTA HERRERA CARLOS DAVID",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 72
+    },
+    {
+      "dni": "09903842",
+      "name": "VILLANUEVA CUSIHUALLPA JENNY",
+      "from": null,
+      "to": "50109",
+      "matchedBy": "DNI",
+      "sourceRow": 73
+    },
+    {
+      "dni": "71732330",
+      "name": "CARBAJAL BENITES LUZ MIRELLA",
+      "from": null,
+      "to": "30013",
+      "matchedBy": "DNI",
+      "sourceRow": 74
+    },
+    {
+      "dni": "47244420",
+      "name": "CHAHUA CHIHUAN LIZ ARACELY",
+      "from": null,
+      "to": "30013",
+      "matchedBy": "DNI",
+      "sourceRow": 75
+    },
+    {
+      "dni": "43835988",
+      "name": "HUAMAN VILCA MABEL MILAGROS",
+      "from": null,
+      "to": "30013",
+      "matchedBy": "DNI",
+      "sourceRow": 76
+    },
+    {
+      "dni": "75012618",
+      "name": "LAGUNA PARIONA YAMILE KATHERINE",
+      "from": null,
+      "to": "30013",
+      "matchedBy": "DNI",
+      "sourceRow": 77
+    },
+    {
+      "dni": "10729992",
+      "name": "SANTA CRUZ ZUÑIGA MANUEL ARTEMIO",
+      "from": null,
+      "to": "40015",
+      "matchedBy": "DNI",
+      "sourceRow": 78
+    },
+    {
+      "dni": "74369167",
+      "name": "SOLANO GONZALES ELFER FRANKLIN",
+      "from": null,
+      "to": "30013",
+      "matchedBy": "DNI",
+      "sourceRow": 79
+    },
+    {
+      "dni": "41123979",
+      "name": "DÁVILA AGUINAGA MIGUEL ARTURO",
+      "from": null,
+      "to": "20006",
+      "matchedBy": "DNI",
+      "sourceRow": 80
+    },
+    {
+      "dni": "71569365",
+      "name": "ESPINO BLAIR CRISTINA LUCÍA",
+      "from": null,
+      "to": "30014",
+      "matchedBy": "DNI",
+      "sourceRow": 81
+    },
+    {
+      "dni": "73325683",
+      "name": "ESTEBAN TOMAS FELIX MORAN",
+      "from": null,
+      "to": "30007",
+      "matchedBy": "DNI",
+      "sourceRow": 82
+    },
+    {
+      "dni": "40593513",
+      "name": "GIL CUEVA MARCELA JAQUELINY",
+      "from": null,
+      "to": "20004",
+      "matchedBy": "DNI",
+      "sourceRow": 83
+    },
+    {
+      "dni": "09353249",
+      "name": "LANDAURO CARRASCO RAFAEL MARTIN",
+      "from": null,
+      "to": "20007",
+      "matchedBy": "DNI",
+      "sourceRow": 84
+    },
+    {
+      "dni": "18181483",
+      "name": "MARTIN BOGDANOVICH MARÍA MINI",
+      "from": null,
+      "to": "20009",
+      "matchedBy": "DNI",
+      "sourceRow": 85
+    },
+    {
+      "dni": "42248126",
+      "name": "MATTA SOLIS EDUARDO PERCY",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 86
+    },
+    {
+      "dni": "09765702",
+      "name": "MENDIGURE FERNANDEZ JULIO",
+      "from": null,
+      "to": "20005",
+      "matchedBy": "DNI",
+      "sourceRow": 87
+    },
+    {
+      "dni": "09378716",
+      "name": "MONTES ITURRIZAGA IVAN",
+      "from": null,
+      "to": "40011",
+      "matchedBy": "DNI",
+      "sourceRow": 88
+    },
+    {
+      "dni": "06677714",
+      "name": "MORAN MARQUEZ GREGORIO OSWALDO",
+      "from": null,
+      "to": "20001",
+      "matchedBy": "DNI",
+      "sourceRow": 89
+    },
+    {
+      "dni": "06294409",
+      "name": "MORAN PAREDES GLADYS IVONNE",
+      "from": null,
+      "to": "20001",
+      "matchedBy": "DNI",
+      "sourceRow": 90
+    },
+    {
+      "dni": "18167641",
+      "name": "OBANDO PERALTA ENA CECILIA",
+      "from": null,
+      "to": "30011",
+      "matchedBy": "DNI",
+      "sourceRow": 91
+    },
+    {
+      "dni": "06718077",
+      "name": "PAREDES RIVERO DE MORAN LEDDY MIRIAM",
+      "from": null,
+      "to": "20001",
+      "matchedBy": "DNI",
+      "sourceRow": 92
+    },
+    {
+      "dni": "42144503",
+      "name": "QUISPE LIZARBE JOAN ALFREDO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 93
+    },
+    {
+      "dni": "10583688",
+      "name": "ORBEGOZO CONTRERAS ELIZABETH CAROL",
+      "from": null,
+      "to": "50308",
+      "matchedBy": "DNI",
+      "sourceRow": 94
+    },
+    {
+      "dni": "41336465",
+      "name": "ALVARADO SANDOVAL ROBERTS LUIS",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 95
+    },
+    {
+      "dni": "43726464",
+      "name": "DAVILA MORAN ROBERTO CARLOS",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 96
+    },
+    {
+      "dni": "23986303",
+      "name": "FLORES RODRIGUEZ MARLENE",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 97
+    },
+    {
+      "dni": "40203064",
+      "name": "CELIS ARTEAGA ANIBAL RUBEN",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 98
+    },
+    {
+      "dni": "09109114",
+      "name": "FERNÁNDEZ SALAZAR ARTURO ANGEL",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 99
+    },
+    {
+      "dni": "44805247",
+      "name": "LEYVA ATO LADY ANTUANETTE",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 100
+    },
+    {
+      "dni": "22314341",
+      "name": "MEJÍA CACERES CARLOS MARTÍN",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 101
+    },
+    {
+      "dni": "10387412",
+      "name": "QUISPE LOPEZ  GASTON MARCOS",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 102
+    },
+    {
+      "dni": "46360490",
+      "name": "SÁNCHEZ CORONEL, CARLOS CÉSAR",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 103
+    },
+    {
+      "dni": "21527645",
+      "name": "TOMAIRO LÓPEZ EVA EDITH",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 104
+    },
+    {
+      "dni": "17867114",
+      "name": "VALERIO HARO FELIX JULIAN",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 105
+    },
+    {
+      "dni": "70866825",
+      "name": "AQUINO CONTRERAS CRISTHIAN JOHAN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 106
+    },
+    {
+      "dni": "02440693",
+      "name": "CUTIMBO UMPIRE JULIA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 107
+    },
+    {
+      "dni": "08171506",
+      "name": "GODOY RAMÍREZ JANETT PATRICIA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 109
+    },
+    {
+      "dni": "70084304",
+      "name": "ROJAS DÍAZ JHON ROBINSON",
+      "from": null,
+      "to": "20001",
+      "matchedBy": "DNI",
+      "sourceRow": 110
+    },
+    {
+      "dni": "00487738",
+      "name": "NINAJA SUCAPUCA DIANA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 111
+    },
+    {
+      "dni": "42845969",
+      "name": "SANCHEZ VILCAYAURI INES ESPERANZA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 112
+    },
+    {
+      "dni": "09265802",
+      "name": "SÁENZ GUZMAN FREDY HARBEY",
+      "from": null,
+      "to": "20010",
+      "matchedBy": "DNI",
+      "sourceRow": 113
+    },
+    {
+      "dni": "09874299",
+      "name": "VILLAR BARNUEVO JULIO CESAR",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 114
+    },
+    {
+      "dni": "40970938",
+      "name": "ZEGARRA CHAPOÑAN ROBERTO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 115
+    },
+    {
+      "dni": "10676704",
+      "name": "CHERO PACHECO VICTOR HUMBERTO",
+      "from": null,
+      "to": "40011",
+      "matchedBy": "DNI",
+      "sourceRow": 116
+    },
+    {
+      "dni": "40692237",
+      "name": "CRISTOBAL PAREDES YULAN CLAUDIA",
+      "from": null,
+      "to": "30012",
+      "matchedBy": "DNI",
+      "sourceRow": 117
+    },
+    {
+      "dni": "41835622",
+      "name": "HUERTA LEON JENNY ROSALYN",
+      "from": null,
+      "to": "40011",
+      "matchedBy": "DNI",
+      "sourceRow": 118
+    },
+    {
+      "dni": "72387371",
+      "name": "MARIMÓN ORTIZ SEBASTIÁN JOSÉ",
+      "from": null,
+      "to": "30012",
+      "matchedBy": "DNI",
+      "sourceRow": 119
+    },
+    {
+      "dni": "09334406",
+      "name": "QUIQUIA RAU FERNANDO PELAYO",
+      "from": null,
+      "to": "30012",
+      "matchedBy": "DNI",
+      "sourceRow": 120
+    },
+    {
+      "dni": "70860716",
+      "name": "CURI NOREÑA RAQUEL ABIGAIL",
+      "from": null,
+      "to": "30005",
+      "matchedBy": "DNI",
+      "sourceRow": 121
+    },
+    {
+      "dni": "43784845",
+      "name": "OSORIO RAMOS LEYDI NATALY",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 122
+    },
+    {
+      "dni": "73180060",
+      "name": "ESQUERRE BECERRA EVA GRACIELA",
+      "from": null,
+      "to": "30005",
+      "matchedBy": "DNI",
+      "sourceRow": 123
+    },
+    {
+      "dni": "42870048",
+      "name": "BAUTISTA DIPAZ  KOLFHER JEFFERSON",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 124
+    },
+    {
+      "dni": "43982929",
+      "name": "ZEBALLOS CONISLLA HOLGER ELMER",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 125
+    },
+    {
+      "dni": "28216843",
+      "name": "ZÁRATE CÁRDENAS ROSARIO",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 126
+    },
+    {
+      "dni": "43253000",
+      "name": "JULCA GÓMEZ SONIA SUSANA",
+      "from": null,
+      "to": "40006",
+      "matchedBy": "DNI",
+      "sourceRow": 127
+    },
+    {
+      "dni": "76298666",
+      "name": "SEVILLANO RODRÍGUEZ EVELYN",
+      "from": null,
+      "to": "30005",
+      "matchedBy": "DNI",
+      "sourceRow": 128
+    },
+    {
+      "dni": "70558742",
+      "name": "LÓPEZ YUPANQUI JOSELYN DENISSE",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 129
+    },
+    {
+      "dni": "73605710",
+      "name": "HUAMURO CASTILLO EDINSON",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 130
+    },
+    {
+      "dni": "41013429",
+      "name": "ANGLAS HANCCO EDGAR GUSTAVO",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 131
+    },
+    {
+      "dni": "09090465",
+      "name": "CHIRINOS MALDONADO HUGO ROBERTO",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 132
+    },
+    {
+      "dni": "77158034",
+      "name": "LLOJLLA SINGUÑA YANETH",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 133
+    },
+    {
+      "dni": "48154559",
+      "name": "MONTALVO PALOMINO GRACIELA",
+      "from": null,
+      "to": "50104",
+      "matchedBy": "DNI",
+      "sourceRow": 134
+    },
+    {
+      "dni": "46088732",
+      "name": "ZAMBRANO BRAÑEZ MARIO ANDRES",
+      "from": null,
+      "to": "50104",
+      "matchedBy": "DNI",
+      "sourceRow": 135
+    },
+    {
+      "dni": "44820703",
+      "name": "ARIAS BARON KIMBERLY ALIKA",
+      "from": null,
+      "to": "30004",
+      "matchedBy": "DNI",
+      "sourceRow": 136
+    },
+    {
+      "dni": "80384220",
+      "name": "GOMEZ BERROSPI PAUL LEONARDO",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 137
+    },
+    {
+      "dni": "45463708",
+      "name": "BERMEJO CABANILLAS ANTHONY GIANPIERRE",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 138
+    },
+    {
+      "dni": "41228192",
+      "name": "GAMBOA QUINCHO EDITH ISABEL",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 139
+    },
+    {
+      "dni": "47161921",
+      "name": "MADUEÑO VENTURA FRESCIA MARIA",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 140
+    },
+    {
+      "dni": "74225172",
+      "name": "TOKUMOTO VALERA FIORELLA SUMIKO",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 141
+    },
+    {
+      "dni": "73119282",
+      "name": "HUERTA VALDIVIA ADRIANA BELÉN",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 142
+    },
+    {
+      "dni": "42443911",
+      "name": "VENEGAS DIOSES JOHANN CHRISTIAN",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 143
+    },
+    {
+      "dni": "76230703",
+      "name": "CAMPOS LOARTE YESENIA CECILIA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 144
+    },
+    {
+      "dni": "44963620",
+      "name": "CARHUACHIN TOLENTINO HECTOR ERWIN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 145
+    },
+    {
+      "dni": "70993644",
+      "name": "CHICATA VELASQUEZ JHEYSON OCTAVIO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 146
+    },
+    {
+      "dni": "45499457",
+      "name": "DE PAZ LUJÁN KATHERINE",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 147
+    },
+    {
+      "dni": "05403224",
+      "name": "DEL CASTILLO MÁRQUEZ HANNES",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 148
+    },
+    {
+      "dni": "07039859",
+      "name": "AMAT Y LEON GUEVARA CARMEN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 149
+    },
+    {
+      "dni": "08679701",
+      "name": "HINOJOSA SANCHEZ LOURDES GIOVANNA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 150
+    },
+    {
+      "dni": "21861852",
+      "name": "PACHECO ATUNCAR ELIZABETH ROXANA",
+      "from": null,
+      "to": "60102",
+      "matchedBy": "DNI",
+      "sourceRow": 151
+    },
+    {
+      "dni": "72123766",
+      "name": "MORENO YAURI ARLIE",
+      "from": null,
+      "to": "50109",
+      "matchedBy": "DNI",
+      "sourceRow": 152
+    },
+    {
+      "dni": "25776442",
+      "name": "CARRILLO RODRIGUEZ SELENA VILMA",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 153
+    },
+    {
+      "dni": "45367788",
+      "name": "GERÓNIMO QUISPE ELIZABETH CRISTELL",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 154
+    },
+    {
+      "dni": "10130431",
+      "name": "CHUQUIZUTTA BENAVIDES KARINA VERONICA",
+      "from": null,
+      "to": "60109",
+      "matchedBy": "DNI",
+      "sourceRow": 155
+    },
+    {
+      "dni": "10674336",
+      "name": "HUAYTA PEREZ LUZ CARMELA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 156
+    },
+    {
+      "dni": "01888090",
+      "name": "QUILLE TICONA JOSE MERLIN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 157
+    },
+    {
+      "dni": "70071066",
+      "name": "ROJAS GUERRERO JIUSEPE IVAN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 158
+    },
+    {
+      "dni": "71951132",
+      "name": "TICONA SANDOVAL FRANCIS AARON",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 159
+    },
+    {
+      "dni": "44286647",
+      "name": "PAREDES VILLEGAS ROSA YARENIS",
+      "from": null,
+      "to": "60109",
+      "matchedBy": "DNI",
+      "sourceRow": 160
+    },
+    {
+      "dni": "06166456",
+      "name": "ZAVALETA GRADOS TRANSITO ELENA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 161
+    },
+    {
+      "dni": "70455522",
+      "name": "AGUIRRE GIHUA MARIO CHRISTIAN",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 162
+    },
+    {
+      "dni": "40165953",
+      "name": "AYALA BAEZ DEYBBIS ROSARIO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 163
+    },
+    {
+      "dni": "44660740",
+      "name": "CAPCHA SICCHA MARLENY FLOR",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 164
+    },
+    {
+      "dni": "75763000",
+      "name": "CRUZ TOLEDO GIANELLA ROSARIO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 165
+    },
+    {
+      "dni": "07498621",
+      "name": "HERNANDEZ CORDERO GIOVANNA OFELIA",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 166
+    },
+    {
+      "dni": "45059918",
+      "name": "TAFUR PANDURO CLAUDIA",
+      "from": null,
+      "to": "60109",
+      "matchedBy": "DNI",
+      "sourceRow": 167
+    },
+    {
+      "dni": "09308488",
+      "name": "VALENZUELA ESLAVA NELLY SOLEDAD",
+      "from": null,
+      "to": "60109",
+      "matchedBy": "DNI",
+      "sourceRow": 168
+    },
+    {
+      "dni": "09865747",
+      "name": "UGARTE UBILLUZ OSCAR RAUL",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 169
+    },
+    {
+      "dni": "28287377",
+      "name": "LIZARBE CASTRO MARÍA VICTORIA",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 170
+    },
+    {
+      "dni": "00553485",
+      "name": "GALARCIO PERIÑAN CARLOS MARIO",
+      "from": null,
+      "to": "60109",
+      "matchedBy": "DNI",
+      "sourceRow": 171
+    },
+    {
+      "dni": "44626932",
+      "name": "VENEGAS DIOSES HUGO FERNANDO",
+      "from": null,
+      "to": "60109",
+      "matchedBy": "DNI",
+      "sourceRow": 172
+    },
+    {
+      "dni": "07498333",
+      "name": "CONTRERAS PINTO CHRISTIAN BENIGNO",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 173
+    },
+    {
+      "dni": "43890091",
+      "name": "WONG ROBALINO MISHELLE ANGELICA",
+      "from": null,
+      "to": "50303",
+      "matchedBy": "DNI",
+      "sourceRow": 174
+    },
+    {
+      "dni": "09303322",
+      "name": "MORALES CONTRERAS CARMEN ROSA",
+      "from": null,
+      "to": "50302",
+      "matchedBy": "DNI",
+      "sourceRow": 175
+    },
+    {
+      "dni": "41148074",
+      "name": "LOPEZ VEGA IRIS MARGOT",
+      "from": null,
+      "to": "50301",
+      "matchedBy": "DNI",
+      "sourceRow": 176
+    },
+    {
+      "dni": "09904425",
+      "name": "SAN MIGUEL VELASQUEZ YULY VICTORIA",
+      "from": null,
+      "to": "50308",
+      "matchedBy": "DNI",
+      "sourceRow": 177
+    },
+    {
+      "dni": "73978233",
+      "name": "HUAMANI HUAMANI LISBET YOCELIN",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 178
+    },
+    {
+      "dni": "08377070",
+      "name": "ÁLVAREZ RODRIGUEZ GLORIA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 179
+    },
+    {
+      "dni": "44728252",
+      "name": "CHATI CHAHUA KARLA MARILYN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 180
+    },
+    {
+      "dni": "45669439",
+      "name": "COCHACHI MENDOZA NADEZHDA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 181
+    },
+    {
+      "dni": "47072895",
+      "name": "DIAZ MEGO RONALD ELIAS",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 182
+    },
+    {
+      "dni": "07682432",
+      "name": "GAMARRA GABANCHO ELIZABETH",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 183
+    },
+    {
+      "dni": "43859350",
+      "name": "GAMBINI DUEÑAS ISRRAEL SIXTO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 184
+    },
+    {
+      "dni": "08353243",
+      "name": "LOYOLA GARCIA NORMA LUZ",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 185
+    },
+    {
+      "dni": "10341898",
+      "name": "MANTILLA ROSALES NOLBERTO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 186
+    },
+    {
+      "dni": "41954311",
+      "name": "NOLAZCO LABAJOS URSULA NOLAZCO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 187
+    },
+    {
+      "dni": "45605596",
+      "name": "PALMA LÓPEZ SARA KEYKO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 188
+    },
+    {
+      "dni": "46208960",
+      "name": "PEÑA TORRES SANTIJESUS",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 189
+    },
+    {
+      "dni": "42258988",
+      "name": "POLICIO MARTINEZ  LIZBETH",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 190
+    },
+    {
+      "dni": "71014505",
+      "name": "VENTURA LOPEZ  MARIA DE LOS ANGELES",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 191
+    },
+    {
+      "dni": "07498822",
+      "name": "ARAUJO CONDOR OSCAR WILFREDO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 192
+    },
+    {
+      "dni": "09470046",
+      "name": "MUÑOZ  YUCRA  LUIS ALBERTO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 193
+    },
+    {
+      "dni": "10677018",
+      "name": "PALOMINO KNUTZEN OSCAR ROBERTO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 194
+    },
+    {
+      "dni": "47271933",
+      "name": "RIVERA GUERRERO MAYELI LIZETH",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 195
+    },
+    {
+      "dni": "25806713",
+      "name": "SALAS VILLAYZAN CESAR IVAN",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 196
+    },
+    {
+      "dni": "45946742",
+      "name": "SANCHEZ SIESQUEN JAVIER ALONSO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 197
+    },
+    {
+      "dni": "45042465",
+      "name": "SOTO PRUDENCIO MARIA CLAUDIA",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 198
+    },
+    {
+      "dni": "41444851",
+      "name": "TOVAR BACA JUAN CARLOS",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 199
+    },
+    {
+      "dni": "08142913",
+      "name": "ACUÑA SEMINO JUAN JOSÉ",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 200
+    },
+    {
+      "dni": "09578116",
+      "name": "ALGUIAR BERNAOLA LUZ ROCIO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 201
+    },
+    {
+      "dni": "41353448",
+      "name": "ALGUIAR BERNAOLA MAGNEY SUSY",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 202
+    },
+    {
+      "dni": "09662680",
+      "name": "ATARAMA GALVEZ KARIM ISABEL",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 203
+    },
+    {
+      "dni": "09127141",
+      "name": "CASAS MELENDEZ MARÍA GUADALUPE",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 204
+    },
+    {
+      "dni": "40069261",
+      "name": "COSTILLA GARCIA EDGARD LUIS",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 205
+    },
+    {
+      "dni": "06121495",
+      "name": "LA SERNA LA ROSA  PABLO ANTONIO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 206
+    },
+    {
+      "dni": "41949925",
+      "name": "LETO HUAYANCA  CINTHIA FARATH",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 207
+    },
+    {
+      "dni": "25574998",
+      "name": "MALDONADO PEREZ JESSICA YVONNE",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 208
+    },
+    {
+      "dni": "46714309",
+      "name": "MARTEL LAURA YONNATAN ALEXANDRO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 209
+    },
+    {
+      "dni": "06569215",
+      "name": "QUISPE ROJAS ANA MARIA",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 210
+    },
+    {
+      "dni": "43156546",
+      "name": "RAMOS LAZARO ANDRES",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 211
+    },
+    {
+      "dni": "44645612",
+      "name": "TRINIDAD COLLAZOS RUTH MARISOL",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 212
+    },
+    {
+      "dni": "42358609",
+      "name": "VALDERRAMA YTOKAZU MAX",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 213
+    },
+    {
+      "dni": "46985963",
+      "name": "VELASCO CHONG JONAS ROBERTO",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 214
+    },
+    {
+      "dni": "72847601",
+      "name": "UBILLUS BENITES JUAN DIEGO",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 215
+    },
+    {
+      "dni": "44243793",
+      "name": "WU VEGA MARIO ESLY",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 216
+    },
+    {
+      "dni": "47200005",
+      "name": "GODINEZ TELLO CARLOS RAUL ANDRE",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 217
+    },
+    {
+      "dni": "41639577",
+      "name": "CAMPOS CHÁVEZ WILLIAM ALEXANDER",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 218
+    },
+    {
+      "dni": "43620635",
+      "name": "ORELLANA PERALTA FIORELLA GUADALUPE",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 219
+    },
+    {
+      "dni": "45220336",
+      "name": "VELASQUEZ SOTO SANDRA ESTELA",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 220
+    },
+    {
+      "dni": "70752720",
+      "name": "GINEZ CLINTON MISAEL CLINTON",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 221
+    },
+    {
+      "dni": "75981720",
+      "name": "VENTURA SOLANO ANGELA ABIGAIL",
+      "from": null,
+      "to": "50102",
+      "matchedBy": "DNI",
+      "sourceRow": 222
+    },
+    {
+      "dni": "44270094",
+      "name": "BEINGOLEA BENITES LUIS MIGUEL",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 223
+    },
+    {
+      "dni": "23937540",
+      "name": "PAPA DELGADO EMILIA",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 224
+    },
+    {
+      "dni": "10777331",
+      "name": "RAMIREZ MUCHA JAVIER",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 225
+    },
+    {
+      "dni": "09632884",
+      "name": "MARQUINA QUISPE RENZO HERNAN",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 226
+    },
+    {
+      "dni": "08597036",
+      "name": "QUISPE ASTO CESAR FRANCISCO",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 227
+    },
+    {
+      "dni": "73017358",
+      "name": "VICTORIO LOPEZ DANY KEVIN",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 228
+    },
+    {
+      "dni": "43642702",
+      "name": "YALI RIVERA JUDITH MERCEDES",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 229
+    },
+    {
+      "dni": "09651850",
+      "name": "RAMIREZ CAJO RITA",
+      "from": null,
+      "to": "50109",
+      "matchedBy": "DNI",
+      "sourceRow": 230
+    },
+    {
+      "dni": "45849473",
+      "name": "ANTONIO ROJAS ABRAHAM ALBERTO",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 231
+    },
+    {
+      "dni": "44633389",
+      "name": "CACHI PÉREZ MASSIEL MADELEINE",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 232
+    },
+    {
+      "dni": "41330799",
+      "name": "CERDAN CUEVA HUGO JAVIER",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 233
+    },
+    {
+      "dni": "40729616",
+      "name": "JULCA CARHUAVILCA JESÚS MATIAS",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 234
+    },
+    {
+      "dni": "76264528",
+      "name": "RODRIGUEZ CONTRERAS LUIS ENRIQUE",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 235
+    },
+    {
+      "dni": "70809226",
+      "name": "ROSPIGLIOSI MORALES MARÍA EDIT",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 236
+    },
+    {
+      "dni": "70436972",
+      "name": "SANTOS RONDÓN KARLA ELIZABETH",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 237
+    },
+    {
+      "dni": "43113410",
+      "name": "VÁSQUEZ TELLO PAULA",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 238
+    },
+    {
+      "dni": "32735332",
+      "name": "VELASQUEZ BAUTISTA JAIME MAXIMO",
+      "from": null,
+      "to": "50106",
+      "matchedBy": "DNI",
+      "sourceRow": 239
+    },
+    {
+      "dni": "42586897",
+      "name": "VILELA MANCHAY DANICSA SOLEDAD",
+      "from": null,
+      "to": "50103",
+      "matchedBy": "DNI",
+      "sourceRow": 240
+    },
+    {
+      "dni": "07459338",
+      "name": "ACARO CHUQUICAÑA FIDEL ERNESTO",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 241
+    },
+    {
+      "dni": "32919696",
+      "name": "ZUÑIGA PRÍNCIPE GISELLE GUADALUPE",
+      "from": null,
+      "to": "60201",
+      "matchedBy": "DNI",
+      "sourceRow": 242
+    },
+    {
+      "dni": "75868762",
+      "name": "ALBORNOZ TOYOHAMA ROGER HIROSHI",
+      "from": null,
+      "to": "50108",
+      "matchedBy": "DNI",
+      "sourceRow": 243
+    },
+    {
+      "dni": "75951739",
+      "name": "CHAVEZ ROJAS GABRIELA BRISETH",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 244
+    },
+    {
+      "dni": "73805452",
+      "name": "GUTIÉRREZ URIARTE SANDRA PAOLA",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 245
+    },
+    {
+      "dni": "76157002",
+      "name": "MENDOZA YARLEQUE ADRIANA LISBETH JASMIN",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 246
+    },
+    {
+      "dni": "70883659",
+      "name": "QUISPE SAGARBINAGA KAREN BEATRIZ",
+      "from": null,
+      "to": "30003",
+      "matchedBy": "DNI",
+      "sourceRow": 247
+    },
+    {
+      "dni": "45834564",
+      "name": "ANTICONA LOPEZ VICTOR HUGO",
+      "from": null,
+      "to": "50308",
+      "matchedBy": "DNI",
+      "sourceRow": 248
+    },
+    {
+      "dni": "80611476",
+      "name": "ORTIZ COTRINA WILINTON CHILIMAN",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 249
+    },
+    {
+      "dni": "48158417",
+      "name": "PAULINO MORENO CLEOGE ZENAIDA",
+      "from": null,
+      "to": "50305",
+      "matchedBy": "DNI",
+      "sourceRow": 250
+    },
+    {
+      "dni": "46566734",
+      "name": "RAMOS RAMOS LUZ GEORGET",
+      "from": null,
+      "to": "50105",
+      "matchedBy": "DNI",
+      "sourceRow": 251
+    },
+    {
+      "dni": "71295034",
+      "name": "BALLENA SIVIPAUCAR STEFANY ROCÍO",
+      "from": null,
+      "to": "50107",
+      "matchedBy": "DNI",
+      "sourceRow": 252
+    },
+    {
+      "dni": "71507367",
+      "name": "AHUANARI CRUZ SHIRLEY JHEANNETHE",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 253
+    },
+    {
+      "dni": "25697604",
+      "name": "FAJARDO CANAVAL MARIA DEL PILAR",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 254
+    },
+    {
+      "dni": "09849431",
+      "name": "MEZA QUISPE JORGE",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 255
+    },
+    {
+      "dni": "09648920",
+      "name": "RODRIGUEZ ORMAECHE RITA LUZ",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 256
+    },
+    {
+      "dni": "41423556",
+      "name": "SANCHEZ QUISPE DIEGO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 257
+    },
+    {
+      "dni": "07808812",
+      "name": "SOLIS MACEDO INES",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 258
+    },
+    {
+      "dni": "21780523",
+      "name": "TORNERO TASAYCO ESVIA CONSUELO",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 259
+    },
+    {
+      "dni": "46655789",
+      "name": "LAZO CCALLO GIOVANI FERNANDO",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 260
+    },
+    {
+      "dni": "48368688",
+      "name": "PINEDO LABAJOS LETHY",
+      "from": null,
+      "to": "30015",
+      "matchedBy": "DNI",
+      "sourceRow": 261
+    },
+    {
+      "dni": "08124057",
+      "name": "ROA CAMPOS LAURA PATRICIA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 262
+    },
+    {
+      "dni": "07198696",
+      "name": "SOLIS SOLIS VIRGINIA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 263
+    },
+    {
+      "dni": "45495040",
+      "name": "ANDIA MONTOYA EVENELYN VERONICA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 264
+    },
+    {
+      "dni": "09235762",
+      "name": "ROJAS DELGADO LUCILA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 265
+    },
+    {
+      "dni": "09729137",
+      "name": "ESPINOZA SEDANO CLARA YSABEL",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 266
+    },
+    {
+      "dni": "10646062",
+      "name": "CHRISTINE GERALDINE SALCEDO ACUÑA",
+      "from": null,
+      "to": "50101",
+      "matchedBy": "DNI",
+      "sourceRow": 267
+    }
+  ],
+  "unchanged": [],
+  "skipped": [
+    {
+      "dni": "70829569",
+      "code": "30004",
+      "reason": "ACCOUNT_NOT_FOUND_BY_DNI"
+    },
+    {
+      "dni": "44647124",
+      "code": "20008",
+      "reason": "DISPUTED_SOURCES: Employee roster 20008, Treasury 20012"
+    }
+  ],
+  "changesApplied": [],
+  "errors": [],
+  "centerCodesInDatabase": 6
+}

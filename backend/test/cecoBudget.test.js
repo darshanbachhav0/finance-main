@@ -66,9 +66,10 @@ test("CECO budgets: each advance is charged to its own CECO, with or without an 
     const other = await CostCenter.create({ code: "CB-OTHER", name: "Someone else's", area: "Library", active: true });
     const opex = await ExpenseType.create({ code: "CB-OPEX", name: "Travel expense", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", deductible: true, active: true });
     const director = await User.create({ name: "CB Director", email: "cb.director@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["*"], area: "Operations" });
-    const owner = await User.create({ name: "CB Employee", dni: "44556622", employeeCode: "UMA-CB-1", email: "cb.owner@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations", costCenter: open._id, authorizedCostCenters: [open._id, planned._id, other._id], jefe: director._id });
+    const owner = await User.create({ name: "CB Employee", dni: "44556622", employeeCode: "UMA-CB-1", email: "cb.owner@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, jobCategory: 3, area: "Operations", costCenter: open._id, authorizedCostCenters: [open._id, planned._id, other._id], jefe: director._id });
     const accounting = await User.create({ name: "CB Accounting", email: "cb.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "CB Treasury", email: "cb.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
+    const gaf = await User.create({ name: "CB GAF", email: "cb.gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
     const superAdmin = await User.create({ name: "CB Super Admin", email: "cb.super@test.local", passwordHash: "unused", role: ROLES.SUPER_ADMIN, area: "IT" });
     const solicitor = await User.create({ name: "CB Other", email: "cb.other@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations" });
     await AccountingPeriod.create({ period, status: "OPEN" });
@@ -95,7 +96,7 @@ test("CECO budgets: each advance is charged to its own CECO, with or without an 
       const payable = await AccountsPayable.findOne({ request: created._id });
       const batch = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", batch.batch.fileName));
-      await verifyBankFile({ batchId: batch.batch._id, user: accounting, req });
+      await verifyBankFile({ batchId: batch.batch._id, user: gaf, req });
       await confirmTreasuryPayable({ accountsPayableId: payable._id, payload: { operationNumber: `CB-OP-${number}`, paidAt: "2026-09-18", confirmedAmount: 56 }, user: treasury, req });
       return created;
     };

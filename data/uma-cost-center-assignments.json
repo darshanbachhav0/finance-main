@@ -1,0 +1,4136 @@
+{
+  "version": 1,
+  "sourceFiles": [
+    "data em.xlsx",
+    "Centro de Costo - Tesoreria.xlsx"
+  ],
+  "primarySource": "data em.xlsx",
+  "conflictPolicy": "SKIP_DISPUTED_DNI",
+  "rows": [
+    {
+      "dni": "70829569",
+      "name": "APONTE ALVA KATYA CONSUELO",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 2,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 82,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "73641847",
+      "name": "BAZAN CHAVEZ DANNA SHANTAL",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 3,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 91,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "72755720",
+      "name": "CALLAN HUAUYA BRISSILA XIOMARA",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 4,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 96,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41162303",
+      "name": "DÍAZ ORIBE ROSA MARGARITA",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 5,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 87,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41800029",
+      "name": "ENCARNACIÓN CRISTÓBAL DE RÍMAC MARIEL CHARO",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 6,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 90,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "74899472",
+      "name": "FERNANDEZ ALVAREZ KATHERINE LISBET",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 7,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 92,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "74396484",
+      "name": "FERNANDEZ PAREDES JAHAIRA SUSANA ANTUANETTE",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 8,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 84,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "71962801",
+      "name": "GONZALEZ GAMARRA XIMENA ANELIK",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 9,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 94,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42214240",
+      "name": "LAGOMARSINO GARCÍA TANIA ELIZABETH",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 10,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 88,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47115816",
+      "name": "MASGO VARA MIRIAM",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 11,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 86,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70435026",
+      "name": "MONTALVAN EGUSQUIZA MARÍA ISABEL",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 12,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 93,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "72972025",
+      "name": "PALOMINO GUIZADO SHEGLY SHARON",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 13,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 83,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09938560",
+      "name": "PEREZ HUAMAN JESUSA ESPERANZA",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 14,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 85,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "73450023",
+      "name": "QUINTANA CARHUAJULCA ABIGAIL YOSELIN",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 15,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "75581503",
+      "name": "YNGA VASQUEZ DIANA MARIA",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 16,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 95,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40356687",
+      "name": "AVALOS ARANCIBIA JUAN JOSÉ",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 17,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50108",
+      "treasuryRow": 53,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "72699087",
+      "name": "RIOS CARLOS FABIANA DAMERIS",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 18,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50108",
+      "treasuryRow": 51,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09884894",
+      "name": "ROMERO PUCCINELLI JOSE ANTONIO",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 19,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50108",
+      "treasuryRow": 54,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47237985",
+      "name": "CARRANZA VALLEJOS EDILBERTO",
+      "code": "20006",
+      "area": "GERENCIA DE OPERACIONES",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 20,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20006",
+      "treasuryRow": 70,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "48000253",
+      "name": "GALLARDO PALACIOS GIAN PIERRE",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 21,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 124,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47129404",
+      "name": "MENDOZA CHUCHON MARCO ANTONIO",
+      "code": "30013",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 22,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30013",
+      "treasuryRow": 117,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41715053",
+      "name": "TARAZONA TARAZONA ANGEL AMERICO",
+      "code": "20006",
+      "area": "GERENCIA DE OPERACIONES",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 23,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20006",
+      "treasuryRow": 71,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75241952",
+      "name": "DIEGO ARTEAGA RUTH CAMILA",
+      "code": "40001",
+      "area": "TESORERÍA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRow": 24,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40001",
+      "treasuryRow": 143,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70988722",
+      "name": "ESPINOZA CARDENAS CINTHIA",
+      "code": "40001",
+      "area": "TESORERÍA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRow": 25,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40001",
+      "treasuryRow": 142,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "08003682",
+      "name": "BACHHAV DARSHAN PRAVIN",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 26,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 130,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "71740794",
+      "name": "CABEZAS HUANGAL ANGELLO SEBASTIÁN",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 27,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 129,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47558888",
+      "name": "CAMACHO PEREZ ENZO ADHEMIR",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 28,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 128,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44305912",
+      "name": "CHIRINOS RUMIN MANUEL WILFREDO",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 29,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 127,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "07999930",
+      "name": "GADADE ABHIRAJ SANDEEP",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 30,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 131,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "08003888",
+      "name": "JOSHI YASH MILIND",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 31,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 134,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40868681",
+      "name": "NICHO FLORES CARLOS DANIEL",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 32,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 125,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "62049056",
+      "name": "PALOMINO CASTRO RODRIGO",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 33,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 132,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75378641",
+      "name": "REVILLA VERGARAY LINDER",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 34,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 126,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75986259",
+      "name": "SINCHE PANDURO VÍCTOR",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 35,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30007",
+      "treasuryRow": 133,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41274394",
+      "name": "JUAREZ ALVINES EVELYN HERLINDA",
+      "code": "20004",
+      "area": "SECRETARÍA GENERAL",
+      "organizationalUnit": "SECRETARIA GENERAL",
+      "sourceRow": 36,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20004",
+      "treasuryRow": 140,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70887469",
+      "name": "SANTE MELGAR ZULLY GIANINA",
+      "code": "40019",
+      "area": "GRADOS Y TITULOS",
+      "organizationalUnit": "SECRETARIA GENERAL",
+      "sourceRow": 37,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40019",
+      "treasuryRow": 79,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42793231",
+      "name": "TAFUR DURAND ERIKA",
+      "code": "20004",
+      "area": "SECRETARÍA GENERAL",
+      "organizationalUnit": "SECRETARIA GENERAL",
+      "sourceRow": 38,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20004",
+      "treasuryRow": 141,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "74388519",
+      "name": "ROJAS PARILLO LUIS ENRIQUE",
+      "code": "20001",
+      "area": "GERENCIA GENERAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 39,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20001",
+      "treasuryRow": 76,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "76133086",
+      "name": "APARICIO RODRÍGUEZ NICOLE ALEXANDRA",
+      "code": "30016",
+      "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 40,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30016",
+      "treasuryRow": 103,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "74433270",
+      "name": "JOCOPE GUAYANAY TANIA ERIKA",
+      "code": "30016",
+      "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 41,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30016",
+      "treasuryRow": 104,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "73089540",
+      "name": "LUNA ZAVALA GRETELL STHEFANY",
+      "code": "30016",
+      "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 42,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30016",
+      "treasuryRow": 105,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "73669675",
+      "name": "MORI ORTIZ JORDI EDU",
+      "code": "30016",
+      "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 43,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30016",
+      "treasuryRow": 106,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "10525370",
+      "name": "ESCOBAR CHUQUIHUACCHA VERONICA SOFIA",
+      "code": "20007",
+      "area": "GERENCIA DE ADMINISTRACION FINANCIERA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRow": 44,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20007",
+      "treasuryRow": 66,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47265042",
+      "name": "FLORES TITO NAYRUT BRIGIDA",
+      "code": "20007",
+      "area": "GERENCIA DE ADMINISTRACION FINANCIERA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRow": 45,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20007",
+      "treasuryRow": 68,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44441990",
+      "name": "SAAVEDRA RAMIREZ MARIO ANTONIO",
+      "code": "20007",
+      "area": "GERENCIA DE ADMINISTRACION FINANCIERA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRow": 46,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20007",
+      "treasuryRow": 67,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45560495",
+      "name": "BOLAÑOS RUEDA JEANCARLO JOEL",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 47,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50103",
+      "treasuryRow": 58,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47761023",
+      "name": "LEON ARGUMEDO CYNTHIA",
+      "code": "40020",
+      "area": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 48,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40020",
+      "treasuryRow": 137,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45225991",
+      "name": "RUBIO LOPEZ GHILMAR",
+      "code": "40020",
+      "area": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 49,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40020",
+      "treasuryRow": 136,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "76325872",
+      "name": "VIZCARRA ANICAMA CAROLAYN DESSIRE",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 50,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50103",
+      "treasuryRow": 60,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "72794714",
+      "name": "YARMA ARIAS REBECA SARAHI",
+      "code": "40020",
+      "area": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 51,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40020",
+      "treasuryRow": 138,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "74820217",
+      "name": "ALVAREZ SULCA JASMIN ESTEYSI",
+      "code": "30018",
+      "area": "DIRECCION DE EDUCACION CONTINUA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 52,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30018",
+      "treasuryRow": 4,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "71298175",
+      "name": "ARENAS ESTRADA MAYRA ALEXANDRA",
+      "code": "40020",
+      "area": "VICERRECTORADO DE GESTIÓN ACADÉMICA EN INGENIERÍA Y NEGOCIOS Y SERVICIOS GENERALES ACADÉMICOS",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 53,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40020",
+      "treasuryRow": 150,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75096354",
+      "name": "ARONES PEREZ PAOLO PAULINO",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 54,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50305",
+      "treasuryRow": 50,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42182154",
+      "name": "CIEZA RAMOS DAVID",
+      "code": "50302",
+      "area": "EP DE ADM. Y NEGOCIOS INTERNACIONALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 55,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50302",
+      "treasuryRow": 12,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "72049174",
+      "name": "FLORES MELGAR ANTHONNY GERSON",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 56,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50305",
+      "treasuryRow": 49,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40186218",
+      "name": "GAMBOA MOLINA JUAN CARLOS",
+      "code": "30018",
+      "area": "DIRECCION DE EDUCACION CONTINUA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 57,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30018",
+      "treasuryRow": 3,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "08711426",
+      "name": "GONZÁLES MATOS MARCELO DANTE",
+      "code": "50301",
+      "area": "EP DE CONTABILIDAD Y FINANZAS",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 58,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50301",
+      "treasuryRow": 14,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42138206",
+      "name": "HERNANDEZ SANCHEZ KELLY",
+      "code": "30016",
+      "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 59,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30016",
+      "treasuryRow": 102,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40542174",
+      "name": "INGA CERDA PATTY SINDY",
+      "code": "20002",
+      "area": "RECTORADO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 60,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20002",
+      "treasuryRow": 135,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70676772",
+      "name": "ORDOÑEZ LEON PATRICIA",
+      "code": "30005",
+      "area": "OFICINA DE BIENESTAR UNIVERSITARIO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 61,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30005",
+      "treasuryRow": 97,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09394947",
+      "name": "PEREZ SANCHEZ CHRISTIAN JESUS",
+      "code": "50301",
+      "area": "EP DE CONTABILIDAD Y FINANZAS",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 62,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50301",
+      "treasuryRow": 13,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47516862",
+      "name": "SAMANIEGO PUENTE LUDMILIA REDINA",
+      "code": "50302",
+      "area": "EP DE ADM. Y NEGOCIOS INTERNACIONALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 63,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50302",
+      "treasuryRow": 11,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75367992",
+      "name": "SOLANO EGOAVIL JAFET DAVID",
+      "code": "30018",
+      "area": "DIRECCION DE EDUCACION CONTINUA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 64,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30018",
+      "treasuryRow": 5,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "10080908",
+      "name": "ZELA MORAYA WESTER EDISON",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 65,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "74833507",
+      "name": "RAMOS AQUIJE JENNYFER XIOMARA",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 66,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "60201",
+      "treasuryRow": 81,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "06661447",
+      "name": "AROSQUIPA RODRÍGUEZ CARLOS CECILIO",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 67,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50108",
+      "treasuryRow": 52,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42897396",
+      "name": "LUYO PACHAS LUIS RONALD",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 68,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50103",
+      "treasuryRow": 59,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "43995352",
+      "name": "PAQUILLO TINCO JIMMY MANUEL",
+      "code": "50104",
+      "area": "EP DE NUTRICIÓN Y DIETÉTICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 69,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50104",
+      "treasuryRow": 56,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "02894992",
+      "name": "PURIZACA CURO DE QUILLE ROXANA MARISEL",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 70,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 16,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40498127",
+      "name": "SAMANIEGO JOAQUIN JHONNEL WILLIAMS",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 71,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 33,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70432387",
+      "name": "VILLALTA HERRERA CARLOS DAVID",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 72,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50106",
+      "treasuryRow": 62,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09903842",
+      "name": "VILLANUEVA CUSIHUALLPA JENNY",
+      "code": "50109",
+      "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 73,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50109",
+      "treasuryRow": 61,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "71732330",
+      "name": "CARBAJAL BENITES LUZ MIRELLA",
+      "code": "30013",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 74,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30013",
+      "treasuryRow": 119,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47244420",
+      "name": "CHAHUA CHIHUAN LIZ ARACELY",
+      "code": "30013",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 75,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30013",
+      "treasuryRow": 121,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "43835988",
+      "name": "HUAMAN VILCA MABEL MILAGROS",
+      "code": "30013",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 76,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30013",
+      "treasuryRow": 118,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75012618",
+      "name": "LAGUNA PARIONA YAMILE KATHERINE",
+      "code": "30013",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 77,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30013",
+      "treasuryRow": 122,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "10729992",
+      "name": "SANTA CRUZ ZUÑIGA MANUEL ARTEMIO",
+      "code": "40015",
+      "area": "UNIDAD TÉCNICA DE BIBLIOTECA CENTRAL",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 78,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40015",
+      "treasuryRow": 147,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "74369167",
+      "name": "SOLANO GONZALES ELFER FRANKLIN",
+      "code": "30013",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 79,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30013",
+      "treasuryRow": 120,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41123979",
+      "name": "DÁVILA AGUINAGA MIGUEL ARTURO",
+      "code": "20006",
+      "area": "GERENCIA DE OPERACIONES",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 80,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20006",
+      "treasuryRow": 72,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "71569365",
+      "name": "ESPINO BLAIR CRISTINA LUCÍA",
+      "code": "30014",
+      "area": "OFICINA DE CONVENIOS INTERNACIONALES",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 81,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30014",
+      "treasuryRow": 101,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "73325683",
+      "name": "ESTEBAN TOMAS FELIX MORAN",
+      "code": "30007",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRow": 82,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "40593513",
+      "name": "GIL CUEVA MARCELA JAQUELINY",
+      "code": "20004",
+      "area": "SECRETARÍA GENERAL",
+      "organizationalUnit": "SECRETARIA GENERAL",
+      "sourceRow": 83,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20004",
+      "treasuryRow": 139,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09353249",
+      "name": "LANDAURO CARRASCO RAFAEL MARTIN",
+      "code": "20007",
+      "area": "GERENCIA DE ADMINISTRACION FINANCIERA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRow": 84,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20007",
+      "treasuryRow": 69,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "18181483",
+      "name": "MARTIN BOGDANOVICH MARÍA MINI",
+      "code": "20009",
+      "area": "VICERRECTORADO ACADÉMICO IINN",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 85,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20009",
+      "treasuryRow": 149,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42248126",
+      "name": "MATTA SOLIS EDUARDO PERCY",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 86,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "60201",
+      "treasuryRow": 80,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09765702",
+      "name": "MENDIGURE FERNANDEZ JULIO",
+      "code": "20005",
+      "area": "VICERRECTORADO ACADÉMICO CCSS",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 87,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20005",
+      "treasuryRow": 148,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09378716",
+      "name": "MONTES ITURRIZAGA IVAN",
+      "code": "40011",
+      "area": "UNIDAD DE INVESTIGACIÓN",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 88,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40011",
+      "treasuryRow": 146,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "06677714",
+      "name": "MORAN MARQUEZ GREGORIO OSWALDO",
+      "code": "20001",
+      "area": "GERENCIA GENERAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 89,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20001",
+      "treasuryRow": 74,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "06294409",
+      "name": "MORAN PAREDES GLADYS IVONNE",
+      "code": "20001",
+      "area": "GERENCIA GENERAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 90,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20001",
+      "treasuryRow": 73,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "18167641",
+      "name": "OBANDO PERALTA ENA CECILIA",
+      "code": "30011",
+      "area": "DIRECCIÓN DE INVESTIGACIÓN",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 91,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30011",
+      "treasuryRow": 10,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "06718077",
+      "name": "PAREDES RIVERO DE MORAN LEDDY MIRIAM",
+      "code": "20001",
+      "area": "GERENCIA GENERAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 92,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20001",
+      "treasuryRow": 75,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42144503",
+      "name": "QUISPE LIZARBE JOAN ALFREDO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 93,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "10583688",
+      "name": "ORBEGOZO CONTRERAS ELIZABETH CAROL",
+      "code": "50308",
+      "area": "EP DE DERECHO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 94,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41336465",
+      "name": "ALVARADO SANDOVAL ROBERTS LUIS",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 95,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43726464",
+      "name": "DAVILA MORAN ROBERTO CARLOS",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 96,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "23986303",
+      "name": "FLORES RODRIGUEZ MARLENE",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 97,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "40203064",
+      "name": "CELIS ARTEAGA ANIBAL RUBEN",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 98,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09109114",
+      "name": "FERNÁNDEZ SALAZAR ARTURO ANGEL",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 99,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44805247",
+      "name": "LEYVA ATO LADY ANTUANETTE",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 100,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "22314341",
+      "name": "MEJÍA CACERES CARLOS MARTÍN",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 101,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "10387412",
+      "name": "QUISPE LOPEZ  GASTON MARCOS",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 102,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "46360490",
+      "name": "SÁNCHEZ CORONEL, CARLOS CÉSAR",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 103,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "21527645",
+      "name": "TOMAIRO LÓPEZ EVA EDITH",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 104,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "17867114",
+      "name": "VALERIO HARO FELIX JULIAN",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 105,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "70866825",
+      "name": "AQUINO CONTRERAS CRISTHIAN JOHAN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 106,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 28,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "02440693",
+      "name": "CUTIMBO UMPIRE JULIA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 107,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44647124",
+      "name": "POPUCHE CABRERA KARINA",
+      "code": "20008",
+      "area": "GERENCIA COMERCIAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 108,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20012",
+      "treasuryRow": 65,
+      "status": "CONFLICT_CODE"
+    },
+    {
+      "dni": "08171506",
+      "name": "GODOY RAMÍREZ JANETT PATRICIA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 109,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "70084304",
+      "name": "ROJAS DÍAZ JHON ROBINSON",
+      "code": "20001",
+      "area": "GERENCIA GENERAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 110,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "20001",
+      "treasuryRow": 77,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "00487738",
+      "name": "NINAJA SUCAPUCA DIANA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 111,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "42845969",
+      "name": "SANCHEZ VILCAYAURI INES ESPERANZA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 112,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09265802",
+      "name": "SÁENZ GUZMAN FREDY HARBEY",
+      "code": "20010",
+      "area": "GERENCIA INNOVACION ESTRATEGICA Y TRANSFORMACION DIGITAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRow": 113,
+      "identityEvidence": "TREASURY_EXACT_NAME_CORRECTION",
+      "treasuryCode": "20010",
+      "treasuryRow": 78,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09874299",
+      "name": "VILLAR BARNUEVO JULIO CESAR",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 114,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30015",
+      "treasuryRow": 7,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40970938",
+      "name": "ZEGARRA CHAPOÑAN ROBERTO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 115,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 20,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "10676704",
+      "name": "CHERO PACHECO VICTOR HUMBERTO",
+      "code": "40011",
+      "area": "UNIDAD DE INVESTIGACIÓN",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 116,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40011",
+      "treasuryRow": 144,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40692237",
+      "name": "CRISTOBAL PAREDES YULAN CLAUDIA",
+      "code": "30012",
+      "area": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 117,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30012",
+      "treasuryRow": 107,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41835622",
+      "name": "HUERTA LEON JENNY ROSALYN",
+      "code": "40011",
+      "area": "UNIDAD DE INVESTIGACIÓN",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 118,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40011",
+      "treasuryRow": 145,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "72387371",
+      "name": "MARIMÓN ORTIZ SEBASTIÁN JOSÉ",
+      "code": "30012",
+      "area": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 119,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30012",
+      "treasuryRow": 109,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "09334406",
+      "name": "QUIQUIA RAU FERNANDO PELAYO",
+      "code": "30012",
+      "area": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 120,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30012",
+      "treasuryRow": 108,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70860716",
+      "name": "CURI NOREÑA RAQUEL ABIGAIL",
+      "code": "30005",
+      "area": "OFICINA DE BIENESTAR UNIVERSITARIO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 121,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30005",
+      "treasuryRow": 98,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "43784845",
+      "name": "OSORIO RAMOS LEYDI NATALY",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 122,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "73180060",
+      "name": "ESQUERRE BECERRA EVA GRACIELA",
+      "code": "30005",
+      "area": "OFICINA DE BIENESTAR UNIVERSITARIO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 123,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30005",
+      "treasuryRow": 99,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42870048",
+      "name": "BAUTISTA DIPAZ  KOLFHER JEFFERSON",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 124,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43982929",
+      "name": "ZEBALLOS CONISLLA HOLGER ELMER",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 125,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "28216843",
+      "name": "ZÁRATE CÁRDENAS ROSARIO",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 126,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43253000",
+      "name": "JULCA GÓMEZ SONIA SUSANA",
+      "code": "40006",
+      "area": "COORDINACIÓN DE SERVICIOS DE SALUD / TÓPICO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 127,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "40006",
+      "treasuryRow": 2,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "76298666",
+      "name": "SEVILLANO RODRÍGUEZ EVELYN",
+      "code": "30005",
+      "area": "OFICINA DE BIENESTAR UNIVERSITARIO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 128,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30005",
+      "treasuryRow": 100,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70558742",
+      "name": "LÓPEZ YUPANQUI JOSELYN DENISSE",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 129,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "73605710",
+      "name": "HUAMURO CASTILLO EDINSON",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 130,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41013429",
+      "name": "ANGLAS HANCCO EDGAR GUSTAVO",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 131,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09090465",
+      "name": "CHIRINOS MALDONADO HUGO ROBERTO",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 132,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "77158034",
+      "name": "LLOJLLA SINGUÑA YANETH",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 133,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "48154559",
+      "name": "MONTALVO PALOMINO GRACIELA",
+      "code": "50104",
+      "area": "EP DE NUTRICIÓN Y DIETÉTICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 134,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50104",
+      "treasuryRow": 55,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "46088732",
+      "name": "ZAMBRANO BRAÑEZ MARIO ANDRES",
+      "code": "50104",
+      "area": "EP DE NUTRICIÓN Y DIETÉTICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 135,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50104",
+      "treasuryRow": 57,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44820703",
+      "name": "ARIAS BARON KIMBERLY ALIKA",
+      "code": "30004",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 136,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30004",
+      "treasuryRow": 89,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "80384220",
+      "name": "GOMEZ BERROSPI PAUL LEONARDO",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 137,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30003",
+      "treasuryRow": 110,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45463708",
+      "name": "BERMEJO CABANILLAS ANTHONY GIANPIERRE",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 138,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41228192",
+      "name": "GAMBOA QUINCHO EDITH ISABEL",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 139,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "47161921",
+      "name": "MADUEÑO VENTURA FRESCIA MARIA",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 140,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "74225172",
+      "name": "TOKUMOTO VALERA FIORELLA SUMIKO",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 141,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "73119282",
+      "name": "HUERTA VALDIVIA ADRIANA BELÉN",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 142,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30003",
+      "treasuryRow": 114,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42443911",
+      "name": "VENEGAS DIOSES JOHANN CHRISTIAN",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 143,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "76230703",
+      "name": "CAMPOS LOARTE YESENIA CECILIA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 144,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 25,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44963620",
+      "name": "CARHUACHIN TOLENTINO HECTOR ERWIN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 145,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 18,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70993644",
+      "name": "CHICATA VELASQUEZ JHEYSON OCTAVIO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 146,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 26,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45499457",
+      "name": "DE PAZ LUJÁN KATHERINE",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 147,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 24,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "05403224",
+      "name": "DEL CASTILLO MÁRQUEZ HANNES",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 148,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 21,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "07039859",
+      "name": "AMAT Y LEON GUEVARA CARMEN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 149,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "08679701",
+      "name": "HINOJOSA SANCHEZ LOURDES GIOVANNA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 150,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "21861852",
+      "name": "PACHECO ATUNCAR ELIZABETH ROXANA",
+      "code": "60102",
+      "area": "SEG. EN EMERG. Y DESA.",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 151,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "72123766",
+      "name": "MORENO YAURI ARLIE",
+      "code": "50109",
+      "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 152,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "25776442",
+      "name": "CARRILLO RODRIGUEZ SELENA VILMA",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 153,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "45367788",
+      "name": "GERÓNIMO QUISPE ELIZABETH CRISTELL",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 154,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 22,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "10130431",
+      "name": "CHUQUIZUTTA BENAVIDES KARINA VERONICA",
+      "code": "60109",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 155,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "10674336",
+      "name": "HUAYTA PEREZ LUZ CARMELA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 156,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 23,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "01888090",
+      "name": "QUILLE TICONA JOSE MERLIN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 157,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 19,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70071066",
+      "name": "ROJAS GUERRERO JIUSEPE IVAN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 158,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 15,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "71951132",
+      "name": "TICONA SANDOVAL FRANCIS AARON",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 159,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 17,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44286647",
+      "name": "PAREDES VILLEGAS ROSA YARENIS",
+      "code": "60109",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 160,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "06166456",
+      "name": "ZAVALETA GRADOS TRANSITO ELENA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 161,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 27,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70455522",
+      "name": "AGUIRRE GIHUA MARIO CHRISTIAN",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 162,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 38,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "40165953",
+      "name": "AYALA BAEZ DEYBBIS ROSARIO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 163,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 41,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44660740",
+      "name": "CAPCHA SICCHA MARLENY FLOR",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 164,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 36,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "75763000",
+      "name": "CRUZ TOLEDO GIANELLA ROSARIO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 165,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 39,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "07498621",
+      "name": "HERNANDEZ CORDERO GIOVANNA OFELIA",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 166,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 34,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45059918",
+      "name": "TAFUR PANDURO CLAUDIA",
+      "code": "60109",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 167,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09308488",
+      "name": "VALENZUELA ESLAVA NELLY SOLEDAD",
+      "code": "60109",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 168,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09865747",
+      "name": "UGARTE UBILLUZ OSCAR RAUL",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 169,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "28287377",
+      "name": "LIZARBE CASTRO MARÍA VICTORIA",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 170,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "00553485",
+      "name": "GALARCIO PERIÑAN CARLOS MARIO",
+      "code": "60109",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 171,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44626932",
+      "name": "VENEGAS DIOSES HUGO FERNANDO",
+      "code": "60109",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 172,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "07498333",
+      "name": "CONTRERAS PINTO CHRISTIAN BENIGNO",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 173,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43890091",
+      "name": "WONG ROBALINO MISHELLE ANGELICA",
+      "code": "50303",
+      "area": "EP DE ADMINISTRACIÓN Y MARKETING",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 174,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09303322",
+      "name": "MORALES CONTRERAS CARMEN ROSA",
+      "code": "50302",
+      "area": "EP DE ADM. Y NEGOCIOS INTERNACIONALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 175,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41148074",
+      "name": "LOPEZ VEGA IRIS MARGOT",
+      "code": "50301",
+      "area": "EP DE CONTABILIDAD Y FINANZAS",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 176,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09904425",
+      "name": "SAN MIGUEL VELASQUEZ YULY VICTORIA",
+      "code": "50308",
+      "area": "EP DE DERECHO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 177,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "73978233",
+      "name": "HUAMANI HUAMANI LISBET YOCELIN",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 178,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 40,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "08377070",
+      "name": "ÁLVAREZ RODRIGUEZ GLORIA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 179,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44728252",
+      "name": "CHATI CHAHUA KARLA MARILYN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 180,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "45669439",
+      "name": "COCHACHI MENDOZA NADEZHDA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 181,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "47072895",
+      "name": "DIAZ MEGO RONALD ELIAS",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 182,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 30,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "07682432",
+      "name": "GAMARRA GABANCHO ELIZABETH",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 183,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43859350",
+      "name": "GAMBINI DUEÑAS ISRRAEL SIXTO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 184,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "08353243",
+      "name": "LOYOLA GARCIA NORMA LUZ",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 185,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "10341898",
+      "name": "MANTILLA ROSALES NOLBERTO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 186,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 29,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41954311",
+      "name": "NOLAZCO LABAJOS URSULA NOLAZCO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 187,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "45605596",
+      "name": "PALMA LÓPEZ SARA KEYKO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 188,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "46208960",
+      "name": "PEÑA TORRES SANTIJESUS",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 189,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50101",
+      "treasuryRow": 31,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "42258988",
+      "name": "POLICIO MARTINEZ  LIZBETH",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 190,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "71014505",
+      "name": "VENTURA LOPEZ  MARIA DE LOS ANGELES",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 191,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "07498822",
+      "name": "ARAUJO CONDOR OSCAR WILFREDO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 192,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09470046",
+      "name": "MUÑOZ  YUCRA  LUIS ALBERTO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 193,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 42,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "10677018",
+      "name": "PALOMINO KNUTZEN OSCAR ROBERTO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 194,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 37,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "47271933",
+      "name": "RIVERA GUERRERO MAYELI LIZETH",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 195,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 43,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "25806713",
+      "name": "SALAS VILLAYZAN CESAR IVAN",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 196,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 44,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45946742",
+      "name": "SANCHEZ SIESQUEN JAVIER ALONSO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 197,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 35,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45042465",
+      "name": "SOTO PRUDENCIO MARIA CLAUDIA",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 198,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 45,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "41444851",
+      "name": "TOVAR BACA JUAN CARLOS",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 199,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 32,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "08142913",
+      "name": "ACUÑA SEMINO JUAN JOSÉ",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 200,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09578116",
+      "name": "ALGUIAR BERNAOLA LUZ ROCIO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 201,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41353448",
+      "name": "ALGUIAR BERNAOLA MAGNEY SUSY",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 202,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09662680",
+      "name": "ATARAMA GALVEZ KARIM ISABEL",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 203,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09127141",
+      "name": "CASAS MELENDEZ MARÍA GUADALUPE",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 204,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "40069261",
+      "name": "COSTILLA GARCIA EDGARD LUIS",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 205,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "06121495",
+      "name": "LA SERNA LA ROSA  PABLO ANTONIO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 206,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41949925",
+      "name": "LETO HUAYANCA  CINTHIA FARATH",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 207,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "25574998",
+      "name": "MALDONADO PEREZ JESSICA YVONNE",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 208,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "46714309",
+      "name": "MARTEL LAURA YONNATAN ALEXANDRO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 209,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "06569215",
+      "name": "QUISPE ROJAS ANA MARIA",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 210,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43156546",
+      "name": "RAMOS LAZARO ANDRES",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 211,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44645612",
+      "name": "TRINIDAD COLLAZOS RUTH MARISOL",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 212,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "42358609",
+      "name": "VALDERRAMA YTOKAZU MAX",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 213,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "46985963",
+      "name": "VELASCO CHONG JONAS ROBERTO",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 214,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "72847601",
+      "name": "UBILLUS BENITES JUAN DIEGO",
+      "code": "50103",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 215,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44243793",
+      "name": "WU VEGA MARIO ESLY",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 216,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "47200005",
+      "name": "GODINEZ TELLO CARLOS RAUL ANDRE",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 217,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41639577",
+      "name": "CAMPOS CHÁVEZ WILLIAM ALEXANDER",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 218,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43620635",
+      "name": "ORELLANA PERALTA FIORELLA GUADALUPE",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 219,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "45220336",
+      "name": "VELASQUEZ SOTO SANDRA ESTELA",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 220,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "70752720",
+      "name": "GINEZ CLINTON MISAEL CLINTON",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 221,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "75981720",
+      "name": "VENTURA SOLANO ANGELA ABIGAIL",
+      "code": "50102",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 222,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50102",
+      "treasuryRow": 46,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "44270094",
+      "name": "BEINGOLEA BENITES LUIS MIGUEL",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 223,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "23937540",
+      "name": "PAPA DELGADO EMILIA",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 224,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "10777331",
+      "name": "RAMIREZ MUCHA JAVIER",
+      "code": "50103",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 225,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09632884",
+      "name": "MARQUINA QUISPE RENZO HERNAN",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 226,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "08597036",
+      "name": "QUISPE ASTO CESAR FRANCISCO",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 227,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "73017358",
+      "name": "VICTORIO LOPEZ DANY KEVIN",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 228,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43642702",
+      "name": "YALI RIVERA JUDITH MERCEDES",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 229,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09651850",
+      "name": "RAMIREZ CAJO RITA",
+      "code": "50109",
+      "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 230,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "45849473",
+      "name": "ANTONIO ROJAS ABRAHAM ALBERTO",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 231,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "44633389",
+      "name": "CACHI PÉREZ MASSIEL MADELEINE",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 232,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41330799",
+      "name": "CERDAN CUEVA HUGO JAVIER",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 233,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "40729616",
+      "name": "JULCA CARHUAVILCA JESÚS MATIAS",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 234,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "76264528",
+      "name": "RODRIGUEZ CONTRERAS LUIS ENRIQUE",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 235,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "70809226",
+      "name": "ROSPIGLIOSI MORALES MARÍA EDIT",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 236,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "70436972",
+      "name": "SANTOS RONDÓN KARLA ELIZABETH",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 237,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "43113410",
+      "name": "VÁSQUEZ TELLO PAULA",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 238,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "32735332",
+      "name": "VELASQUEZ BAUTISTA JAIME MAXIMO",
+      "code": "50106",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 239,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "42586897",
+      "name": "VILELA MANCHAY DANICSA SOLEDAD",
+      "code": "50103",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 240,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "50103",
+      "treasuryRow": 47,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "07459338",
+      "name": "ACARO CHUQUICAÑA FIDEL ERNESTO",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 241,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "32919696",
+      "name": "ZUÑIGA PRÍNCIPE GISELLE GUADALUPE",
+      "code": "60201",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRow": 242,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "75868762",
+      "name": "ALBORNOZ TOYOHAMA ROGER HIROSHI",
+      "code": "50108",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 243,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "75951739",
+      "name": "CHAVEZ ROJAS GABRIELA BRISETH",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 244,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30003",
+      "treasuryRow": 112,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "73805452",
+      "name": "GUTIÉRREZ URIARTE SANDRA PAOLA",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 245,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30003",
+      "treasuryRow": 113,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "76157002",
+      "name": "MENDOZA YARLEQUE ADRIANA LISBETH JASMIN",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 246,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30003",
+      "treasuryRow": 111,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "70883659",
+      "name": "QUISPE SAGARBINAGA KAREN BEATRIZ",
+      "code": "30003",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRow": 247,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30003",
+      "treasuryRow": 115,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "45834564",
+      "name": "ANTICONA LOPEZ VICTOR HUGO",
+      "code": "50308",
+      "area": "EP DE DERECHO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 248,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "80611476",
+      "name": "ORTIZ COTRINA WILINTON CHILIMAN",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 249,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "48158417",
+      "name": "PAULINO MORENO CLEOGE ZENAIDA",
+      "code": "50305",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 250,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "46566734",
+      "name": "RAMOS RAMOS LUZ GEORGET",
+      "code": "50105",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 251,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "71295034",
+      "name": "BALLENA SIVIPAUCAR STEFANY ROCÍO",
+      "code": "50107",
+      "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 252,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "71507367",
+      "name": "AHUANARI CRUZ SHIRLEY JHEANNETHE",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 253,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30015",
+      "treasuryRow": 8,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "25697604",
+      "name": "FAJARDO CANAVAL MARIA DEL PILAR",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 254,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09849431",
+      "name": "MEZA QUISPE JORGE",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 255,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09648920",
+      "name": "RODRIGUEZ ORMAECHE RITA LUZ",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 256,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "41423556",
+      "name": "SANCHEZ QUISPE DIEGO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 257,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "07808812",
+      "name": "SOLIS MACEDO INES",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 258,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "21780523",
+      "name": "TORNERO TASAYCO ESVIA CONSUELO",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 259,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "46655789",
+      "name": "LAZO CCALLO GIOVANI FERNANDO",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 260,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30015",
+      "treasuryRow": 6,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "48368688",
+      "name": "PINEDO LABAJOS LETHY",
+      "code": "30015",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRow": 261,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": "30015",
+      "treasuryRow": 9,
+      "status": "MATCHED_TREASURY"
+    },
+    {
+      "dni": "08124057",
+      "name": "ROA CAMPOS LAURA PATRICIA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 262,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "07198696",
+      "name": "SOLIS SOLIS VIRGINIA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 263,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "45495040",
+      "name": "ANDIA MONTOYA EVENELYN VERONICA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 264,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09235762",
+      "name": "ROJAS DELGADO LUCILA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 265,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "09729137",
+      "name": "ESPINOZA SEDANO CLARA YSABEL",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 266,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    },
+    {
+      "dni": "10646062",
+      "name": "CHRISTINE GERALDINE SALCEDO ACUÑA",
+      "code": "50101",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRow": 267,
+      "identityEvidence": "EMPLOYEE_SHEET",
+      "treasuryCode": null,
+      "treasuryRow": null,
+      "status": "EMPLOYEE_ROSTER_ONLY"
+    }
+  ],
+  "centers": [
+    {
+      "code": "20001",
+      "name": "GERENCIA GENERAL",
+      "area": "GERENCIA GENERAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRows": [
+        39,
+        89,
+        90,
+        92,
+        110
+      ],
+      "metadataVariants": [
+        {
+          "area": "GERENCIA GENERAL",
+          "organizationalUnit": "GERENCIA GENERAL",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "code": "20002",
+      "name": "RECTORADO",
+      "area": "RECTORADO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        60
+      ],
+      "metadataVariants": [
+        {
+          "area": "RECTORADO",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "20004",
+      "name": "SECRETARÍA GENERAL",
+      "area": "SECRETARÍA GENERAL",
+      "organizationalUnit": "SECRETARIA GENERAL",
+      "sourceRows": [
+        36,
+        38,
+        83
+      ],
+      "metadataVariants": [
+        {
+          "area": "SECRETARÍA GENERAL",
+          "organizationalUnit": "SECRETARIA GENERAL",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "20005",
+      "name": "VICERRECTORADO ACADÉMICO CCSS",
+      "area": "VICERRECTORADO ACADÉMICO CCSS",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        87
+      ],
+      "metadataVariants": [
+        {
+          "area": "VICERRECTORADO ACADÉMICO CCSS",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "20006",
+      "name": "GERENCIA DE OPERACIONES",
+      "area": "GERENCIA DE OPERACIONES",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRows": [
+        20,
+        23,
+        80
+      ],
+      "metadataVariants": [
+        {
+          "area": "GERENCIA DE OPERACIONES",
+          "organizationalUnit": "GERENCIA DE OPERACIONES",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "20007",
+      "name": "GERENCIA DE ADMINISTRACION FINANCIERA",
+      "area": "GERENCIA DE ADMINISTRACION FINANCIERA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRows": [
+        44,
+        45,
+        46,
+        84
+      ],
+      "metadataVariants": [
+        {
+          "area": "GERENCIA DE ADMINISTRACION FINANCIERA",
+          "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "code": "20008",
+      "name": "GERENCIA COMERCIAL",
+      "area": "GERENCIA COMERCIAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRows": [
+        108
+      ],
+      "metadataVariants": [
+        {
+          "area": "GERENCIA COMERCIAL",
+          "organizationalUnit": "GERENCIA COMERCIAL",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "20009",
+      "name": "VICERRECTORADO ACADÉMICO IINN",
+      "area": "VICERRECTORADO ACADÉMICO IINN",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        85
+      ],
+      "metadataVariants": [
+        {
+          "area": "VICERRECTORADO ACADÉMICO IINN",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "20010",
+      "name": "GERENCIA INNOVACION ESTRATEGICA Y TRANSFORMACION DIGITAL",
+      "area": "GERENCIA INNOVACION ESTRATEGICA Y TRANSFORMACION DIGITAL",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRows": [
+        113
+      ],
+      "metadataVariants": [
+        {
+          "area": "GERENCIA INNOVACION ESTRATEGICA Y TRANSFORMACION DIGITAL",
+          "organizationalUnit": "GERENCIA GENERAL",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "30003",
+      "name": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRows": [
+        137,
+        142,
+        143,
+        244,
+        245,
+        246,
+        247
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE MARKETING E IMAGEN INSTITUCIONAL",
+          "organizationalUnit": "GERENCIA COMERCIAL",
+          "count": 7
+        }
+      ]
+    },
+    {
+      "code": "30004",
+      "name": "OFICINA DE ADMISIÓN",
+      "area": "OFICINA DE ADMISIÓN",
+      "organizationalUnit": "GERENCIA COMERCIAL",
+      "sourceRows": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        136
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE ADMISIÓN",
+          "organizationalUnit": "GERENCIA COMERCIAL",
+          "count": 16
+        }
+      ]
+    },
+    {
+      "code": "30005",
+      "name": "OFICINA DE BIENESTAR UNIVERSITARIO",
+      "area": "OFICINA DE BIENESTAR UNIVERSITARIO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        61,
+        121,
+        123,
+        128
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE BIENESTAR UNIVERSITARIO",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "code": "30007",
+      "name": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRows": [
+        21,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        82
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE TECNOLOGÍA DE LA INFORMACIÓN",
+          "organizationalUnit": "GERENCIA DE OPERACIONES",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "code": "30011",
+      "name": "DIRECCIÓN DE INVESTIGACIÓN",
+      "area": "DIRECCIÓN DE INVESTIGACIÓN",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRows": [
+        91
+      ],
+      "metadataVariants": [
+        {
+          "area": "DIRECCIÓN DE INVESTIGACIÓN",
+          "organizationalUnit": "DIRECCION DE INVESTIGACION",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "30012",
+      "name": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+      "area": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRows": [
+        117,
+        119,
+        120
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE GESTIÓN DE LA CALIDAD Y GESTIÓN DOCENTE",
+          "organizationalUnit": "DIRECCION DE INVESTIGACION",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "30013",
+      "name": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRows": [
+        22,
+        74,
+        75,
+        76,
+        77,
+        79
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE SERVICIOS ACADÉMICOS Y REGISTROS",
+          "organizationalUnit": "GERENCIA DE OPERACIONES",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "code": "30014",
+      "name": "OFICINA DE CONVENIOS INTERNACIONALES",
+      "area": "OFICINA DE CONVENIOS INTERNACIONALES",
+      "organizationalUnit": "GERENCIA GENERAL",
+      "sourceRows": [
+        81
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE CONVENIOS INTERNACIONALES",
+          "organizationalUnit": "GERENCIA GENERAL",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "30015",
+      "name": "DIRECCION DE ESTUDIOS GENERALES",
+      "area": "DIRECCION DE ESTUDIOS GENERALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        114,
+        131,
+        132,
+        173,
+        253,
+        260,
+        261
+      ],
+      "metadataVariants": [
+        {
+          "area": "DIRECCION DE ESTUDIOS GENERALES",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 15
+        }
+      ]
+    },
+    {
+      "code": "30016",
+      "name": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        40,
+        41,
+        42,
+        43,
+        59
+      ],
+      "metadataVariants": [
+        {
+          "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 4
+        },
+        {
+          "area": "OFICINA DE EDUCACIÓN VIRTUAL",
+          "organizationalUnit": "GERENCIA DE OPERACIONES",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "30018",
+      "name": "DIRECCION DE EDUCACION CONTINUA",
+      "area": "DIRECCION DE EDUCACION CONTINUA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        52,
+        57,
+        64
+      ],
+      "metadataVariants": [
+        {
+          "area": "DIRECCION DE EDUCACION CONTINUA",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "40001",
+      "name": "TESORERÍA",
+      "area": "TESORERÍA",
+      "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+      "sourceRows": [
+        24,
+        25
+      ],
+      "metadataVariants": [
+        {
+          "area": "TESORERÍA",
+          "organizationalUnit": "GERENCIA ADMINISTRACIÓN FINANCIERA",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "code": "40006",
+      "name": "COORDINACIÓN DE SERVICIOS DE SALUD / TÓPICO",
+      "area": "COORDINACIÓN DE SERVICIOS DE SALUD / TÓPICO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        127
+      ],
+      "metadataVariants": [
+        {
+          "area": "COORDINACIÓN DE SERVICIOS DE SALUD / TÓPICO",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "40011",
+      "name": "UNIDAD DE INVESTIGACIÓN",
+      "area": "UNIDAD DE INVESTIGACIÓN",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRows": [
+        88,
+        116,
+        118
+      ],
+      "metadataVariants": [
+        {
+          "area": "UNIDAD DE INVESTIGACIÓN",
+          "organizationalUnit": "DIRECCION DE INVESTIGACION",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "40015",
+      "name": "UNIDAD TÉCNICA DE BIBLIOTECA CENTRAL",
+      "area": "UNIDAD TÉCNICA DE BIBLIOTECA CENTRAL",
+      "organizationalUnit": "GERENCIA DE OPERACIONES",
+      "sourceRows": [
+        78
+      ],
+      "metadataVariants": [
+        {
+          "area": "UNIDAD TÉCNICA DE BIBLIOTECA CENTRAL",
+          "organizationalUnit": "GERENCIA DE OPERACIONES",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "40019",
+      "name": "GRADOS Y TITULOS",
+      "area": "GRADOS Y TITULOS",
+      "organizationalUnit": "SECRETARIA GENERAL",
+      "sourceRows": [
+        37
+      ],
+      "metadataVariants": [
+        {
+          "area": "GRADOS Y TITULOS",
+          "organizationalUnit": "SECRETARIA GENERAL",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "40020",
+      "name": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+      "area": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        48,
+        49,
+        51,
+        53
+      ],
+      "metadataVariants": [
+        {
+          "area": "RESPONSABILIDAD SOCIAL UNIVERSITARIA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 3
+        },
+        {
+          "area": "VICERRECTORADO DE GESTIÓN ACADÉMICA EN INGENIERÍA Y NEGOCIOS Y SERVICIOS GENERALES ACADÉMICOS",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "50101",
+      "name": "EP DE ENFERMERÍA",
+      "area": "EP DE ENFERMERÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        70,
+        93,
+        106,
+        107,
+        109,
+        111,
+        112,
+        115,
+        122,
+        129,
+        133,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        154,
+        156,
+        157,
+        158,
+        159,
+        161,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        249,
+        254,
+        255,
+        256,
+        257,
+        258,
+        259,
+        262,
+        263,
+        264,
+        265,
+        266,
+        267
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE ENFERMERÍA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 51
+        }
+      ]
+    },
+    {
+      "code": "50102",
+      "name": "EP DE FARMACIA Y BIOQUÍMICA",
+      "area": "EP DE FARMACIA Y BIOQUÍMICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        71,
+        124,
+        138,
+        139,
+        140,
+        162,
+        163,
+        164,
+        165,
+        166,
+        178,
+        193,
+        194,
+        195,
+        196,
+        197,
+        198,
+        199,
+        200,
+        201,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        210,
+        211,
+        212,
+        213,
+        214,
+        222
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE FARMACIA Y BIOQUÍMICA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 34
+        }
+      ]
+    },
+    {
+      "code": "50103",
+      "name": "EP DE PSICOLOGÍA",
+      "area": "EP DE PSICOLOGÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        47,
+        50,
+        68,
+        153,
+        215,
+        223,
+        224,
+        225,
+        240
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE PSICOLOGÍA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 7
+        },
+        {
+          "area": "EP DE FARMACIA Y BIOQUÍMICA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "code": "50104",
+      "name": "EP DE NUTRICIÓN Y DIETÉTICA",
+      "area": "EP DE NUTRICIÓN Y DIETÉTICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        69,
+        134,
+        135
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE NUTRICIÓN Y DIETÉTICA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "50105",
+      "name": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        125,
+        130,
+        226,
+        227,
+        228,
+        229,
+        251
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP TECNOLOGÍA MÉDICA EN LABORATORIO CLÍNICO Y ANATOMÍA PATOLÓGICA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 7
+        }
+      ]
+    },
+    {
+      "code": "50106",
+      "name": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        72,
+        231,
+        232,
+        233,
+        234,
+        235,
+        236,
+        237,
+        238,
+        239
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP TECNOLOGÍA MÉDICA EN TERAPIA FÍSICA Y REHABILITACIÓN",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "code": "50107",
+      "name": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        252
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "50108",
+      "name": "EP DE MEDICINA",
+      "area": "EP DE MEDICINA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        17,
+        18,
+        19,
+        67,
+        97,
+        141,
+        218,
+        219,
+        220,
+        221,
+        243
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE MEDICINA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "code": "50109",
+      "name": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        73,
+        152,
+        230
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP TECNOLOGÍA MÉDICA EN OPTOMETRÍA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "50301",
+      "name": "EP DE CONTABILIDAD Y FINANZAS",
+      "area": "EP DE CONTABILIDAD Y FINANZAS",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        58,
+        62,
+        176
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE CONTABILIDAD Y FINANZAS",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "50302",
+      "name": "EP DE ADM. Y NEGOCIOS INTERNACIONALES",
+      "area": "EP DE ADM. Y NEGOCIOS INTERNACIONALES",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        55,
+        63,
+        175
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE ADM. Y NEGOCIOS INTERNACIONALES",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "50303",
+      "name": "EP DE ADMINISTRACIÓN Y MARKETING",
+      "area": "EP DE ADMINISTRACIÓN Y MARKETING",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        174
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE ADMINISTRACIÓN Y MARKETING",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "50305",
+      "name": "EP DE INGENIERÍA IA",
+      "area": "EP DE INGENIERÍA IA",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        54,
+        56,
+        65,
+        95,
+        96,
+        216,
+        217,
+        250
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE INGENIERÍA IA",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "code": "50308",
+      "name": "EP DE DERECHO",
+      "area": "EP DE DERECHO",
+      "organizationalUnit": "VICERECTORADO IINN",
+      "sourceRows": [
+        94,
+        177,
+        248
+      ],
+      "metadataVariants": [
+        {
+          "area": "EP DE DERECHO",
+          "organizationalUnit": "VICERECTORADO IINN",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "code": "60102",
+      "name": "SEG. EN EMERG. Y DESA.",
+      "area": "SEG. EN EMERG. Y DESA.",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        151
+      ],
+      "metadataVariants": [
+        {
+          "area": "SEG. EN EMERG. Y DESA.",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "code": "60109",
+      "name": "SEG. PSICOLOGÍA CLÍNICA",
+      "area": "SEG. PSICOLOGÍA CLÍNICA",
+      "organizationalUnit": "VICERECTORADO CCSS",
+      "sourceRows": [
+        155,
+        160,
+        167,
+        168,
+        171,
+        172
+      ],
+      "metadataVariants": [
+        {
+          "area": "SEG. PSICOLOGÍA CLÍNICA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "code": "60201",
+      "name": "MAESTRÍA SALUD PUBLICA",
+      "area": "MAESTRÍA SALUD PUBLICA",
+      "organizationalUnit": "DIRECCION DE INVESTIGACION",
+      "sourceRows": [
+        66,
+        86,
+        126,
+        169,
+        170,
+        241,
+        242
+      ],
+      "metadataVariants": [
+        {
+          "area": "MAESTRÍA SALUD PUBLICA",
+          "organizationalUnit": "DIRECCION DE INVESTIGACION",
+          "count": 6
+        },
+        {
+          "area": "MAESTRÍA SALUD PUBLICA",
+          "organizationalUnit": "VICERECTORADO CCSS",
+          "count": 1
+        }
+      ]
+    }
+  ]
+}

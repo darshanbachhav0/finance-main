@@ -53,6 +53,7 @@ test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
       email: "phase3.requester@uma.edu.pe",
       passwordHash: "unused",
       role: ROLES.SOLICITOR,
+      jobCategory: 3, // PDF: may charge another CECO
       area: "Health Sciences",
       costCenter: center._id,
       authorizedCostCenters: [secondCenter._id]

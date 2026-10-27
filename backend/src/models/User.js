@@ -35,6 +35,8 @@ const userSchema = new mongoose.Schema(
     // de la Gerencia General). Without one, their approvals go to their nearest available jefe.
     substitute: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     jobTitle: { type: String, trim: true },
+    // Portal de Personas job category. Only 3, 5 and 6 may charge another CECO.
+    jobCategory: { type: Number, min: 1 },
     organizationalUnit: { type: String, trim: true },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.SOLICITOR, required: true },
     approvalLevel: {

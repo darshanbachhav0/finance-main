@@ -1,0 +1,129 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import mongoose from "mongoose";
+import BudgetException from "../src/models/BudgetException.js";
+import BudgetRule from "../src/models/BudgetRule.js";
+import CostCenter from "../src/models/CostCenter.js";
+import ExpenseType from "../src/models/ExpenseType.js";
+import FinancialRequest from "../src/models/FinancialRequest.js";
+import User from "../src/models/User.js";
+import { commitApprovedRequestBudget } from "../src/services/approvalService.js";
+import { recordBudgetExceptionDecision, resolveExceptionApproverRole } from "../src/services/budgetExceptionService.js";
+import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
+import { ROLES } from "../src/utils/constants.js";
+
+test("Budget exception authority is configurable per dimension and amount, defaulting to Management unchanged", { timeout: 60000 }, async (t) => {
+  const databaseName = `erp_budget_exception_routing_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
+  try {
+    const budgetOfficer = await User.create({ name: "Budget Officer", email: "exc-routing-budget@test.local", role: ROLES.TREASURY, passwordHash: "unused" });
+    const management = await User.create({ name: "Management", email: "exc-routing-mgmt@test.local", role: ROLES.MANAGEMENT, passwordHash: "unused" });
+    const rectorate = await User.create({ name: "Rectorate", email: "exc-routing-rector@test.local", role: ROLES.ADMIN, passwordHash: "unused" });
+
+    async function makeException(overrides = {}) {
+      return BudgetException.create({
+        request: new mongoose.Types.ObjectId(), dimensionKey: `k-${new mongoose.Types.ObjectId()}`,
+        costCenter: overrides.costCenter || new mongoose.Types.ObjectId(),
+        expenseType: overrides.expenseType, project: overrides.project,
+        strategy: "EXTRAORDINARY_APPROVAL", availableAmount: 0, requestedAmount: overrides.requestedAmount ?? 100,
+        requestedBy: budgetOfficer._id, history: [{ action: "CREATED", by: budgetOfficer._id }]
+      });
+    }
+
+    await t.test("with no matching BudgetRule, Management remains the default authority (unchanged behavior)", async () => {
+      const exception = await makeException();
+      assert.equal(await resolveExceptionApproverRole(exception), ROLES.MANAGEMENT);
+      await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Trying as Admin", rectorate, {}), (error) => error.statusCode === 403);
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
+      const decided = await recordBudgetExceptionDecision(exception._id, "APPROVED", "Management authorizes", management, {});
+      assert.equal(decided.status, "APPROVED");
+    });
+
+    await t.test("a BudgetRule can never configure a non-Management exception approver (Admin included)", async () => {
+      const center = await CostCenter.create({ code: "CC-EXC-ROUTE", name: "Exception Routing", area: "Finance", active: true });
+      await assert.rejects(
+        () => BudgetRule.create({ name: "Route to Admin", mode: "ACTIVE", exceptionStrategy: "EXTRAORDINARY_APPROVAL", costCenter: center._id, exceptionApproverRole: ROLES.ADMIN, active: true }),
+        (error) => /exceptionApproverRole/.test(error.message)
+      );
+      // A rule that was never persisted (rejected above) leaves the dimension on the
+      // unconfigured default - still Management, never Admin.
+      const exception = await makeException({ costCenter: center._id, requestedAmount: 500 });
+      assert.equal(await resolveExceptionApproverRole(exception), ROLES.MANAGEMENT);
+      await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Trying as Admin", rectorate, {}), (error) => error.statusCode === 403);
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
+      const decided = await recordBudgetExceptionDecision(exception._id, "APPROVED", "Management authorizes", management, {});
+      assert.equal(decided.status, "APPROVED");
+    });
+
+    await t.test("escalation likewise can never configure a non-Management approver", async () => {
+      const center = await CostCenter.create({ code: "CC-EXC-ESCALATE", name: "Exception Escalation", area: "Finance", annualBudget: 100, budgetMode: "ACTIVE", active: true });
+      const expenseType = await ExpenseType.create({ code: "EXC-ESC-EXP", name: "Escalation expense", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
+      await assert.rejects(
+        () => BudgetRule.create({
+          name: "Escalate above 1000", mode: "ACTIVE", exceptionStrategy: "EXTRAORDINARY_APPROVAL",
+          costCenter: center._id, expenseType: expenseType._id,
+          exceptionApproverRole: ROLES.MANAGEMENT, exceptionEscalationAmount: 1000, exceptionEscalationApproverRole: ROLES.ADMIN,
+          active: true
+        }),
+        (error) => /exceptionEscalationApproverRole/.test(error.message)
+      );
+      // A valid rule (escalation target also Management) persists fine and resolves
+      // to Management on both sides of the threshold - there is no higher authority
+      // than Management/Rectorate to escalate to.
+      await BudgetRule.create({
+        name: "Escalate above 1000 (valid)", mode: "ACTIVE", exceptionStrategy: "EXTRAORDINARY_APPROVAL",
+        costCenter: center._id, expenseType: expenseType._id,
+        exceptionApproverRole: ROLES.MANAGEMENT, exceptionEscalationAmount: 1000, exceptionEscalationApproverRole: ROLES.MANAGEMENT,
+        active: true
+      });
+      const aboveThreshold = await makeException({ costCenter: center._id, expenseType: expenseType._id, requestedAmount: 5000 });
+      assert.equal(await resolveExceptionApproverRole(aboveThreshold), ROLES.MANAGEMENT);
+      await assert.rejects(() => recordBudgetExceptionDecision(aboveThreshold._id, "APPROVED", "Trying as Admin", rectorate, {}), (error) => error.statusCode === 403);
+      await recordBudgetExceptionDecision(aboveThreshold._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
+      const decided = await recordBudgetExceptionDecision(aboveThreshold._id, "APPROVED", "Management approves", management, {});
+      assert.equal(decided.status, "APPROVED");
+    });
+
+    await t.test("Budget still only prepares (REVIEWED), regardless of the configured final authority", async () => {
+      const center = await CostCenter.create({ code: "CC-EXC-PREP", name: "Prep only", area: "Finance", active: true });
+      await BudgetRule.create({ name: "Explicit Management rule for prep test", mode: "ACTIVE", exceptionStrategy: "EXTRAORDINARY_APPROVAL", costCenter: center._id, exceptionApproverRole: ROLES.MANAGEMENT, active: true });
+      const exception = await makeException({ costCenter: center._id });
+      await assert.rejects(() => recordBudgetExceptionDecision(exception._id, "APPROVED", "Budget cannot self-authorize", budgetOfficer, {}), (error) => error.statusCode === 403);
+      const reviewed = await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget recommends funding", budgetOfficer, {});
+      assert.equal(reviewed.status, "PENDING");
+      assert.equal(String(reviewed.preparedBy), String(budgetOfficer._id));
+    });
+
+    await t.test("a budget observation stays with Budget/Management; only a rejected exception sends the request back to its requester", async () => {
+      const requester = await User.create({ name: "Requester", email: "exc-routing-owner@test.local", role: ROLES.SOLICITOR, passwordHash: "unused" });
+      const center = await CostCenter.create({ code: "CC-EXC-OWNER", name: "Owner flow", area: "Finance", active: true });
+      const [request] = await FinancialRequest.collection.insertMany([{
+        requestNumber: "SOL-EXC-OWNER", status: "OBSERVADO_PRESUPUESTO", flowType: "A1", requestType: "OPEX", requester: requester._id, solicitor: requester._id,
+        approvalStage: "COMPLETE", approvalRouteSnapshot: [{ sequence: 1, approvalLevel: "AREA_DIRECTOR", required: true, status: "APPROVED" }],
+        approvalHistory: [{ action: "APPROVAL_REQUESTED" }], observation: { code: "INSUFFICIENT_BUDGET", resolver: "BUDGET" }
+      }]).then((result) => FinancialRequest.find({ _id: { $in: Object.values(result.insertedIds) } }));
+      // While the exception is open, resubmitting would only repeat the approvals.
+      const ownerActions = allowedRequestActions(request, requester);
+      assert.ok(!ownerActions.includes("EDIT") && !ownerActions.includes("SUBMIT"), `owner actions: ${ownerActions}`);
+      assert.ok(allowedRequestActions(request, budgetOfficer).includes("COMMIT_BUDGET"));
+
+      const exception = await makeException({ costCenter: center._id });
+      exception.request = request._id;
+      await exception.save();
+      await recordBudgetExceptionDecision(exception._id, "REVIEWED", "Budget reviewed", budgetOfficer, {});
+      await recordBudgetExceptionDecision(exception._id, "REJECTED", "No funds this year; reduce the scope.", management, {});
+      const rejected = await FinancialRequest.findById(request._id);
+      assert.equal(rejected.observation.resolver, "REQUESTER");
+      const afterRejection = allowedRequestActions(rejected, requester);
+      assert.ok(afterRejection.includes("EDIT") && afterRejection.includes("SUBMIT"));
+      // Withdrawn back to draft after an earlier submission, it can be voided but not hard-deleted.
+      assert.ok(!allowedRequestActions({ ...rejected.toObject(), status: "BORRADOR" }, requester).includes("DELETE"));
+      // Committing the rejected figures would bypass Management's decision.
+      assert.ok(!allowedRequestActions(rejected, budgetOfficer).includes("COMMIT_BUDGET"));
+      await assert.rejects(() => commitApprovedRequestBudget({ request: rejected, user: budgetOfficer, req: {} }), /rejected the budget exception/);
+    });
+  } finally {
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});

@@ -181,7 +181,7 @@ function dateKeyOf(value, field) {
   return limaDateKey(date);
 }
 
-// University payment schedule: payments run on the 15th and the 30th (last day of February).
+// University payment schedule: payments run on the 15th and the last working day of the month.
 // The default is the next cycle date; any other date needs a reason (audited) and a date in the
 // past is never accepted. Advances to render are paid the same working day: a file holding only
 // advances defaults to today and needs no typed reason (the platform records why).
@@ -195,7 +195,7 @@ export function resolvePaymentSchedule({ paymentDate, reason, now = new Date(), 
   const onCycle = isPaymentCycleDate(new Date(`${date}T12:00:00.000Z`));
   const overrideReason = String(reason || "").trim() || (advancesOnly ? ADVANCE_PAYMENT_REASON : "");
   if (!onCycle && !overrideReason) {
-    throw new AppError(422, `Payments follow the 15th/30th cycle (next: ${cycleDate}). A reason is required to schedule on another date.`, { field: "paymentDateReason", paymentDate: date, cycleDate }, ERROR_CODES.VALIDATION_ERROR);
+    throw new AppError(422, `Payments follow the 15th / last-working-day cycle (next: ${cycleDate}). A reason is required to schedule on another date.`, { field: "paymentDateReason", paymentDate: date, cycleDate }, ERROR_CODES.VALIDATION_ERROR);
   }
   return { paymentDate: date, cycleDate, override: onCycle ? null : { reason: overrideReason, cycleDate } };
 }
@@ -229,7 +229,7 @@ export function paymentRunFilter(cycleDate) {
 
 const PAYMENT_RUN_STATUSES = [AP_STATUS.OPEN, AP_STATUS.PARTIALLY_PAID];
 
-// The next payment run (15th / 30th) and what falls into it: the payables the payment terms (or
+// The next payment run (15th / last working day) and what falls into it: the payables the payment terms (or
 // Treasury's plan) put there, by currency. Treasury prepares it in one click and only confirms.
 export async function nextPaymentRunSummary(now = new Date()) {
   const date = nextPaymentCycleDate(now);
@@ -813,7 +813,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
       return { batch, content };
     });
     await notifyRoles({
-      roles: [ROLES.ACCOUNTING],
+      roles: [ROLES.GAF],
       eventKey: bankFileVerificationTaskKey(result.batch._id),
       type: "BANK_FILE_VERIFICATION",
       title: advanceCount ? notificationText("Verify today: bank file with an advance") : notificationText("Bank file awaiting verification"),

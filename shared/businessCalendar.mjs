@@ -113,16 +113,25 @@ export function businessDaysBetween(from, to, options) {
   return count;
 }
 
-// University payment cycle: payments run on the 15th and the 30th (the last day in a
-// shorter month). Returns the first cycle date on or after `value`, as a Lima date key.
-export function nextPaymentCycleDate(value) {
+// The PDF specifies the 15th and the LAST WORKING DAY of each month.
+// The 15th remains a literal calendar date: the manual does not say whether to move
+// it when it falls on a non-working day. An operator can use an override if needed.
+// In contrast, month-end is always the previous working day (weekends/Peru holidays).
+export function lastWorkingDayOfMonth(year, month, options = {}) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) throw new RangeError("Invalid payment month");
+  let cursor = new Date(Date.UTC(year, month, 0, 12)); // noon UTC => 07:00 Lima
+  while (!isBusinessDay(cursor, options)) cursor = new Date(cursor.getTime() - DAY_MS);
+  return utcKey(cursor.getTime());
+}
+
+export function nextPaymentCycleDate(value, options = {}) {
   const key = limaDateKey(value);
-  const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7)), day = Number(key.slice(8, 10));
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const secondRun = Math.min(30, lastDay);
-  if (day <= 15) return `${year}-${pad(month)}-15`;
-  if (day <= secondRun) return `${year}-${pad(month)}-${pad(secondRun)}`;
-  const next = new Date(Date.UTC(year, month, 15));
+  const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7));
+  const firstRun = `${year}-${pad(month)}-15`;
+  const lastRun = lastWorkingDayOfMonth(year, month, options);
+  if (key <= firstRun) return firstRun;
+  if (key <= lastRun) return lastRun;
+  const next = new Date(Date.UTC(year, month, 1));
   return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-15`;
 }
 
@@ -137,9 +146,8 @@ export function advancePaymentDate(value = new Date(), { cutoffHour = ADVANCE_CU
   return limaDateKey(nextBusinessDay(afterCutoff ? time + DAY_MS : time, options));
 }
 
-export function isPaymentCycleDate(value) {
+export function isPaymentCycleDate(value, options = {}) {
   const key = limaDateKey(value);
-  const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7)), day = Number(key.slice(8, 10));
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return day === 15 || day === Math.min(30, lastDay);
+  const year = Number(key.slice(0, 4)), month = Number(key.slice(5, 7));
+  return key === `${year}-${pad(month)}-15` || key === lastWorkingDayOfMonth(year, month, options);
 }

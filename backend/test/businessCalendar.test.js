@@ -14,7 +14,7 @@ test("Lima time: today and the calendar day of stored dates", () => {
   assert.equal(calendarDateKey("not a date"), "");
 });
 
-test("business calendar: Peruvian holidays, weekends, Lima time and the 15th/30th payment cycle", () => {
+test("business calendar: Peruvian holidays, weekends, Lima time and the 15th/last-working-day payment cycle", () => {
   const holidays2026 = peruHolidays(2026).map((item) => item.date);
   assert.ok(holidays2026.includes("2026-04-02") && holidays2026.includes("2026-04-03"), "Holy Thursday and Good Friday 2026");
   assert.ok(holidays2026.includes("2026-07-28") && holidays2026.includes("2026-12-09"));
@@ -37,7 +37,9 @@ test("business calendar: Peruvian holidays, weekends, Lima time and the 15th/30t
   assert.equal(nextPaymentCycleDate(lima("2026-09-03")), "2026-09-15");
   assert.equal(nextPaymentCycleDate(lima("2026-09-16")), "2026-09-30");
   assert.equal(nextPaymentCycleDate(lima("2026-10-31")), "2026-11-15", "31st rolls to the next month's 15th");
-  assert.equal(nextPaymentCycleDate(lima("2027-02-20")), "2027-02-28", "February runs on its last day");
-  assert.equal(isPaymentCycleDate(lima("2027-02-28")), true);
+  assert.equal(nextPaymentCycleDate(lima("2027-02-20")), "2027-02-26", "February uses the last working day");
+  assert.equal(isPaymentCycleDate(lima("2027-02-26")), true);
   assert.equal(isPaymentCycleDate(lima("2026-09-29")), false);
+  assert.equal(nextPaymentCycleDate(lima("2026-10-16")), "2026-10-30", "Saturday 31st is moved to Friday 30th");
+  assert.equal(nextPaymentCycleDate(lima("2026-12-16")), "2026-12-31", "Thursday last day remains month end");
 });

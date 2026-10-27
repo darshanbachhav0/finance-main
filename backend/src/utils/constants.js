@@ -71,7 +71,7 @@ export const PERMISSIONS = Object.freeze({
   BATCH_INVOICE_REVIEW: "batch-invoice:review",
   PAYMENT_REPROCESS: "payment:reprocess",
   BANK_FORMAT_CERTIFY: "bank-format:certify",
-  // Accounting checks each generated bank TXT before Treasury may download it. A department
+  // GAF approves each generated bank TXT before Treasury may download it. A department
   // duty (with Admin), so it is not grantable piecemeal.
   BANK_FILE_VERIFY: "bank-file:verify"
 });
@@ -124,7 +124,6 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.RENDITION_REVIEW,
     PERMISSIONS.BATCH_INVOICE_UPLOAD,
     PERMISSIONS.BATCH_INVOICE_REVIEW,
-    PERMISSIONS.BANK_FILE_VERIFY
   ],
   [ROLES.TREASURY]: [
     PERMISSIONS.REQUEST_VIEW_ALL,
@@ -154,7 +153,7 @@ const ROLE_BASE_PERMISSIONS = Object.freeze({
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.MANAGEMENT_PORTAL_VIEW,
-    // Approves each bank file (lote) before Treasury downloads it, as Accounting does.
+    // Approves each bank file (lote) before Treasury downloads it.
     PERMISSIONS.BANK_FILE_VERIFY
   ],
   [ROLES.LEGAL]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],

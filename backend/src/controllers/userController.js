@@ -15,7 +15,7 @@ import NotificationDelivery from "../models/NotificationDelivery.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
-const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil", "emailNotifications"];
+const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "jobCategory", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil", "emailNotifications"];
 
 // Area Director and Vice-Rector are single-level roles: their approvalLevel is
 // implied by the role itself, never a separate admin choice (unlike Management,

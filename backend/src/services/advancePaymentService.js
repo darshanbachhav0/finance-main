@@ -4,9 +4,9 @@ import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.
 import { DEFAULT_ADVANCE_PAYMENT_CUTOFF_HOUR, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE } from "../utils/constants.js";
 
 // An advance to render (Track C, entrega a rendir) is money the employee needs now: it is paid
-// the same working day it is approved, not on the 15th / 30th. An approval after the cut-off hour
+// the same working day it is approved, not on the 15th / last working day. An approval after the cut-off hour
 // (Lima, 15:00 by default) is paid the next working day.
-export const ADVANCE_PAYMENT_REASON = "Advance to render: paid the same working day, outside the 15th/30th cycle.";
+export const ADVANCE_PAYMENT_REASON = "Advance to render: paid the same working day, outside the 15th/last working day cycle.";
 
 // The advance payable: created by provisionTrackCAdvance with an ANTICIPO voucher.
 export const isAdvancePayable = (payable) => payable?.flowType === FLOW_TYPE.C && payable?.voucher?.voucherType === "ANTICIPO";

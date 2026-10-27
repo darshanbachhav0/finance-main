@@ -76,7 +76,7 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
     const person = (name, extra = {}) => User.create({ name, email: `${name.toLowerCase().replace(/\W+/g, ".")}@test.local`, passwordHash: "unused", role: ROLES.SOLICITOR, ...extra });
     const vicerector = await person("Vicerrector", { role: ROLES.VICE_RECTOR, approvalLevel: "VICE_RECTOR", area: "Rectorado" });
     const itJefe = await person("Jefe TI", { area: "Tecnología de la Información", costCenter: it._id, jefe: vicerector._id });
-    const requester = await person("Analista TI", { area: "Tecnología de la Información", costCenter: it._id, authorizedCostCenters: [it._id], jefe: itJefe._id });
+    const requester = await person("Analista TI", { area: "Tecnología de la Información", jobCategory: 3, costCenter: it._id, authorizedCostCenters: [it._id], jefe: itJefe._id });
     // Medicine's head is its top jefe in the roster; Nursing's is its Area Director, known by area
     // only (no CECO on the profile, as the demo directors). An approver of every area ("*") is neither.
     const dean = await person("Decana de Medicina", { area: "Escuela de Medicina", costCenter: medicine._id, jefe: vicerector._id });

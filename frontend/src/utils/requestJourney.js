@@ -41,7 +41,7 @@ export function journeyMilestones(request, { orderApplies = true } = {}) {
 }
 
 // When the money is expected: the scheduled date of the first unpaid payable, else the next
-// payment cycle (15th / 30th) once a payable exists, else nothing yet. A paid request shows when.
+// payment cycle (15th / last working day) once a payable exists, else nothing yet. A paid request shows when.
 export function expectedPayment(request, payables = [], now = new Date()) {
   // A transfer between UMA's own accounts pays nobody: its execution shows in its milestones.
   if (request.flowType === "D") return null;

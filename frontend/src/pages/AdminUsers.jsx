@@ -61,6 +61,7 @@ export default function AdminUsers() {
         { name: "jefe", label: "Direct supervisor", type: "search-select", options: peopleOptions, searchPlaceholder: "Search by name or job title...", getValue: row => row.jefe?._id || row.jefe || "", wide: true },
         { name: "substitute", label: "Substitute during leave", type: "search-select", options: peopleOptions, searchPlaceholder: "Search by name or job title...", getValue: row => row.substitute?._id || row.substitute || "", wide: true, hint: (form) => form.substitute ? coverageHint(form) : "Approves on this person's behalf while they are on leave or inactive. Without one, their approvals go to their nearest available jefe." },
         { name: "jobTitle", label: "Job title" },
+        { name: "jobCategory", label: "Job category (Portal de Personas)", type: "number", min: 1, step: 1, getValue: row => row.jobCategory ?? "", hint: "Only categories 3, 5 and 6 can charge expenses to another cost center." },
         { name: "organizationalUnit", label: "Organizational unit" },
         { name: "area", label: "Area", defaultValue: "General", required: true },
         { type: "section", label: "Access" },
@@ -86,6 +87,7 @@ export default function AdminUsers() {
         const payload = { ...form, jefe: form.jefe || null, substitute: form.substitute || null };
         if (!payload.password) delete payload.password;
         if (!payload.costCenter) delete payload.costCenter;
+        if (payload.jobCategory === "" || payload.jobCategory === null) delete payload.jobCategory;
         if (!payload.onLeave || !payload.leaveUntil) payload.leaveUntil = null;
         return payload;
       }}

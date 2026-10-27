@@ -36,6 +36,8 @@ import {
 import { authorize, authorizeAccess, authorizePermission, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
 import { PERMISSIONS, ROLES } from "../utils/constants.js";
+import { issueDigitalActa, signDigitalActa } from "../services/digitalActaService.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 
 const router = Router();
 
@@ -55,6 +57,8 @@ router.get("/:id/procurement-readiness", getProcurementReadiness);
 // The request's conversation (requestCommentService): anyone who can view the request.
 router.get("/:id/comments/mentionable", getMentionableUsers);
 router.route("/:id/comments").get(getRequestComments).post(postRequestComment);
+router.post("/:id/acta/issue", asyncHandler(async (req, res) => res.status(201).json({ data: await issueDigitalActa({ requestId: req.params.id, payload: req.body, user: req.user, req }) })));
+router.post("/:id/acta/sign", asyncHandler(async (req, res) => res.json({ data: await signDigitalActa({ requestId: req.params.id, user: req.user, req }) })));
 router.post("/:id/procurement-order", authorizePermission(PERMISSIONS.PROCUREMENT_ORDER_CREATE), createProcurementOrder);
 router.post("/:id/submit", submitRequest);
 router.post("/:id/withdraw", withdrawRequest);

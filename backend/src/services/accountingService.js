@@ -25,6 +25,7 @@ import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { requireAccountingMapping, resolveAccountingMapping } from "./accountingMappingService.js";
 import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
+import { assertDigitalActaForAccounting } from "./digitalActaService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
 import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
@@ -1020,6 +1021,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   }
   await validateAccountingDimensions({ requestType: request.requestType, expenseNature: request.expenseNature, lines: request.lines, requireAccount: true });
   await assertConfiguredDocuments(request, DOCUMENT_PHASE.ACCOUNTING);
+  assertDigitalActaForAccounting(request);
   if (MANDATORY_XML_TYPES.includes(request.requestType) && !request.xmlValidation?.validated) {
     throw new AppError(422, "A verified invoice (its XML or factura PDF) is required before Accounting processing.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
   }

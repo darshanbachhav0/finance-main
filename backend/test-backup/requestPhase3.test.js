@@ -1,0 +1,358 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import mongoose from "mongoose";
+import AccountingPeriod from "../src/models/AccountingPeriod.js";
+import AuditLog from "../src/models/AuditLog.js";
+import { assertStoredAssetAccess, resolveStoredAsset } from "../src/services/fileAccessService.js";
+import ApprovalRule from "../src/models/ApprovalRule.js";
+import BudgetCommitment from "../src/models/BudgetCommitment.js";
+import CostCenter from "../src/models/CostCenter.js";
+import DocumentRule from "../src/models/DocumentRule.js";
+import ExpenseType from "../src/models/ExpenseType.js";
+import FinancialRequest from "../src/models/FinancialRequest.js";
+import Project from "../src/models/Project.js";
+import Supplier from "../src/models/Supplier.js";
+import User from "../src/models/User.js";
+import { validateStructuredQuotationComparison } from "../src/services/documentRuleService.js";
+import {
+  createFinancialRequest,
+  updateFinancialRequest,
+  parseQuotations,
+  previewFinancialRequestBudget,
+  requestAuthorizedCostCenters,
+  requestFormPolicy,
+  submitFinancialRequest,
+  titleFromDescription
+} from "../src/services/requestService.js";
+import { assertSupplierSubmittable, assertSupplierUsable } from "../src/services/supplierService.js";
+import { ERROR_CODES, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { invoicePdf } from "./fiscalFixtures.js";
+
+const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
+
+test("RCO-FOR-001 Phase 3 request controls", { timeout: 120000 }, async (t) => {
+  const databaseName = `erp_request_phase3_${process.pid}_${Date.now()}`;
+  await mongoose.connect(`mongodb://127.0.0.1:27017/${databaseName}`);
+  try {
+    const [center, secondCenter, forbiddenCenter] = await CostCenter.create([
+      { code: "CC-PH3-100", name: "Health Sciences", area: "Health Sciences", annualBudget: 50000, active: true, budgetMode: "ACTIVE" },
+      { code: "CC-PH3-110", name: "Pharmacy", area: "Pharmacy", annualBudget: 25000, active: true },
+      { code: "CC-PH3-900", name: "Unassigned Engineering", area: "Engineering", annualBudget: 50000, active: true }
+    ]);
+    const [opex, capex] = await ExpenseType.create([
+      { code: "PH3-OPEX", name: "Laboratory maintenance", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "634101", active: true },
+      { code: "PH3-CAPEX", name: "Laboratory equipment", category: "CAPEX", accountingClass: "CLASS_3", accountNumber: "336101", active: true }
+    ]);
+    const project = await Project.create({ code: "PEP-PH3-01", name: "Health Laboratory Upgrade", costCenter: center._id, active: true });
+    const solicitor = await User.create({
+      employeeCode: "UMA-PH3-SOL",
+      name: "Phase 3 Requester",
+      email: "phase3.requester@uma.edu.pe",
+      passwordHash: "unused",
+      role: ROLES.SOLICITOR,
+      area: "Health Sciences",
+      costCenter: center._id,
+      authorizedCostCenters: [secondCenter._id]
+    });
+    await AccountingPeriod.create({ period: "2026-08", status: "OPEN", openedAt: new Date(), openedBy: solicitor._id });
+    const jefe = await User.create({ name: "Phase 3 Jefe", passwordHash: "unused", role: ROLES.SOLICITOR });
+    solicitor.jefe = jefe._id;
+    await solicitor.save();
+    // Retain legacy rules to verify hierarchy routing remains independent.
+    await ApprovalRule.create({ name: "Phase 3 wildcard route", approvalLevel: "AREA_DIRECTOR", role: ROLES.AREA_DIRECTOR, area: "*", amountFrom: 0, requestType: "*", flowType: "*", required: true, sequence: 1, slaHours: 24, active: true });
+    const suppliers = await Supplier.create([
+      { rucDni: "20611111111", legalName: "Homologated Phase 3 SAC", name: "Homologated Phase 3 SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-8101" },
+      { rucDni: "20622222222", legalName: "Pending Phase 3 SAC", name: "Pending Phase 3 SAC", homologationStatus: "PENDING_VALIDATION", status: "PENDING_VALIDATION", active: false },
+      { rucDni: "20633333333", legalName: "Observed Phase 3 SAC", name: "Observed Phase 3 SAC", homologationStatus: "OBSERVED", status: "OBSERVED", active: false },
+      { rucDni: "20644444444", legalName: "Rejected Phase 3 SAC", name: "Rejected Phase 3 SAC", homologationStatus: "REJECTED", status: "REJECTED", active: false },
+      { rucDni: "20655555555", legalName: "Inactive Phase 3 SAC", name: "Inactive Phase 3 SAC", homologationStatus: "INACTIVE", status: "INACTIVE", active: false },
+      { rucDni: "20666666666", legalName: "Recommended Phase 3 SAC", name: "Recommended Phase 3 SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-8106" }
+    ]);
+    // The official A1 document recommends an approved supplier; the other quotations may come from any supplier.
+    const quoted = [suppliers[0], suppliers[5], suppliers[1]];
+    await DocumentRule.create({
+      code: "PH3-OFFICIAL-OPEX",
+      requestType: REQUEST_TYPE.OPEX,
+      expenseNature: EXPENSE_NATURE.MAINTENANCE,
+      requirements: [{ kind: "QUOTATION", minCount: 3, labelKey: "three quotations" }],
+      quotationPolicy: { enabled: true, minimumCount: 3, allowAuthorizedException: true, exceptionReasonRequired: true },
+      active: true
+    });
+
+    function line(overrides = {}) {
+      return {
+        itemDescription: "Preventive maintenance service",
+        quantity: 1,
+        unitOfMeasure: "SERVICE",
+        unitPrice: 118,
+        costCenter: center._id,
+        expenseType: opex._id,
+        netAmount: 100,
+        igvAmount: 18,
+        totalAmount: 118,
+        ...overrides
+      };
+    }
+
+    async function officialDocument(overrides = {}) {
+      const attachmentIds = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
+      return FinancialRequest.create({
+        requestType: REQUEST_TYPE.OPEX,
+        expenseNature: EXPENSE_NATURE.MAINTENANCE,
+        issueDate: "2026-08-12",
+        accountingPeriod: "2026-08",
+        requester: solicitor._id,
+        solicitor: solicitor._id,
+        requesterArea: solicitor.area,
+        requesterCostCenter: center._id,
+        currency: "PEN",
+        supplier: suppliers[5]._id,
+        title: "Official laboratory maintenance",
+        detailedDescription: "Maintain laboratory equipment and deliver the service report.",
+        businessJustification: "Protects teaching continuity and equipment availability.",
+        nonApprovalRisk: "Practical classes may be interrupted.",
+        description: "Official laboratory maintenance",
+        supplierSelectionReason: "Best delivery period and technically compliant proposal.",
+        opexDetails: { expenseFrequency: "ONE_OFF" },
+        lines: [line()],
+        attachments: attachmentIds.map((id, index) => ({ _id: id, kind: "QUOTATION", originalName: `quote-${index + 1}.pdf`, filename: `quote-${index + 1}.pdf`, url: `/files/quote-${index + 1}.pdf`, mimetype: "application/pdf", size: 10, uploadedBy: solicitor._id })),
+        quotations: quoted.map((supplier, index) => ({ supplier: supplier._id, amount: 118 + index, currency: "PEN", attachment: attachmentIds[index], recommended: index === 1 })),
+        ...overrides
+      });
+    }
+
+    await t.test("legacy request remains readable and official fields are additive", () => {
+      const legacy = FinancialRequest.hydrate({ requestNumber: "SOL-2026-98001", description: "Legacy description", requestType: "OPEX" });
+      assert.equal(legacy.description, "Legacy description");
+      assert.equal(legacy.title, "");
+    });
+
+    await t.test("authorized CECO options are filtered and forged header/line CECOs are rejected", async () => {
+      const options = await requestAuthorizedCostCenters(solicitor);
+      assert.deepEqual(options.map((item) => item.code), ["CC-PH3-100", "CC-PH3-110"]);
+      await assert.rejects(() => createFinancialRequest({
+        payload: { requestType: "OPEX", expenseNature: "MAINTENANCE", requesterCostCenter: forbiddenCenter._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id, title: "Official", description: "Official", lines: [line()] },
+        files: {}, user: solicitor, req
+      }), (error) => error.code === ERROR_CODES.INVALID_COST_CENTER);
+      await assert.rejects(() => createFinancialRequest({
+        payload: { requestType: "OPEX", expenseNature: "MAINTENANCE", requesterCostCenter: center._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id, title: "Official", description: "Official", lines: [line({ costCenter: forbiddenCenter._id })] },
+        files: {}, user: solicitor, req
+      }), (error) => error.code === ERROR_CODES.INVALID_COST_CENTER_LINE && error.details.line === 1 && error.details.code === forbiddenCenter.code);
+    });
+
+    await t.test("CAPEX fields, project snapshot, NPV and Payback are server controlled and stored without calculation", async () => {
+      const request = await createFinancialRequest({
+        payload: {
+          requestType: "CAPEX", expenseNature: "EQUIPMENT", requesterCostCenter: center._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id,
+          title: "Microscope renewal", detailedDescription: "Replace teaching microscopes.", businessJustification: "Capacity improvement.", nonApprovalRisk: "Reduced lab capacity.", description: "Microscope renewal",
+          capexDetails: { projectSnapshot: { id: project._id, code: "FORGED", name: "FORGED" }, assetCategory: "MACHINERY", usefulLifeYears: 8, npv: { amount: 15000, currency: "PEN" }, payback: { value: 3, unit: "YEARS" } },
+          lines: [line({ expenseType: capex._id, itemDescription: "Microscope", quantity: 2, unitPrice: 59 })]
+        }, files: {}, user: solicitor, req
+      });
+      assert.equal(request.capexDetails.projectSnapshot.code, project.code);
+      assert.equal(request.capexDetails.projectSnapshot.name, project.name);
+      assert.equal(request.capexDetails.npv.amount, 15000);
+      assert.equal(request.capexDetails.payback.value, 3);
+      const invalid = new FinancialRequest({ requestType: "CAPEX", capexDetails: { assetCategory: "INVALID", usefulLifeYears: -1 } });
+      assert.ok(invalid.validateSync()?.errors["capexDetails.assetCategory"]);
+      assert.ok(invalid.validateSync()?.errors["capexDetails.usefulLifeYears"]);
+    });
+
+    await t.test("OPEX frequency and exact commercial reconciliation preserve accounting totals", async () => {
+      const request = await createFinancialRequest({
+        payload: { requestType: "OPEX", expenseNature: "MAINTENANCE", requesterCostCenter: center._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id, title: "OPEX service", detailedDescription: "Service", businessJustification: "Need", nonApprovalRisk: "Risk", description: "OPEX service", opexDetails: { expenseFrequency: "MONTHLY_RECURRING" }, lines: [{ ...line(), commercialTotal: 999999 }] },
+        files: {}, user: solicitor, req
+      });
+      assert.equal(request.opexDetails.expenseFrequency, "MONTHLY_RECURRING");
+      assert.equal(request.lines[0].commercialTotal, 118);
+      assert.equal(request.totalCommercialAmount, 118);
+      assert.equal(request.totalAmount, 118);
+      assert.equal(request.commercialTotalStatus, "MATCH");
+      request.lines[0].unitPrice = 100;
+      await request.validate();
+      assert.equal(request.commercialTotalStatus, "MISMATCH");
+      assert.equal(request.totalAmount, 118);
+    });
+
+    await t.test("automatic IGV survives database save, reload, edit and budget preview", async () => {
+      const payload = { requestType: "OPEX", expenseNature: "MAINTENANCE", requesterCostCenter: center._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id, title: "Automatic IGV", description: "Automatic IGV", lines: [line({ quantity: 3, unitPrice: 1000, priceIncludesIGV: false, netAmount: 1, igvAmount: 1, totalAmount: 2 })] };
+      const created = await createFinancialRequest({ payload, files: {}, user: solicitor, req });
+      let stored = await FinancialRequest.findById(created._id);
+      assert.equal(stored.lines[0].priceIncludesIGV, false);
+      assert.equal(stored.totalNet, 3000);
+      assert.equal(stored.totalIGV, 540);
+      assert.equal(stored.totalAmount, 3540);
+      assert.equal(stored.commercialTotalStatus, "MATCH");
+      const preview = await previewFinancialRequestBudget({ payload, user: solicitor });
+      assert.equal(preview.lines[0].amount, 3540);
+      await updateFinancialRequest({ id: created._id, payload: { lines: [line({ quantity: 3, unitPrice: 1000, priceIncludesIGV: true, totalAmount: 999 })] }, files: {}, user: solicitor, req });
+      stored = await FinancialRequest.findById(created._id);
+      assert.equal(stored.lines[0].priceIncludesIGV, true);
+      assert.equal(stored.totalAmount, 3000);
+      assert.equal(stored.totalNet, 2542.37);
+      assert.equal(stored.totalIGV, 457.63);
+      assert.equal(stored.commercialTotalStatus, "MATCH");
+    });
+
+    await t.test("the requester removes a wrong document while editing; quotation evidence stays", async () => {
+      const wrongPath = path.join(os.tmpdir(), `wrong-contract-${process.pid}-${Date.now()}.pdf`);
+      await fs.writeFile(wrongPath, "%PDF-1.4 wrong document");
+      const contractId = new mongoose.Types.ObjectId();
+      const supportingId = new mongoose.Types.ObjectId();
+      const request = await officialDocument();
+      request.attachments.push(
+        { _id: contractId, kind: "CONTRACT", originalName: "wrong-contract.pdf", filename: "wrong-contract.pdf", path: wrongPath, url: "/uploads/requests/x/wrong-contract.pdf", mimetype: "application/pdf", size: 24, uploadedBy: solicitor._id },
+        { _id: supportingId, kind: "SUPPORTING", originalName: "annex.pdf", filename: "annex.pdf", url: "/uploads/requests/x/annex.pdf", mimetype: "application/pdf", size: 10, uploadedBy: solicitor._id }
+      );
+      await request.save();
+      const quotationEvidence = request.attachments.find((item) => item.kind === "QUOTATION");
+      await assert.rejects(
+        () => updateFinancialRequest({ id: request._id, payload: { removeAttachments: JSON.stringify([String(quotationEvidence._id)]) }, files: {}, user: solicitor, req }),
+        (error) => error.statusCode === 422 && error.code === ERROR_CODES.VALIDATION_ERROR
+      );
+      await updateFinancialRequest({ id: request._id, payload: { removeAttachments: JSON.stringify([String(contractId), String(new mongoose.Types.ObjectId())]) }, files: {}, user: solicitor, req });
+      const stored = await FinancialRequest.findById(request._id);
+      assert.deepEqual(stored.attachments.map((item) => item.kind).sort(), ["QUOTATION", "QUOTATION", "QUOTATION", "SUPPORTING"]);
+      // Never sent for approval, so the file itself is gone; the audit keeps what was removed.
+      await assert.rejects(() => fs.access(wrongPath));
+      const audit = await AuditLog.findOne({ entityId: request._id, action: "UPDATED" }).sort({ createdAt: -1 });
+      assert.deepEqual(audit.newValues.removedAttachments.map((item) => item.originalName), ["wrong-contract.pdf"]);
+    });
+
+    await t.test("everyone who can open the request can open its documents, a chain approver included", async () => {
+      const request = await officialDocument();
+      const manager = await User.create({ employeeCode: `UMA-PH3-JEFE-${Date.now()}`, name: "Phase 3 Jefe", email: `phase3.jefe.${Date.now()}@uma.edu.pe`, passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id });
+      const outsider = await User.create({ employeeCode: `UMA-PH3-OUT-${Date.now()}`, name: "Phase 3 Outsider", email: `phase3.outsider.${Date.now()}@uma.edu.pe`, passwordHash: "unused", role: ROLES.SOLICITOR, area: "Health Sciences", costCenter: center._id });
+      await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { status: REQUEST_STATUS.PENDING_APPROVAL, approvalRouteSnapshot: [{ sequence: 1, approvalLevel: "MANAGER_CHAIN", approverUser: manager._id, status: "PENDING" }] } });
+      const asset = resolveStoredAsset(`/uploads/requests/${request._id}/contract.pdf`);
+      await assert.doesNotReject(() => assertStoredAssetAccess(asset, solicitor));
+      await assert.doesNotReject(() => assertStoredAssetAccess(asset, manager));
+      await assert.rejects(() => assertStoredAssetAccess(asset, outsider), /permission/);
+    });
+
+    await t.test("configured quotation policy exposes its real minimum and detailed recommendation errors", async () => {
+      const policy = await requestFormPolicy({ requestType: "OPEX", expenseNature: "MAINTENANCE" });
+      assert.equal(policy.quotationPolicy.enabled, true);
+      // The rule was configured with the legacy "3 quotations"; the product decision makes one quotation the minimum.
+      assert.equal(policy.quotationPolicy.minimumCount, 1);
+      const base = { supplier: suppliers[0]._id, supplierSelectionReason: "Technical choice", quotations: [] };
+      const none = validateStructuredQuotationComparison(base, policy.quotationPolicy);
+      assert.ok(none.errors.some((item) => item.code === "QUOTATION_MINIMUM_NOT_MET"));
+      assert.ok(none.errors.some((item) => item.code === "NO_RECOMMENDED_QUOTATION"));
+      const multiple = validateStructuredQuotationComparison({ ...base, quotations: suppliers.slice(0, 3).map((supplier) => ({ supplier: supplier._id, attachment: new mongoose.Types.ObjectId(), recommended: true })) }, policy.quotationPolicy);
+      assert.ok(multiple.errors.some((item) => item.code === "MULTIPLE_RECOMMENDED_QUOTATIONS"));
+    });
+
+    await t.test("client cannot forge quotation snapshots or authorize its own exception", async () => {
+      const parsed = parseQuotations([{ supplier: suppliers[0]._id, supplierSnapshot: { legalName: "FORGED" }, recommended: true }]);
+      assert.equal(parsed[0].supplierSnapshot, undefined);
+      const request = await createFinancialRequest({
+        payload: { requestType: "OPEX", expenseNature: "MAINTENANCE", requesterCostCenter: center._id, issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", supplier: suppliers[0]._id, title: "Exception attempt", detailedDescription: "Detail", businessJustification: "Need", nonApprovalRisk: "Risk", description: "Exception attempt", quotationException: { authorized: true, authorizedBy: solicitor._id }, quotations: [{ supplier: suppliers[0]._id, supplierSnapshot: { legalName: "FORGED" }, recommended: true }], lines: [line()] },
+        files: {}, user: solicitor, req
+      });
+      assert.equal(request.quotationException.authorized, false);
+      assert.equal(request.quotations[0].supplierSnapshot.legalName, suppliers[0].legalName);
+    });
+
+    await t.test("each missing official narrative field blocks submission with a precise code", async () => {
+      for (const [field, code] of [["detailedDescription", "DETAILED_DESCRIPTION_REQUIRED"], ["businessJustification", "BUSINESS_JUSTIFICATION_REQUIRED"]]) {
+        const request = await officialDocument({ [field]: "" });
+        await assert.rejects(() => submitFinancialRequest({ id: request._id, user: solicitor, req }), (error) => error.code === code);
+      }
+    });
+
+    await t.test("the simple form's request: no title, risk or selection reason for one quotation", async () => {
+      const request = await officialDocument({ title: "", nonApprovalRisk: "", supplierSelectionReason: "" });
+      request.quotations = [request.quotations.find((quotation) => quotation.recommended).toObject()];
+      await request.save();
+      const submitted = await submitFinancialRequest({ id: request._id, user: solicitor, req });
+      assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(submitted.title, titleFromDescription(request.detailedDescription));
+      assert.equal(titleFromDescription("  \nFirst line\nSecond"), "First line");
+      assert.equal(titleFromDescription("x".repeat(200)).length, 120);
+    });
+
+    await t.test("quotation evidence, minimum, recommendation and supplier consistency are enforced", async () => {
+      // Neither a quote nor the invoice: the document rule says what is missing.
+      const insufficient = await officialDocument({ quotations: [], attachments: [] });
+      await assert.rejects(() => submitFinancialRequest({ id: insufficient._id, user: solicitor, req }), (error) => error.code === "MISSING_REQUIRED_DOCUMENT" && error.details.missing.some((item) => item.kind === "QUOTE_OR_INVOICE"));
+      const noEvidence = await officialDocument();
+      noEvidence.quotations[0].attachment = undefined;
+      noEvidence.attachments.splice(0, 1);
+      await noEvidence.save();
+      await assert.rejects(() => submitFinancialRequest({ id: noEvidence._id, user: solicitor, req }), (error) => error.code === "QUOTATION_ATTACHMENT_REQUIRED");
+      const mismatch = await officialDocument({ supplier: suppliers[0]._id });
+      await assert.rejects(() => submitFinancialRequest({ id: mismatch._id, user: solicitor, req }), (error) => error.code === "RECOMMENDED_SUPPLIER_MISMATCH");
+    });
+
+    await t.test("a single recommended quotation with evidence is enough (three quotations are not compulsory)", async () => {
+      const single = await officialDocument();
+      single.quotations = [single.quotations.find((quotation) => quotation.recommended).toObject()];
+      await single.save();
+      const submitted = await submitFinancialRequest({ id: single._id, user: solicitor, req, comments: "One quotation" });
+      assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(submitted.quotations.length, 1);
+    });
+
+    await t.test("an A1 request may be sent with a supplier still waiting for the proposer's jefe, not an observed, rejected or inactive one", async () => {
+      assert.throws(() => assertSupplierUsable(suppliers[1]), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED");
+      assert.throws(() => assertSupplierUsable(suppliers[2]), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED");
+      assert.throws(() => assertSupplierUsable(suppliers[3]), (error) => error.code === "SUPPLIER_REJECTED");
+      assert.throws(() => assertSupplierUsable(suppliers[4]), (error) => error.code === "SUPPLIER_INACTIVE");
+      assert.doesNotThrow(() => assertSupplierUsable(suppliers[0]));
+      // The jefe verifies a waiting supplier while deciding the request.
+      assert.doesNotThrow(() => assertSupplierSubmittable(suppliers[1]));
+      for (const blocked of suppliers.slice(2, 5)) assert.throws(() => assertSupplierSubmittable(blocked));
+      const pending = await officialDocument({ supplier: suppliers[1]._id, quotations: quoted.map((supplier, index) => ({ supplier: supplier._id, amount: 118 + index, currency: "PEN", recommended: index === 2 })) });
+      const sent = await submitFinancialRequest({ id: pending._id, user: solicitor, req });
+      assert.equal(sent.status, REQUEST_STATUS.PENDING_APPROVAL);
+      const observed = await officialDocument({ supplier: suppliers[2]._id, quotations: quoted.map((supplier, index) => ({ supplier: index === 2 ? suppliers[2]._id : supplier._id, amount: 118 + index, currency: "PEN", recommended: index === 2 })) });
+      await assert.rejects(() => submitFinancialRequest({ id: observed._id, user: solicitor, req }), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED" && /observed/.test(error.message));
+    });
+
+    await t.test("a complete request with an approved supplier submits for approval and carries server supplier snapshots", async () => {
+      const request = await officialDocument();
+      const submitted = await submitFinancialRequest({ id: request._id, user: solicitor, req, comments: "Phase 3 submission" });
+      assert.equal(submitted.status, REQUEST_STATUS.PENDING_APPROVAL);
+      assert.equal(submitted.supplier.homologationStatus, "HOMOLOGATED");
+      assert.equal(submitted.quotations[0].supplierSnapshot.legalName, suppliers[0].legalName);
+      assert.equal(submitted.quotations[2].supplierSnapshot.legalName, suppliers[1].legalName, "a pending supplier may still be quoted without being recommended");
+    });
+
+    await t.test("an A1 sent with its factura PDF must carry the selected supplier's invoice", async () => {
+      const facturaFrom = async (ruc) => {
+        const file = path.join(os.tmpdir(), `factura-${ruc}-${process.pid}-${Date.now()}.pdf`);
+        await fs.writeFile(file, invoicePdf({ ruc, series: "E001", number: "273", issueDate: "2026-08-12", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 }));
+        return { kind: "PDF", originalName: "factura.pdf", filename: "factura.pdf", path: file, url: "/uploads/requests/x/factura.pdf", mimetype: "application/pdf", size: 100, uploadedBy: solicitor._id };
+      };
+      // After approval this invoice could not be registered against the order, so it is refused now.
+      const otherIssuer = await officialDocument();
+      otherIssuer.attachments.push(await facturaFrom("20610378669"));
+      await otherIssuer.save();
+      await assert.rejects(() => submitFinancialRequest({ id: otherIssuer._id, user: solicitor, req }), (error) => error.code === "SUPPLIER_INVOICE_MISMATCH" && error.details.invoiceRuc === "20610378669" && error.details.field === "supplier");
+      const ownInvoice = await officialDocument();
+      ownInvoice.attachments.push(await facturaFrom(suppliers[5].rucDni));
+      await ownInvoice.save();
+      assert.equal((await submitFinancialRequest({ id: ownInvoice._id, user: solicitor, req })).status, REQUEST_STATUS.PENDING_APPROVAL);
+    });
+
+    await t.test("budget preview uses current Budget dimensions, ignores fake status and never creates a commitment", async () => {
+      const before = await BudgetCommitment.countDocuments();
+      const preview = await previewFinancialRequestBudget({
+        payload: { requestType: "OPEX", expenseNature: "MAINTENANCE", issueDate: "2026-08-12", accountingPeriod: "2026-08", currency: "PEN", budgetStatus: "AVAILABLE", lines: [line()] },
+        user: solicitor
+      });
+      assert.equal(preview.status, "AVAILABLE");
+      assert.equal(preview.totalRequested, 118);
+      assert.equal(preview.lines[0].available, 50000);
+      assert.equal(preview.lines[0].projectedBalance, 49882);
+      assert.equal(await BudgetCommitment.countDocuments(), before);
+    });
+  } finally {
+    await mongoose.connection.dropDatabase();
+    await mongoose.disconnect();
+  }
+});

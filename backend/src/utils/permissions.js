@@ -171,11 +171,17 @@ export function canApproveStage(request, user) {
   return level === (request.approvalStage || APPROVAL_STAGES.AREA_DIRECTOR);
 }
 
+export function mayChargeAnotherCostCenter(user) {
+  return user?.role === ROLES.ADMIN || [3, 5, 6].includes(Number(user?.jobCategory));
+}
+
 export function canUseCostCenter(user, costCenterId) {
   if (!user || !costCenterId) return false;
   if (user.role === ROLES.ADMIN) return true;
   const allowed = [user.costCenter, ...(user.authorizedCostCenters || [])]
     .filter(Boolean)
     .map((value) => String(value?._id || value));
-  return allowed.includes(String(costCenterId?._id || costCenterId));
+  const id = String(costCenterId?._id || costCenterId);
+  if (id === String(user.costCenter?._id || user.costCenter)) return true;
+  return mayChargeAnotherCostCenter(user) && allowed.includes(id);
 }
