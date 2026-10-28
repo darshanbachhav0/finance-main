@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import mongoose from "mongoose";
-import { advancePaymentDate, isPaymentCycleDate, limaDateKey } from "../../shared/businessCalendar.mjs";
+import { advancePaymentDate, isPaymentCycleDate, isUrgencyPaymentDate, limaDateKey } from "../../shared/businessCalendar.mjs";
 import { calculateRequestLineAmounts } from "../../shared/requestLineAmounts.mjs";
 import AccountingMapping from "../src/models/AccountingMapping.js";
 import AccountingPeriod from "../src/models/AccountingPeriod.js";
@@ -129,7 +129,8 @@ test("an approved advance goes to Treasury to pay now, and the employee is told 
       const result = await generatePaymentBatch({ payableIds: [String(payable._id)], bank: "BBVA", currency: "PEN", paymentDate: today, user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       const scheduled = await AccountsPayable.findById(payable._id);
-      if (!isPaymentCycleDate(new Date(`${today}T12:00:00Z`))) assert.equal(scheduled.scheduleOverride.reason, ADVANCE_PAYMENT_REASON, "the platform records why it is off the cycle");
+      // A fortnightly payment day or a Wednesday (the urgency window) needs no reason.
+      if (!isPaymentCycleDate(new Date(`${today}T12:00:00Z`)) && !isUrgencyPaymentDate(new Date(`${today}T12:00:00Z`))) assert.equal(scheduled.scheduleOverride.reason, ADVANCE_PAYMENT_REASON, "the platform records why it is off the cycle");
       const task = await Notification.findOne({ user: gaf._id, type: "BANK_FILE_VERIFICATION" });
       assert.equal(task.title, "Verify today: bank file with an advance");
       await verifyBankFile({ batchId: result.batch._id, user: gaf, req });
