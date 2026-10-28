@@ -1,11 +1,10 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
-import { clientId } from "../utils/clientId.js";
 import { allocationPercentages, percentageTotal, splitByPercentages } from "../../../shared/costCenterAllocation.mjs";
 import SearchSelect from "./SearchSelect.jsx";
 
-export const newCostAllocation = (percentage = "") => ({ clientId: clientId(), costCenter: "", percentage });
+export const newCostAllocation = (percentage = "") => ({ clientId: `${Date.now()}-${Math.random()}`, costCenter: "", percentage });
 const centerLabel = (item) => `${item.code} - ${item.name}${item.area && item.area !== item.name ? ` (${item.area})` : ""}`;
 
 // Por Encargo: the school or department the request is for, chosen from the CECO master (never a
