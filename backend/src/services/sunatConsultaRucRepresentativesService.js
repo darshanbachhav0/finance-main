@@ -29,6 +29,10 @@ const BACKEND_ROOT =
 const DEFAULT_TIMEOUT_MS =
   30_000;
 
+// "Representantes Legales", and the current "Representante(s) Legal(es)".
+const REPRESENTATIVES_LABEL =
+  /representante(?:\(s\)|s)?\s+legal(?:\(es\)|es)?/i;
+
 const DEFAULT_CACHE_MINUTES =
   30;
 
@@ -414,6 +418,14 @@ async function findRepresentativesControl(
   page
 ) {
   const selectors = [
+    // SUNAT's current result page (Oct 2026): <form name="formRepLeg"> with
+    // <button class="btnInfRepLeg">Representante(s) Legal(es)</button>.
+    '.btnInfRepLeg',
+
+    'form[name="formRepLeg"] button',
+
+    'button:has-text("Representante(s) Legal(es)")',
+
     'a:has-text("Representantes Legales")',
 
     'button:has-text("Representantes Legales")',
@@ -459,7 +471,7 @@ async function findRepresentativesControl(
   const textLocator =
     page
       .getByText(
-        /representantes\s+legales/i
+        REPRESENTATIVES_LABEL
       )
       .first();
 
@@ -491,7 +503,16 @@ async function submitRepresentativeFormFallback(
           document.forms || []
         );
 
+      // SUNAT's own representatives form first: it already carries the page's
+      // contexto and modo fields. Any other form is only a last resort.
       const form =
+        forms.find(
+          (candidate) =>
+            candidate.name === "formRepLeg" ||
+            candidate.querySelector(
+              '[name="accion"][value="getRepLeg"]'
+            )
+        ) ||
         forms.find(
           (candidate) =>
             candidate.querySelector(
@@ -507,6 +528,14 @@ async function submitRepresentativeFormFallback(
         return false;
       }
 
+      const ownForm =
+        form.name === "formRepLeg" ||
+        Boolean(
+          form.querySelector(
+            '[name="accion"][value="getRepLeg"]'
+          )
+        );
+
       function assign(
         name,
         value
@@ -515,6 +544,11 @@ async function submitRepresentativeFormFallback(
           form.querySelector(
             `[name="${name}"]`
           );
+
+        // SUNAT's own form already holds the RUC and name it showed.
+        if (ownForm && element?.value) {
+          return;
+        }
 
         if (!element) {
           element =
@@ -569,6 +603,65 @@ async function submitRepresentativeFormFallback(
         legalName
     }
   );
+}
+
+// SUNAT may put the representatives page behind a security check (Cloudflare,
+// "Verificación de seguridad en curso"). Wait for the representatives or for that
+// check, whichever comes first; give a check a few seconds to clear by itself, as it
+// does for a normal visitor, and never try to get past it.
+const CHALLENGE_GRACE_MS =
+  8_000;
+
+async function waitForRepresentativesOrChallenge(
+  page
+) {
+  // The company profile already contains a Representatives link. That link
+  // alone must not be mistaken for a successfully loaded representatives page.
+  const loaded = () => {
+    const text = document.body?.innerText || "";
+    return /REPRESENTANTES\s+LEGALES\s+DE\s+\d{11}/i.test(text)
+      && (/DOCUMENTO[\s\S]*NOMBRE[\s\S]*CARGO[\s\S]*FECHA/i.test(text)
+        || /NO (SE (ENCONTRARON|REGISTRAN)|TIENE|EXISTEN)[\s\S]*REPRESENTANTES/i.test(text));
+  };
+
+  // Representatives loaded, or SUNAT's security check: whichever comes first.
+  await page
+    .waitForFunction(
+      () => {
+        const text = document.body?.innerText || "";
+        const representatives = /REPRESENTANTES\s+LEGALES\s+DE\s+\d{11}/i.test(text)
+          && (/DOCUMENTO[\s\S]*NOMBRE[\s\S]*CARGO[\s\S]*FECHA/i.test(text)
+            || /NO (SE (ENCONTRARON|REGISTRAN)|TIENE|EXISTEN)[\s\S]*REPRESENTANTES/i.test(text));
+        return representatives || /VERIFICACI[OÓ]N DE SEGURIDAD|CAPTCHA|NO SOY UN ROBOT/i.test(text);
+      },
+      undefined,
+      {
+        timeout:
+          timeoutMs()
+      }
+    )
+    .catch(
+      () => {}
+    );
+
+  if (
+    await detectHumanChallenge(
+      page
+    )
+  ) {
+    await page
+      .waitForFunction(
+        loaded,
+        undefined,
+        {
+          timeout:
+            CHALLENGE_GRACE_MS
+        }
+      )
+      .catch(
+        () => {}
+      );
+  }
 }
 
 async function openRepresentatives(
@@ -877,9 +970,10 @@ async function lookupInternal(
 
   const context =
     await browser.newContext({
-      // Let Chromium use its actual User-Agent. The old non-browser
-      // "UMA-Finance/1.0" value may cause sites to reject or mis-render a
-      // browser visit. Do not spoof an identity or bypass SUNAT challenges.
+      // Identify this public-data client openly. SUNAT answers HTTP 403 to
+      // Chromium's default HeadlessChrome user-agent (checked 28 Oct 2026) and
+      // serves this one. Never pose as a person's browser or bypass SUNAT's checks.
+      userAgent: "UMA-Finance/1.0 (SUNAT public RUC lookup)",
       locale:
         "es-PE",
 
@@ -920,7 +1014,8 @@ async function lookupInternal(
 
     const response =
       await page.goto(
-        CONSULTA_RUC_URL,
+        // The automated tests point this at simulated SUNAT pages.
+        env("SUNAT_CONSULTA_RUC_URL", CONSULTA_RUC_URL),
         {
           waitUntil:
             "domcontentloaded",
@@ -1033,14 +1128,9 @@ async function lookupInternal(
         legalName
       );
 
-    await representativePage.waitForFunction(() => {
-      const text = document.body?.innerText || "";
-      // The company profile already contains a Representatives link. That link
-      // alone must not be mistaken for a successfully loaded representatives page.
-      return /REPRESENTANTES\s+LEGALES\s+DE\s+\d{11}/i.test(text)
-        && (/DOCUMENTO[\s\S]*NOMBRE[\s\S]*CARGO[\s\S]*FECHA/i.test(text)
-          || /NO (SE (ENCONTRARON|REGISTRAN)|TIENE|EXISTEN)[\s\S]*REPRESENTANTES/i.test(text));
-    }, undefined, { timeout: timeoutMs() });
+    await waitForRepresentativesOrChallenge(
+      representativePage
+    );
 
     await saveDebug(
       representativePage,
