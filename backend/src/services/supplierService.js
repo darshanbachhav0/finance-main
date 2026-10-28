@@ -879,7 +879,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       }
     }
     // Manual integration mode can still preserve the public evidence retrieved by the form.
-    if (identifier.length === 11 && (usesAutomaticTaxpayerLookup() || cachedSunatLegalRepresentatives(identifier, supplier.legalName))) {
+    if (identifier.length === 11 && ((usesAutomaticTaxpayerLookup() && supplier.taxpayerValidation?.source !== "SUNAT_PUBLIC_PADRON_RUC") || cachedSunatLegalRepresentatives(identifier, supplier.legalName))) {
       try { await recordSupplierSunatRepresentatives(supplier, user, req); }
       catch (error) {
         warnings.push({ code: "SUNAT_REPRESENTATIVES_PENDING", message: "Supplier saved. SUNAT legal representatives could not be retrieved; complete the representative manually." });

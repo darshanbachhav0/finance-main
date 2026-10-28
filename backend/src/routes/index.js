@@ -1,3 +1,7 @@
+import umaInvestmentRoutes from "./umaInvestmentRoutes.js";
+import umaSpecialRoutes from "./umaSpecialRoutes.js";
+import statementReviewRoutes from "./statementReviewRoutes.js";
+import umaInsightsRoutes from "./umaInsightsRoutes.js";
 import operationsRoutes from "./operationsRoutes.js";
 import importRoutes from "./importRoutes.js";
 import padronRoutes from "./padronRoutes.js";
@@ -52,6 +56,10 @@ router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR,
 router.use("/superadmin", superAdminRoutes);
 
 router.use("/operations", operationsRoutes);
+router.use("/special-expenses", umaSpecialRoutes);
+router.use("/investments", umaInvestmentRoutes);
+router.use("/statement-reviews", statementReviewRoutes);
+router.use("/insights", umaInsightsRoutes);
 router.use("/imports", importRoutes);
 router.use("/sunat-padron", padronRoutes);
 router.use("/work-drafts", workDraftRoutes);

@@ -16,7 +16,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const user = { _id: "sunat-requester", name: "Solicitante UMA", role: "Solicitor", area: "Laboratorios", costCenter: "center" };
 const person = { documentType: "DOC. NACIONAL DE IDENTIDAD", documentNumber: "01234567", fullName: "ANA REPRESENTANTE", position: "GERENTE GENERAL", dateFrom: "15/01/2024" };
 const second = { documentType: "CARNET DE EXTRANJERIA", documentNumber: "001234567", fullName: "SEGUNDO REPRESENTANTE", position: "APODERADO", dateFrom: "01/03/2025" };
-const errors = [], pending = new Map();
+const errors = [], pending = new Map(), representativeRequests = [];
 const queriedAt = "2026-10-21T02:30:00Z"; // Still 20 October in Lima.
 let page, submitted;
 try {
@@ -51,11 +51,20 @@ try {
       body = { found: true, ruc, source: "SUNAT_CONSULTA_RUC", officialSource: true, queriedAt,
         data: { rucDni: ruc, legalName: `PROVEEDOR ${ruc}`, personType: "LEGAL_ENTITY", fiscalAddress: "AV. UNIVERSIDAD 100",
           taxpayerStatus: inactive ? "BAJA DE OFICIO" : "ACTIVO", domicileCondition: inactive ? "NO HABIDO" : "HABIDO",
-          active: !inactive, habido: !inactive, registrationDate: "2020-02-01", activityStartDate: "2020-02-15", deregistrationDate: inactive ? "2026-10-01" : "" } };
+          active: !inactive, habido: !inactive, location: { ubigeo: "150101" }, registrationDate: "2020-02-01", activityStartDate: "2020-02-15", deregistrationDate: inactive ? "2026-10-01" : "" } };
+      if (ruc.endsWith("17")) { status = 503; body = { code: "CONSULTA_ACCESS_RESTRICTED", message: "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now.", details: { retryable: false, assistedAvailable: true } }; }
+      if (ruc.endsWith("18") || ruc.endsWith("19")) body = { ...body, source: "SUNAT_PUBLIC_PADRON_RUC", fallback: true, datasetDate: "2026-10-27" };
+      if (ruc.endsWith("20")) body.representativesLookup = { data: { ruc, representatives: [person], queriedAt } };
+      if (ruc.endsWith("21")) body.representativesLookup = { error: "SUNAT unavailable" };
+    } else if (path === "/suppliers/consulta-ruc/20600000017/assisted") {
+      assert.equal(req.method(), "POST");
+      body = { found: true, ruc: "20600000017", source: "SUNAT_CONSULTA_RUC", officialSource: true, assisted: true, queriedAt,
+        data: { rucDni: "20600000017", legalName: "PROVEEDOR VERIFICADO EN SUNAT", taxpayerStatus: "ACTIVO", domicileCondition: "HABIDO", active: true, habido: true } };
     } else if (path.includes("/representatives")) {
       const ruc = path.split("/")[3];
+      representativeRequests.push(ruc);
       if (ruc.endsWith("14") || ruc.endsWith("15")) await new Promise(resolve => pending.set(ruc, resolve));
-      if (ruc.endsWith("16")) { status = 503; body = { message: "SUNAT unavailable" }; }
+      if (ruc.endsWith("16") || ruc.endsWith("19")) { status = 503; body = { message: "SUNAT unavailable" }; }
       else body = { found: true, ruc, legalName: `PROVEEDOR ${ruc}`, source: "SUNAT_CONSULTA_RUC_BROWSER", officialSource: true, queriedAt, representatives: ruc.endsWith("12") ? [person, second] : [person] };
     } else if (path === "/suppliers" && req.method() === "POST") {
       submitted = req.postData();
@@ -64,7 +73,7 @@ try {
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });
   await mockWorkDrafts(page);
-  await page.goto("http://127.0.0.1:5198/requests/new");
+  await page.goto("http://127.0.0.1:5198/requests/new/form?process=A1");
   await page.getByRole("button", { name: /¿No está en la lista/ }).click();
   const form = page.locator(".supplier-quick-register");
   const ruc = form.getByLabel("RUC proveedor", { exact: false });
@@ -121,7 +130,42 @@ try {
   await form.getByLabel("Razón social", { exact: false }).waitFor();
   assert.equal(await form.getByLabel("Razón social", { exact: false }).inputValue(), "PROVEEDOR 20600000016");
 
+  await ruc.fill("20600000017");
+  const consultaLink = form.getByRole("link", { name: "Abrir Consulta RUC SUNAT" });
+  await consultaLink.waitFor();
+  assert.equal(await consultaLink.getAttribute("href"), "https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/FrameCriterioBusquedaWeb.jsp");
+  await form.getByText("La verificación automática SUNAT está pendiente. Los datos ingresados manualmente requieren revisión de Contabilidad.", { exact: true }).waitFor();
+  assert.equal(await name.inputValue(), "");
+  assert.equal(await form.locator(".supplier-sunat-evidence").count(), 0);
+  await form.getByRole("button", { name: "Verificar en el navegador SUNAT" }).click();
+  await form.getByText("Estado SUNAT: ACTIVO", { exact: true }).waitFor();
+  assert.equal(await form.getByLabel("Razón social", { exact: false }).inputValue(), "PROVEEDOR VERIFICADO EN SUNAT");
+  assert.equal(await form.getByRole("button", { name: "Verificar en el navegador SUNAT" }).count(), 0);
+  await ruc.fill("20600000018");
+  await form.getByText("Los datos del contribuyente provienen del Padrón oficial. Los representantes legales se consultan por separado en Consulta RUC.", { exact: true }).waitFor();
+  assert.equal(await form.getByLabel("Razón social", { exact: false }).inputValue(), "PROVEEDOR 20600000018");
+  assert.match(await form.locator(".supplier-sunat-evidence > p").first().innerText(), /27\/10\/2026/);
+  await page.waitForFunction(() => document.querySelector('.supplier-quick-register input[value="ANA REPRESENTANTE"]'));
+  assert.equal(representativeRequests.includes("20600000018"), true, "Padrón fallback still checks the separate representative source");
+  assert.equal(await document.inputValue(), person.documentNumber);
+  await form.locator(".supplier-sunat-evidence").getByText("AV. UNIVERSIDAD 100", { exact: true }).waitFor();
+  assert.equal(await form.getByText("La verificación automática SUNAT está pendiente. Los datos ingresados manualmente requieren revisión de Contabilidad.", { exact: true }).count(), 0, "a representative failure must not mark the verified RUC as pending");
+  await form.locator(".supplier-sunat-evidence").getByText("150101", { exact: true }).waitFor();
+  // A representative source failure must retain all available taxpayer information.
+  await ruc.fill("20600000019");
+  await form.getByText("Consulta de representantes SUNAT no disponible por ahora", { exact: true }).waitFor();
+  assert.equal(await name.inputValue(), "");
+  assert.equal(await form.getByLabel("Razón social", { exact: false }).inputValue(), "PROVEEDOR 20600000019");
+  await form.locator(".supplier-sunat-evidence").getByText("AV. UNIVERSIDAD 100", { exact: true }).waitFor();
+
   // Actual form submission contains the extracted representative and document, not client evidence.
+  await ruc.fill("20600000020");
+  await page.waitForFunction(() => document.querySelector('.supplier-quick-register input[value="ANA REPRESENTANTE"]'));
+  assert.equal(representativeRequests.includes("20600000020"), false, "combined browser response needs no second SUNAT visit");
+  await ruc.fill("20600000021");
+  await form.getByText("Consulta de representantes SUNAT no disponible por ahora", { exact: true }).waitFor();
+  assert.equal(representativeRequests.includes("20600000021"), false, "partial response retains taxpayer evidence without repeating a failed visit");
+  assert.equal(await form.getByLabel("Razón social", { exact: false }).inputValue(), "PROVEEDOR 20600000021");
   await ruc.fill("20600000011");
   await page.waitForFunction(() => document.querySelector('.supplier-quick-register input[value="ANA REPRESENTANTE"]'));
   await form.getByLabel("Sustento del registro del proveedor").fill("Servicio de mantenimiento");

@@ -101,10 +101,10 @@ export async function reviewBankFile(batchId) {
 }
 
 export async function verifyBankFile({ batchId, user, req }) {
-  if (![ROLES.GAF, ROLES.ADMIN].includes(user?.role)) throw new AppError(403, "Only GAF may approve payment batches.", undefined, ERROR_CODES.FORBIDDEN);
+  if (user?.role !== ROLES.GAF) throw new AppError(403, "Only GAF may approve payment batches.", undefined, ERROR_CODES.FORBIDDEN);
   const batch = await pendingBatch(batchId);
-  // Separation of duties: whoever generated the file does not verify it. Admin may.
-  if (String(batch.generatedBy) === String(user._id) && user.role !== ROLES.ADMIN) {
+  // Separation of duties: no role, including Admin, can approve a batch they generated.
+  if (String(batch.generatedBy) === String(user._id)) {
     throw new AppError(403, "You generated this bank file, so another person must verify it.", { batchId }, ERROR_CODES.FORBIDDEN);
   }
   const problems = await bankFileProblems(batch);
@@ -137,7 +137,7 @@ export async function verifyBankFile({ batchId, user, req }) {
 // Rejecting cancels the file: its CXPs go back to Treasury's queue to be corrected and generated
 // again, and the reason travels with them.
 export async function rejectBankFile({ batchId, payload = {}, user, req }) {
-  if (![ROLES.GAF, ROLES.ADMIN].includes(user?.role)) throw new AppError(403, "Only GAF may reject payment batches.", undefined, ERROR_CODES.FORBIDDEN);
+  if (user?.role !== ROLES.GAF) throw new AppError(403, "Only GAF may reject payment batches.", undefined, ERROR_CODES.FORBIDDEN);
   const reason = String(payload.reason || "").trim();
   if (!reason) throw new AppError(422, "A rejection reason is required.", { field: "reason" }, ERROR_CODES.VALIDATION_ERROR);
   const batch = await pendingBatch(batchId);

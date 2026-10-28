@@ -1,3 +1,4 @@
+import "./styles/uma-pilot.css";
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout.jsx";
@@ -7,6 +8,13 @@ import { useAuth } from "./context/AuthContext.jsx";
 import { configurationRoles, navigationAccess, settingsRoles } from "./utils/navigationAccess.js";
 
 const SettingsHub = lazy(() => import("./pages/SettingsHub.jsx"));
+const UmaGuides = lazy(() => import("./pages/UmaGuides.jsx"));
+const RequestProcessSelection = lazy(() => import("./pages/RequestProcessSelection.jsx"));
+const UmaInvestments = lazy(() => import("./pages/UmaInvestments.jsx"));
+const UmaSpecialExpenses = lazy(() => import("./pages/UmaSpecialExpenses.jsx"));
+const UmaStatementReviews = lazy(() => import("./pages/UmaStatementReviews.jsx"));
+const UmaAudit = lazy(() => import("./pages/UmaAudit.jsx"));
+const UmaInsights = lazy(() => import("./pages/UmaInsights.jsx"));
 const AccountingEntries = lazy(() => import("./pages/AccountingEntries.jsx"));
 const AccountsPayable = lazy(() => import("./pages/AccountsPayable.jsx"));
 const BankFileVerification = lazy(() => import("./pages/BankFileVerification.jsx"));
@@ -73,10 +81,18 @@ export default function App() {
           {/* Former hub pages: their links now live in the menu and on Settings. */}
           <Route path="administration" element={<Navigate to="/settings" replace />} />
           <Route path="requests" element={<ProtectedRoute roles={readers} />}><Route index element={<RequestsList />} /></Route>
+          <Route path="guides" element={<ProtectedRoute roles={navigationAccess["/guides"]} />}><Route index element={<UmaGuides />} /></Route>
+          <Route path="investments" element={<ProtectedRoute roles={navigationAccess["/investments"]} />}><Route index element={<UmaInvestments />} /></Route>
+          <Route path="special-expenses" element={<ProtectedRoute roles={navigationAccess["/special-expenses"]} />}><Route index element={<UmaSpecialExpenses />} /></Route>
+          <Route path="treasury/statement-reviews" element={<ProtectedRoute roles={["Admin","Treasury","Accounting","GAF", ...readOnlyRoles]} />}><Route index element={<UmaStatementReviews />} /></Route>
+          <Route path="audit" element={<ProtectedRoute roles={["Admin","GAF","Accounting","Management", ...readOnlyRoles]} />}><Route index element={<UmaAudit />} /></Route>
+          <Route path="consultas" element={<ProtectedRoute roles={["Admin","GAF","Accounting","Treasury","Management", ...readOnlyRoles]} />}><Route index element={<UmaInsights />} /></Route>
+          <Route path="indicadores" element={<ProtectedRoute roles={["Admin","GAF","Accounting","Treasury","Management", ...readOnlyRoles]} />}><Route index element={<UmaInsights type="indicadores" />} /></Route>
           <Route path="requests/invoices" element={<ProtectedRoute roles={readers} />}><Route index element={<DepartmentInvoices />} /></Route>
           <Route path="my-team" element={<ProtectedRoute requiresTeam roles={internalRoles} />}><Route index element={<MyTeam />} /></Route>
           <Route path="requests/new" element={<ProtectedRoute roles={requesterRoles} permissions={["request:create"]} />}>
-            <Route index element={<RequestCreate />} />
+            <Route index element={<RequestProcessSelection />} />
+            <Route path="form" element={<RequestCreate />} />
           </Route>
           <Route path="requests/:id/edit" element={<ProtectedRoute roles={requesterRoles} permissions={["request:create"]} />}>
             <Route index element={<RequestCreate />} />

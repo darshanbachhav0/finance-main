@@ -4,6 +4,7 @@ import { lookupSunatTaxpayerProfile } from "./sunatConsultaRucRepresentativesSer
 import { lookupSunatPadronRuc } from "./sunatPadronService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
+import { CONSULTA_RUC_URL } from "../../../shared/consultaRuc.mjs";
 
 function normalizeRuc(value) {
   return String(value ?? "").replace(/\D/g, "");
@@ -183,7 +184,8 @@ export async function getSupplierPadronPrefill(rucValue) {
 }
 
 // Public web profile first. A fallback never turns absence/unavailability into validation.
-// In CONSULTA_RUC mode (the default) the Consulta RUC page is the only source: no Padrón fallback.
+// Consulta RUC is the only source unless the Padrón fallback is explicitly enabled.
+let consultaCooldown = null;
 export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
   if (cloudTaxpayerMode() && !options.consulta && !options.padron) {
     return cachedTaxpayerProfile(normalizeRuc(rucValue), () => lookupAutomaticProfile(rucValue));
@@ -194,24 +196,31 @@ export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
 async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill, consultaOnly = usesConsultaRucOnly() } = {}) {
   const ruc = normalizeRuc(rucValue);
   if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
-  try { return await consulta(ruc); }
-  catch (error) {
-    const failure = classifyConsultaFailure(error);
-    console.warn(`[SUNAT LOOKUP] Consulta RUC failed: ${failure.code}`);
-    if (consultaOnly) {
-      throw new AppError(503, failure.message, { consultaFailure: failure.code, requiresConfiguration: failure.requiresConfiguration, source: "SUNAT_CONSULTA_RUC" });
+  const useCooldown = !consultaOnly && consulta === lookupSunatTaxpayerProfile;
+  let failure = useCooldown && consultaCooldown?.until > Date.now() ? consultaCooldown.failure : null;
+  if (!failure) {
+    try { const profile = await consulta(ruc); if (useCooldown) consultaCooldown = null; return profile; }
+    catch (error) {
+      failure = classifyConsultaFailure(error);
+      console.warn(`[SUNAT LOOKUP] Consulta RUC failed: ${failure.code}`);
+      // A blocked website should not slow down every RUC or repeatedly launch
+      // browsers. Recheck it after two minutes while using the official fallback.
+      if (useCooldown) consultaCooldown = { failure, until: Date.now() + 120000 };
     }
-    try {
-      const result = await padron(ruc);
-      return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: failure.code, queriedAt: new Date().toISOString() };
-    } catch (padronError) {
-      console.warn("[SUNAT LOOKUP] Padrón fallback unavailable.");
-      throw new AppError(503, `${failure.message} The SUNAT Padrón fallback is also unavailable.`, {
-        consultaFailure: failure.code,
-        requiresConfiguration: failure.requiresConfiguration,
-        fallbackState: "UNAVAILABLE"
-      });
-    }
+  }
+  if (consultaOnly) {
+    throw new AppError(503, failure.message, { consultaFailure: failure.code, requiresConfiguration: failure.requiresConfiguration, retryable: !failure.requiresConfiguration && failure.code !== "CONSULTA_ACCESS_RESTRICTED", consultaUrl: CONSULTA_RUC_URL, source: "SUNAT_CONSULTA_RUC" }, failure.code);
+  }
+  try {
+    const result = await padron(ruc);
+    return { ...result, fallback: true, primarySource: "SUNAT_CONSULTA_RUC", fallbackReason: failure.code, queriedAt: new Date().toISOString() };
+  } catch (padronError) {
+    console.warn("[SUNAT LOOKUP] Padrón fallback unavailable.");
+    throw new AppError(503, `${failure.message} The SUNAT Padrón fallback is also unavailable.`, {
+      consultaFailure: failure.code,
+      requiresConfiguration: failure.requiresConfiguration,
+      fallbackState: "UNAVAILABLE"
+    });
   }
 }
 
@@ -219,13 +228,13 @@ async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayer
 // Stable, sanitized diagnostics: never return browser paths, stacks or raw HTML.
 export function classifyConsultaFailure(error) {
   const message = String(error?.message || "");
-  if (/executable doesn't exist|browser.*not installed/i.test(message)) {
+  if (/executable.*doesn.?t exist|browser.*not installed|cannot find (package|module).*playwright|spawn ENOENT/i.test(message)) {
     return { code: "CONSULTA_BROWSER_MISSING", requiresConfiguration: true, message: "Automatic lookup is not configured on the server: Chromium is missing. Administration must redeploy with the SUNAT browser build check." };
   }
   if (/shared libraries|host system is missing dependencies|error while loading/i.test(message)) {
     return { code: "CONSULTA_BROWSER_DEPENDENCIES", requiresConfiguration: true, message: "The server is missing browser system dependencies. Administration must correct the deployment." };
   }
-  if (/HTTP 403|HTTP 429|human verification|interactive verification/i.test(message)) {
+  if (/HTTP\s*(403|429)|human verification|interactive.*verification|access restricted|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/i.test(message)) {
     return { code: "CONSULTA_ACCESS_RESTRICTED", requiresConfiguration: false, message: "SUNAT is restricting automated access from this server. The lookup cannot retrieve the profile right now." };
   }
   if (/timeout|timed out|has been closed/i.test(message)) {

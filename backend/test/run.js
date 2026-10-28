@@ -1,5 +1,6 @@
 import "../src/config/timeZone.js";
 import "./isolateEnv.js";
+import "./serverStartup.test.js";
 import "./permissions.test.js";
 import "./quotationPaymentTerms.test.js";
 import "./minimalFinance.test.js";
@@ -89,6 +90,8 @@ import "./sessionRefresh.test.js";
 
 import "./supplierAutomaticLookup.test.js";
 import "./consultaRucVerification.test.js";
+import "./sunatRepresentativesFailure.test.js";
+import "./consultaRucFlow.test.js";
 
 import "./taxpayerProfileCache.test.js";
 import "./operationsAutomation.test.js";
@@ -98,3 +101,8 @@ import "./invoiceEvidence.test.js";
 import "./livelyPlatform.test.js";
 import "./simplerPlatform.test.js";
 import "./trackDApprovalTiers.test.js";
+
+import "./umaPilotAdditions.test.js";
+import "./umaSpecialRules.test.js";
+import "./umaInvestmentRules.test.js";
+import "./removedContractsFeature.test.js";

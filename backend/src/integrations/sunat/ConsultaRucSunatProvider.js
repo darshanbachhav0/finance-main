@@ -7,8 +7,9 @@ const digits = (value) => String(value ?? "").replace(/\D/g, "");
 const text = (value) => String(value ?? "").trim();
 
 // SUNAT_PROVIDER_MODE=CONSULTA_RUC (the default): a RUC is verified on SUNAT's public Consulta RUC
-// page only - RUC, legal name, status, domicile condition and the rest of its profile - with no
-// Padrón file and no simulated answers. mode=PRODUCTION is intentional, as for the Padrón: supplier
+// page - RUC, legal name, status, domicile condition and the rest of its profile. An explicitly
+// enabled Padrón fallback supplies official data if the website is unavailable. mode=PRODUCTION
+// is intentional, as for the Padrón: supplier
 // homologation treats an official SUNAT source as authoritative. The public page cannot confirm an
 // individual invoice (CPE), so a voucher is never verified here: Accounting's audited manual SUNAT
 // exception remains the way an invoice posts, unless a contracted CPE endpoint is configured.
@@ -56,10 +57,12 @@ export class ConsultaRucSunatProvider extends SunatProvider {
       fiscalAddress: data.fiscalAddress,
       ubigeo: data.location?.ubigeo,
       queriedAt: profile.queriedAt,
+      datasetDate: profile.datasetDate,
+      fallback: profile.fallback === true,
       cacheExpiresAt: profile.cacheExpiresAt,
-      comments: `SUNAT Consulta RUC: ${data.taxpayerStatus || "NO_INFORMADO"} / ${data.domicileCondition || "NO_INFORMADO"}; ${profile.queriedAt || ""}`.trim(),
+      comments: `${profile.source}: ${data.taxpayerStatus || "NO_INFORMADO"} / ${data.domicileCondition || "NO_INFORMADO"}; ${profile.datasetDate || profile.queriedAt || ""}`.trim(),
       message: valid
-        ? "RUC is ACTIVO and HABIDO in SUNAT Consulta RUC."
+        ? profile.source === "SUNAT_PUBLIC_PADRON_RUC" ? "RUC is ACTIVO and HABIDO in the official SUNAT Padrón." : "RUC is ACTIVO and HABIDO in SUNAT Consulta RUC."
         : `RUC is not eligible: status ${data.taxpayerStatus || "NO_INFORMADO"}, condition ${data.domicileCondition || "NO_INFORMADO"}.`
     };
   }

@@ -13,14 +13,16 @@ for (const role of authenticatedRoles) {
   assert.deepEqual([...flat].sort(), navigationForUser({ role, hasTeam: true, hasPendingApprovals: true }).map(([, path]) => path).sort(), `${role} keeps every menu entry`);
 }
 const accounting = grouped({ role: "Accounting" });
-assert.deepEqual(accounting.map((group) => group.label), ["Overview", "Invoices and payables", "Accounting", "Master Data"]);
+assert.deepEqual(accounting.map((group) => group.label), ["Overview", "My work", "Invoices and payables", "Treasury", "Accounting", "Planning and reports", "Master Data"]);
+assert.deepEqual(accounting.find((group) => group.label === "My work").items.map((item) => item.path), ["/special-expenses", "/guides"]);
+assert.deepEqual(accounting.find((group) => group.label === "Treasury").items.map((item) => item.path), ["/treasury/statement-reviews"]);
 assert.deepEqual(accounting.find((group) => group.label === "Invoices and payables").items.map((item) => item.path), ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables"]);
 // Accounting verifies bank files; Treasury downloads them afterwards and has no verification page.
 assert.ok(!navigationForUser({ role: "Treasury" }).some(([, path]) => path === "/accounting/bank-files"));
 assert.deepEqual(accounting.find((group) => group.label === "Accounting").items.map((item) => item.path), ["/accounting", "/accounting/periods", "/accounting/sire"]);
 // A permission-granted page lands in its section, not at the end of the list.
 const treasuryRequester = grouped({ role: "Treasury", permissions: ["request:create"] });
-assert.deepEqual(treasuryRequester.find((group) => group.label === "My work").items.map((item) => item.path), ["/requests", "/requests/new"]);
+assert.deepEqual(treasuryRequester.find((group) => group.label === "My work").items.map((item) => item.path), ["/requests", "/requests/new", "/special-expenses", "/guides"]);
 assert.equal(treasuryRequester[1].label, "My work", "My work comes right after Overview");
 
 // Settings is one menu entry; a single settings page is linked directly.

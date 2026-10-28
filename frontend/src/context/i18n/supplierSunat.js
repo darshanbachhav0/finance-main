@@ -1,4 +1,14 @@
 export default {
+  "The official Padrón does not include legal representatives. Enter those details manually.": "El Padrón oficial no incluye representantes legales. Completa esos datos manualmente.",
+  "RUC is ACTIVO and HABIDO in the official SUNAT Padrón.": "El RUC está ACTIVO y HABIDO en el Padrón oficial SUNAT.",
+  "Verify in SUNAT browser": "Verificar en el navegador SUNAT",
+  "Complete any verification in the SUNAT window on this computer. We will read the result and fill the supplier details.": "Completa la verificación en la ventana SUNAT de esta computadora. Leeremos el resultado y completaremos los datos del proveedor.",
+  "SUNAT browser verification timed out. Retry and complete the verification in the SUNAT window.": "La verificación en el navegador SUNAT venció. Reintenta y completa la verificación en la ventana SUNAT.",
+  "SUNAT browser verification was cancelled. Retry when you are ready.": "Se canceló la verificación en el navegador SUNAT. Reintenta cuando estés listo.",
+  "A SUNAT browser verification is already open. Complete or close it first.": "Ya hay una verificación SUNAT abierta. Complétala o ciérrala primero.",
+  "SUNAT browser verification is available only on the local Windows development computer.": "La verificación en el navegador SUNAT solo está disponible en la computadora Windows local de desarrollo.",
+  "Open SUNAT Consulta RUC": "Abrir Consulta RUC SUNAT",
+  "Automatic SUNAT verification is pending. Details entered manually require Accounting review.": "La verificación automática SUNAT está pendiente. Los datos ingresados manualmente requieren revisión de Contabilidad.",
   "SUNAT taxpayer status": "Estado SUNAT",
   "UMA validation result": "Resultado de validación UMA",
   "Supplier {code} registered. Accounting reviews its documentation.": "Proveedor {code} registrado. Contabilidad revisa su documentación.",
@@ -16,6 +26,7 @@ export default {
   "Supplier saved. SUNAT legal representatives could not be retrieved; complete the representative manually.": "Proveedor guardado. No se pudieron obtener sus representantes SUNAT; completa el representante manualmente.",
   // The rest of the Consulta RUC profile (components/suppliers/SupplierSunatEvidence.jsx).
   "SUNAT taxpayer profile": "Ficha RUC SUNAT",
+  "Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.": "Los datos del contribuyente provienen del Padrón oficial. Los representantes legales se consultan por separado en Consulta RUC.",
   "Taxpayer type": "Tipo de contribuyente",
   "Identity document": "Documento de identidad",
   "Economic activities": "Actividades económicas",

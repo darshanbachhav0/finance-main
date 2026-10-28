@@ -43,9 +43,11 @@ services:
         value: /var/data/backups
       - key: SUNAT_PADRON_DATA_DIR
         value: /var/data/sunat-padron
-      # Supplier RUCs are verified on SUNAT's public Consulta RUC page only (docs/OPERATIONS.md).
+      # Consulta RUC first; official Padrón fallback during outages or access restrictions.
       - key: SUNAT_PROVIDER_MODE
         value: CONSULTA_RUC
+      - key: SUNAT_CONSULTA_RUC_PADRON_FALLBACK
+        value: "true"
       # Without a contracted SUNAT exchange-rate API, USD requests use the daily rate Accounting
       # enters in Exchange rates (recorded as a reference fallback, never as authoritative).
       - key: EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK

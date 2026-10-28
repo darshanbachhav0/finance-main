@@ -26,7 +26,7 @@ export function SunatRepresentativeNote({ representative, queriedAt }) {
 
 const listed = (values) => (Array.isArray(values) ? values.filter(Boolean) : []);
 
-// The rest of the Consulta RUC profile, only what SUNAT reported (the Padrón has none of it).
+// Display only returned values. The Padrón also supplies address and ubigeo.
 function profileRows(data, t, language) {
   const activity = (item) => [item.kind, item.code, item.description].filter(Boolean).join(" · ");
   return [
@@ -57,8 +57,22 @@ export default function SupplierSunatEvidence({ lookup }) {
     ["SUNAT consulted at", lookup.queriedAt, true]
   ].filter(([, value]) => value);
   const profile = profileRows(data, t, language);
+  const identity = [
+    ["RUC", data.rucDni || lookup.ruc],
+    ["Legal name", data.legalName],
+    ["Commercial name", data.commercialName],
+    ["Fiscal address", data.fiscalAddress],
+    ["Department", data.location?.department],
+    ["Province", data.location?.province],
+    ["District", data.location?.district],
+    ["Ubigeo", data.location?.ubigeo]
+  ].filter(([, value]) => value);
   return <div className={`supplier-sunat-evidence ${data.taxpayerStatus === "ACTIVO" && data.domicileCondition === "HABIDO" ? "is-valid" : "needs-review"}`}>
+    {lookup.fallback && <p><span>{t("SUNAT public Padrón")} · {t("Dataset")}: {sunatDateLabel(lookup.datasetDate, language)}</span><small>{t("Consulta RUC unavailable. Official Padrón fallback used.")}</small></p>}
     <p role="status"><strong>{t("SUNAT taxpayer status")}: {data.taxpayerStatus || t("Not reported")}</strong><span>{t("Domicile condition")}: {data.domicileCondition || t("Not reported")}</span></p>
+    <dl className="supplier-detail-grid">
+      {identity.map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{value}</dd></div>)}
+    </dl>
     <details><summary>{t("SUNAT dates and source")}</summary>
       <dl className="supplier-detail-grid">
         {dates.map(([label, value, withTime]) => <div key={label}><dt>{t(label)}</dt><dd>{sunatDateLabel(value, language, withTime) || t("Not reported")}</dd></div>)}
@@ -66,7 +80,7 @@ export default function SupplierSunatEvidence({ lookup }) {
       </dl>
       {lookup.fallback && <small>{t("Consulta RUC unavailable. Official Padrón fallback used.")}</small>}
     </details>
-    {profile.length > 0 && <details><summary>{t("SUNAT taxpayer profile")}</summary>
+    {profile.length > 0 && <details open><summary>{t("SUNAT taxpayer profile")}</summary>
       <dl className="supplier-detail-grid">
         {profile.map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{Array.isArray(value) ? <ul className="supplier-sunat-list">{value.map((item) => <li key={item}>{item}</li>)}</ul> : value}</dd></div>)}
       </dl>

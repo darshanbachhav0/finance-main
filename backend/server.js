@@ -4,6 +4,7 @@ import "dotenv/config";
 import mongoose from "mongoose";
 
 import { connectDB } from "./src/config/db.js";
+import { listenHttpServer } from "./src/utils/listenHttpServer.js";
 
 import { getSunatPadronStatus } from "./src/services/sunatPadronService.js";
 import { getSunatProvider } from "./src/services/sunatService.js";
@@ -76,14 +77,8 @@ connectDB()
 
     warnIfSunatProviderMisconfigured();
 
-    const server = app.listen(
-      PORT,
-      () => {
-        console.log(
-          `ERP Financial backend running on port ${PORT}`
-        );
-      }
-    );
+    const server = await listenHttpServer(app, { port: PORT });
+    console.log(`ERP Financial backend running on port ${PORT}`);
 
     // Batch invoices, SLA escalation and the Padrón refresh run in this process (see
     // src/workers/inProcessWorkers.js for the env flags that turn each one off).
@@ -105,11 +100,12 @@ connectDB()
     process.on("SIGTERM", () => { void shutdown("SIGTERM"); });
     process.on("SIGINT", () => { void shutdown("SIGINT"); });
   })
-  .catch((error) => {
-    console.error(
-      "Unable to start backend",
-      error
-    );
-
+  .catch(async (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`Unable to start backend: port ${PORT} is already in use. Stop the other backend instance, then restart npm run dev.`);
+    } else {
+      console.error("Unable to start backend", error);
+    }
+    await mongoose.disconnect().catch(() => {});
     process.exit(1);
   });

@@ -1,6 +1,7 @@
 import "./menuNavigation.test.js";
 import "./myTeamAccess.test.js";
 import "./navigationSections.test.js";
+import "./umaProcessSelection.test.js";
 import "./validationMessages.test.js";
 import "./dashboardLinks.test.js";
 import "./myTasks.test.js";

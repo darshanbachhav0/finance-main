@@ -1,0 +1,22 @@
+/* New administrative modules: restrained, responsive, consistent with UMA's magenta palette. */
+.uma-module { display:flex; flex-direction:column; gap:18px; padding-bottom:32px; }
+.uma-module h2 {font-size:var(--font-lg);margin:0 0 8px}
+.uma-toolbar {display:flex; gap:12px; flex-wrap:wrap; align-items:end; justify-content:flex-start}
+.uma-toolbar p {max-width:72ch; margin:0; flex:1}
+.uma-toolbar label,.uma-form label {display:flex; flex-direction:column; gap:5px;font-size:var(--font-sm); min-width:150px}
+.uma-toolbar input,.uma-toolbar select,.uma-form input,.uma-form select {border:1px solid var(--border,#c9c2c7); background:var(--surface,#fff); color:inherit; border-radius:var(--radius-sm); padding:9px 11px; min-height:39px;max-width:100%}
+.uma-module button {border:1px solid #bcb2b8; border-radius:var(--radius-sm); padding:7px 12px; cursor:pointer; background:var(--surface,#fff); color:inherit;margin:2px}
+.uma-module button[type=submit],.uma-module button.primary {background:#a70043;color:#fff;border-color:#a70043}
+.uma-module button:disabled {opacity:.5;cursor:not-allowed}
+.uma-module button:focus-visible,.uma-module input:focus-visible {outline:2px solid #e50d5e; outline-offset:2px}
+.uma-panel {border:1px solid #ded6db; border-radius:var(--radius-md); padding:18px;background:var(--surface,#fff)}
+.uma-form {display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;align-items:end}
+.uma-form button {width:max-content}
+.uma-table-wrap {width:100%;overflow-x:auto;border:1px solid #ded6db;border-radius:var(--radius-sm)}
+.uma-table {border-collapse:collapse;width:100%;font-size:var(--font-sm);min-width:600px}
+.uma-table th,.uma-table td {text-align:left;padding:10px 12px;border-bottom:1px solid #e5dfe3;vertical-align:top}
+.uma-table th {background:rgba(130,93,117,.08);font-size:var(--font-xs)}
+.uma-table td button {white-space:nowrap}
+.uma-notice {border-left:3px solid #246490;padding:10px 14px;background:rgba(36,100,144,.08)}
+.uma-error {border-left:3px solid #b42318;padding:10px 14px;background:rgba(180,35,24,.08)}
+.uma-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}

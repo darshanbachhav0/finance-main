@@ -28,8 +28,8 @@ const router = Router();
 // here. Declared before the Accounting-only guard below so the GAF reaches it.
 router.get("/bank-files", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), listBankFiles);
 router.get("/bank-files/:id/checks", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), reviewBankFileChecks);
-router.post("/bank-files/:id/verify", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), verifyBankFileAction);
-router.post("/bank-files/:id/reject", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), rejectBankFileAction);
+router.post("/bank-files/:id/verify", protect, authorize(ROLES.GAF), authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), verifyBankFileAction);
+router.post("/bank-files/:id/reject", protect, authorize(ROLES.GAF), authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), rejectBankFileAction);
 router.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
 router.get("/entries", listEntries);
 router.get("/accounts-payable", listAccountsPayable);

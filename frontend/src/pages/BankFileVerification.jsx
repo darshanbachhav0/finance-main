@@ -18,7 +18,7 @@ import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 
-// Treasury downloads a bank TXT and sends it to the bank only after Accounting verifies it here.
+// Treasury downloads a bank TXT and sends it to the bank only after GAF verifies it here.
 // Rejecting a file cancels it: its payments return to Treasury's queue with the reason.
 const verificationOf = (batch) => batch?.verification?.status || "VERIFIED";
 const activeItems = (batch) => (batch?.items || []).filter((item) => item.status !== "CANCELLED");
@@ -51,7 +51,7 @@ const warningText = {
 export default function BankFileVerification() {
   const { t, language } = useLanguage();
   const { notify } = useToast();
-  const { readOnly } = useAuth();
+  const { readOnly, user } = useAuth();
   const deepLink = useDeepLink(["record"]);
   const table = usePaginatedResource("/accounting/bank-files", { fixedParams: deepLink.link, deepLink: deepLink.active, initialFilters: { verificationStatus: "PENDING" } });
   const [selected, setSelected] = useState(null);
@@ -156,7 +156,7 @@ export default function BankFileVerification() {
         title={pending ? "Verify bank file" : "Bank file"}
         description={selected ? `${selected.batchNumber} · ${money(selected.currency, selected.totalAmount)} · ${formatDate(selected.paymentDate, language)}` : ""}
         onClose={() => !processing && setSelected(null)}
-        footer={pending && !readOnly ? <>
+        footer={pending && !readOnly && user?.role === "GAF" ? <>
           <button type="button" className="danger-button" disabled={processing} onClick={() => setDecision("reject")}><XCircle size={16} />{t("Reject")}</button>
           <button type="button" className="primary-button" disabled={processing || checks.loading || checks.problems.length > 0 || Boolean(checks.error)} onClick={() => setDecision("verify")}><CheckCircle2 size={16} />{t("Verify")}</button>
         </> : <button type="button" className="secondary-button" onClick={() => setSelected(null)}>{t("Close")}</button>}

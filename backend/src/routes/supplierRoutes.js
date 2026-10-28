@@ -12,6 +12,7 @@ import {
   listSuppliers,
   lookupSupplier,
   lookupSupplierPadron,
+  lookupSupplierAssisted,
   lookupSupplierLegalRepresentatives,
   removeBankAccount,
   selectPreferredBankAccount,
@@ -88,6 +89,8 @@ router.get(
   proposeSupplier,
   lookupSupplierLegalRepresentatives
 );
+
+router.post("/consulta-ruc/:ruc/assisted", proposeSupplier, lookupSupplierAssisted);
 
 router.post(
   "/",

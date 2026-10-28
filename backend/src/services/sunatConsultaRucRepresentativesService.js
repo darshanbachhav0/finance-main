@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { sunatCalendarDate } from "../../../shared/supplierSunat.mjs";
+import { CONSULTA_RUC_URL, consultaRucPageState } from "../../../shared/consultaRuc.mjs";
 
 const __filename =
   fileURLToPath(
@@ -24,9 +25,6 @@ const BACKEND_ROOT =
     "..",
     ".."
   );
-
-const CONSULTA_RUC_URL =
-  "https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/FrameCriterioBusquedaWeb.jsp";
 
 const DEFAULT_TIMEOUT_MS =
   30_000;
@@ -198,7 +196,7 @@ function saveCached(
   );
 }
 
-async function getBrowser() {
+export async function getSunatConsultaBrowser() {
   if (
     browserPromise
   ) {
@@ -305,22 +303,7 @@ async function detectHumanChallenge(
         )
     );
 
-  const challengeTerms = [
-    "CAPTCHA",
-    "VERIFICACION",
-    "VERIFICACIÓN",
-    "NO SOY UN ROBOT",
-    "RECAPTCHA",
-    "INGRESE EL CODIGO",
-    "INGRESE EL CÓDIGO"
-  ];
-
-  return challengeTerms.some(
-    (term) =>
-      body.includes(
-        normalizeText(term)
-      )
-  );
+  return consultaRucPageState({ bodyText: body }) === "CHALLENGE";
 }
 
 async function locateRucInput(
@@ -416,23 +399,15 @@ async function clickSearchButton(
   return false;
 }
 
-async function waitForRucResult(
+export async function waitForRucResult(
   page,
   ruc
 ) {
-  await page.waitForFunction(
-    (expectedRuc) =>
-      document.body
-        ?.innerText
-        ?.includes(
-          expectedRuc
-        ),
-    ruc,
-    {
-      timeout:
-        timeoutMs()
-    }
-  );
+  const state = await page.waitForFunction(consultaRucPageState, { ruc }, { timeout: timeoutMs() });
+  const result = await state.jsonValue();
+  await state.dispose();
+  if (result === "CHALLENGE") throw new Error("SUNAT requested interactive human verification after the RUC search.");
+  if (result === "UNAVAILABLE") throw new Error("SUNAT Consulta RUC is unavailable or access restricted.");
 }
 
 async function findRepresentativesControl(
@@ -898,13 +873,13 @@ async function lookupInternal(
   profileOnly = false
 ) {
   const browser =
-    await getBrowser();
+    await getSunatConsultaBrowser();
 
   const context =
     await browser.newContext({
-      // Identify this public-data client explicitly. SUNAT resets connections
-      // using Chromium's default HeadlessChrome user-agent on this host.
-      userAgent: "UMA-Finance/1.0 (SUNAT public RUC lookup)",
+      // Let Chromium use its actual User-Agent. The old non-browser
+      // "UMA-Finance/1.0" value may cause sites to reject or mis-render a
+      // browser visit. Do not spoof an identity or bypass SUNAT challenges.
       locale:
         "es-PE",
 
@@ -923,6 +898,7 @@ async function lookupInternal(
     void context.close().catch(() => {});
   }, profileTimeoutMs());
   let page;
+  let taxpayerProfile;
 
   try {
     // Rendering assets are unnecessary for extracting public taxpayer text.
@@ -958,6 +934,7 @@ async function lookupInternal(
       !response ||
       !response.ok()
     ) {
+      if (await detectHumanChallenge(page)) throw new Error("SUNAT requested interactive human verification on Consulta RUC.");
       throw new Error(
         `SUNAT Consulta RUC returned HTTP ${
           response?.status() ||
@@ -1037,9 +1014,9 @@ async function lookupInternal(
       // Both operations visit the same company page. Preserve that verified
       // profile even if the separate representative page later fails.
       try {
-        const profile = consultaProfileFromFields(ruc, fields);
-        saveCached(`profile:${ruc}`, profile);
-        if (profileOnly) return profile;
+        taxpayerProfile = consultaProfileFromFields(ruc, fields);
+        legalName = taxpayerProfile.data.legalName;
+        if (!profileOnly) saveCached(`profile:${ruc}`, taxpayerProfile);
       } catch (error) {
         if (profileOnly) throw error;
       }
@@ -1056,23 +1033,14 @@ async function lookupInternal(
         legalName
       );
 
-    await representativePage
-      .waitForFunction(
-        () =>
-          /REPRESENTANTES\s+LEGALES/i.test(
-            document.body
-              ?.innerText ||
-            ""
-          ),
-        undefined,
-        {
-          timeout:
-            timeoutMs()
-        }
-      )
-      .catch(
-        () => {}
-      );
+    await representativePage.waitForFunction(() => {
+      const text = document.body?.innerText || "";
+      // The company profile already contains a Representatives link. That link
+      // alone must not be mistaken for a successfully loaded representatives page.
+      return /REPRESENTANTES\s+LEGALES\s+DE\s+\d{11}/i.test(text)
+        && (/DOCUMENTO[\s\S]*NOMBRE[\s\S]*CARGO[\s\S]*FECHA/i.test(text)
+          || /NO (SE (ENCONTRARON|REGISTRAN)|TIENE|EXISTEN)[\s\S]*REPRESENTANTES/i.test(text));
+    }, undefined, { timeout: timeoutMs() });
 
     await saveDebug(
       representativePage,
@@ -1108,7 +1076,7 @@ async function lookupInternal(
       `[SUNAT REPRESENTATIVES] Found ${representatives.length} representative(s) for ${ruc}.`
     );
 
-    return {
+    const representativeResult = {
       found:
         representatives.length >
         0,
@@ -1139,7 +1107,15 @@ async function lookupInternal(
           ? `${representatives.length} legal representative(s) returned by SUNAT Consulta RUC.`
           : "SUNAT Consulta RUC loaded correctly but did not return legal representatives."
     };
+    // One session searches the RUC, reads the profile, and opens representatives.
+    // Reuse this evidence if a caller subsequently requests representatives alone.
+    saveCached(cacheKey(ruc, legalName), representativeResult);
+    return profileOnly ? { ...taxpayerProfile, representativesLookup: { data: representativeResult } } : representativeResult;
   } catch (error) {
+    if (profileOnly && taxpayerProfile) {
+      const failure = classifyRepresentativeLookupFailure(deadlineExpired ? new Error("Consulta RUC lookup timed out.") : error);
+      return { ...taxpayerProfile, representativesLookup: { error: failure.message, code: failure.code } };
+    }
     if (deadlineExpired) throw new Error("Consulta RUC lookup timed out.");
     throw error;
   } finally {
@@ -1237,9 +1213,55 @@ export async function lookupSunatTaxpayerProfile(rucValue) {
   const cached = getCached(key);
   if (cached) return cached;
   if (inflight.has(key)) return inflight.get(key);
-  const pending = lookupInternal(ruc, "", true).then(result => { saveCached(key, result); return result; }).finally(() => inflight.delete(key));
+  const pending = lookupInternal(ruc, "", true).then(result => { if (result.found) saveCached(key, result); return result; }).finally(() => inflight.delete(key));
   inflight.set(key, pending);
   return pending;
+}
+
+// Only server-read SUNAT fields may populate the verification cache.
+export function rememberConsultaRucProfile(ruc, fields) {
+  const profile = consultaProfileFromFields(ruc, fields);
+  saveCached(`profile:${ruc}`, profile);
+  return profile;
+}
+
+export function clearConsultaRucProfile(ruc) {
+  cache.delete(`profile:${ruc}`);
+}
+
+
+/**
+ * Classify lookup errors without returning internal paths or browser traces
+ * to the frontend. Taxpayer RUC validation is a separate service and remains
+ * fail-closed; an unavailable representative lookup is never a verification.
+ */
+export function classifyRepresentativeLookupFailure(error) {
+  const raw = String(error?.message || error || "");
+  const missing = /executable.*doesn.?t exist|browser.*not found|cannot find (package|module).*playwright|ERR_MODULE_NOT_FOUND|chromium.*not installed|spawn ENOENT/i.test(raw);
+  if (missing) return {
+    code: "SUNAT_REP_BROWSER_MISSING", retryable: false, requiresConfiguration: true,
+    message: "The SUNAT representatives browser is not installed. From the project folder run: npx playwright install chromium"
+  };
+  if (/libnss3|libatk|missing.*dependenc|host system is missing|failed to launch|browser.*closed unexpectedly/i.test(raw)) return {
+    code: "SUNAT_REP_BROWSER_FAILED", retryable: false, requiresConfiguration: true,
+    message: "The SUNAT representatives browser could not start. Check the backend logs and browser installation."
+  };
+  if (/captcha|recaptcha|human verification|interactive.*verification|no soy un robot/i.test(raw)) return {
+    code: "SUNAT_REP_MANUAL_VERIFICATION", retryable: false, requiresConfiguration: false,
+    message: "SUNAT requires manual browser verification. Enter the representative information manually and verify it using SUNAT's official website."
+  };
+  if (/HTTP\s*(403|429)|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_BLOCKED_BY_CLIENT|access restricted/i.test(raw)) return {
+    code: "SUNAT_REP_ACCESS_RESTRICTED", retryable: true, requiresConfiguration: false,
+    message: "SUNAT is refusing or limiting automated representative requests from this connection. Try again later or consult SUNAT manually."
+  };
+  if (/timeout|timed out|Target page, context or browser has been closed|Target page has been closed/i.test(raw)) return {
+    code: "SUNAT_REP_TIMEOUT", retryable: true, requiresConfiguration: false,
+    message: "SUNAT did not respond before the representative lookup timeout. You can retry without losing the supplier form."
+  };
+  return {
+    code: "SUNAT_REP_UNAVAILABLE", retryable: true, requiresConfiguration: false,
+    message: "SUNAT legal representatives could not be retrieved right now. You may retry or enter the representative manually for review."
+  };
 }
 
 export async function lookupSunatLegalRepresentatives(
@@ -1341,47 +1363,18 @@ export async function lookupSunatLegalRepresentatives(
             error
           );
 
-          let message =
-            error?.message ||
-            "SUNAT Consulta RUC could not be completed.";
-
-          if (
-            /executable.*doesn.?t exist|browser.*not found/i.test(
-              message
-            )
-          ) {
-            message =
-              "Playwright Chromium is not installed. Run: npx playwright install chromium";
-          }
-
-          if (
-            /human verification|captcha|recaptcha/i.test(
-              message
-            )
-          ) {
-            message =
-              "SUNAT Consulta RUC is currently requiring manual browser verification. Automated representative lookup cannot continue until SUNAT allows the normal public browser flow.";
-          }
-
+          const failure = classifyRepresentativeLookupFailure(error);
           throw new AppError(
             503,
-            message,
+            failure.message,
             {
               ruc,
-
-              source:
-                "SUNAT_CONSULTA_RUC_BROWSER",
-
-              originalError:
-                error?.message,
-
-              debugDirectory:
-                debugEnabled()
-                  ? debugDir()
-                  : undefined
+              source: "SUNAT_CONSULTA_RUC_BROWSER",
+              category: failure.code,
+              retryable: failure.retryable,
+              requiresConfiguration: failure.requiresConfiguration
             },
-            ERROR_CODES
-              .INTEGRATION_NOT_CONFIGURED
+            failure.code
           );
         }
       )

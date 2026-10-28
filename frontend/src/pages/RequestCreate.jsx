@@ -30,7 +30,7 @@ import {
   Zap
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../api/client.js";
 import Message from "../components/Message.jsx";
 import RequestItemLine from "../components/RequestItemLine.jsx";
@@ -80,6 +80,8 @@ import {
   trackCRequestTypes
 } from "../utils/options.js";
 import "../styles/requestWizard.css";
+import "../styles/umaProcessSelection.css";
+import { requestFlowFromProcess, processByCode } from "../utils/umaProcessSelection.js";
 
 // One request form in four steps, in the order the work happens: who is paid (the supplier and
 // the account it is paid into), its receipt (read automatically), the details of the need, and
@@ -241,7 +243,11 @@ export default function RequestCreate() {
   const [masters, setMasters] = useState({ suppliers: [], costCenters: [], beneficiaryCenters: [], projects: [], periods: [] });
   const [supplierScope, setSupplierScope] = useState(null);
   const [supplierSearching, setSupplierSearching] = useState(false);
-  const [form, setForm] = useState(initialForm);
+  const initialProcess = useRef(new URLSearchParams(location.search).get("process"));
+  const [form, setForm] = useState(() => ({
+    ...initialForm(),
+    ...(requestFlowFromProcess(initialProcess.current) || {})
+  }));
   const [capex, setCapex] = useState(initialCapex);
   const [lines, setLines] = useState([emptyLine()]);
   const [costAllocations, setCostAllocations] = useState([]);
@@ -478,7 +484,7 @@ export default function RequestCreate() {
   }, [isEditing, draft.ready, draftSearch]);
   // The full supplier proposal (Suppliers page) returns here; an invoice's unregistered RUC goes along.
   const invoiceRuc = !invoiceCheck?.supplier && /^\d{11}$/.test(invoiceCheck?.invoice?.ruc || "") ? invoiceCheck.invoice.ruc : "";
-  const supplierProposalPath = `/suppliers?${new URLSearchParams({ mode: "new", ...(invoiceRuc && { ruc: invoiceRuc }), returnTo: isEditing ? `/requests/${id}/edit` : `/requests/new${draftSearch}` })}`;
+  const supplierProposalPath = `/suppliers?${new URLSearchParams({ mode: "new", ...(invoiceRuc && { ruc: invoiceRuc }), returnTo: isEditing ? `/requests/${id}/edit` : `/requests/new/form${draftSearch}` })}`;
   // "New request" clicked while a request is open: that draft stays in Continue your work and a
   // blank request starts.
   const ownNavigation = useRef(false);
@@ -1036,13 +1042,19 @@ export default function RequestCreate() {
   const userArea = supplierScope?.scoped ? supplierScope.department : "";
   const supplierLabel = (item) => `${item.supplierCode ? `${item.supplierCode} - ` : ""}${item.rucDni} - ${supplierName(item)}`;
 
+  // A new request must originate from the eight-process chooser. Existing drafts and
+  // edits still work, including older saved work and supplier-return URLs.
+  if (!isEditing && !requestFlowFromProcess(initialProcess.current) && !new URLSearchParams(location.search).has("workDraft") && !draft.session.revision) {
+    return <Navigate to="/requests/new" replace />;
+  }
   if (loading) return <WorkspaceSkeleton label={isEditing ? "Loading request..." : "Loading form data..."} />;
 
   return <section>
     <PageHeader
       title={isEditing ? "Edit request" : "New request"}
-      description="Four steps: supplier, receipt, details and summary. Your progress saves automatically."
+      description={isEditing ? "Edite los datos de esta solicitud." : `Proceso ${form.flowType} · Complete los datos, documentos, controles y envío.`}
     />
+    {!isEditing && <div className="uma-request-process-banner"><div><strong>Proceso elegido: {form.flowType}</strong><span>{processByCode(form.flowType)?.title || "Solicitud financiera"}</span></div><button type="button" className="secondary-button" onClick={() => navigate("/requests/new")}>Cambiar proceso</button></div>}
     {!isEditing && <ContinueWork scope="request" recordId="new" exclude={draft.session.id} />}
     <DraftPanel busy={saving} draft={draft} onDiscard={() => navigate(isEditing ? `/requests/${id}` : "/requests")}>
     {stepId === "review" && <ReadinessPanel defaultOpen payload={{ ...form, lines, quotations: quotations.map(q => ({ ...q, attachment: quotationFiles[q.clientId] ? "preview-only" : q.attachment })), attachments: [...existingAttachments, ...Object.values(quotationFiles).filter(Boolean).map(file => ({ kind: "QUOTATION", name: file.name, url: "preview-only" })), ...documentDefinitions.flatMap(def => (files[def.key] || []).map(file => ({ kind: def.kind, name: file.name, url: "preview-only" })))] }} />}
@@ -1055,11 +1067,11 @@ export default function RequestCreate() {
 
         {stepId === "supplier" && <div className="wizard-step">
           <WizardSection title="Who is paid?">
-            <fieldset className="quick-choices" aria-label={t("Who gets the money?")}>
+            {!isEditing ? <p className="quick-note">{payee === "employee" ? "Beneficiario: colaborador de UMA. Elija abajo si es entrega a rendir o reembolso." : "Beneficiario: proveedor. La selección del proceso anterior determina si existe OC."}</p> : <fieldset className="quick-choices" aria-label={t("Who gets the money?")}>
               <legend className="sr-only">{t("Who gets the money?")}</legend>
               <Choice name="request-payee" value="supplier" current={payee} icon={Building2} title="A supplier" hint="A company or person who sells to UMA" onChange={() => changeTrack({ payee: "supplier" })} />
               <Choice name="request-payee" value="employee" current={payee} icon={UserRound} title="Me" hint="An advance or a reimbursement for you" onChange={() => changeTrack({ payee: "employee" })} />
-            </fieldset>
+            </fieldset>}
           </WizardSection>
 
           {payee === "employee" && <WizardSection title="What do you need?" description="Petty cash and reimbursements are handled here, in Track C.">
@@ -1192,11 +1204,11 @@ export default function RequestCreate() {
             </label>
             <div className="form-grid two-column-form">
               {payee === "supplier" && <div className="field form-span-two"><span>{t("Request type")} *</span>
-                <fieldset className="quick-choices compact-choices">
+                {!isEditing ? <strong className="field-static">{form.flowType} · {route === "order" ? "Compra con OC" : "Factura directa"}</strong> : <fieldset className="quick-choices compact-choices">
                   <legend className="sr-only">{t("How is it paid?")}</legend>
                   <Choice name="request-route" value="order" current={route} icon={ShoppingCart} title="With a purchase order" hint="Procurement places the order after approval" onChange={() => changeTrack({ route: "order" })} />
                   <Choice name="request-route" value="direct" current={route} icon={Zap} title="Direct payment" hint="No order needed: paid once approved" onChange={() => changeTrack({ route: "direct" })} />
-                </fieldset>
+                </fieldset>}
               </div>}
               <label className={fieldClass("expenseNature")}><span>{t("Type of expense")} *</span><select value={form.expenseNature} onChange={(event) => changeForm({ expenseNature: event.target.value })}>{[...new Set([...creationExpenseNatures, form.expenseNature])].map((item) => <option key={item} value={item}>{t(optionLabel(item, expenseNatureLabels))}</option>)}</select>{fieldError("expenseNature")}</label>
               {payee === "supplier" && <label className="quick-check"><input type="checkbox" checked={form.requestType === "CAPEX"} onChange={(event) => changeTrack({ capex: event.target.checked })} /><span>{t("It is equipment or a work that lasts more than a year (CAPEX)")}</span></label>}

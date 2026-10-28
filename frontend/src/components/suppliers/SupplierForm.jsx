@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import Message from "../Message.jsx";
 import OptionalSection from "../OptionalSection.jsx";
+import ConsultaRucLink from "./ConsultaRucLink.jsx";
 import WorkflowStepper from "../WorkflowStepper.jsx";
 import { dniError, identifierError, requiredError } from "../../utils/fieldValidation.js";
 import { homologationChecklist, supplierStepProblems, supplierStepsFor } from "../../utils/supplierProposal.js";
@@ -95,7 +96,7 @@ function ContactFields({ legend, value, onChange }) {
 
 // SUNAT lookups in one panel: taxpayer data (Consulta RUC, or the Padrón fallback) and legal
 // representatives, one row each, instead of up to five stacked alerts.
-function SunatStatus({ padronLookup, representativeLookup, padronData, legalName }) {
+function SunatStatus({ padronLookup, representativeLookup, padronData, legalName, onRetryRepresentatives, onVerifiedSunat }) {
   const { t } = useLanguage();
   if (!padronLookup && !representativeLookup) return null;
   const representatives = representativeLookup?.data?.representatives || [];
@@ -104,12 +105,12 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
     : padronLookup?.found
       ? { tone: padronData?.eligibleForHomologation ? "success" : "warning", icon: padronData?.eligibleForHomologation ? CheckCircle2 : AlertTriangle, title: padronLookup.source === "SUNAT_CONSULTA_RUC" ? "SUNAT Consulta RUC data loaded automatically" : "SUNAT Padrón data loaded automatically", text: padronData?.legalName || legalName }
       : padronLookup
-        ? { tone: "warning", icon: AlertTriangle, title: padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : "RUC not found in the current SUNAT Padrón", text: padronLookup.message ? t(padronLookup.message) : t("Consulta RUC could not be reached and the Padrón fallback is unavailable. We will retry automatically; you can keep completing this form.") }
+        ? { tone: "warning", icon: AlertTriangle, title: padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : "SUNAT Consulta RUC does not recognize this RUC.", text: padronLookup.message ? t(padronLookup.message) : t("Consulta RUC could not return a usable supplier profile.") }
         : null;
   const people = representativeLookup?.loading
     ? { tone: "info", icon: RefreshCw, spin: true, title: "Checking SUNAT legal representatives...", text: t("The supplier form is already available while Consulta RUC is checked in the background.") }
     : representativeLookup?.error
-      ? { tone: "warning", icon: AlertTriangle, title: "SUNAT representative lookup temporarily unavailable", text: `${representativeLookup.error} ${t("The Padrón validation above remains valid and supplier creation can continue.")}` }
+      ? { tone: "warning", icon: AlertTriangle, title: "SUNAT representative lookup temporarily unavailable", text: t(representativeLookup.error) }
       : representativeLookup?.data
         ? representatives.length === 1
           ? { tone: "success", icon: CheckCircle2, title: "SUNAT legal representatives", text: t("SUNAT returned one representative. Review the name and document below.") }
@@ -121,13 +122,15 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
     <div className="sunat-status" role="status">
       {[taxpayer, people].filter(Boolean).map((row) => {
         const Icon = row.icon;
-        return <div key={row.title} className={`sunat-status-row tone-${row.tone}`}><Icon size={17} className={row.spin ? "spin" : undefined} aria-hidden="true" /><div><strong>{t(row.title)}</strong><span>{row.text}</span></div></div>;
+        return <div key={row.title} className={`sunat-status-row tone-${row.tone}`}><Icon size={17} className={row.spin ? "spin" : undefined} aria-hidden="true" /><div><strong>{t(row.title)}</strong><span>{row.text}</span>{row === people && representativeLookup?.error && onRetryRepresentatives && !representativeLookup?.loading && <button type="button" className="text-button" onClick={onRetryRepresentatives}>{t("Retry representative lookup")}</button>}</div></div>;
       })}
+      <ConsultaRucLink pending={Boolean(padronLookup?.unavailable)} ruc={padronLookup?.ruc} assistedAvailable={padronLookup?.assistedAvailable} onVerified={onVerifiedSunat} />
+      {padronLookup?.fallback && <p className="field-hint">{t("Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.")}</p>}
     </div>
   );
 }
 
-export default function SupplierForm({ supplier, identifier, padronLookup = null, representativeLookup = null, includeInitialBank = false, loading = false, draftValue = null, onDraftChange, onSubmit, onCancel }) {
+export default function SupplierForm({ supplier, identifier, padronLookup = null, representativeLookup = null, onRetryRepresentatives, onVerifiedSunat, includeInitialBank = false, loading = false, draftValue = null, onDraftChange, onSubmit, onCancel }) {
   const { t } = useLanguage();
   const [form, setForm] = useState(() => restoredForm(draftValue?.form) || initialValues(supplier, identifier, padronLookup));
   const steps = supplierStepsFor({ includeInitialBank });
@@ -284,7 +287,7 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       <p className="supplier-form-legend">{t("* Required to submit.")}</p>
 
       <div {...pane("identity")}>
-        {!supplier && <><SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} /><SupplierSunatEvidence lookup={padronLookup} /></>}
+        {!supplier && <><SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} onRetryRepresentatives={onRetryRepresentatives} onVerifiedSunat={onVerifiedSunat} /><SupplierSunatEvidence lookup={padronLookup} /></>}
         {!supplier && legalRepresentatives.length > 0 && (
           <details className="sunat-representatives" open={legalRepresentatives.length > 1 || undefined}>
             <summary>{t("Legal representatives of {ruc} - {name}").replace("{ruc}", representativeLookup.data.ruc || "").replace("{name}", representativeLookup.data.legalName || form.legalName)} ({legalRepresentatives.length})</summary>

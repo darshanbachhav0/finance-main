@@ -11,7 +11,7 @@ import { openZipEntryStream } from "../utils/zipReader.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { findPadronLine, preparePadronIndexes } from "./padronChunkIndex.js";
-import { usesPublicPadron } from "../config/sunatMode.js";
+import { usesPublicPadronData } from "../config/sunatMode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -723,25 +723,6 @@ async function downloadPadronZip({
   };
 }
 
-async function closeWriteStream(
-  stream
-) {
-  if (!stream) {
-    return;
-  }
-
-  await new Promise(
-    (resolve, reject) => {
-      stream.once(
-        "error",
-        reject
-      );
-
-      stream.end(resolve);
-    }
-  );
-}
-
 async function buildChunksFromZip({
   zipPath,
   stagingDir,
@@ -810,13 +791,16 @@ async function buildChunksFromZip({
   let rowCount = 0;
   let skipped = 0;
   let headerLine = "";
-  let currentPrefix = "";
-  let currentStream = null;
-  let batch = "";
-  async function flushBatch() {
-    if (!batch) return;
-    const data = batch; batch = "";
-    await new Promise((resolve, reject) => currentStream.write(data, "utf8", error => error ? reject(error) : resolve()));
+  // SUNAT can interleave RUC prefixes. Buffer by prefix instead of reopening a
+  // file on every prefix change; bound memory while writing larger disk blocks.
+  const batches = new Map();
+  let buffered = 0;
+  async function flushBatch(prefix) {
+    const data = batches.get(prefix);
+    if (!data) return;
+    batches.delete(prefix);
+    buffered -= data.length;
+    await fsp.appendFile(path.join(chunksDir, `${prefix}.txt`), data, "utf8");
   }
 
   try {
@@ -869,31 +853,15 @@ async function buildChunksFromZip({
           CHUNK_PREFIX_LENGTH
         );
 
-      if (
-        prefix !==
-        currentPrefix
-      ) {
-        await flushBatch();
-        await closeWriteStream(currentStream);
-
-        currentPrefix =
-          prefix;
-
-        currentStream =
-          fs.createWriteStream(
-            path.join(
-              chunksDir,
-              `${prefix}.txt`
-            ),
-            {
-              flags: "a",
-              encoding: "utf8"
-            }
-          );
+      const batch = (batches.get(prefix) || "") + line + "\n";
+      batches.set(prefix, batch);
+      buffered += line.length + 1;
+      if (batch.length >= 256 * 1024) await flushBatch(prefix);
+      if (buffered > 16 * 1024 * 1024) {
+        let largest = prefix;
+        for (const [key, value] of batches) if (value.length > (batches.get(largest)?.length || 0)) largest = key;
+        await flushBatch(largest);
       }
-
-      batch += `${line}\n`;
-      if (batch.length >= 256 * 1024) await flushBatch();
 
       rowCount += 1;
 
@@ -911,8 +879,7 @@ async function buildChunksFromZip({
       }
     }
   } finally {
-    await flushBatch();
-    await closeWriteStream(currentStream);
+    for (const prefix of batches.keys()) await flushBatch(prefix);
 
     lines.close();
   }
@@ -1399,8 +1366,8 @@ function cachePut(
 }
 
 export function refreshForLookup() {
-  // Only the Padrón mode reads the downloaded file; Consulta RUC never needs it.
-  if (!usesPublicPadron()) return;
+  // The downloaded file is used in Padrón mode or by an explicitly enabled fallback.
+  if (!usesPublicPadronData()) return;
   if (String(process.env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO") return;
   if (["false", "off", "0"].includes(String(process.env.SUNAT_PADRON_WORKER_ENABLED || "").toLowerCase())) return;
   if (Date.now() < nextLookupRefreshAt) return;

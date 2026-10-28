@@ -117,13 +117,15 @@ test("GAF approves each bank TXT before Treasury can download it", { timeout: 12
       await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: gaf, req }), (error) => error.statusCode === 409, "a file is verified once");
     });
 
-    await t.test("whoever generated a file does not verify it, except Admin", async () => {
+    await t.test("only GAF approves bank files and no generator can approve their own file", async () => {
       const { batch } = await makeFile([await makePayable()], gaf);
       await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: gaf, req }), (error) => error.statusCode === 403);
       const own = await makeFile([await makePayable()], admin);
-      await verifyBankFile({ batchId: own.batch._id, user: admin, req });
+      await assert.rejects(() => verifyBankFile({ batchId: own.batch._id, user: admin, req }), (error) => error.statusCode === 403);
+      await assert.rejects(() => rejectBankFile({ batchId: own.batch._id, payload: { reason: "Test" }, user: admin, req }), (error) => error.statusCode === 403);
+      await verifyBankFile({ batchId: own.batch._id, user: gaf, req });
       assert.equal((await PaymentBatch.findById(own.batch._id)).verification.status, "VERIFIED");
-      await rejectBankFile({ batchId: batch._id, payload: { reason: "Test cleanup" }, user: admin, req });
+      await cancelPaymentBatch({ batchId: batch._id, payload: { reason: "Test cleanup" }, user: treasury, req });
     });
 
     await t.test("a TXT changed after generation, or one still holding a removed payment, fails its checks", async () => {

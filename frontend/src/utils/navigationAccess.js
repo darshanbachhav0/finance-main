@@ -55,6 +55,13 @@ export const navigationAccess = Object.freeze({
   "/": authenticatedRoles,
   "/management-view": ["Admin", "Management", "ManagementViewer", "GAF", ...READERS],
   "/requests": ["Admin", ...requesterRoles, "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "GAF", ...READERS],
+  "/guides": internalRoles.concat(READERS),
+  "/investments": ["Admin", "Treasury", "GAF", "Accounting", "Management", ...READERS],
+  "/special-expenses": ["Admin", "Solicitor", "Legal", "HumanResources", "GAF", "Accounting", "Treasury", "AreaDirector", ...READERS],
+  "/treasury/statement-reviews": ["Admin", "Treasury", "Accounting", "GAF", ...READERS],
+  "/audit": ["Admin", "GAF", "Accounting", "Management", ...READERS],
+  "/consultas": ["Admin", "GAF", "Accounting", "Treasury", "Management", ...READERS],
+  "/indicadores": ["Admin", "GAF", "Accounting", "Treasury", "Management", ...READERS],
   "/my-team": internalRoles,
   "/requests/new": ["Admin", ...requesterRoles],
   "/settings": settingsRoles,
@@ -105,6 +112,13 @@ export const navigationGrants = Object.freeze({
 export const pageLabels = Object.freeze({
   "/": "Dashboard",
   "/requests": "Requests",
+  "/guides": "Guía y modelos",
+  "/investments": "Inversiones",
+  "/special-expenses": "Solicitudes especiales",
+  "/treasury/statement-reviews": "Conciliaciones",
+  "/audit": "Auditoría",
+  "/consultas": "Consultas",
+  "/indicadores": "Indicadores",
   "/requests/new": "New request",
   "/approvals": "Approvals",
   "/my-team": "My Team",
@@ -194,11 +208,11 @@ export function approvesRequests(user, pendingApprovals = 0) {
 export const navigationSections = Object.freeze([
   ["Super Admin", superAdminConsolePaths],
   ["Overview", ["/"]],
-  ["My work", ["/requests", "/requests/new", "/approvals", "/my-team"]],
+  ["My work", ["/requests", "/requests/new", "/approvals", "/my-team", "/special-expenses", "/guides"]],
   ["Invoices and payables", ["/batch-invoices", "/accounting/invoice-observations", "/accounting/payables", "/accounting/bank-files", "/reimbursement-bank"]],
-  ["Treasury", ["/treasury", "/treasury/history", "/treasury/transfers"]],
+  ["Treasury", ["/treasury", "/treasury/history", "/treasury/transfers", "/treasury/statement-reviews"]],
   ["Accounting", ["/accounting", "/accounting/periods", "/accounting/sire"]],
-  ["Planning and reports", ["/budget", "/reports", "/management-view"]],
+  ["Planning and reports", ["/budget", "/reports", "/consultas", "/indicadores", "/investments", "/audit", "/management-view"]],
   ["Master Data", ["/suppliers", "/settings", ...settingsPaths]]
 ]);
 
@@ -257,6 +271,7 @@ export function navigationForUser(user, { pendingApprovals = 0 } = {}) {
   const paths = (roleMenus[role] || []).filter((path) => path !== "/approvals" || approvesRequests(user, pendingApprovals));
   const add = (path) => { if (!paths.includes(path)) paths.push(path); };
   if (user?.hasTeam === true) add("/my-team");
+  for (const page of ["/guides", "/investments", "/special-expenses", "/treasury/statement-reviews", "/audit", "/consultas", "/indicadores"]) if (canAccessNavigation(role, page, user)) add(page);
   // Proposing suppliers is open to every internal user, so the menu offers it - except to
   // requesters, whose menu stays at their requests: they propose a supplier from the request form.
   if (internalRoles.includes(role) && !requesterRoles.includes(role)) add("/suppliers");

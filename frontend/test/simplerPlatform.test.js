@@ -69,7 +69,7 @@ assert.equal(usesPlainStatuses({ role: "Accounting" }), false);
 
 // 4. The requester's menu stays at their requests; their bank account is in the account menu.
 const solicitor = { role: "Solicitor", hasTeam: false, permissions: [] };
-assert.deepEqual(navigationForUser(solicitor).map(([, path]) => path), ["/", "/requests", "/requests/new"]);
+assert.deepEqual(navigationForUser(solicitor).map(([, path]) => path), ["/", "/requests", "/requests/new", "/guides", "/special-expenses"]);
 assert.deepEqual(accountMenuPaths(solicitor), ["/reimbursement-bank"]);
 assert.deepEqual(accountMenuPaths({ role: "Accounting", permissions: [] }), []);
 assert.ok(navigationForUser({ role: "Accounting", permissions: [] }).some(([, path]) => path === "/suppliers"), "Finance keeps Suppliers in its menu");

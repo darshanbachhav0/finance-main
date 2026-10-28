@@ -1,4 +1,6 @@
 import { refreshForLookup } from "../services/sunatPadronService.js";
+import { assistedConsultaAvailable, lookupAssistedConsultaRuc } from "../services/sunatAssistedLookupService.js";
+import { AppError } from "../utils/AppError.js";
 import {
   asyncHandler
 } from "../middleware/asyncHandler.js";
@@ -64,10 +66,7 @@ export const lookupSupplier =
     }
   );
 
-/*
- * Fast lookup from the locally downloaded SUNAT
- * Padron Reducido.
- */
+// The legacy /padron URL now uses the configured source (Consulta RUC by default).
 export const lookupSupplierPadron =
   asyncHandler(
     async (
@@ -78,15 +77,35 @@ export const lookupSupplierPadron =
         res.json(await getSupplierAutomaticPrefill(req.params.ruc));
       } catch (error) {
         if (error.statusCode === 503) {
-          // Queue a throttled refresh; never download/index millions of rows before responding.
-          refreshForLookup();
-          res.set("Retry-After", "15");
-          error.details = { ...error.details, lookupState: "UNAVAILABLE", retryAfterSeconds: 15 };
+          const retryable = error.details?.retryable !== false;
+          if (retryable) {
+            refreshForLookup();
+            res.set("Retry-After", "15");
+          }
+          error.details = { ...error.details, assistedAvailable: assistedConsultaAvailable(req) && !error.details?.requiresConfiguration, lookupState: "UNAVAILABLE", ...(retryable ? { retryAfterSeconds: 15 } : {}) };
         }
         throw error;
       }
     }
   );
+
+const assistedLookups = new Set();
+export const lookupSupplierAssisted = asyncHandler(async (req, res) => {
+  if (!assistedConsultaAvailable(req)) throw new AppError(403, "SUNAT browser verification is available only on the local Windows development computer.");
+  const userId = String(req.user._id);
+  if (assistedLookups.has(userId)) throw new AppError(409, "A SUNAT browser verification is already open. Complete or close it first.");
+  const controller = new AbortController();
+  const abort = () => { if (!res.writableEnded) controller.abort(); };
+  assistedLookups.add(userId);
+  res.once("close", abort);
+  try {
+    const profile = await lookupAssistedConsultaRuc(req.params.ruc, { signal: controller.signal });
+    if (!res.destroyed) res.json(profile);
+  } finally {
+    res.off("close", abort);
+    assistedLookups.delete(userId);
+  }
+});
 
 /*
  * Additional public SUNAT Consulta RUC lookup.
@@ -108,12 +127,14 @@ export const lookupSupplierLegalRepresentatives =
           ""
         ).trim();
 
-      res.json(
-        await lookupSunatLegalRepresentatives(
-          req.params.ruc,
-          legalName
-        )
-      );
+      try {
+        res.json(await lookupSunatLegalRepresentatives(req.params.ruc, legalName));
+      } catch (error) {
+        if (error.statusCode === 503) {
+          res.set("Retry-After", "30");
+        }
+        throw error;
+      }
     }
   );
 

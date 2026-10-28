@@ -760,12 +760,12 @@ export default function Suppliers() {
         if (!stopped) {
           setLookup(current => ({ ...current, padron: response.data, checkedAt: new Date().toISOString() }));
           if (response.data?.found && response.data?.data?.legalName) {
-            void loadLegalRepresentatives(lookupSequence.current, identifier, response.data.data.legalName);
+            void loadLegalRepresentatives(lookupSequence.current, identifier, response.data.data.legalName, response.data.representativesLookup);
           }
         }
       } catch (error) {
         if (stopped) return;
-        if (error.details?.requiresConfiguration || (error.status && error.status < 500 && error.status !== 429)) {
+        if (error.details?.retryable === false || error.details?.requiresConfiguration || (error.status && error.status < 500 && error.status !== 429)) {
           setLookup(current => ({ ...current, padron: { ...current.padron, retryable: false, message: error.message } }));
           return;
         }
@@ -851,7 +851,8 @@ export default function Suppliers() {
   async function loadLegalRepresentatives(
     sequence,
     ruc,
-    legalName
+    legalName,
+    prefetched
   ) {
     if (
       !legalName
@@ -877,11 +878,13 @@ export default function Suppliers() {
     );
 
     try {
+      if (prefetched?.error) throw new Error(prefetched.error);
       const response =
-        await api.get(
+        prefetched?.data ? { data: prefetched.data } : await api.get(
           `/suppliers/consulta-ruc/${ruc}/representatives?legalName=${encodeURIComponent(
             legalName
-          )}`
+          )}`,
+          { timeout: 35000 }
         );
 
       if (
@@ -1165,7 +1168,8 @@ export default function Suppliers() {
             normalized,
             padron
               .data
-              .legalName
+              .legalName,
+            padron.representativesLookup
           );
         }
 
@@ -1193,7 +1197,8 @@ export default function Suppliers() {
 
           padron: {
             unavailable: true,
-            retryable: !padronError.details?.requiresConfiguration && (!padronError.status || padronError.status >= 500 || padronError.status === 429),
+            assistedAvailable: padronError.details?.assistedAvailable === true,
+            retryable: padronError.details?.retryable !== false && !padronError.details?.requiresConfiguration && (!padronError.status || padronError.status >= 500 || padronError.status === 429),
             found:
               false,
 
@@ -1886,6 +1891,15 @@ export default function Suppliers() {
                 lookup
                   .representatives
               }
+              onRetryRepresentatives={() => loadLegalRepresentatives(
+                lookupSequence.current,
+                identifier,
+                lookup.padron?.data?.legalName || lookup.representatives?.data?.legalName || ""
+              )}
+              onVerifiedSunat={profile => {
+                if (profile.ruc !== identifier) return;
+                setLookup(current => ({ ...current, padron: profile, checkedAt: new Date().toISOString(), representatives: { loading: false, data: null, error: "" } }));
+              }}
               includeInitialBank
               loading={
                 saving

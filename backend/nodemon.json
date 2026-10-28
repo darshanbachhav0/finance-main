@@ -1,0 +1,5 @@
+{
+  "watch": ["server.js", "src", "../shared", ".env"],
+  "ext": "js,mjs,cjs,json,env",
+  "ignore": ["data/**", "generated/**", "uploads/**", "backups/**", "debug/**"]
+}

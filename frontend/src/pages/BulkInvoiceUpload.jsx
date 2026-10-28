@@ -1,4 +1,6 @@
 import useWorkDraft, { useDraftResume, resumeDraftRecord } from "../hooks/useWorkDraft.js";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 import DraftPanel from "../components/DraftPanel.jsx";
 import { FileArchive, RefreshCw, UploadCloud, Eye } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +21,7 @@ const finalStatuses = new Set(["COMPLETED", "COMPLETED_WITH_OBSERVATIONS", "FAIL
 
 export default function BulkInvoiceUpload() {
   const { t, language } = useLanguage();
+  const { user } = useAuth();
   const { notify } = useToast();
   const [orders, setOrders] = useState([]);
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
@@ -100,7 +103,7 @@ export default function BulkInvoiceUpload() {
 
   return (
     <section>
-      <PageHeader title="A2 · Batch invoice ingestion" description="Select an active Purchase Order and upload a ZIP of XML/PDF pairs, optionally with an XLSX invoice list. Every voucher is validated independently." actions={<button type="button" className="secondary-button" onClick={() => { loadOrders(); batchTable.reload(); }}><RefreshCw size={16} /><span>{t("Refresh")}</span></button>} />
+      <PageHeader title="A2 · Batch invoice ingestion" description="Select an active Purchase Order and upload a ZIP of XML/PDF pairs, optionally with an XLSX invoice list. Every voucher is validated independently." actions={<>{(['Admin','Solicitor','Legal','HumanResources'].includes(user?.role) || user?.permissions?.includes('request:create')) && <Link to="/requests/new" className="secondary-button">← Elegir otro proceso</Link>}<button type="button" className="secondary-button" onClick={() => { loadOrders(); batchTable.reload(); }}><RefreshCw size={16} /><span>{t("Refresh")}</span></button></>} />
       <Message type="error">{error || batchTable.error}</Message>
       {deepLink.active && <DeepLinkNotice title={deepLink.link.batch ? "Showing the batch linked from your notification" : "Showing the batches of the linked request"} missing={!batchTable.loading && !batchTable.rows.length} missingDescription="No invoice batch was found for this link." clearLabel="Show all batches" onClear={() => { setActiveBatch(null); deepLink.clear(); }} />}
       <div className="workspace-panel batch-upload-workspace">

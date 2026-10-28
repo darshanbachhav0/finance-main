@@ -1,5 +1,5 @@
 import { cloudTaxpayerMode } from "../services/taxpayerProfileCache.js";
-import { usesPublicPadron } from "../config/sunatMode.js";
+import { usesPublicPadronData as usesPublicPadron } from "../config/sunatMode.js";
 import { notificationEmailConfiguration } from "../services/notificationEmailService.js";
 // Background workers that run inside the web service process.
 //

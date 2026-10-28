@@ -96,6 +96,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     const owner = await User.create({ name: "Workflow owner", dni: "12345678", employeeCode: "UMA-EMP-1", email: "status.owner@test.local", passwordHash: "unused", role: "Solicitor", area: "Operations" });
     const admin = await User.create({ name: "Workflow admin", email: "status.admin@test.local", passwordHash: "unused", role: "Admin", area: "Finance" });
     const treasury = await User.create({ name: "Workflow treasury", email: "status.treasury@test.local", passwordHash: "unused", role: "Treasury", area: "Finance" });
+    const gaf = await User.create({ name: "Workflow GAF", email: "status.gaf@test.local", passwordHash: "unused", role: "GAF", area: "Finance" });
     const center = await CostCenter.create({ code: "STATUS-CC", name: "Status tests", area: "Operations", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
     const expense = await ExpenseType.create({ code: "STATUS-EXP", name: "Status expense", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", active: true });
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20999999991", normalizedIdentifier: "20999999991", legalName: "Status Supplier", name: "Status Supplier", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
@@ -119,7 +120,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       // Accounting releases the TXT before Treasury sends it to the bank.
-      await verifyBankFile({ batchId: result.batch._id, user: admin, req });
+      await verifyBankFile({ batchId: result.batch._id, user: gaf, req });
       return result;
     }
     const confirm = ap => confirmTreasuryPayable({ accountsPayableId: ap._id, payload: { operationNumber: "BANK-" + ap._id, paidAt: "2026-08-15", confirmedAmount: 118 }, user: treasury, req });

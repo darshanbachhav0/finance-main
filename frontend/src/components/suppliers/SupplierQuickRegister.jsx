@@ -7,6 +7,7 @@ import Message from "../Message.jsx";
 import StatusBadge from "../StatusBadge.jsx";
 import BankAccountFields from "./BankAccountFields.jsx";
 import CreditDaysField from "./CreditDaysField.jsx";
+import ConsultaRucLink from "./ConsultaRucLink.jsx";
 import { supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
 import { representativeDocumentType } from "../../../../shared/supplierSunat.mjs";
 import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
@@ -22,6 +23,8 @@ const digits = (value) => String(value || "").replace(/\D/g, "");
 export default function SupplierQuickRegister({ initialRuc = "", need = "", currency = "PEN", onRegistered, onUseExisting, onCancel }) {
   const { t } = useLanguage();
   const [ruc, setRuc] = useState(digits(initialRuc));
+  const currentRuc = useRef(ruc);
+  currentRuc.current = ruc;
   const [check, setCheck] = useState({ status: "idle" });
   const [sunat, setSunat] = useState(null);
   const [legalName, setLegalName] = useState("");
@@ -71,19 +74,50 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
           setAccounts((current) => current.map((account) => account.accountHolderName ? account : { ...account, accountHolderName: name }));
           autoHolder.current = name;
         }
+        // Padrón and representatives have different sources. A taxpayer fallback
+        // must not suppress a separate Consulta RUC lookup (or its cached result).
         if (!lookup.data?.found || !name) return;
-        setRepresentativeLookup({ status: "loading" });
-        api.get(`/suppliers/consulta-ruc/${value}/representatives`, { params: { legalName: name }, timeout: 35000 }).then(response => {
-          if (!active) return;
-          if (response.data?.ruc !== value) { setRepresentativeLookup({ status: "unavailable" }); return; }
-          setRepresentativeLookup({ status: "found", data: response.data });
-          const people = response.data?.representatives || [];
-          if (people.length === 1 && !typedRepresentative.current) setRepresentative({ ...people[0], documentType: representativeDocumentType(people[0].documentType) });
-        }).catch(() => active && setRepresentativeLookup({ status: "unavailable" }));
-      }).catch(() => active && setSunat({ status: "unavailable" }));
+        void retryRepresentatives(value, name, () => active, lookup.data.representativesLookup);
+      }).catch(error => active && setSunat({ status: "unavailable", error: error.message, assistedAvailable: error.details?.assistedAvailable === true }));
     }).catch((err) => active && setCheck({ status: "error", error: err.message }));
     return () => { active = false; };
   }, [ruc]);
+
+  function applyAssistedProfile(profile) {
+    if (profile.ruc !== digits(currentRuc.current)) return;
+    setSunat({ status: profile.found ? "found" : "missing", data: profile.data, lookup: profile });
+    const name = profile.data?.legalName;
+    if (name && !typedName.current) {
+      setLegalName(name);
+      setAccounts(current => current.map(account => account.accountHolderName ? account : { ...account, accountHolderName: name }));
+      autoHolder.current = name;
+    }
+    // Representatives are a separate lookup; a verified RUC must not be replaced
+    // with the failure of a new headless session after assisted verification.
+    if (profile.found && name) void retryRepresentatives(profile.ruc, name);
+  }
+
+  async function retryRepresentatives(rucValue = digits(ruc), name = sunat?.data?.legalName || legalName, stillActive = () => true, prefetched) {
+    if (!/^\d{11}$/.test(rucValue) || !name || !stillActive()) return;
+    setRepresentativeLookup({ status: "loading" });
+    try {
+      if (prefetched?.error) throw new Error(prefetched.error);
+      const response = prefetched?.data ? { data: prefetched.data } : await api.get(`/suppliers/consulta-ruc/${rucValue}/representatives`, {
+        params: { legalName: name }, timeout: 35000
+      });
+      if (!stillActive() || digits(currentRuc.current) !== rucValue) return;
+      if (response.data?.ruc !== rucValue) throw new Error("SUNAT returned an unexpected RUC.");
+      setRepresentativeLookup({ status: "found", data: response.data });
+      const people = response.data?.representatives || [];
+      if (people.length === 1 && !typedRepresentative.current) {
+        setRepresentative({ ...people[0], documentType: representativeDocumentType(people[0].documentType) });
+      }
+    } catch (err) {
+      if (stillActive() && digits(currentRuc.current) === rucValue) {
+        setRepresentativeLookup({ status: "unavailable", error: err.message || "SUNAT lookup unavailable" });
+      }
+    }
+  }
 
   function editRepresentative(patch) {
     typedRepresentative.current = true;
@@ -180,11 +214,14 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
       {status === "new" && <>
         {sunat?.status === "loading" && <p className="muted-text"><Loader2 size={14} className="spin" aria-hidden="true" /> {t("Looking up the RUC in SUNAT...")}</p>}
         {sunat?.status === "found" && <SupplierSunatEvidence lookup={sunat.lookup} />}
-        {["missing", "unavailable"].includes(sunat?.status) && <p className="muted-text">{t("SUNAT did not answer: type the legal name as it appears on the RUC.")}</p>}
+        {sunat?.lookup?.fallback && <p className="field-hint">{t("Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.")}</p>}
+        {sunat?.status === "missing" && <p className="muted-text">{t("SUNAT Consulta RUC does not recognize this RUC.")}</p>}
+        {sunat?.status === "unavailable" && <div role="status"><p className="muted-text">{t(sunat.error || "Consulta RUC could not return a usable supplier profile.")}</p><ConsultaRucLink pending ruc={digits(ruc)} assistedAvailable={sunat.assistedAvailable} onVerified={applyAssistedProfile} /></div>}
+        {representativeLookup.status === "unavailable" && sunat?.status !== "unavailable" && <ConsultaRucLink />}
         <div className="form-grid two-column-form">
           <label className={`field form-span-two${errors.legalName ? " field-error" : ""}`}><span>{t("Legal name")} *</span><input value={legalName} onChange={(event) => { typedName.current = true; setLegalName(event.target.value); }} aria-invalid={Boolean(errors.legalName)} />{errors.legalName && <small className="field-error-text">{t(errors.legalName)}</small>}</label>
           {representativeLookup.status === "loading" && <p className="field-hint form-span-two" role="status">{t("Checking SUNAT legal representatives...")}</p>}
-          {representativeLookup.status === "unavailable" && <p className="field-hint form-span-two" role="status">{t("SUNAT representative lookup temporarily unavailable")}</p>}
+          {representativeLookup.status === "unavailable" && <div className="field-hint form-span-two" role="status"><p>{t("SUNAT representative lookup temporarily unavailable")}</p>{representativeLookup.error && <p>{t(representativeLookup.error)}</p>}<button type="button" className="text-button" onClick={() => void retryRepresentatives()}>{t("Retry representative lookup")}</button><p>{t("Representative lookup is separate from RUC validation; manual details still require review.")}</p></div>}
           {representativeLookup.status === "found" && !(representativeLookup.data?.representatives?.length) && <p className="field-hint form-span-two">{t("SUNAT Consulta RUC did not return legal representatives for this RUC.")}</p>}
           {(representativeLookup.data?.representatives?.length || 0) > 1 && <label className="field form-span-two"><span>{t("Select a SUNAT representative")}</span><select value={representativeLookup.data.representatives.findIndex(person => person.fullName === representative.fullName && person.documentNumber === representative.documentNumber)} onChange={event => {
             const person = representativeLookup.data.representatives[Number(event.target.value)];

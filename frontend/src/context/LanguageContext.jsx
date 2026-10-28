@@ -1,6 +1,7 @@
 import minimalFinanceSpanish from "./i18n/minimalFinance.js";
 import approvalOptimizationSpanish from "./i18n/approvalOptimization.js";
 import supplierSunatSpanish from "./i18n/supplierSunat.js";
+import umaModulesSpanish from "./i18n/umaModules.js";
 import { budgetPlanningSpanish } from "../utils/budgetPlanningSpanish.js";
 import experienceSpanish from "./experienceSpanish.js";
 import refinementSpanish from "./refinementSpanish.js";
@@ -1765,7 +1766,7 @@ const quotationPaymentSpanish = {
   "QUOTATION_PAYMENT_TERMS_INVALID": "Condiciones de pago de cotización incompletas o inválidas"
 };
 
-const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...uxhomeSpanish, ...uxsearchSpanish, ...uxbulkSpanish, ...uxformsSpanish, ...uxlistsSpanish, ...uxshellSpanish, ...rowactionsSpanish, ...notificationsSpanish, ...navigationSpanish, ...feedbackSpanish, ...suppliersSpanish, ...commonSpanish, ...superAdminSpanish, ...livelySpanish, ...simpleSpanish, ...requestWizardSpanish, ...costCenterTypeSpanish, ...minimalFinanceSpanish, ...approvalOptimizationSpanish, ...supplierSunatSpanish, ...trackDSpanish, ...paymentsManualSpanish };
+const spanishDictionary = { ...spanish, ...additionalSpanish, ...productionSpanish, ...uiUxSpanish, ...phase2SupplierSpanish, ...phase3RequestSpanish, ...phase4RenditionSpanish, ...phase5WorkflowSpanish, ...tripleTrackSpanish, ...quotationPaymentSpanish, ...budgetPlanningSpanish, ...experienceSpanish, ...refinementSpanish, ...approvalsSpanish, ...budgetSpanish, ...accountingSpanish, ...sireSpanish, ...treasurySpanish, ...renditionsSpanish, ...operationsSpanish, ...interfaceSpanish, ...uxhomeSpanish, ...uxsearchSpanish, ...uxbulkSpanish, ...uxformsSpanish, ...uxlistsSpanish, ...uxshellSpanish, ...rowactionsSpanish, ...notificationsSpanish, ...navigationSpanish, ...feedbackSpanish, ...suppliersSpanish, ...commonSpanish, ...superAdminSpanish, ...livelySpanish, ...simpleSpanish, ...requestWizardSpanish, ...costCenterTypeSpanish, ...minimalFinanceSpanish, ...approvalOptimizationSpanish, ...supplierSunatSpanish, ...trackDSpanish, ...paymentsManualSpanish, ...umaModulesSpanish };
 Object.assign(spanishDictionary, {
   "Generate a BBVA fixed-width payment instruction. Payment remains pending until bank execution is confirmed.": "Generar una instrucción BBVA de ancho fijo. El pago queda pendiente hasta confirmar la ejecución bancaria.",
   "BBVA confirmed configuration (JSON)": "Configuración BBVA confirmada (JSON)",

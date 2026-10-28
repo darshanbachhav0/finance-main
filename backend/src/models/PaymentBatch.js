@@ -76,7 +76,7 @@ const paymentBatchSchema = new mongoose.Schema(
     },
     priority: { type: String, enum: ["NORMAL", "PRIORITY", "MIXED"], default: "NORMAL", index: true },
     status: { type: String, enum: ["GENERATED", "PARTIALLY_CONFIRMED", "CONFIRMED", "REJECTED", "REPROGRAMMED", "CANCELLED"], default: "GENERATED", index: true },
-    // Accounting verifies the TXT before Treasury may download it and send it to the bank
+    // GAF verifies the TXT before Treasury may download it and send it to the bank
     // (bankFileVerificationService). A batch stored before this control has no status and counts
     // as verified; the migration marks it so (legacy).
     verification: {

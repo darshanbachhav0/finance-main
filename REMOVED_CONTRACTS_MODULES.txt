@@ -1,0 +1,10 @@
+The following source files must be deleted when applying changed-only files:
+backend/src/models/UmaContract.js
+backend/src/models/UmaContractInvoice.js
+backend/src/routes/umaContractRoutes.js
+backend/src/services/umaContractService.js
+backend/test/umaContractRules.test.js
+frontend/src/pages/UmaContracts.jsx
+shared/umaContractRules.mjs
+
+Run REMOVE_CONTRACTS.ps1 after extracting this ZIP at the finance-main project root.

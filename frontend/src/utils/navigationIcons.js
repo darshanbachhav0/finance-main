@@ -31,6 +31,13 @@ import {
 const icons = {
   "/": BarChart3,
   "/requests": ReceiptText,
+  "/guides": BookOpenCheck,
+  "/investments": Landmark,
+  "/special-expenses": FileSpreadsheet,
+  "/treasury/statement-reviews": Landmark,
+  "/audit": ScrollText,
+  "/consultas": ClipboardList,
+  "/indicadores": Gauge,
   "/requests/new": FilePlus2,
   "/approvals": ClipboardCheck,
   "/my-team": Users,
