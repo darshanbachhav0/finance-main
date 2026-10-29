@@ -29,6 +29,7 @@ export function journeyMilestones(request, { orderApplies = true } = {}) {
     if (isAdvance(request)) steps.push({ key: "advance", label: "Advance paid", done: rank >= 7 }, { key: "rendition", label: "Rendition validated", done: renditionSettled(request) });
     else steps.push({ key: "declaration", label: "Declaration approved", done: rank >= 4 }, { key: "paid", label: "Paid", done: rank >= 7 });
   } else if (request.flowType === "B") {
+    steps.push({ key: "budget", label: "Budget committed", done: rank >= 3 }, { key: "invoice", label: "Invoice booked", done: rank >= 4 });
     steps.push({ key: "paid", label: "Paid", done: rank >= 7 });
   } else {
     if (orderApplies) steps.push({ key: "order", label: "Purchase order", done: Boolean(request.purchaseOrder) || rank >= 4 });
@@ -86,7 +87,7 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
   if (status === "APROBADO" && request.flowType === "D") return { text: "Approved. Treasury makes the transfer at the bank and records its operation number.", holder: team("Treasury"), since };
   if (status === "PAGADO" && request.flowType === "D") return { text: "Transferred. Treasury reconciles it with the bank statement.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status) && request.flowType === "D") return { text: mine ? "Returned to you for corrections. Correct it in Transfers and send it again." : "Returned to Treasury for corrections.", holder: requester, since, tone: "attention" };
-  if (status === "APROBADO") return { text: "Approved. The budget is being committed.", holder: team("Treasury"), since };
+  if (status === "APROBADO") return { text: "Approved. Waiting for Treasury to commit the budget.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status)) return { text: mine ? "Returned to you for corrections. Fix it and submit it again." : "Returned to the requester for corrections.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Treasury"), since, tone: "attention" };
   // An invoice from another supplier, or one already registered, waits for the requester; only a

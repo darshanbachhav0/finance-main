@@ -65,7 +65,7 @@ const netAmountOf = (row) => Number(row.accountsPayable?.netPayableAmount ?? amo
 const onPaymentCycle = (dateKey) => Boolean(dateKey) && (isPaymentCycleDate(new Date(`${dateKey}T12:00:00.000Z`)) || isUrgencyPaymentDate(new Date(`${dateKey}T12:00:00.000Z`)));
 const requestIdOf = (row) => row.requestId || row.request?._id || row._id;
 const payableIdOf = (row) => row.accountsPayable?._id || row._id;
-const PAYMENT_VIEWS = ["prepare", "confirm", "detractions", "reconcile", "returned"];
+const PAYMENT_VIEWS = ["prepare", "budget", "confirm", "detractions", "reconcile", "returned"];
 // Accounting verifies each bank TXT before Treasury may download it and send it to the bank. A file
 // generated before that control has no verification status and counts as verified.
 const verificationOf = (batch) => batch?.verification?.status || "VERIFIED";
@@ -170,7 +170,10 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const bouncedTable = usePaginatedResource("/treasury/bounced-payments", linkOptions);
   const reconciliationTable = usePaginatedResource("/treasury/reconciliation", linkOptions);
   const detractionTable = usePaginatedResource("/treasury/detractions", linkOptions);
-  const stageTables = { prepare: queueTable, confirm: confirmationTable, detractions: detractionTable, reconcile: reconciliationTable, returned: bouncedTable };
+  const budgetTable = usePaginatedResource("/treasury/pending-budgets", { ...linkOptions,
+    fixedParams: linkActive && deepLink.link.request ? { request: deepLink.link.request } : {},
+    enabled: !historyOnly && (!linkActive || Boolean(deepLink.link.request)) });
+  const stageTables = { prepare: queueTable, budget: budgetTable, confirm: confirmationTable, detractions: detractionTable, reconcile: reconciliationTable, returned: bouncedTable };
   const stageTotals = PAYMENT_VIEWS.map((view) => stageTables[view].loading ? null : Number(stageTables[view].pagination.total || 0));
   const stageTotalsKey = stageTotals.join(",");
   const linkMissing = linkActive && stageTotals.every((total) => total === 0);
@@ -201,7 +204,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const rows = queueTable.rows;
   // Refresh spins for what is on screen, not for every stage.
   const loading = historyOnly ? historyTable.loading : stageTables[paymentView].loading;
-  const resourceError = historyOnly ? historyTable.error : queueTable.error || confirmationTable.error || bouncedTable.error || reconciliationTable.error || detractionTable.error;
+  const resourceError = historyOnly ? historyTable.error : stageTables[paymentView].error;
 
   function selectView(view) {
     setPaymentView(view);
@@ -298,6 +301,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     loadNextRun();
     loadAdvancesDue();
     queueTable.reload();
+    budgetTable.reload();
     confirmationTable.reload();
     bouncedTable.reload();
     reconciliationTable.reload();
@@ -613,12 +617,25 @@ export default function TreasuryQueue({ historyOnly = false }) {
       <PageHeader title={historyOnly ? "Payment History" : "Payments"} description={historyOnly ? "Bank files generated for payment, with their downloads." : "Prepare the BBVA bank file, confirm what the bank paid, deposit detractions and reconcile."} actions={<>{!historyOnly && !readOnly && <ExcelImport kind="payment-schedule" onImported={reloadAll} />}<button type="button" className="secondary-button" onClick={reloadAll} disabled={loading}><RefreshCw className={loading ? "spin" : ""} size={16} /><span>{t("Refresh")}</span></button></>} />
       <WorkspaceTools links={[["Reimbursement Banking", "/reimbursement-bank"], ["Suppliers", "/suppliers"], ["Management Reports", "/reports"]]} />
     <Message type="error">{(paymentRow || bounceRow || reprogramRow || reconciliationRow || cancelTarget || detractionRow ? "" : actionError) || resourceError}</Message>
-    {linkActive && <DeepLinkNotice title="Showing the payment linked from your notification" missing={linkMissing} missingDescription="This payment is no longer pending in any Treasury stage. It may already be paid and reconciled." clearLabel="Show all payments" onClear={deepLink.clear} />}
+    {linkActive && <DeepLinkNotice title="Showing the request or payment linked from your notification" missing={linkMissing} missingDescription="No pending Treasury work was found for this record. Review the request for its current stage." clearLabel="Show all payments" onClear={deepLink.clear} />}
 
 
     {historyOnly
       ? <div className="focus-tabs"><Link to="/treasury">{t("Payments")}</Link></div>
-      : <Tabs idPrefix="treasury" label="Payment stages" panels value={paymentView} onChange={selectView} tabs={[["prepare", "Pending payments"], ["confirm", "Confirm payments"], ["detractions", "Detractions"], ["reconcile", "Reconciliation"], ["returned", "Returned payments"]].map(([id, label]) => ({ id, label, count: stageTotals[PAYMENT_VIEWS.indexOf(id)] }))}><Link to="/treasury/history">{t("Payment History")}</Link></Tabs>}
+      : <Tabs idPrefix="treasury" label="Payment stages" panels value={paymentView} onChange={selectView} tabs={[["prepare", "Pending payments"], ["budget", "Awaiting budget commitment"], ["confirm", "Confirm payments"], ["detractions", "Detractions"], ["reconcile", "Reconciliation"], ["returned", "Returned payments"]].map(([id, label]) => ({ id, label, count: stageTotals[PAYMENT_VIEWS.indexOf(id)] }))}><Link to="/treasury/history">{t("Payment History")}</Link></Tabs>}
+    <div hidden={historyOnly || paymentView !== "budget"} {...tabPanelProps("treasury", "budget")} className="workspace-panel section-spacer">
+      <div className="section-heading"><div><h3>{t("Awaiting budget commitment")}</h3><p>{t("These requests are approved but their budget commitment is pending. Review the request and resolve the blocking requirement before payment preparation.")}</p></div><span className="section-count">{budgetTable.pagination.total}</span></div>
+      <DataTable rows={budgetTable.rows} loading={budgetTable.loading} remote={budgetTable.remote}
+        emptyTitle="No approved requests awaiting budget commitment" emptyDescription="Approved requests appear here if the automatic budget handoff could not finish."
+        columns={[
+          { key: "requestNumber", label: "Request", type: "name", render: row => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
+          { key: "supplier", label: "Supplier", sortable: false, render: row => row.supplier?.legalName || row.supplier?.name || "-" },
+          { key: "requester", label: "Requester", sortable: false, render: row => row.requester?.name || "-" },
+          { key: "totalAmount", label: "Amount", type: "money", render: row => money(row.currency, row.totalAmount) },
+          { key: "pendingReason", label: "Last handoff issue", primary: true, sortable: false, render: row => t(row.pendingReason) },
+          { key: "review", label: "Actions", primary: true, sortable: false, render: row => <Link className="secondary-button" to={`/requests/${row._id}`}>{t("Review request")}</Link> }
+        ]} />
+    </div>
     <div hidden={historyOnly || paymentView !== "prepare"} {...tabPanelProps("treasury", "prepare")}>
     {advancesDue?.count > 0 && <div className={`payment-run-banner is-urgent${advanceRun ? " is-active" : ""}`} role="region" aria-label={t("Advances to pay now")}>
       <AlertTriangle size={20} aria-hidden="true" />

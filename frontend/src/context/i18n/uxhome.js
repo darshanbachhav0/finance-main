@@ -1,5 +1,7 @@
 // Spanish copy for the uxhome area. Keys are the English UI strings passed to t().
 export default {
+  "{count} approved request awaiting budget commitment": "{count} solicitud aprobada pendiente de compromiso presupuestal",
+  "{count} approved requests awaiting budget commitment": "{count} solicitudes aprobadas pendientes de compromiso presupuestal",
   // Dashboard: "My tasks"
   "My tasks": "Mis tareas",
   "What needs your attention, most urgent first.": "Lo que requiere su atención, empezando por lo más urgente.",

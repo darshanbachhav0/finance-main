@@ -22,6 +22,7 @@ import { isEligibleSupplierPaymentAccount, usesEmployeeReimbursementDestination 
 import { budgetExceptionPath, countPendingBudgetExceptions } from "../services/budgetExceptionService.js";
 import { countPendingBudgetPlanChanges } from "../services/budgetPlanChangeService.js";
 import { suppliersAwaitingApprovalBy } from "../services/supplierService.js";
+import { countPendingTreasuryBudgets } from "../services/treasuryBudgetQueueService.js";
 import { personalDashboard } from "../services/personalDashboardService.js";
 import { APPROVAL_STAGES, APPROVAL_TIERS, AP_STATUS, PERMISSIONS, REQUEST_STATUS, REQUESTER_ROLES, ROLES } from "../utils/constants.js";
 import { actsAsRequester, hasPermission, isReadOnlyOverseer, requestVisibilityFilter } from "../utils/permissions.js";
@@ -139,6 +140,10 @@ async function buildTasks(user) {
   if (isReadOnlyOverseer(user)) return { items: [], total: 0, counters: {} };
   const items = [];
   const now = new Date();
+  if (hasPermission(user, PERMISSIONS.TREASURY_SCHEDULE)) {
+    items.push({ key: "budgetCommitments", label: "Approved requests awaiting budget commitment",
+      count: await countPendingTreasuryBudgets(), path: "/treasury?tab=budget", tone: "warning" });
+  }
   {
     const query = approvalScope(user);
     const [count, overdue, dueAt] = await Promise.all([

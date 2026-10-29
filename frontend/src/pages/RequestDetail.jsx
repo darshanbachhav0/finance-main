@@ -651,6 +651,7 @@ export default function RequestDetail() {
                 <div key={item._id}>
                   <span>{formatDateTime(item.createdAt, language)} · {item.user?.name || "System"}</span>
                   <strong>{item.action}</strong>
+                  {(item.message || item.comments) && <small>{t(item.message || item.comments)}</small>}
                 </div>
               ))}
               {!related.audit?.length && <EmptyState compact title="No audit events available." />}

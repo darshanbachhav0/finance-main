@@ -1,5 +1,18 @@
 // Spanish copy for the treasury area. Keys are the English UI strings passed to t().
 export default {
+  "Awaiting budget commitment": "Pendientes de compromiso",
+  "Approved requests awaiting budget commitment": "Solicitudes aprobadas pendientes de compromiso presupuestal",
+  "{count} approved request awaiting budget commitment": "{count} solicitud aprobada pendiente de compromiso presupuestal",
+  "{count} approved requests awaiting budget commitment": "{count} solicitudes aprobadas pendientes de compromiso presupuestal",
+  "Approved. Waiting for Treasury to commit the budget.": "Aprobada. Tesorería debe comprometer el presupuesto.",
+  "These requests are approved but their budget commitment is pending. Review the request and resolve the blocking requirement before payment preparation.": "Estas solicitudes están aprobadas, pero su compromiso presupuestal está pendiente. Revisa la solicitud y resuelve el requisito pendiente antes de preparar el pago.",
+  "No approved requests awaiting budget commitment": "No hay solicitudes aprobadas pendientes de compromiso",
+  "Approved requests appear here if the automatic budget handoff could not finish.": "Aquí aparecen las solicitudes aprobadas cuyo compromiso presupuestal automático no pudo completarse.",
+  "Last handoff issue": "Último problema de compromiso",
+  "Budget commitment is pending.": "El compromiso presupuestal está pendiente.",
+  "Review request": "Revisar solicitud",
+  "Showing the request or payment linked from your notification": "Mostrando la solicitud o el pago vinculado desde tu notificación",
+  "No pending Treasury work was found for this record. Review the request for its current stage.": "No se encontró trabajo pendiente de Tesorería para este registro. Revisa la solicitud para ver su etapa actual.",
   // Payment cycle (15th / 30th)
   "Payments run on the 15th and the 30th of each month.": "Los pagos se realizan el día 15 y el último día hábil de cada mes.",
   "Reason for paying off the payment cycle": "Motivo para pagar fuera del ciclo de pagos",

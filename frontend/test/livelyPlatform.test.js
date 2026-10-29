@@ -21,7 +21,8 @@ assert.deepEqual(rows.map((row) => [row.key, row.ok]), [["currency", true], ["su
 assert.equal(rows.at(-1).difference, 0.01, "one céntimo is a difference, as on the server");
 
 // 2. The request journey shows each track's own milestones and where it stands.
-assert.deepEqual(states(journeyMilestones({ flowType: "B", status: "CONTABILIZADO" })), { submitted: "done", approved: "done", paid: "current", closed: "upcoming" });
+assert.deepEqual(states(journeyMilestones({ flowType: "B", status: "CONTABILIZADO" })), { submitted: "done", approved: "done", budget: "done", invoice: "done", paid: "current", closed: "upcoming" });
+assert.deepEqual(states(journeyMilestones({ flowType: "B", status: "APROBADO" })), { submitted: "done", approved: "done", budget: "current", invoice: "upcoming", paid: "upcoming", closed: "upcoming" }, "approval alone never labels the request as ready for payment");
 assert.deepEqual(states(journeyMilestones({ flowType: "A1", status: "COMPROMISO_PRESUPUESTAL" })), { submitted: "done", approved: "done", order: "current", invoice: "upcoming", paid: "upcoming", closed: "upcoming" });
 assert.deepEqual(Object.keys(states(journeyMilestones({ flowType: "A1", status: "COMPROMISO_PRESUPUESTAL" }, { orderApplies: false }))), ["submitted", "approved", "invoice", "paid", "closed"], "travel and research have no purchase order step");
 assert.deepEqual(states(journeyMilestones({ flowType: "C", requestType: "ENTREGA_RENDIR", status: "PAGADO", rendition: { status: "PENDING" } })), { submitted: "done", approved: "done", advance: "done", rendition: "current", closed: "upcoming" });
@@ -42,7 +43,7 @@ assert.equal(journeySummary(bankHold("REQUESTER"), { viewerId: "other" }).text, 
 assert.equal(journeySummary(bankHold("ACCOUNTING"), { viewerId: "r1" }).holder.name, "Accounting");
 assert.deepEqual(plainNextStep(bankHold("REQUESTER")), { text: "Register your bank account in {currency} under My bank account. The advance is paid once Accounting verifies it.", params: { currency: "PEN" }, yours: true });
 assert.equal(plainNextStep(bankHold("ACCOUNTING")).yours, false);
-assert.equal(journeySummary({ ...bankHold("REQUESTER"), observation: { code: "REIMBURSEMENT_BANK_REQUIRED", resolvedAt: "2026-10-19T15:00:00Z" } }).text, "Approved. The budget is being committed.", "a cleared hold is not shown");
+assert.equal(journeySummary({ ...bankHold("REQUESTER"), observation: { code: "REIMBURSEMENT_BANK_REQUIRED", resolvedAt: "2026-10-19T15:00:00Z" } }).text, "Approved. Waiting for Treasury to commit the budget.", "a cleared hold is not shown");
 // An advance is paid the same working day: the expected date is its pay date (today once it has come).
 const advanceBooked = { flowType: "C", requestType: "ENTREGA_RENDIR", status: "CONTABILIZADO", requester: { _id: "r1", name: "Ruth" } };
 const advancePayable = [{ status: "OPEN", dueDate: "2026-10-19T17:00:00.000Z" }];

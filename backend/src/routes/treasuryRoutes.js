@@ -26,6 +26,7 @@ import { authorizePermission, protect } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { advancesDueSummary, nextPaymentRunSummary, getPaymentBatchSummary } from "../services/treasuryService.js";
 import { useCurrentBankAccountForAdvance } from "../services/advanceDestinationService.js";
+import { listPendingTreasuryBudgets } from "../services/treasuryBudgetQueueService.js";
 import { createTreasuryTransfer, executeTreasuryTransfer, listTreasuryAccounts, listTreasuryTransfers, reconcileTreasuryTransfer, resubmitTreasuryTransfer, saveTreasuryAccount } from "../services/treasuryTransferService.js";
 import { uploadFields } from "../middleware/upload.js";
 import { PERMISSIONS } from "../utils/constants.js";
@@ -57,6 +58,7 @@ router.post("/transfers/:id/reconcile", protect, manageTransfers, asyncHandler(a
 
 router.use(protect, authorizePermission(PERMISSIONS.TREASURY_SCHEDULE));
 router.get("/queue", paymentQueue);
+router.get("/pending-budgets", asyncHandler(async (req, res) => res.json(await listPendingTreasuryBudgets(req.query))));
 // The next 15th / last-working-day payment run and what falls into it (Payments page banner).
 router.get("/next-run", asyncHandler(async (_req, res) => res.json({ data: await nextPaymentRunSummary() })));
 router.get("/advances-due", asyncHandler(async (_req, res) => res.json({ data: await advancesDueSummary() })));

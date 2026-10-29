@@ -634,7 +634,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     await notifyApprovalStep(request);
   } else if (budgetWarning?.hardReject) {
     // Terminal - resolveBudgetCommitmentFailure already notified the requester; no Budget task to raise.
-  } else if (budgetWarning) {
+  } else if (budgetWarning?.code === ERROR_CODES.INSUFFICIENT_BUDGET) {
     await notifyRoles({
       roles: [ROLES.TREASURY],
       eventKey: `request:${request._id}:budget-exception`,
@@ -651,14 +651,14 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
   } else if (fiscalObservation) {
     // The direct-payment preflight already notified the requester. Do not
     // create a misleading Accounting/Treasury task while the XML is observed.
-  } else if (budgetDeferred) {
+  } else if (budgetWarning || budgetDeferred) {
     await notifyRoles({
       roles: [ROLES.TREASURY],
       eventKey: `request:${request._id}:budget-commitment`,
       type: "BUDGET_COMMITMENT",
       title: notificationText("Budget commitment required"),
-      message: notificationText("{requestNumber} completed its approval route, but the automatic budget commitment could not run: {detail}", { requestNumber: request.requestNumber, detail: budgetDeferred.message }),
-      path: `/requests/${request._id}`,
+      message: notificationText("{requestNumber} completed its approval route, but the automatic budget commitment could not run: {detail}", { requestNumber: request.requestNumber, detail: (budgetWarning || budgetDeferred).message }),
+      path: `/treasury?tab=budget&request=${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
     });

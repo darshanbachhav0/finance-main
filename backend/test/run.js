@@ -61,6 +61,7 @@ import "./slaMonitoring.test.js";
 import "./budgetPhaseMode.test.js";
 import "./treasuryObservationGate.test.js";
 import "./treasuryPayments.test.js";
+import "./treasuryBudgetQueue.test.js";
 import "./bbvaCertificationGovernance.test.js";
 import "./myTeam.test.js";
 import "./businessCalendar.test.js";

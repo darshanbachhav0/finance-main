@@ -100,6 +100,12 @@ test("a request carrying a supplier that waits for its proposer's jefe", { timeo
       await approve(request, root);
       assert.equal((await Supplier.findById(supplier._id)).homologationStatus, "PENDING_VALIDATION");
       assert.ok(await Notification.exists({ user: requester._id, type: "REQUEST_APPROVED", entityId: request._id }));
+      assert.equal(await Notification.exists({ entityId: request._id, type: "BUDGET_EXCEPTION" }), null, "a pending supplier is not a budget exception");
+      // Treasury can find the saved approval even though the failed handoff created no payable.
+      const { listPendingTreasuryBudgets } = await import("../src/services/treasuryBudgetQueueService.js");
+      const waiting = await listPendingTreasuryBudgets({ request: String(request._id) });
+      assert.equal(waiting.pagination.total, 1);
+      assert.equal(String(waiting.data[0]._id), String(request._id));
     });
   } finally {
     await mongoose.connection.dropDatabase();
