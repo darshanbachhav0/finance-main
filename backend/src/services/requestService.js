@@ -35,6 +35,7 @@ import {
 } from "./documentRuleService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
+import { processBAdvanceEvidence } from "../../../shared/processBAdvanceEvidence.mjs";
 import { notificationText, notifyRoles, notifyApprovalStep, notifyUser, resolveApprovalNotifications, resolveNotification, resolveRequestNotifications } from "./notificationService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "./queryService.js";
 import { assertRequestLines } from "./requestRules.js";
@@ -1325,7 +1326,13 @@ export async function voidFinancialRequest({ id, user, req, comments }) {
 export async function closeFinancialRequest({ id, user, req, comments }) {
   const request = await FinancialRequest.findById(id);
   if (!request) throw new AppError(404, "Financial request not found.", { id }, ERROR_CODES.NOT_FOUND);
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "CLOSE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
+  // Closing a duly paid B request is a current-period administrative action;
+  // the invoice/provision journals remain in their original immutable periods.
+  await guardAccountingPeriod({ period: request.flowType === FLOW_TYPE.B ? periodFromDate(new Date()) : request.accountingPeriod, action: "CLOSE", user, req, module: "REQUESTS", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
+  const bEvidence = processBAdvanceEvidence(request);
+  if (bEvidence && (!bEvidence.actaComplete || !bEvidence.invoiceComplete)) {
+    throw new AppError(422, "Complete the post-payment acta and invoice evidence for this Track B advance before closing the request.", { evidence: bEvidence }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
+  }
   await assertClosureAllowed(request);
   await runFinancialOperation(async session => {
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.CLOSED, user, req, action: "CLOSED", comments: comments || "All obligations reconciled and financial file closed.", session });
@@ -1545,6 +1552,7 @@ export function publicRequestPayload(value, user, actionContext) {
   if (object?.status) object.status = canonicalRequestStatus(object.status);
   if (object && user && !object.allowedActions) object.allowedActions = allowedRequestActions(value, user, actionContext);
   if (object) object.observationOwner = observationOwner(value);
+  if (object?.flowType === FLOW_TYPE.B) object.advanceEvidence = processBAdvanceEvidence(object);
   for (const attachment of object?.attachments || []) delete attachment.path;
   return object;
 }

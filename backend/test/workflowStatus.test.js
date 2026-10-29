@@ -298,14 +298,8 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       request.totalAmount = originalTotal;
       await reserveBudget(request, treasury._id);
       const checked = await preflightDirectPayment({ request, user: accounting, req }); assert.equal(checked.valid, true);
-      const result = await provisionDirectPayment({ request, user: accounting, req, preflight: checked });
-      assert.equal(result.accountsPayable.originalAmount, 118);
-      assert.equal(result.request?.status || request.status, "CONTABILIZADO");
-      assert.equal(result.accountsPayable.exchangeRateEvidence.source, "PEN");
-      await makeBatch([result.accountsPayable]);
-      await confirm(result.accountsPayable);
-      await reconcile(result.accountsPayable);
-      assert.equal((await closeFinancialRequest({ id: request._id, user: accounting, req })).status, "CERRADO");
+      await assert.rejects(() => provisionDirectPayment({ request, user: accounting, req, preflight: checked }), /Contabilidad review and a signed acta/);
+      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0, "no payable is created by direct provisioning");
     });
 
     await t.test("A1 first/additional and A2 worker validate actual invoice files before posting", async () => {
@@ -421,12 +415,8 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await reserveBudget(request, treasury._id);
       const checked = await preflightDirectPayment({ request, user: accounting, req }); assert.equal(checked.valid, true, checked.detail);
       assert.deepEqual([checked.voucher.series, Number(checked.voucher.number), checked.voucher.ruc], ["FB02", 1, supplier.rucDni], "SUNAT is consulted with the identity printed on the factura");
-      const result = await provisionDirectPayment({ request, user: accounting, req, preflight: checked });
-      assert.equal(result.accountsPayable.originalAmount, 118);
-      const evidence = await SunatVoucher.findById(result.accountsPayable.sunatVoucher).select("+xmlPath +pdfPath");
-      assert.equal(evidence.evidenceSource, "PDF");
-      assert.equal(evidence.xmlPath, undefined);
-      assert.equal(evidence.pdfPath, filePath);
+      await assert.rejects(() => provisionDirectPayment({ request, user: accounting, req, preflight: checked }), /Contabilidad review and a signed acta/);
+      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0, "PDF verification alone cannot bypass Accounting");
     });
 
     await t.test("A1 invoice registers from its factura PDF alone, and a scanned PDF is refused", async () => {

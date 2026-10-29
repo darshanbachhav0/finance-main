@@ -22,6 +22,7 @@ import "./workflowPhase5.test.js";
 import "./tripleTrackWorkflow.test.js";
 import "./batchInvoiceProcessing.test.js";
 import "./directPaymentWorkflow.test.js";
+import "./processBCompliance.test.js";
 import "./renditionDeadline.test.js";
 import "./trackCRenditions.test.js";
 import "./advanceWaitsForBank.test.js";

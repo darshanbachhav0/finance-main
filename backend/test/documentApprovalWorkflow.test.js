@@ -97,8 +97,8 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
     assert.deepEqual(kinds({ flowType: FLOW_TYPE.C }, DOCUMENT_PHASE.RENDITION), [["RENDITION", 1]]);
   });
 
-  await t.test("Track B defaults to Area Director then Vice Rector", () => {
-    assert.deepEqual(defaultApprovalRouteForFlow(FLOW_TYPE.B).map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
+  await t.test("legacy static fallback remains only for non-B flows", () => {
+    assert.deepEqual(defaultApprovalRouteForFlow(FLOW_TYPE.A1).map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
   });
 
   await t.test("configured rules match flowType instead of being bypassed", async () => {
@@ -119,7 +119,7 @@ test("phase-based document and approval workflow rules", { timeout: 120000 }, as
 
       await ApprovalRule.create({ name: "Legacy B director", approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", flowType: FLOW_TYPE.B, sequence: 1, slaHours: 4 });
       const route = await resolveApprovalRoute({ flowType: FLOW_TYPE.B, requestType: "OPEX", requesterArea: "General", totalAmount: 100 });
-      assert.deepEqual(route.map((step) => step.approvalLevel), ["AREA_DIRECTOR", "VICE_RECTOR"]);
+      assert.deepEqual(route.map((step) => step.approvalLevel), ["AREA_DIRECTOR"], "a B rule must not manufacture a fixed Vice-Rector step");
 
       // Product decision: a resubmission re-resolves the route for the request as it
       // is now (amount, track, area) instead of re-running the historical snapshot.

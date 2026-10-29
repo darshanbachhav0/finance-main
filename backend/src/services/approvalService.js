@@ -22,7 +22,7 @@ import {
 } from "./approvalRuleService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { reserveBudget } from "./budgetService.js";
-import { preflightDirectPayment, provisionDirectPayment, provisionTrackCAdvance } from "./directPaymentService.js";
+import { preflightDirectPayment, provisionTrackCAdvance } from "./directPaymentService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { commitUndocumentedReimbursementBudget } from "./renditionService.js";
 import { holdAdvanceForBankAccount, resolveBankNotices } from "./advanceBankHoldService.js";
@@ -164,8 +164,8 @@ async function validateApprovalControls(request, user) {
   }
 }
 
-// A B request that carries its verified invoice is paid straight after approval; one sent with only
-// its quote waits, budget reserved, for the invoice.
+// A B request with an invoice is verified during approval but still waits for the
+// mandatory Accounting provision. A quotation-only request waits for its invoice first.
 export const directInvoiceReady = (request) => request.flowType === FLOW_TYPE.B && Boolean(latestInvoiceEvidence(request.attachments) && request.xmlValidation?.validated);
 
 export async function listApprovalInbox(queryParams, user) {
@@ -412,8 +412,14 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
   const result = await runFinancialOperation(async (session) => {
     const commitment = await reserveBudget(request, user._id, { session });
     request.budgetCommitment = commitment._id;
+    if (request.flowType === FLOW_TYPE.B && request.observation?.resolver === "ACCOUNTING") {
+      // An audited Accounting SUNAT exception was accepted; clear the old hold
+      // only after the budget commitment transaction begins successfully.
+      request.observation = undefined;
+    }
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed and budget commitment recorded.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, skipRoleCheck: automatic, session });
-    if (payNow) await provisionDirectPayment({ request, user, req, session, preflight: directPaymentPreflight });
+    // Track B stops at budget commitment: Contabilidad must review the acta,
+    // account mapping, IGV and SPOT before a payable or journal can exist.
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);
@@ -424,8 +430,8 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
       userId: request.requester?._id || request.requester || request.solicitor,
       eventKey: `request:${request._id}:direct-invoice-needed`,
       type: "INVOICE_NEEDED",
-      title: notificationText("Upload the invoice to get it paid"),
-      message: notificationText("{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives and it goes to payment.", { requestNumber: request.requestNumber }),
+      title: notificationText("Upload the invoice for Accounting review"),
+      message: notificationText("{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives so Accounting can validate the acta, IGV and SPOT before payment.", { requestNumber: request.requestNumber }),
       path: `/requests/${request._id}`,
       entityType: "FinancialRequest",
       entityId: request._id
@@ -433,15 +439,16 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     return result;
   }
   await notifyRoles({
-    roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [],
-    permission: request.flowType === FLOW_TYPE.B ? undefined : PERMISSIONS.PURCHASE_ORDER_ISSUE,
-    eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,
-    type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "PROCUREMENT_ORDER",
-    title: request.flowType === FLOW_TYPE.B ? notificationText("Priority payment ready") : notificationText("Purchase order required"),
+    ...(request.flowType === FLOW_TYPE.B
+      ? { roles: [ROLES.ACCOUNTING] }
+      : { permission: PERMISSIONS.PURCHASE_ORDER_ISSUE }),
+    eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "accounting" : "procurement"}`,
+    type: request.flowType === FLOW_TYPE.B ? "ACCOUNTING_PENDING" : "PROCUREMENT_ORDER",
+    title: request.flowType === FLOW_TYPE.B ? notificationText("Track B requires Accounting review") : notificationText("Purchase order required"),
     message: request.flowType === FLOW_TYPE.B
-      ? notificationText("{requestNumber} was auto-provisioned and is ready for priority Treasury payment.", { requestNumber: request.requestNumber })
+      ? notificationText("{requestNumber} is budget committed. Review the signed acta, IGV, accounting account and SPOT before creating CXP.", { requestNumber: request.requestNumber })
       : notificationText("{requestNumber} is budget committed and ready for Procurement to issue the order.", { requestNumber: request.requestNumber }),
-    path: request.flowType === FLOW_TYPE.B ? `/treasury?tab=prepare&request=${request._id}` : `/requests/${request._id}`,
+    path: request.flowType === FLOW_TYPE.B ? `/accounting?request=${request._id}` : `/requests/${request._id}`,
     entityType: "FinancialRequest",
     entityId: request._id
   });

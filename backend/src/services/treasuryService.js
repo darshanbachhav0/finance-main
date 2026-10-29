@@ -367,7 +367,7 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
 async function scheduleLoadedItem(item, schedule, user, req, session) {
   const { request, accountsPayable, bankAccountSnapshot } = item;
   const { paymentDate, override } = schedule;
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "SCHEDULE", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
+  await guardAccountingPeriod({ period: periodFromDate(paymentDate), action: "SCHEDULE", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   const reschedulable = [AP_STATUS.OPEN, AP_STATUS.SCHEDULED, AP_STATUS.PARTIALLY_PAID].includes(accountsPayable.status);
   if (reschedulable) {
     accountsPayable.scheduledFor = new Date(`${paymentDate}T00:00:00.000Z`);
@@ -900,7 +900,6 @@ async function confirmPayable({ accountsPayable, payload, user, req }) {
       ? "Confirmed amount cannot exceed the outstanding CXP amount net of the pending SPOT detraccion."
       : "Confirmed amount cannot exceed the outstanding CXP amount.", { confirmedAmount, outstandingAmount: accountsPayable.outstandingAmount, pendingDetraction: detraction, transferable }, ERROR_CODES.VALIDATION_ERROR);
   }
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "CONFIRM_PAYMENT", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
 
   const sourceBatch = await PaymentBatch.findById(accountsPayable.paymentBatch).select("bank");
   const result = await runFinancialOperation(async (session) => {
@@ -1273,7 +1272,6 @@ export async function recordDetractionDeposit({ accountsPayableId, payload = {},
     throw new AppError(422, "The supplier has no Banco de la Nacion detracciones account registered.", { supplier: accountsPayable.supplier }, ERROR_CODES.BANK_DETAILS_MISSING);
   }
   await guardAccountingPeriod({ period: periodFromDate(depositDate), action: "POST", user, req, module: "TREASURY", entityId: request._id, requestId: request._id });
-  await guardAccountingPeriod({ period: request.accountingPeriod, action: "CONFIRM_PAYMENT", user, req, module: "TREASURY", entityType: "FinancialRequest", entityId: request._id, requestId: request._id });
   const amount = roundMoney(accountsPayable.detraction.amount);
 
   const result = await runFinancialOperation(async (session) => {

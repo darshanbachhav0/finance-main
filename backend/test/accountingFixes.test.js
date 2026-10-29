@@ -333,12 +333,13 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
 
         const stored = await SunatVoucher.findOne({ request: request._id });
         const result = await approveManualSunatException({ requestId: request._id, voucherId: stored._id, reason: "SUNAT CPE service unavailable; PDF checked on the supplier portal.", user: accounting, req });
-        assert.equal(result.provisioned, true, result.detail);
+        assert.equal(result.provisioned, false, "Accounting must still explicitly post the payable");
+        assert.equal(result.accountingReviewRequired, true);
         const resumed = await FinancialRequest.findById(request._id);
-        assert.equal(resumed.status, "CONTABILIZADO");
+        assert.equal(resumed.status, "COMPROMISO_PRESUPUESTAL");
         assert.equal(resumed.observation?.code, undefined);
         assert.ok(!resumed.approvalHistory.slice(approvalsBefore).some((entry) => ["APPROVAL_REQUESTED", "CHAIN_APPROVED_FINAL"].includes(entry.action)), "no approval is repeated");
-        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
+        assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0, "Accounting has not created the payable yet");
 
         // Observations the requester can fix stay with the requester; older records are classified by code.
         assert.equal(observationOwner({ status: "OBSERVADO_SUNAT", observation: { code: "PADRON_RUC_VERIFIED_CPE_NOT_VALIDATED" } }), "ACCOUNTING");
@@ -351,7 +352,7 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
       }
     });
 
-    await t.test("1c. Track B sent with only a quote: approval reserves the budget and waits; the invoice registered later must match and then provisions the payable", async () => {
+    await t.test("1c. Track B quote-first approval reserves budget; later invoice registration waits for Accounting", async () => {
       const quote = await writeTemp("quote.pdf", "%PDF-1.4 quote");
       const request = await makeRequest({
         flowType: "B", status: "APROBADO",
@@ -380,15 +381,15 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
 
       const right = await writeTemp("invoice.xml", invoiceXml(voucher));
       const result = await registerDirectPaymentInvoice({ requestId: request._id, files: { xml: [right] }, user: owner, req });
-      assert.ok(result.accountsPayable, "the payable is created");
+      assert.equal(result.accountingReviewRequired, true, "the invoice waits for Accounting review");
       const paid = await FinancialRequest.findById(request._id);
-      assert.equal(paid.status, "CONTABILIZADO");
+      assert.equal(paid.status, "COMPROMISO_PRESUPUESTAL");
       assert.equal(paid.xmlValidation.validated, true);
-      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 1);
+      assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0);
       assert.ok(await AuditLog.findOne({ entityId: request._id, action: "DIRECT_INVOICE_REGISTERED" }));
       assert.ok((await Notification.findById(notice._id)).resolvedAt, "the invoice request is closed");
       assert.ok(!allowedRequestActions(paid, owner).includes("REGISTER_INVOICE"));
-      // Once provisioned it cannot be registered again.
+      // A verified invoice cannot be registered again while pending Accounting.
       const again = await writeTemp("again.xml", invoiceXml(voucher));
       await assert.rejects(() => registerDirectPaymentInvoice({ requestId: request._id, files: { xml: [again] }, user: owner, req }), (error) => error.code === "INVALID_STATUS_TRANSITION");
     });

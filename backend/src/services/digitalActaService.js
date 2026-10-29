@@ -4,8 +4,10 @@ import crypto from "node:crypto";
 import FinancialRequest from "../models/FinancialRequest.js";
 import User from "../models/User.js";
 import { clientIp, electronicSignature, recordAudit } from "./auditService.js";
+import { notifyUser, notificationText } from "./notificationService.js";
+import { hasPermission } from "../utils/permissions.js";
 import { AppError } from "../utils/AppError.js";
-import { DEFAULT_UIT_VALUE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { DEFAULT_UIT_VALUE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES, PERMISSIONS } from "../utils/constants.js";
 
 const id = (value) => String(value?._id || value || "");
 const allowedFlows = [FLOW_TYPE.A1, FLOW_TYPE.A2, FLOW_TYPE.B, FLOW_TYPE.C];
@@ -111,11 +113,46 @@ export async function signDigitalActa({ requestId, user, req }) {
 // Only credit or post-delivery invoices must be signed before posting; advances remain payable
 // before receipt, with the follow-up acta tracked separately.
 export function assertDigitalActaForAccounting(request) {
-  if (!digitalActaPostingEnabled()) return;
+  // Track B credit invoices ALWAYS require a signed acta (manual pp. 3-5).
+  // The rollout flag continues to control A1/A2 so unrelated routes are not changed.
+  if (request.flowType !== FLOW_TYPE.B && !digitalActaPostingEnabled()) return;
   if (![FLOW_TYPE.A1, FLOW_TYPE.A2, FLOW_TYPE.B].includes(request.flowType)) return;
   const condition = request.supplierPaymentTerms?.paymentCondition;
   if (condition === "100%_ADVANCE") return;
   if (request.digitalActa?.status !== "COMPLETE" || request.digitalActa?.conformity !== "TOTAL") {
     throw new AppError(422, "A fully signed, conforming digital acta is required before provisioning a credit/post-delivery invoice. Partial or non-conforming receipt needs Accounting review.", { actaStatus: request.digitalActa?.status || "MISSING" }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
   }
+}
+
+// Accounting cannot silently accept a partial or nonconforming receipt at full value.
+// Instead it returns the acta to the receiver, preserving the original signed record
+// and hash in an append-only history. Only a new fully conforming acta can release B.
+export async function requestDigitalActaCorrection({ requestId, reason, user, req }) {
+  if (!hasPermission(user, PERMISSIONS.ACCOUNTING_PROVISION)) throw error(403, "Only Accounting may request correction of an acta.");
+  const text = String(reason || "").trim();
+  if (text.length < 10 || text.length > 2000) throw error(422, "Provide a specific correction reason (10-2000 characters).");
+  const request = await FinancialRequest.findById(requestId);
+  if (!request) throw error(404, "Request not found.");
+  if (request.flowType !== FLOW_TYPE.B || !request.digitalActa?.status || request.digitalActa.conformity === "TOTAL") {
+    throw error(409, "Only a partial or non-conforming Process B acta may be returned for corrected receipt.");
+  }
+  if ([REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.CLOSED].includes(request.status)) {
+    throw error(409, "Accounting cannot replace an acta after a payable has been posted.");
+  }
+  // Atomic optimistic lock prevents two Accounting users from simultaneously returning
+  // an acta. The exact hash must still be the one the reviewer saw.
+  const oldActa = request.digitalActa.toObject();
+  const result = await FinancialRequest.updateOne({ _id: requestId, "digitalActa.documentHash": oldActa.documentHash }, {
+    $push: { digitalActaHistory: oldActa },
+    $unset: { digitalActa: "" }
+  });
+  if (!result.modifiedCount) throw error(409, "The acta changed. Refresh before requesting a correction.");
+  await recordAudit({ entityType: "FinancialRequest", entity: request, user, req, module: "ACTAS", action: "DIGITAL_ACTA_RETURNED", comments: text,
+    oldValues: { status: oldActa.status, conformity: oldActa.conformity, documentHash: oldActa.documentHash },
+    newValues: { correctionRequested: true, reason: text } });
+  await notifyUser({ userId: request.requester || request.solicitor, eventKey: `request:${requestId}:acta-correction:${Date.now()}`,
+    type: "REQUEST_OBSERVED", title: notificationText("Correct the digital acta"),
+    message: notificationText("{requestNumber}: Accounting requested a new conforming acta. Reason: {detail}", { requestNumber: request.requestNumber, detail: text }),
+    path: `/requests/${requestId}`, entityType: "FinancialRequest", entityId: requestId });
+  return { status: "CORRECTION_REQUIRED", previousHash: oldActa.documentHash };
 }

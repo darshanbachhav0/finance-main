@@ -6,6 +6,7 @@ import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { costCenterHeads, loadCascade, superiorCostCenterIn } from "./costCenterCascadeService.js";
 import { COST_CENTER_TYPE } from "../../../shared/costCenterAllocation.mjs";
+import { chargedCostCenterAmounts } from "../../../shared/antiFragmentation.mjs";
 import { AppError } from "../utils/AppError.js";
 import {
   APPROVAL_ROUTING_MODE,
@@ -62,14 +63,12 @@ function routeValue(rule, overrides = {}) {
 }
 
 export function defaultApprovalRouteForFlow(flowType) {
-  if (flowType === FLOW_TYPE.B) return [
-    { ...defaultRoute[0], name: "Track B Area Director approval", sequence: 1, slaHours: 4 },
-    { ...defaultRoute[1], name: "Track B Vice Rector approval", sequence: 2, slaHours: 4 }
-  ];
   return defaultRoute.map((rule) => ({ ...rule, slaHours: approvalStepSlaHours() }));
 }
 
 export async function resolveApprovalRoute(request, { configuredOnly = false } = {}) {
+  // Compatibility for master-data rule previews only. Live Process B submissions
+  // MUST use initializeApprovalRoute (manager, beneficiary CeCo and UIT tiers).
   const area = request.requesterArea || request.requestingArea || "General";
   const amount = Number(request.totalPENEquivalent ?? request.penEquivalent ?? request.totalAmount ?? 0);
   const rules = await ApprovalRule.find({
@@ -82,20 +81,10 @@ export async function resolveApprovalRoute(request, { configuredOnly = false } =
   }).sort({ sequence: 1, area: -1, requestType: -1 });
   if (rules.length) {
     const exactFlowRules = rules.filter((rule) => rule.flowType === request.flowType);
-    if (exactFlowRules.length) {
-      if (request.flowType !== FLOW_TYPE.B) return exactFlowRules;
-      const director = exactFlowRules.find((rule) => rule.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR) || { ...defaultRoute[0], slaHours: 4 };
-      const viceRector = exactFlowRules.find((rule) => rule.approvalLevel === APPROVAL_STAGES.VICE_RECTOR) || { ...defaultRoute[1], name: "Track B Vice Rector approval", slaHours: 4 };
-      return [routeValue(director, { sequence: 1 }), routeValue(viceRector, { sequence: 2 })];
-    }
-    // Track B uses only an explicitly configured B route; wildcard rules may
-    // contain unrelated higher-value stages.
-    if (request.flowType !== FLOW_TYPE.B) return rules;
+    if (exactFlowRules.length) return exactFlowRules;
+    return rules;
   }
   if (configuredOnly) return [];
-  if (request.flowType === FLOW_TYPE.B) {
-    return defaultApprovalRouteForFlow(FLOW_TYPE.B);
-  }
   return defaultApprovalRouteForFlow(request.flowType);
 }
 
@@ -270,18 +259,35 @@ export const FRAGMENTATION_WINDOW_DAYS = 30;
 const FRAGMENTATION_FLOWS = Object.freeze([FLOW_TYPE.A1, FLOW_TYPE.A2, FLOW_TYPE.B]);
 const NOT_COUNTED_STATUSES = Object.freeze(["BORRADOR", "RECHAZADO", "ANULADO"]);
 
+// Use the ACTUAL beneficiary CeCos, including the percentage of a Por encargo
+// request charged to each one. A requesting department must never conceal the
+// aggregation of spending on behalf of the same beneficiary.
 export async function recentSameSupplierPen(request, { now = new Date() } = {}) {
   const FinancialRequest = mongoose.models.FinancialRequest;
-  if (!FinancialRequest || !FRAGMENTATION_FLOWS.includes(request.flowType) || !request.supplier || !request.requesterCostCenter) return 0;
+  const current = chargedCostCenterAmounts(request);
+  if (!FinancialRequest || !FRAGMENTATION_FLOWS.includes(request.flowType) || !request.supplier || !current.length) return 0;
   const since = new Date(now.getTime() - FRAGMENTATION_WINDOW_DAYS * 86400000);
   const others = await FinancialRequest.find({
     _id: { $ne: request._id },
     supplier: request.supplier?._id || request.supplier,
-    requesterCostCenter: request.requesterCostCenter?._id || request.requesterCostCenter,
     status: { $nin: NOT_COUNTED_STATUSES },
-    createdAt: { $gte: since }
-  }).select("totalPENEquivalent penEquivalent").lean();
-  return others.reduce((sum, item) => sum + Number(item.totalPENEquivalent || item.penEquivalent || 0), 0);
+    createdAt: { $gte: since },
+    $or: [
+      { requesterCostCenter: { $in: current.map((item) => item.id) } },
+      { "costAllocations.costCenter": { $in: current.map((item) => item.id) } }
+    ]
+  }).select("totalPENEquivalent penEquivalent requesterCostCenter costCenterType costAllocations").lean();
+  const previousByCeco = new Map(current.map((item) => [item.id, 0]));
+  for (const other of others) {
+    for (const allocated of chargedCostCenterAmounts(other)) {
+      if (previousByCeco.has(allocated.id)) previousByCeco.set(allocated.id, previousByCeco.get(allocated.id) + allocated.amount);
+    }
+  }
+  const requestAmount = Number(request.totalPENEquivalent ?? request.penEquivalent ?? 0);
+  const largestAffectedCecoTotal = Math.max(...current.map((item) => item.amount + previousByCeco.get(item.id)));
+  // Keep the original full-request amount tier and add only enough history to
+  // reach the highest beneficiary CeCo's 30-day total; never double-count shares.
+  return Math.max(0, largestAffectedCecoTotal - requestAmount);
 }
 
 // Payments to Tesorería's own staff always pass through the GAF (Manual técnico, "Controles de
@@ -687,3 +693,5 @@ export function stopApprovalRoute(request, status) {
 export function slaStatus(stepOrRequest, now = new Date()) {
   return classifyApprovalSla(activeApprovalStep(stepOrRequest)?.dueAt || stepOrRequest?.dueAt || stepOrRequest?.approvalDueAt, now);
 }
+
+export { chargedCostCenterAmounts } from "../../../shared/antiFragmentation.mjs";

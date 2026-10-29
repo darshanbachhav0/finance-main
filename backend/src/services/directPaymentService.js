@@ -2,12 +2,11 @@ import { assertVoucherEvidenceMatches, latestInvoiceEvidence } from "./xmlValida
 import { advancePaymentDateKey } from "./advancePaymentService.js";
 import { assertPostingAllowed } from "./financialProgressService.js";
 import Supplier from "../models/Supplier.js";
-import SunatVoucher from "../models/SunatVoucher.js";
 import User from "../models/User.js";
 import { createAccountsPayableFromVoucher } from "./accountingService.js";
-import { reserveBudget, executeBudget } from "./budgetService.js";
+import { reserveBudget } from "./budgetService.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
-import { createSunatVoucher, duplicateVoucherError, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat } from "./sunatVoucherService.js";
+import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat } from "./sunatVoucherService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS } from "../utils/constants.js";
@@ -162,99 +161,11 @@ export async function preflightDirectPayment({ request, user, req, observe = tru
   return { valid: true, voucher, sunatResult, placeholder };
 }
 
-export async function provisionDirectPayment({ request, user, req, session, preflight }) {
-  await assertPostingAllowed(request, { user, req });
-  if (request.flowType !== FLOW_TYPE.B) throw new AppError(422, "Direct-payment provisioning is only available for Track B.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
-  if (request.status !== REQUEST_STATUS.BUDGET_COMMITTED) throw new AppError(409, "Track B can be provisioned only after approval and budget commitment.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
-  const checked = preflight || await preflightDirectPayment({ request, user, req, observe: false });
-  if (!checked.valid) {
-    throw new AppError(409, checked.detail || "Track B fiscal validation failed.", { code: checked.code }, checked.code || ERROR_CODES.XML_VALIDATION_FAILED);
-  }
-
-  const supplier = request.supplier?._id ? request.supplier : await Supplier.findById(request.supplier).session(session || null);
-  const { voucher, sunatResult } = checked;
-  const duplicate = await findDuplicateVoucher(voucher, { session });
-  const reusable = sameObservedRequestVoucher(duplicate, request) ? duplicate : null;
-  if (duplicate && !reusable) throw await duplicateVoucherError(voucher, { requestId: request._id, holderRequestId: duplicate.request, session });
-
-  const xmlAttachment = latestAttachment(request, "XML");
-  const pdfAttachment = latestAttachment(request, "PDF");
-  let sunatVoucher = reusable ? await SunatVoucher.findById(reusable._id).session(session || null) : null;
-  if (sunatVoucher) {
-    const identity = splitVoucherNumber(`${voucher.series || ""}-${voucher.number || ""}`);
-    sunatVoucher.set({
-      rucIssuer: String(voucher.ruc || "").replace(/\D/g, ""),
-      voucherType: String(voucher.voucherType || "FACTURA").trim().toUpperCase(),
-      series: String(voucher.series || identity.series || "").trim().toUpperCase(),
-      number: String(voucher.number || identity.number || "").trim().toUpperCase(),
-      seriesNumber: `${String(voucher.series || identity.series || "").trim().toUpperCase()}-${String(voucher.number || identity.number || "").trim().toUpperCase()}`,
-      issueDate: voucher.issueDate,
-      currency: voucher.currency || request.currency,
-      netAmount: voucher.netAmount,
-      igvAmount: voucher.igvAmount,
-      xmlAmount: voucher.totalAmount,
-      validationStatus: "VALID",
-      observationDetail: "",
-      sunatStatus: sunatResult?.status || sunatResult?.fiscal?.status,
-      taxpayerStatus: sunatResult?.taxpayer?.condition || sunatResult?.taxpayer?.status,
-      sunatProvider: sunatResult?.fiscal?.source || sunatResult?.taxpayer?.source,
-      xmlPath: xmlAttachment?.path,
-      xmlUrl: xmlAttachment?.url,
-      xmlChecksum: xmlAttachment?.checksum,
-      pdfPath: pdfAttachment?.path,
-      pdfUrl: pdfAttachment?.url,
-      validatedAt: new Date(),
-      validatedBy: user._id
-    });
-    await sunatVoucher.save({ session });
-  } else {
-    sunatVoucher = await createSunatVoucher({ request, supplier, voucher, flowType: FLOW_TYPE.B, validationStatus: "VALID", sunatResult, xmlFile: xmlAttachment, pdfFile: pdfAttachment, user, session });
-  }
-
-  const accountsPayable = await createAccountsPayableFromVoucher({
-    request,
-    supplier,
-    voucher,
-    sunatVoucher,
-    user,
-    paymentPriority: "PRIORITY",
-    session
-  });
-  sunatVoucher.accountsPayable = accountsPayable._id;
-  sunatVoucher.provisionedAt = new Date();
-  await sunatVoucher.save({ session });
-
-  request.fiscalData = {
-    supplierIdentifierNormalized: String(voucher.ruc || "").replace(/\D/g, ""),
-    voucherType: voucher.voucherType,
-    documentType: voucher.voucherType,
-    series: voucher.series,
-    number: voucher.number,
-    documentDate: voucher.issueDate,
-    accountingDate: new Date(),
-    fiscalPeriod: request.accountingPeriod,
-    comments: "Track B automatically provisioned after SUNAT validation.",
-    processedAt: new Date(),
-    processedBy: user._id
-  };
-  request.directPayment = {
-    express: true,
-    xmlLocked: true,
-    immutableAmounts: {
-      netAmount: voucher.netAmount,
-      igvAmount: voucher.igvAmount,
-      totalAmount: voucher.totalAmount,
-      currency: voucher.currency
-    },
-    provisionedAt: new Date(),
-    provisionedBy: user._id
-  };
-  request.observation = undefined;
-  await executeBudget(request, user._id, { session, comments: "Track B budget executed at automatic CXP provision." });
-  accountsPayable.budgetExecutedAt = new Date();
-  await accountsPayable.save({ session });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "DIRECT_PAYMENT_PROVISIONED", comments: "Track B invoice validated with SUNAT and automatically provisioned to CXP.", session });
-  return { observed: false, sunatVoucher, accountsPayable };
+// Legacy direct posting is deliberately disabled. The former implementation created
+// journal entries at the final approver's action, bypassing Contabilidad and the acta.
+// Existing callers must use processAccountsPayable (Accounting permission required).
+export async function provisionDirectPayment() {
+  throw new AppError(409, "Track B requires Contabilidad review and a signed acta. Use the Accounting provision workflow.", undefined, ERROR_CODES.INVALID_STATUS_TRANSITION);
 }
 
 // automatic: run as the consequence of the final approval (or of the employee's bank account

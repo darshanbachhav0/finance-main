@@ -37,7 +37,8 @@ import {
 import { authorizePermission, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
 import { PERMISSIONS } from "../utils/constants.js";
-import { issueDigitalActa, signDigitalActa } from "../services/digitalActaService.js";
+import { issueDigitalActa, signDigitalActa, requestDigitalActaCorrection } from "../services/digitalActaService.js";
+import { getCompletedDigitalActaPdf } from "../services/digitalActaPdfService.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 
 const router = Router();
@@ -62,6 +63,14 @@ router.get("/:id/comments/mentionable", getMentionableUsers);
 router.route("/:id/comments").get(getRequestComments).post(postRequestComment);
 router.post("/:id/acta/issue", asyncHandler(async (req, res) => res.status(201).json({ data: await issueDigitalActa({ requestId: req.params.id, payload: req.body, user: req.user, req }) })));
 router.post("/:id/acta/sign", asyncHandler(async (req, res) => res.json({ data: await signDigitalActa({ requestId: req.params.id, user: req.user, req }) })));
+router.post("/:id/acta/correction", authorizePermission(PERMISSIONS.ACCOUNTING_PROVISION), asyncHandler(async (req, res) => res.json({ data: await requestDigitalActaCorrection({ requestId: req.params.id, reason: req.body.reason, user: req.user, req }) })));
+router.get("/:id/acta/pdf", asyncHandler(async (req, res) => {
+  const { pdf, filename } = await getCompletedDigitalActaPdf({ requestId: req.params.id, user: req.user });
+  res.set("Content-Type", "application/pdf");
+  res.set("Content-Disposition", `attachment; filename="${filename}"`);
+  res.set("Cache-Control", "private, no-store");
+  res.send(pdf);
+}));
 router.post("/:id/procurement-order", authorizePermission(PERMISSIONS.PURCHASE_ORDER_ISSUE), createProcurementOrder);
 router.post("/:id/submit", submitRequest);
 router.post("/:id/withdraw", withdrawRequest);

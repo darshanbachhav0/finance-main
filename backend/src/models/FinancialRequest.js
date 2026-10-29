@@ -497,6 +497,7 @@ const financialRequestSchema = new mongoose.Schema(
     },
     attachments: [attachmentSchema],
     digitalActa: { type: digitalActaSchema, default: undefined },
+    digitalActaHistory: { type: [digitalActaSchema], default: [] }, // archived superseded acts, never discarded
     xmlValidation: { type: xmlValidationSchema, default: () => ({}) },
     xmlValidationHistory: { type: [xmlValidationSchema], default: [] },
     approvalHistory: [workflowHistorySchema],

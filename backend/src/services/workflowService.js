@@ -125,7 +125,7 @@ function assertTransitionPermission(request, targetStatus, user, { approvalStage
 
 // Milestones derived from posted financial evidence. Each posting behind them guards the period it
 // lands in (invoice date, payment date), so the request's creation month must not block them.
-const FINANCIAL_EVIDENCE_MILESTONES = new Set(["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "PAGO_REBOTADO"]);
+const FINANCIAL_EVIDENCE_MILESTONES = new Set(["CONTABILIZADO", "PROGRAMADO", "TXT_GENERADO", "PAGADO", "CONCILIADO", "PAGO_REBOTADO", "CERRADO"]);
 
 async function assertTransitionControls(request, targetStatus, context = {}) {
   if (!FINANCIAL_EVIDENCE_MILESTONES.has(canonicalRequestStatus(targetStatus))) await ensurePeriodOpen(request.accountingPeriod, {

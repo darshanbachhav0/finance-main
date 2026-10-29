@@ -171,6 +171,22 @@ async function buildTasks(user) {
     const [drafts, corrections] = await Promise.all([FinancialRequest.countDocuments(draftQuery), FinancialRequest.countDocuments(correctionQuery)]);
     items.push({ key: "drafts", label: "Drafts to finish", count: drafts, path: (await singleRecordPath(drafts, FinancialRequest, draftQuery, (record) => `/requests/${record._id}/edit`)) || `/requests?status=${REQUEST_STATUS.DRAFT}`, tone: "neutral" });
     items.push({ key: "corrections", label: "Requests to correct", count: corrections, path: (await singleRecordPath(corrections, FinancialRequest, correctionQuery, (record) => `/requests/${record._id}`)) || `/requests?status=${OWNER_CORRECTION_STATUSES.join("%2C")}`, tone: "danger" });
+    // Both due dates are counted from the bank payment, not from request creation.
+    // This covers payments made in a previous month, even when that month is closed.
+    const invoiceCutoff = new Date(now.getTime() - 15 * 86400000);
+    const actaCutoff = new Date(now.getTime() - 30 * 86400000);
+    const advanceEvidenceQuery = {
+      flowType: "B",
+      "supplierPaymentTerms.paymentCondition": { $in: ["100%_ADVANCE", "ADVANCE_AND_BALANCE"] },
+      $and: [owner, { $or: [
+        { "payment.paidAt": { $lt: invoiceCutoff }, "xmlValidation.validated": { $ne: true } },
+        { "payment.paidAt": { $lt: actaCutoff }, "digitalActa.status": { $ne: "COMPLETE" } }
+      ] }]
+    };
+    const advanceEvidenceOverdue = await FinancialRequest.countDocuments(advanceEvidenceQuery);
+    items.push({ key: "processBAdvanceEvidence", label: "Track B advances: missing post-payment documentation", count: advanceEvidenceOverdue,
+      path: advanceEvidenceOverdue === 1 ? await singleRecordPath(1, FinancialRequest, advanceEvidenceQuery, (record) => `/requests/${record._id}`) : "/requests?flowType=B",
+      tone: "danger", overdue: advanceEvidenceOverdue });
   }
   if (hasRole(user, [ROLES.ACCOUNTING, ...REQUESTER_ROLES])) {
     // Each role sees the rendition work that is its own: the requester submits (PENDING or

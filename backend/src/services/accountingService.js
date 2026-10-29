@@ -1,4 +1,5 @@
 import { requestSuggestedPaymentDate } from "./paymentWindowService.js";
+import { normalizeRequestPriority } from "../../../shared/requestPriority.mjs";
 import mongoose from "mongoose";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
 import { assertBudgetBeforePosting, executeBudgetAmount, reverseBudgetExecution } from "./budgetService.js";
@@ -611,6 +612,10 @@ export async function createAccountsPayableFromVoucher({
   session
 }) {
   await assertPostingAllowed(request, { user });
+  if (request.flowType === FLOW_TYPE.B) {
+    // No direct B posting from approvals, invoice registration or another service.
+    throw new AppError(409, "Track B must be provisioned by Accounting through processAccountsPayable, after acta and SPOT review.", undefined, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
   const supplierId = supplier?._id || supplier || request.supplier?._id || request.supplier;
   const supplierIdentifier = voucher.ruc || supplier?.normalizedIdentifier || supplier?.rucDni || request.supplierSnapshot?.identifier || request.rendition?.beneficiarySnapshot?.employeeCode || request.requester?.email || request.requestNumber;
   const identity = voucherIdentity({ ...voucher, ruc: voucher.ruc || supplierIdentifier, invoiceNumber: voucher.invoiceNumber });
@@ -974,6 +979,14 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   // Accounting sets the account (replacing the platform suggestion) and confirms SPOT / IGV here.
   await applyAccountingAccounts(request, payload);
   const treatment = accountingTreatmentPayload(payload, user);
+  if (request.flowType === FLOW_TYPE.B) {
+    if (!latestInvoiceEvidence(request.attachments) || !request.xmlValidation?.validated) {
+      throw new AppError(422, "Track B requires verified invoice evidence before Accounting can provision a payable.", undefined, ERROR_CODES.XML_VALIDATION_FAILED);
+    }
+    if (!treatment?.spotConfirmed) {
+      throw new AppError(422, "Accounting must explicitly select the SPOT category or 'not applicable' for Track B.", undefined, ERROR_CODES.VALIDATION_ERROR);
+    }
+  }
   assertPostingAccount(request, fiscal.accountNumber);
   const duplicate = await AccountsPayable.findOne({
     request: { $ne: request._id },
@@ -1072,6 +1085,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
         paymentTermsSnapshot,
         accountingTreatment: treatment,
         status: AP_STATUS.OPEN,
+        paymentPriority: ["P1", "P2"].includes(normalizeRequestPriority(request.priority)) ? "PRIORITY" : "NORMAL",
         history: [{ status: AP_STATUS.OPEN, by: user._id, comments: manualEvidence ? "CXP created under an approved manual SUNAT exception." : "CXP created after fiscal validation." }]
       }], session ? { session } : undefined);
       if (purchaseOrder) await consumePurchaseOrderBalance(purchaseOrder._id, request.totalAmount, { session });
