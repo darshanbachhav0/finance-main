@@ -29,6 +29,7 @@ import {
   verifySupplierBankAccount
 } from "../src/services/supplierService.js";
 import { ROLES } from "../src/utils/constants.js";
+import { AppError } from "../src/utils/AppError.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
@@ -143,7 +144,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       const task = await Notification.findOne({ user: users.treasury._id, eventKey: `supplier:${created.supplier._id}:finance-review` });
       assert.equal(task?.type, "SUPPLIER_REVIEW_PENDING", "Treasury receives the provider review");
       assert.equal(await Notification.countDocuments({ user: users.accounting._id, entityId: created.supplier._id }), 0, "Accounting no longer receives provider reviews");
-      assert.equal(await Notification.countDocuments({ user: users.jefe._id, entityId: created.supplier._id }), 0, "the jefe receives no provider approval task");
+      assert.ok(await Notification.exists({ user: users.jefe._id, entityId: created.supplier._id, type: "SUPPLIER_REVIEW_PENDING" }), "the proposer's jefe also receives the review task");
       assert.equal(created.supplier.paymentTerms?.option, undefined, "New proposals need no duplicate payment-term entry");
       const legacy = await Supplier.findById(created.supplier._id);
       legacy.paymentTerms = { option: "CUSTOM", days: 60, comments: "Historical agreement" };
@@ -184,7 +185,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.equal(stored.complianceReview.result, "PENDING");
     });
 
-    await t.test("6-8. only Treasury reviews providers; nobody else owns the decision, bank verification or PRV", async () => {
+    await t.test("6-8. Treasury or the assigned jefe reviews providers; unrelated users cannot decide", async () => {
       const supplier = await completeSupplier();
       const account = await addSupplierBankAccount({
         supplierId: supplier._id,
@@ -193,7 +194,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
         req
       });
       await assert.rejects(() => approve(supplier, users.solicitor), (error) => error.code === "FORBIDDEN" && /Another Treasury/.test(error.message), "the proposer cannot approve their own supplier");
-      for (const outsider of [users.otherSolicitor, users.jefe, users.accounting, users.admin, users.director]) {
+      for (const outsider of [users.otherSolicitor, users.accounting, users.admin, users.director]) {
         await assert.rejects(() => approve(supplier, outsider), (error) => error.code === "FORBIDDEN" && /Only Treasury/.test(error.message), `${outsider.name} does not review providers`);
       }
       await assert.rejects(() => updateAndReviewSupplier({ supplierId: supplier._id, payload: { homologationStatus: "HOMOLOGATED" }, user: users.accounting, req }), (error) => error.code === "FORBIDDEN", "Accounting can no longer homologate");
@@ -201,6 +202,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       await assert.rejects(() => verifySupplierBankAccount({ supplierId: supplier._id, accountId: account.account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" }, user: users.solicitor, req }), (error) => error.code === "FORBIDDEN");
       await assert.rejects(() => updateSupplierProposal({ supplierId: supplier._id, payload: { supplierCode: "PRV-9999" }, files: {}, user: users.solicitor, req }), (error) => error.code === "FORBIDDEN");
       await assert.rejects(() => updateSupplierProposal({ supplierId: supplier._id, payload: { jefeApproval: { decision: "APPROVED" } }, files: {}, user: users.solicitor, req }), (error) => error.code === "FORBIDDEN");
+      await assert.rejects(() => updateSupplierProposal({ supplierId: supplier._id, payload: { taxpayerLookup: { status: "UNAVAILABLE" } }, user: users.solicitor, req }), (error) => error.code === "FORBIDDEN");
       const stored = await Supplier.findById(supplier._id);
       assert.equal(stored.supplierCode, undefined);
       assert.equal(stored.homologationStatus, "PENDING_VALIDATION");
@@ -224,7 +226,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.ok(approved.homologationValidUntil > new Date());
       assert.equal(isSupplierUsable(approved), true, "every requester can use it now");
       assert.doesNotThrow(() => assertSupplierUsable(approved));
-      assert.ok(await AuditLog.exists({ entityId: supplier._id, action: "APPROVED_BY_ACCOUNTING" }));
+      assert.ok(await AuditLog.exists({ entityId: supplier._id, action: "APPROVED_BY_TREASURY" }));
       assert.equal((await suppliersAwaitingApprovalBy(users.treasury)).some((item) => String(item._id) === String(supplier._id)), false);
       await assert.rejects(() => approve(supplier), (error) => error.code === "INVALID_STATUS_TRANSITION");
       // The proposer hears the decision; Treasury is asked to verify the account it pays to.
@@ -283,11 +285,12 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.equal((await Supplier.findById(supplier._id)).homologationStatus, "HOMOLOGATED");
     });
 
-    await t.test("provider reviews belong to Finance regardless of the requester's manager roster", async () => {
+    await t.test("Treasury can review when the jefe is unavailable; the next available manager covers", async () => {
       const supplier = await addPendingAccount(await completeSupplier());
       await User.updateOne({ _id: users.jefe._id }, { $set: { onLeave: true } });
       try {
         assert.equal((await supplierApproverFor(users.solicitor._id)).financeReview, true);
+        assert.equal(String((await supplierApproverFor(users.solicitor._id)).approver._id), String(users.director._id));
         assert.deepEqual(await suppliersAwaitingApprovalBy(users.jefe), []);
         await assert.rejects(() => approve(supplier, users.jefe), error => error.code === "FORBIDDEN");
         await approve(supplier, users.treasury);
@@ -311,9 +314,9 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.ok(renewed.supplier.homologationValidUntil > new Date());
     });
 
-    await t.test("pending suppliers cannot be used financially until Treasury reviews them", async () => {
+    await t.test("pending suppliers cannot be used financially until Treasury or the jefe reviews them", async () => {
       const pending = await completeSupplier();
-      assert.throws(() => assertSupplierUsable(pending), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED" && /waiting for the approval/.test(error.message));
+      assert.throws(() => assertSupplierUsable(pending), (error) => error.code === "SUPPLIER_NOT_HOMOLOGATED" && /waiting for Treasury/.test(error.message));
       const inactive = await completeSupplier({ homologationStatus: "INACTIVE", status: "INACTIVE" });
       assert.throws(() => assertSupplierUsable(inactive), (error) => error.code === "SUPPLIER_INACTIVE");
     });
@@ -467,7 +470,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.equal((await getSupplierDetailPayload(supplier._id,users.treasury)).permissions.canValidateTaxpayer,true);
     });
 
-    await t.test("bank data is full for Treasury/Accounting and masked for the jefe, and masked for unrelated Solicitors", async () => {
+    await t.test("bank data is visible to the assigned jefe for review and masked for unrelated Solicitors", async () => {
       const supplier = await completeSupplier();
       await addReviewedAccount(supplier, { accountNumber: "191001234567" });
       const treasuryView = await getSupplierDetailPayload(supplier._id, users.treasury);
@@ -475,15 +478,75 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       const jefeView = await getSupplierDetailPayload(supplier._id, users.jefe);
       const accountingView = await getSupplierDetailPayload(supplier._id, users.accounting);
       assert.equal(treasuryView.bankAccounts[0].accountNumber, "191001234567");
-      assert.match(jefeView.bankAccounts[0].accountNumber, /^\*+4567$/);
+      assert.equal(jefeView.bankAccounts[0].accountNumber, "191001234567");
       assert.equal(accountingView.bankAccounts[0].accountNumber, "191001234567", "Accounting keeps supplier.bank_view");
-      assert.equal(jefeView.permissions.canApprove, false);
+      assert.equal(jefeView.permissions.canApprove, true);
       assert.equal(treasuryView.permissions.canApprove, true, "Treasury reviews the supplier");
       assert.equal(accountingView.permissions.canApprove, false, "Accounting no longer reviews suppliers");
       assert.equal(jefeView.approval.financeReview, true);
       assert.equal(unrelatedView.permissions.canApprove, false);
       assert.match(unrelatedView.bankAccounts[0].accountNumber, /^\*+4567$/);
       assert.match(unrelatedView.bankAccount, /^\*+/);
+    });
+
+    await t.test("SUNAT and Padron outage: Treasury or the proposer's jefe approves without inventing verification", async () => {
+      const previousMode = process.env.SUNAT_PROVIDER_MODE;
+      process.env.SUNAT_PROVIDER_MODE = "CONSULTA_RUC";
+      try {
+        for (const reviewer of [users.treasury, users.jefe]) {
+          const supplier = await addPendingAccount(await completeSupplier({
+            taxpayerStatus: "PENDING", taxpayerValidation: undefined, compliance: { taxpayerActive: false },
+            departments: ["An area different from the jefe's"]
+          }));
+          await assert.rejects(validateAutomaticSupplierTaxpayer(supplier, users.solicitor, req, async () => {
+            throw new AppError(503, "SUNAT and Padron are unavailable.", { consultaFailure: "CONSULTA_ACCESS_RESTRICTED" });
+          }), error => error.statusCode === 503);
+          const detail = await getSupplierDetailPayload(supplier._id, reviewer);
+          assert.equal(detail.permissions.canApprove, true, "the assigned jefe can review across areas");
+          assert.equal(detail.taxpayerLookup.status, "UNAVAILABLE");
+          assert.ok((await suppliersAwaitingApprovalBy(reviewer)).some(row => String(row._id) === String(supplier._id)));
+          await approve(supplier, reviewer);
+          const approved = await Supplier.findById(supplier._id);
+          assert.equal(isSupplierUsable(approved), true);
+          assert.equal(approved.taxpayerStatus, "PENDING");
+          assert.equal(approved.taxpayerValidation.status, "NOT_VERIFIED");
+          assert.equal(approved.compliance.taxpayerActive, false);
+          assert.equal(approved.jefeApproval.reviewMethod, "MANUAL_SUNAT_UNAVAILABLE");
+          assert.equal(approved.jefeApproval.sunatFailureCode, "CONSULTA_ACCESS_RESTRICTED");
+          assert.equal(String(approved.jefeApproval.decidedBy), String(reviewer._id));
+          const completed = await getSupplierDetailPayload(supplier._id, reviewer);
+          assert.equal(completed.homologationStatus, "HOMOLOGATED", "the reviewer can read the completed decision across areas");
+          assert.equal(completed.permissions.canApprove, false);
+          assert.equal((await getSupplierHomologationReadiness(supplier._id, reviewer)).valid, true);
+          assert.equal((await SupplierBankAccount.findOne({ supplier: supplier._id })).verificationStatus, "PENDING");
+          assert.ok(await AuditLog.exists({ entityId: supplier._id, action: reviewer === users.treasury ? "APPROVED_BY_TREASURY" : "APPROVED_BY_JEFE",
+            "newValues.reviewMethod": "MANUAL_SUNAT_UNAVAILABLE" }));
+          await assert.rejects(() => approve(supplier, reviewer), error => error.code === "INVALID_STATUS_TRANSITION");
+        }
+        const supplier = await addPendingAccount(await completeSupplier({ taxpayerStatus: "INACTIVE" }));
+        supplier.taxpayerLookup = { status: "UNAVAILABLE", identifier: supplier.rucDni, legalName: supplier.legalName,
+          checkedAt: new Date(), failureCode: "CONSULTA_ACCESS_RESTRICTED" };
+        await supplier.save();
+        for (const reviewer of [users.treasury, users.jefe]) {
+          await assert.rejects(() => approve(supplier, reviewer), error => error.details.issues.some(issue => issue.code === "TAXPAYER_NOT_ACTIVE"));
+        }
+        supplier.taxpayerStatus = "PENDING";
+        supplier.taxpayerValidation.identifierMatch = "MISMATCH";
+        await supplier.save();
+        await assert.rejects(() => approve(supplier, users.jefe), error => error.details.issues.some(issue => issue.code === "TAXPAYER_IDENTIFIER_MISMATCH"));
+        const concurrent = await addPendingAccount(await completeSupplier({ taxpayerStatus: "PENDING", taxpayerValidation: undefined,
+          supplierCode: "PRV-999999", taxpayerLookup: undefined }));
+        await assert.rejects(validateAutomaticSupplierTaxpayer(concurrent, users.solicitor, req, async () => {
+          throw new AppError(503, "SUNAT is unavailable.", { consultaFailure: "CONSULTA_ACCESS_RESTRICTED" });
+        }));
+        const results = await Promise.allSettled([approve(concurrent, users.treasury), approve(concurrent, users.jefe)]);
+        assert.equal(results.filter(result => result.status === "fulfilled").length, 1, "simultaneous reviewers record only one decision for a preassigned PRV");
+        assert.ok(results.filter(result => result.status === "rejected").every(result => ["CONFLICT", "INVALID_STATUS_TRANSITION"].includes(result.reason.code)));
+        assert.equal(await AuditLog.countDocuments({ entityId: concurrent._id, action: { $in: ["APPROVED_BY_TREASURY", "APPROVED_BY_JEFE"] } }), 1);
+      } finally {
+        if (previousMode === undefined) delete process.env.SUNAT_PROVIDER_MODE;
+        else process.env.SUNAT_PROVIDER_MODE = previousMode;
+      }
     });
   } finally {
     if (originalProviderMode === undefined) delete process.env.SUNAT_PROVIDER_MODE;

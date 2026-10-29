@@ -16,6 +16,7 @@ import { getSupplierAutomaticPrefill } from "./supplierPadronLookupService.js";
 import { cachedSunatLegalRepresentatives, lookupSunatLegalRepresentatives } from "./sunatConsultaRucRepresentativesService.js";
 import { representativeDocumentType, sunatCalendarDate } from "../../../shared/supplierSunat.mjs";
 import { runFinancialOperation } from "./transactionService.js";
+import { nearestAvailableSupervisor, isAvailableApprover } from "./approvalRuleService.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
@@ -155,6 +156,7 @@ const protectedSupplierFields = Object.freeze([
   "reviewedBy",
   "reviewedAt",
   "taxpayerValidation",
+  "taxpayerLookup",
   "sunatRepresentatives",
   "verifiedBy",
   "verifiedAt",
@@ -330,9 +332,17 @@ function idOf(value) {
   return value?._id || value || "";
 }
 
-// Provider review belongs to Finance. Historical jefe decisions remain in the record.
-export async function supplierApproverFor() {
-  return { approver: null, coveringFor: null, adminFallback: false, financeReview: true };
+// Treasury or the proposer's available jefe may review the proposal.
+export async function supplierApproverFor(proposer) {
+  let context = { approver: null, coveringFor: null };
+  if (idOf(proposer)) {
+    try { context = await nearestAvailableSupervisor(idOf(proposer), { exclude: [idOf(proposer)] }); }
+    catch (error) {
+      // A broken manager roster must not prevent Treasury from reviewing a supplier.
+      if (!(error instanceof AppError) || error.statusCode !== 422) throw error;
+    }
+  }
+  return { approver: context.approver, coveringFor: context.coveringFor, adminFallback: false, financeReview: true };
 }
 
 // Waiting for a decision: a new or corrected proposal, or a homologation whose validity lapsed.
@@ -345,8 +355,9 @@ function awaitingApprovalQuery(now = new Date()) {
   return { $or: [{ homologationStatus: "PENDING_VALIDATION" }, { homologationStatus: "HOMOLOGATED", homologationValidUntil: { $lt: now } }] };
 }
 
-function decidesSupplierApproval(supplier, user) {
-  return Boolean(user?._id && validatesSuppliers(user) && awaitsApproval(supplier)
+function decidesSupplierApproval(supplier, user, approval = null) {
+  return Boolean(user?._id && isAvailableApprover(user)
+    && (validatesSuppliers(user) || (approval?.approver && String(idOf(approval.approver)) === String(user._id))) && awaitsApproval(supplier)
     && String(idOf(supplier.proposedBy)) !== String(user._id));
 }
 
@@ -363,9 +374,9 @@ async function approvalContexts(suppliers) {
   return contexts;
 }
 
-// Only Finance receives provider review tasks. Request approval remains independent.
+// Both reviewers receive the same supplier task; either can complete it.
 export async function suppliersAwaitingApprovalBy(user) {
-  if (!user?._id || !validatesSuppliers(user)) return [];
+  if (!user?._id || !isAvailableApprover(user)) return [];
   const waiting = await Supplier.find(awaitingApprovalQuery()).select("proposedBy homologationStatus homologationValidUntil").sort({ updatedAt: 1 }).lean();
   const contexts = await approvalContexts(waiting);
   return waiting.filter((supplier) => decidesSupplierApproval(supplier, user, contexts.get(String(supplier._id))));
@@ -382,7 +393,16 @@ function supplierName(supplier) {
 }
 
 async function notifySupplierApprover(supplier, { once = false } = {}) {
-  await resolveNotification(`supplier:${supplier._id}:approval`);
+  const approval = await supplierApproverFor(supplier.proposedBy);
+  await Notification.updateMany({ eventKey: `supplier:${supplier._id}:approval`,
+    ...(approval.approver ? { user: { $ne: approval.approver._id } } : {}) }, { $set: { resolvedAt: new Date() } });
+  if (approval.approver && !validatesSuppliers(approval.approver)) {
+    await notifyUser({ once, userId: approval.approver._id,
+      eventKey: `supplier:${supplier._id}:approval`, type: "SUPPLIER_REVIEW_PENDING",
+      title: notificationText("Provider review pending"),
+      message: notificationText("{supplier} requires Treasury or the proposer's jefe review.", { supplier: supplierName(supplier) }),
+      path: `/suppliers/${supplier._id}`, entityType: "Supplier", entityId: supplier._id });
+  }
   return notifyRoles({ once, roles: SUPPLIER_VALIDATOR_ROLES, excludeUserId: idOf(supplier.proposedBy),
     eventKey: `supplier:${supplier._id}:finance-review`, type: "SUPPLIER_REVIEW_PENDING",
     title: notificationText("Provider review pending"),
@@ -500,7 +520,7 @@ async function loadSupplier(supplierId, options = {}) {
 // or one their work reaches (supplierVisibilityService). Another department's is refused.
 async function loadSupplierFor(supplierId, user, options = {}) {
   const supplier = await loadSupplier(supplierId, options);
-  if (!decidesSupplierApproval(supplier, user)) await assertCanOpenSupplier(supplier, user);
+  if (!await isCurrentSupplierApprover(supplier, user)) await assertCanOpenSupplier(supplier, user);
   return supplier;
 }
 
@@ -878,7 +898,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     if (usesAutomaticTaxpayerLookup() && identifier.length === 11) {
       try { await validateAutomaticSupplierTaxpayer(supplier, user, req); }
       catch (error) {
-        warnings.push({ code: "TAXPAYER_VALIDATION_PENDING", message: "Supplier saved. Automatic SUNAT validation is pending; Treasury can retry it from Taxpayer Validation." });
+        warnings.push({ code: "TAXPAYER_VALIDATION_PENDING", message: "Supplier saved. SUNAT verification is pending; Treasury or your jefe can approve the supplier manually." });
         console.warn("[SUPPLIER] Automatic taxpayer review pending:", error.code || error.name);
       }
     }
@@ -1238,8 +1258,19 @@ async function recordSupplierTaxpayerResult({ supplier, result, provider, user, 
 // Only server-fetched official taxpayer evidence is accepted here. This never
 // validates invoices, bank ownership or the separate Finance compliance review.
 export async function validateAutomaticSupplierTaxpayer(supplier, user, req, lookupProfile = getSupplierAutomaticPrefill) {
-  const lookup = await lookupProfile(supplier.normalizedIdentifier || supplier.rucDni);
+  const identifier = supplier.normalizedIdentifier || supplier.rucDni;
+  let lookup;
+  try { lookup = await lookupProfile(identifier); }
+  catch (error) {
+    if (![429, 502, 503, 504].includes(error.statusCode)) throw error;
+    const failureCode = String(error.details?.consultaFailure || error.code || "SUNAT_UNAVAILABLE");
+    supplier.taxpayerLookup = { status: "UNAVAILABLE", identifier, legalName: supplier.legalName || supplier.name,
+      checkedAt: new Date(), failureCode: /^[A-Z_]+$/.test(failureCode) ? failureCode : "SUNAT_UNAVAILABLE" };
+    await supplier.save();
+    throw error;
+  }
   const result = automaticTaxpayerResult(lookup);
+  supplier.taxpayerLookup = { status: "AVAILABLE", identifier, legalName: supplier.legalName || supplier.name, checkedAt: new Date() };
   return recordSupplierTaxpayerResult({ supplier, result,
     provider: { mode: "PRODUCTION", state: "PRODUCTION", configured: true }, user, req });
 }
@@ -1422,7 +1453,7 @@ function isHomologationExpired(supplier) {
 
 const JEFE_DECISIONS = Object.freeze({ APPROVE: "APPROVED", OBSERVE: "OBSERVED", REJECT: "REJECTED" });
 
-// Treasury approves, observes or rejects a waiting supplier.
+// Treasury or the proposer's jefe approves, observes or rejects a waiting supplier.
 // Approving homologates it: an immutable PRV code, active and usable on any requester's request.
 export async function decideSupplierApproval({ supplierId, payload = {}, user, req }) {
   const action = String(payload.decision || "").trim().toUpperCase();
@@ -1437,13 +1468,13 @@ export async function decideSupplierApproval({ supplierId, payload = {}, user, r
     throw new AppError(409, "This supplier is not waiting for approval.", { homologationStatus: supplier.homologationStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (String(idOf(supplier.proposedBy)) === String(user._id)) {
-    throw new AppError(403, "Another Treasury user must review the supplier you proposed.", undefined, ERROR_CODES.FORBIDDEN);
+    throw new AppError(403, "Another Treasury user or your jefe must review the supplier you proposed.", undefined, ERROR_CODES.FORBIDDEN);
   }
   const approval = await supplierApproverFor(supplier.proposedBy);
   if (!decidesSupplierApproval(supplier, user, approval)) {
     throw new AppError(
       403,
-      "Only Treasury can review this supplier.",
+      "Only Treasury or the proposer's jefe can review this supplier.",
       { approver: approval.approver },
       ERROR_CODES.FORBIDDEN
     );
@@ -1465,47 +1496,51 @@ function jefeDecisionRecord(decision, user, approval, comments) {
 }
 
 async function approveSupplier({ supplier, user, req, approval, comments }) {
-  if (!supplierVerificationCurrent(supplier) && usesAutomaticTaxpayerLookup()) {
+  const recentOutage = supplier.taxpayerLookup?.status === "UNAVAILABLE"
+    && supplier.taxpayerLookup.identifier === (supplier.normalizedIdentifier || supplier.rucDni)
+    && supplier.taxpayerLookup.legalName === (supplier.legalName || supplier.name)
+    && Date.now() - new Date(supplier.taxpayerLookup.checkedAt).getTime() < 10 * 60 * 1000;
+  if (!supplierVerificationCurrent(supplier) && usesAutomaticTaxpayerLookup() && !recentOutage
+    && (supplier.normalizedIdentifier || supplier.rucDni).length === 11) {
     // A fresh official check when SUNAT answers; its being unreachable never blocks the jefe.
     try { supplier = await validateAutomaticSupplierTaxpayer(supplier, user, req); }
-    catch (error) { console.warn("[SUPPLIER] Automatic taxpayer check skipped at approval:", error.code || error.name); }
+    catch (error) {
+      if (![429, 502, 503, 504].includes(error.statusCode)) throw error;
+      console.warn("[SUPPLIER] Automatic taxpayer check unavailable at approval:", error.code || error.name);
+    }
   }
   const readiness = await assertSupplierCanBeHomologated(supplier);
   const oldValues = { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil };
   // Fix 2: homologation is only valid for a configurable period (default 12 months) from the date it is
   // granted or renewed - see computeHomologationValidUntil()/SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS_KEY.
   const homologationValidUntil = await computeHomologationValidUntil();
+  const manualSunatApproval = !supplierVerificationCurrent(supplier) && supplier.taxpayerLookup?.status === "UNAVAILABLE"
+    && supplier.taxpayerLookup.identifier === (supplier.normalizedIdentifier || supplier.rucDni)
+    && supplier.taxpayerLookup.legalName === (supplier.legalName || supplier.name);
+  const decisionRecord = { ...jefeDecisionRecord("APPROVED", user, validatesSuppliers(user) ? {} : approval, comments),
+    reviewMethod: manualSunatApproval ? "MANUAL_SUNAT_UNAVAILABLE" : "STANDARD",
+    sunatFailureCode: manualSunatApproval ? supplier.taxpayerLookup.failureCode : undefined };
   const granted = {
     homologationStatus: "HOMOLOGATED",
     status: "ACTIVE",
     active: true,
     homologationValidUntil,
-    jefeApproval: jefeDecisionRecord("APPROVED", user, approval, comments),
+    jefeApproval: decisionRecord,
     reviewedBy: user._id,
     reviewedAt: new Date(),
     reviewComments: comments
   };
-  let assignedCode = false;
-  if (!supplier.supplierCode) {
-    const candidate = await nextSupplierCode();
-    const updated = await Supplier.findOneAndUpdate(
-      {
-        _id: supplier._id,
-        homologationStatus: { $ne: "HOMOLOGATED" },
-        $or: [{ supplierCode: { $exists: false } }, { supplierCode: null }, { supplierCode: "" }]
-      },
-      { $set: { supplierCode: candidate, ...granted } },
-      { new: true, runValidators: true }
-    );
-    if (!updated) {
-      throw new AppError(409, "Supplier approval changed concurrently. Refresh and try again.", undefined, ERROR_CODES.CONFLICT);
-    }
-    supplier = updated;
-    assignedCode = true;
-  } else {
-    supplier.set(granted);
-    await supplier.save();
+  const assignedCode = !supplier.supplierCode;
+  const supplierCode = supplier.supplierCode || await nextSupplierCode();
+  const updated = await Supplier.findOneAndUpdate(
+    { _id: supplier._id, __v: supplier.__v, ...awaitingApprovalQuery() },
+    { $set: { supplierCode, ...granted }, $inc: { __v: 1 } },
+    { new: true, runValidators: true }
+  );
+  if (!updated) {
+    throw new AppError(409, "Supplier approval changed concurrently. Refresh and try again.", undefined, ERROR_CODES.CONFLICT);
   }
+  supplier = updated;
   if (assignedCode) {
     await recordAudit({
       entityType: "Supplier",
@@ -1520,28 +1555,30 @@ async function approveSupplier({ supplier, user, req, approval, comments }) {
   await recordAudit({
     entityType: "Supplier",
     entity: supplier,
-    action: "APPROVED_BY_ACCOUNTING",
+    action: validatesSuppliers(user) ? "APPROVED_BY_TREASURY" : "APPROVED_BY_JEFE",
     user,
     req,
     module: "SUPPLIERS",
     comments,
     oldValues,
-    newValues: { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil, coveringFor: approval.coveringFor?._id || null }
+    newValues: { supplierCode: supplier.supplierCode, homologationStatus: supplier.homologationStatus, active: supplier.active, homologationValidUntil: supplier.homologationValidUntil,
+      coveringFor: decisionRecord.coveringFor || null, reviewMethod: decisionRecord.reviewMethod, sunatFailureCode: decisionRecord.sunatFailureCode }
   });
   return { supplier, assignedCode, readiness };
 }
 
 async function observeOrRejectSupplier({ supplier, decision, user, req, approval, comments }) {
   const oldValues = { homologationStatus: supplier.homologationStatus, active: supplier.active };
-  supplier.homologationStatus = decision;
-  supplier.status = decision;
-  supplier.active = false;
-  supplier.homologationValidUntil = undefined;
-  supplier.jefeApproval = jefeDecisionRecord(decision, user, approval, comments);
-  supplier.reviewedBy = user._id;
-  supplier.reviewedAt = new Date();
-  supplier.reviewComments = comments;
-  await supplier.save();
+  const updated = await Supplier.findOneAndUpdate(
+    { _id: supplier._id, __v: supplier.__v, ...awaitingApprovalQuery() },
+    { $set: { homologationStatus: decision, status: decision, active: false,
+      jefeApproval: jefeDecisionRecord(decision, user, validatesSuppliers(user) ? {} : approval, comments),
+      reviewedBy: user._id, reviewedAt: new Date(), reviewComments: comments },
+      $unset: { homologationValidUntil: 1 }, $inc: { __v: 1 } },
+    { new: true, runValidators: true }
+  );
+  if (!updated) throw new AppError(409, "Supplier approval changed concurrently. Refresh and try again.", undefined, ERROR_CODES.CONFLICT);
+  supplier = updated;
   await recordAudit({
     entityType: "Supplier",
     entity: supplier,
@@ -1599,7 +1636,7 @@ export function assertSupplierUsable(supplier) {
   if (supplier?.active && supplier.homologationStatus === "HOMOLOGATED" && isHomologationExpired(supplier)) {
     throw new AppError(
       422,
-      "The supplier review has expired. Accounting must renew it before financial processing.",
+      "The supplier review has expired. Treasury or the proposer's jefe must renew it before financial processing.",
       { ...details, homologationValidUntil: supplier.homologationValidUntil, reason: "HOMOLOGATION_EXPIRED" },
       ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED
     );
@@ -1608,7 +1645,7 @@ export function assertSupplierUsable(supplier) {
   if (status === "REJECTED") throw new AppError(422, "This supplier was rejected and cannot be used. Select another supplier.", details, ERROR_CODES.SUPPLIER_REJECTED);
   if (status === "INACTIVE") throw new AppError(422, "This supplier is inactive and cannot be used. Select another supplier.", details, ERROR_CODES.SUPPLIER_INACTIVE);
   if (status === "PENDING_VALIDATION") {
-    throw new AppError(422, "This supplier is waiting for the approval of Accounting before financial processing.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
+    throw new AppError(422, "This supplier is waiting for Treasury or the proposer's jefe approval before financial processing.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);
   }
   if (status === "OBSERVED") {
     throw new AppError(422, "This supplier was observed by Accounting and must be corrected before it can be used.", details, ERROR_CODES.SUPPLIER_NOT_HOMOLOGATED);

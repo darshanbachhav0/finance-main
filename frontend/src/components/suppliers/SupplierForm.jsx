@@ -125,6 +125,7 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
         return <div key={row.title} className={`sunat-status-row tone-${row.tone}`}><Icon size={17} className={row.spin ? "spin" : undefined} aria-hidden="true" /><div><strong>{t(row.title)}</strong><span>{row.text}</span>{row === people && representativeLookup?.error && onRetryRepresentatives && !representativeLookup?.loading && <button type="button" className="text-button" onClick={onRetryRepresentatives}>{t("Retry representative lookup")}</button>}</div></div>;
       })}
       <ConsultaRucLink pending={Boolean(padronLookup?.unavailable)} ruc={padronLookup?.ruc} assistedAvailable={padronLookup?.assistedAvailable} onVerified={onVerifiedSunat} />
+      {padronLookup?.unavailable && <p className="field-hint">{t("Enter the supplier details manually and save. Treasury or your jefe can approve the supplier with one click while SUNAT is unavailable.")}</p>}
       {padronLookup?.fallback && <p className="field-hint">{t("Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.")}</p>}
     </div>
   );

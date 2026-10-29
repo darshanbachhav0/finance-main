@@ -151,8 +151,8 @@ router.post(
   validateTaxpayer
 );
 
-// Only the proposer's jefe (or whoever covers for them; the Admin when nobody can) decides. The
-// service resolves who that is from the roster, so the route is open to every supplier user.
+// Treasury or the proposer's jefe (including their available cover) decides.
+// The service resolves the manager from the roster and enforces the decision permission.
 router.post(
   "/:id/approval",
   decideApproval

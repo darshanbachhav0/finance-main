@@ -5,6 +5,7 @@
 export default {
   "Provider review pending": "Proveedor pendiente de revisión",
   "{supplier} requires Treasury review.": "{supplier} requiere revisión de Tesorería.",
+  "{supplier} requires Treasury or the proposer's jefe review.": "{supplier} requiere revisión de Tesorería o del jefe de quien lo registró.",
   "Accounting confirmation pending": "Pendiente de confirmación contable",
   "{requestNumber}: confirm SPOT treatment and net payable.": "{requestNumber}: confirma la detracción y el neto a pagar.",
   // Approvals

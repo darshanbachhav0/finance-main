@@ -1,5 +1,18 @@
 // Spanish copy for the supplier proposal form steps. Keys are the English UI strings passed to t().
 export default {
+  "Supplier saved. SUNAT verification is pending; Treasury or your jefe can approve the supplier manually.": "Proveedor guardado. La verificación SUNAT está pendiente; Tesorería o tu jefe pueden aprobar al proveedor manualmente.",
+  "The supplier review has expired. Treasury or the proposer's jefe must renew it before financial processing.": "La revisión del proveedor venció. Tesorería o el jefe de quien lo registró deben renovarla antes del proceso financiero.",
+  "This supplier is waiting for Treasury or the proposer's jefe approval before financial processing.": "Este proveedor espera la aprobación de Tesorería o del jefe de quien lo registró antes del proceso financiero.",
+  "Enter the supplier details manually and save. Treasury or your jefe can approve the supplier with one click while SUNAT is unavailable.": "Completa los datos del proveedor manualmente y guarda. Tesorería o tu jefe pueden aprobar al proveedor con un clic mientras SUNAT no esté disponible.",
+  "SUNAT is unavailable. Treasury or the proposer's jefe can approve this supplier manually. This approval does not confirm SUNAT status.": "SUNAT no está disponible. Tesorería o el jefe de quien registró al proveedor pueden aprobarlo manualmente. Esta aprobación no confirma el estado SUNAT.",
+  "Treasury or the proposer's jefe reviews suppliers": "Tesorería o el jefe de quien registra revisan al proveedor",
+  "Approved manually while SUNAT was unavailable. SUNAT verification remains pending.": "Aprobado manualmente mientras SUNAT no estaba disponible. La verificación SUNAT sigue pendiente.",
+  "Approve in one click after reviewing the supplier details. Treasury verifies its bank account before payment.": "Aprueba con un clic después de revisar los datos del proveedor. Tesorería verifica la cuenta bancaria antes del pago.",
+  "Approve supplier manually": "Aprobar proveedor manualmente",
+  "Supplier approved. It can now be used on requests.": "Proveedor aprobado. Ya se puede usar en solicitudes.",
+  "Only Treasury or the proposer's jefe can review this supplier.": "Solo Tesorería o el jefe de quien registró al proveedor pueden revisarlo.",
+  "Another Treasury user or your jefe must review the supplier you proposed.": "Otro usuario de Tesorería o tu jefe deben revisar al proveedor que registraste.",
+  "APPROVED_BY_TREASURY": "APROBADO POR TESORERÍA",
   // Steps
   "Identification": "Identificación",
   "Contacts and conditions": "Contactos y condiciones",

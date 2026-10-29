@@ -28,6 +28,15 @@ test("Website outage falls back to Padron and preserves its evidence and missing
  await assert.rejects(getSupplierAutomaticPrefill(ruc,{consultaOnly:false,consulta:async()=>{throw new Error("Unavailable");},padron:async()=>{throw new Error("Dataset unavailable");}}),/Padrón fallback is also unavailable/);
 });
 
+test("blocked SUNAT with unavailable Padron offers manual approval and stops automatic retries", async () => {
+ await assert.rejects(getSupplierAutomaticPrefill(ruc, { consultaOnly: false,
+  consulta: async () => { throw new Error("HTTP 403"); },
+  padron: async () => { throw new Error("Dataset unavailable"); }
+ }), error => error.statusCode === 503 && error.code === "CONSULTA_ACCESS_RESTRICTED"
+  && error.details.manualApprovalAvailable === true && error.details.retryable === false
+  && error.details.fallbackState === "UNAVAILABLE");
+});
+
 test("Consulta RUC keeps inactive status separate from its closure date", () => {
  const result = consultaProfileFromFields(ruc, {...fields, "ESTADO DEL CONTRIBUYENTE": "BAJA DE OFICIO Fecha de Baja: 31/03/2014"});
  assert.equal(result.data.taxpayerStatus, "BAJA DE OFICIO");

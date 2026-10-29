@@ -516,8 +516,8 @@ export default function Suppliers() {
                     <span>
                       {
                         row.approval.approver
-                          ? row.approval.approver.name
-                          : t("Accounting / Admin")
+                          ? `${t("Treasury")} / ${row.approval.approver.name}`
+                          : t("Treasury")
                       }
                     </span>
                   )
@@ -1422,20 +1422,17 @@ export default function Suppliers() {
     }
   }
 
-  // The proposer's jefe (or whoever covers for them) decides; observe and reject need a reason.
+  // Approval is one click. Observe and reject still need a reason.
   function requestApprovalDecision(
     decision
   ) {
+    if (decision === "APPROVE") {
+      return mutate(
+        () => api.post(`/suppliers/${detail._id}/approval`, { decision }),
+        "Supplier approved. It can now be used on requests."
+      );
+    }
     const definitions = {
-      APPROVE: {
-        title: "Approve this supplier?",
-        description: "Approving assigns the PRV code and lets every requester use this supplier on their requests. Accounting still verifies its bank account before Treasury pays it.",
-        confirmLabel: "Approve supplier",
-        tone: "primary",
-        inputLabel: "Approval comments",
-        inputRequired: false,
-        success: "Supplier approved and PRV assigned. It can now be used on requests."
-      },
       OBSERVE: {
         title: "Observe this supplier?",
         description: "The proposer corrects the stated observations and the supplier comes back to you.",

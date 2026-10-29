@@ -155,8 +155,8 @@ async function buildTasks(user) {
     items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "danger", ...(user.role === ROLES.MANAGEMENT ? {} : { partOf: "approval" }) });
 
   }
-  // Tesorería validates new suppliers before they are paid.
-  if (hasPermission(user, PERMISSIONS.SUPPLIER_VALIDATE)) {
+  // Treasury and the proposer's jefe can complete the supplier review.
+  if (hasPermission(user, PERMISSIONS.SUPPLIER_VIEW)) {
     const suppliers = await suppliersAwaitingApprovalBy(user);
     items.push({ key: "suppliers", label: "Provider review pending", count: suppliers.length,
       path: suppliers.length === 1 ? `/suppliers/${suppliers[0]._id}` : "/suppliers?awaitingMyApproval=true", tone: "warning" });

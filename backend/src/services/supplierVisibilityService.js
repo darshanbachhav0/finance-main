@@ -73,6 +73,8 @@ export function canSeeSupplier(supplier, user) {
 export async function seesSupplierThroughWork(supplier, user) {
   const supplierId = idOf(supplier);
   if (!supplierId || !user?._id) return false;
+  // The reviewer can still open the result after their decision removes it from the queue.
+  if (idOf(supplier.jefeApproval?.decidedBy) === idOf(user._id)) return true;
   const involved = [{ "approvalRouteSnapshot.approverUser": user._id }, { requester: user._id }, { solicitor: user._id }];
   if (hasRole(user, REQUEST_PROCESSING_ROLES)) involved.push({ status: { $ne: REQUEST_STATUS.DRAFT } });
   const onRequest = await FinancialRequest.exists({

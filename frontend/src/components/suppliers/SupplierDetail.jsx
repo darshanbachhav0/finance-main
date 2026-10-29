@@ -143,12 +143,15 @@ export default function SupplierDetail({
   const docKinds = new Set(documents.map((item) => item.kind));
   const hasDeclarations = ["stateSanctions", "complianceModel"].some((key) => ["YES", "NO"].includes(supplier.declarations?.[key]?.answer));
   const provider = supplier.sunatProvider || { state: "NOT_CONFIGURED", configured: false };
+  const sunatUnavailable = supplier.taxpayerLookup?.status === "UNAVAILABLE"
+    && supplier.taxpayerLookup.identifier === supplier.rucDni
+    && supplier.taxpayerLookup.legalName === (supplier.legalName || supplier.name);
   const approvalDisabledReason = readiness?.issues?.[0]?.message || "";
   // Only the proposer's jefe approves. While the supplier waits, approval names who decides it now.
   const jefeApproval = supplier.jefeApproval || {};
   const onBehalfOf = (person) => (person?.name ? ` (${t("on behalf of {name}").replace("{name}", person.name)})` : "");
   const waitingOn = supplier.approval
-    ? supplier.approval.approver ? `${supplier.approval.approver.name}${onBehalfOf(supplier.approval.coveringFor)}` : t("Accounting / Admin")
+    ? supplier.approval.approver ? `${t("Treasury")} / ${supplier.approval.approver.name}${onBehalfOf(supplier.approval.coveringFor)}` : t("Treasury")
     : "";
   const decidedBy = jefeApproval.decidedBy?.name ? `${jefeApproval.decidedBy.name}${onBehalfOf(jefeApproval.coveringFor)}` : "";
   // Fix 2: homologation is only valid for a configurable period (default 12 months) from when it was granted.
@@ -353,6 +356,7 @@ export default function SupplierDetail({
       </Section>}
 
       <Section icon={ShieldCheck} title="Taxpayer Validation" status={provider.configured ? `${t("Provider")}: ${t({ CONSULTA_RUC: "SUNAT Consulta RUC", PADRON: "SUNAT public Padrón" }[provider.variant] || provider.state)}` : "SUNAT integration not configured"}>
+        {sunatUnavailable && <div className="inline-alert alert-warning"><AlertTriangle size={16} /><span>{t("SUNAT is unavailable. Treasury or the proposer's jefe can approve this supplier manually. This approval does not confirm SUNAT status.")}</span></div>}
         {supplier.taxpayerValidation?.returnedIdentifier === supplier.rucDni && supplier.taxpayerValidation?.sunat?.taxpayerStatus && <SupplierSunatEvidence lookup={{ found: true, source: supplier.taxpayerValidation.source, data: supplier.taxpayerValidation.sunat, queriedAt: supplier.taxpayerValidation.sunat.queriedAt, datasetDate: supplier.taxpayerValidation.sunat.datasetDate }} />}
         {supplier.taxpayerValidation?.status === "VALID" && !permissions.canValidateTaxpayer && <p className="cell-note">{t("Verified supplier")}</p>}
         <DetailGrid>
@@ -396,7 +400,8 @@ export default function SupplierDetail({
         {readiness?.valid && !readiness?.legacyCompatible && <div className="inline-alert alert-success"><CheckCircle2 size={16} /><span>{t("All backend homologation requirements are currently satisfied.")}</span></div>}
       </Section>
 
-      <Section icon={UserCheck} title="Provider review" status={jefeApproval.decision === "APPROVED" ? "Approved for use on requests" : waitingOn ? "Waiting for Accounting review" : "Accounting reviews suppliers"}>
+      <Section icon={UserCheck} title="Provider review" status={jefeApproval.decision === "APPROVED" ? "Approved for use on requests" : "Treasury or the proposer's jefe reviews suppliers"}>
+        {jefeApproval.reviewMethod === "MANUAL_SUNAT_UNAVAILABLE" && <p className="section-note">{t("Approved manually while SUNAT was unavailable. SUNAT verification remains pending.")}</p>}
         <DetailGrid>
           <Detail label="Decision"><StatusBadge status={jefeApproval.decision || "PENDING"} /></Detail>
           <Detail label={waitingOn ? "Waiting for" : "Decided By"} value={waitingOn || decidedBy} />
@@ -405,9 +410,9 @@ export default function SupplierDetail({
         </DetailGrid>
         {permissions.canApprove && (
           <div className="homologation-action-row">
-            <div><strong>{t("Your decision")}</strong><span>{t("Approving lets the supplier's areas use it on requests. Accounting still verifies its bank account before Treasury pays it.")}</span></div>
+            <div><strong>{t("Your decision")}</strong><span>{t("Approve in one click after reviewing the supplier details. Treasury verifies its bank account before payment.")}</span></div>
             <div className="row-actions decision-actions">
-              <button type="button" className="primary-button" disabled={loading || !readiness?.valid} title={!readiness?.valid ? t(approvalDisabledReason || "Complete all required controls first.") : undefined} onClick={() => onDecision("APPROVE")}><CheckCircle2 size={16} /><span>{t("Approve supplier")}</span></button>
+              <button type="button" className="primary-button" disabled={loading || !readiness?.valid} title={!readiness?.valid ? t(approvalDisabledReason || "Complete all required controls first.") : undefined} onClick={() => onDecision("APPROVE")}><CheckCircle2 size={16} /><span>{t(sunatUnavailable ? "Approve supplier manually" : "Approve supplier")}</span></button>
               <button type="button" className="secondary-button" disabled={loading} onClick={() => onDecision("OBSERVE")}><MessageSquareWarning size={16} /><span>{t("Observe")}</span></button>
               <button type="button" className="danger-button ghost-danger" disabled={loading} onClick={() => onDecision("REJECT")}><XCircle size={16} /><span>{t("Reject")}</span></button>
             </div>

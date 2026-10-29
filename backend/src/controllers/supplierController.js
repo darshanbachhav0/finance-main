@@ -437,7 +437,7 @@ export const validateTaxpayer =
     }
   );
 
-// The proposer's jefe (or whoever covers for them) approves, observes or rejects the supplier.
+// Treasury or the proposer's jefe approves, observes or rejects the supplier.
 export const decideApproval =
   asyncHandler(
     async (

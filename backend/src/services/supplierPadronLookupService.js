@@ -196,7 +196,7 @@ export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
 async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayerProfile, padron = getSupplierPadronPrefill, consultaOnly = usesConsultaRucOnly() } = {}) {
   const ruc = normalizeRuc(rucValue);
   if (!/^\d{11}$/.test(ruc)) throw new AppError(422, "SUNAT lookup requires an 11-digit RUC.");
-  const useCooldown = !consultaOnly && consulta === lookupSunatTaxpayerProfile;
+  const useCooldown = consulta === lookupSunatTaxpayerProfile;
   let failure = useCooldown && consultaCooldown?.until > Date.now() ? consultaCooldown.failure : null;
   if (!failure) {
     try { const profile = await consulta(ruc); if (useCooldown) consultaCooldown = null; return profile; }
@@ -209,7 +209,7 @@ async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayer
     }
   }
   if (consultaOnly) {
-    throw new AppError(503, failure.message, { consultaFailure: failure.code, requiresConfiguration: failure.requiresConfiguration, retryable: !failure.requiresConfiguration && failure.code !== "CONSULTA_ACCESS_RESTRICTED", consultaUrl: CONSULTA_RUC_URL, source: "SUNAT_CONSULTA_RUC" }, failure.code);
+    throw new AppError(503, failure.message, { consultaFailure: failure.code, requiresConfiguration: failure.requiresConfiguration, retryable: !failure.requiresConfiguration && failure.code !== "CONSULTA_ACCESS_RESTRICTED", manualApprovalAvailable: true, consultaUrl: CONSULTA_RUC_URL, source: "SUNAT_CONSULTA_RUC" }, failure.code);
   }
   try {
     const result = await padron(ruc);
@@ -219,8 +219,10 @@ async function lookupAutomaticProfile(rucValue, { consulta = lookupSunatTaxpayer
     throw new AppError(503, `${failure.message} The SUNAT Padrón fallback is also unavailable.`, {
       consultaFailure: failure.code,
       requiresConfiguration: failure.requiresConfiguration,
+      retryable: !failure.requiresConfiguration && failure.code !== "CONSULTA_ACCESS_RESTRICTED",
+      manualApprovalAvailable: true,
       fallbackState: "UNAVAILABLE"
-    });
+    }, failure.code);
   }
 }
 

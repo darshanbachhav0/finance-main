@@ -139,6 +139,14 @@ const supplierSchema = new mongoose.Schema(
       updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
     },
     taxpayerStatus: { type: String, enum: ["PENDING", "ACTIVE", "INACTIVE", "NOT_CONFIGURED", "MANUALLY_VALIDATED"], default: "PENDING" },
+    // Server-recorded availability, separate from official taxpayer evidence.
+    taxpayerLookup: {
+      status: { type: String, enum: ["AVAILABLE", "UNAVAILABLE"] },
+      identifier: String,
+      legalName: String,
+      checkedAt: Date,
+      failureCode: String
+    },
     taxpayerValidation: {
       revalidationRequired: { type: Boolean, default: false },
       status: { type: String, enum: ["NOT_VERIFIED", "VALID", "INVALID"], default: "NOT_VERIFIED" },
@@ -205,6 +213,8 @@ const supplierSchema = new mongoose.Schema(
       decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       coveringFor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       decidedAt: Date,
+      reviewMethod: { type: String, enum: ["STANDARD", "MANUAL_SUNAT_UNAVAILABLE"] },
+      sunatFailureCode: String,
       comments: { type: String, trim: true, default: "" }
     },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
