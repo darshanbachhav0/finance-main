@@ -6,36 +6,30 @@ import { supplierVisibilityQuery } from "./supplierVisibilityService.js";
 import User from "../models/User.js";
 import { canonicalRequestStatus } from "../../../shared/workflowStatus.mjs";
 import { escapedRegex } from "./queryService.js";
-import { ROLES } from "../utils/constants.js";
-import { canViewSuppliers, requestVisibilityFilter } from "../utils/permissions.js";
+import { PERMISSIONS, SCOPES } from "../utils/constants.js";
+import { canViewSuppliers, hasPermission, requestViewScope, requestVisibilityFilter, rolesOf } from "../utils/permissions.js";
 import { seriesNumberPattern, voucherNumberPattern } from "../utils/voucherIdentity.js";
 
 // Global search (Ctrl+K). Each group reuses the visibility rule of the list endpoint that opens
 // the record, so a result never points at something the caller could not open:
 //   requests  - requestVisibilityFilter (the /requests list rule)
 //   vouchers  - the parent request's requestVisibilityFilter (vouchers are read in Request Detail)
-//   suppliers - SUPPLIER_VIEW_ROLES (the /suppliers route gate)
-//   payables  - Admin and Accounting (the /accounting route gate)
-//   users     - Admin (the /users route gate)
-// ManagementViewer is refused by the internal API gate and, should this service be reached
-// another way, gets no group at all.
+//   suppliers - supplier.view / supplier.create (the /suppliers route gate)
+//   payables  - Contabilidad (the /accounting route gate), and the GAF and Auditoría who read it
+//   users     - the administrator (employee.manage, the /users route gate)
 export const SEARCH_MIN_LENGTH = 2;
 export const SEARCH_MAX_LENGTH = 80;
 export const SEARCH_GROUP_LIMIT = 5;
 
-// The read-only Super Admin and Auditor find what an Admin finds.
-const INTERNAL_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.GAF, ROLES.LEGAL, ROLES.HUMAN_RESOURCES, ROLES.AUDITOR, ROLES.SUPER_ADMIN]);
-const PAYABLE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.GAF, ROLES.AUDITOR, ROLES.SUPER_ADMIN]);
-const USER_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
 
 export const SEARCH_GROUPS = Object.freeze(["requests", "suppliers", "vouchers", "payables", "users"]);
 
 export function searchGroupsFor(user) {
-  if (!user || user.active === false || !INTERNAL_ROLES.includes(user.role)) return [];
+  if (!user || user.active === false || !rolesOf(user).length) return [];
   return SEARCH_GROUPS.filter((group) => {
     if (group === "suppliers") return canViewSuppliers(user);
-    if (group === "payables") return PAYABLE_ROLES.includes(user.role);
-    if (group === "users") return USER_ROLES.includes(user.role);
+    if (group === "payables") return hasPermission(user, PERMISSIONS.ACCOUNTING_PROVISION) || hasPermission(user, PERMISSIONS.AUDIT_READ) && requestViewScope(user) === SCOPES.UNIVERSITY;
+    if (group === "users") return hasPermission(user, PERMISSIONS.EMPLOYEE_MANAGE);
     return true;
   });
 }
@@ -170,9 +164,7 @@ async function searchPayables(term, search) {
 }
 
 async function searchUsers(term, search, user) {
-  // Like the Users list, Super Admin accounts are found only by the Super Admin.
-  const scope = user?.role === ROLES.SUPER_ADMIN ? {} : { role: { $ne: ROLES.SUPER_ADMIN } };
-  const rows = await User.find({ ...scope, $or: [{ name: search }, { dni: search }, { email: search }, { employeeCode: search }] })
+  const rows = await User.find({ $or: [{ name: search }, { dni: search }, { email: search }, { employeeCode: search }] })
     .select("name dni email employeeCode role active")
     .sort({ active: -1, name: 1 })
     .limit(SEARCH_GROUP_LIMIT)

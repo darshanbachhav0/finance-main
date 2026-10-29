@@ -53,6 +53,7 @@ import {
 
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatDateTime } from "../utils/formatters.js";
+import { PERMISSIONS, ROLES, hasRole, userCan } from "../utils/access.js";
 
 function freshLookupState() {
   return {
@@ -119,12 +120,12 @@ export default function Suppliers() {
   // Every internal user can propose a supplier; the proposer's jefe approves it. The read-only
   // Super Admin only looks.
   const canPropose =
-    user.role !== "ManagementViewer" && !readOnly;
+    !readOnly;
 
   // Everyone sees their own department's list; the Admin, the GAF, the Super Admin and the Auditor
   // see every department (backend supplierVisibilityService).
   const departmentScoped =
-    !["Admin", "GAF", "SuperAdmin", "Auditor"].includes(user.role);
+    !hasRole(user, [ROLES.TREASURY, ROLES.GAF, ROLES.AUDITOR]);
   const userArea =
     String(user.area || "").trim() || "General";
 
@@ -1732,7 +1733,7 @@ export default function Suppliers() {
                   <span>
                     {t(
                       lookup.result.otherDepartment
-                        ? "It is registered for another area. Ask an Admin to share it with your area; a duplicate will not be created."
+                        ? "It is registered for another area. Ask Treasury to share it with your area; a duplicate will not be created."
                         : "Open the existing record. A duplicate will not be created."
                     )}
                   </span>
@@ -2232,7 +2233,7 @@ export default function Suppliers() {
         description="RCO-FOR-002 onboarding, SUNAT validations, protected evidence, review by Accounting, banking history and controlled PRV assignment."
         actions={
           <>
-            {!readOnly && ["Admin", "Accounting", "Procurement"].includes(user.role) && <ExcelImport kind="suppliers" onImported={() => suppliers.reload()} />}
+            {!readOnly && userCan(user, PERMISSIONS.SUPPLIER_VALIDATE) && <ExcelImport kind="suppliers" onImported={() => suppliers.reload()} />}
             <button
               type="button"
               className="secondary-button"

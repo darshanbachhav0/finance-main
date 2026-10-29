@@ -12,6 +12,6 @@ router.get("/me", getPersonalDashboard);
 router.get("/invoices", getJefeInvoices);
 // Reviewed budget exceptions awaiting Management's decision (Approval Inbox). Admin reads them;
 // the decision itself stays POST /budget/exceptions/:id/decision, which only Management passes.
-router.get("/decisions/budget-exceptions", authorize(ROLES.ADMIN, ROLES.MANAGEMENT), getBudgetExceptionDecisions);
+router.get("/decisions/budget-exceptions", authorize(ROLES.MANAGEMENT), getBudgetExceptionDecisions);
 
 export default router;

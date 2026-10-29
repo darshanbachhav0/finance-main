@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import ApprovalRule from "../models/ApprovalRule.js";
 import User from "../models/User.js";
 import { approvalSlaWorkingDays, classifyApprovalSla } from "./slaPolicy.js";
@@ -21,6 +22,7 @@ import {
   MAX_APPROVAL_CHAIN_DEPTH,
   ROLES
 } from "../utils/constants.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 const defaultRoute = Object.freeze([
   {
@@ -110,12 +112,12 @@ const bySequence = (request) => [...(request.approvalRouteSnapshot || [])].sort(
 const OPEN_STEP_STATUSES = ["PENDING", "NOT_REACHED"];
 
 // Someone can take an approval right now only while their account is active, they
-// are not on leave, and they hold an internal role (ManagementViewer is read-only).
+// are not on leave, and they are not Auditoría (read-only).
 export function isAvailableApprover(user) {
-  return Boolean(user) && user.active !== false && !user.onLeave && user.role !== ROLES.MANAGEMENT_VIEWER;
+  return Boolean(user) && user.active !== false && !user.onLeave && !hasRole(user, ROLES.AUDITOR);
 }
 
-const APPROVER_FIELDS = "name jobTitle active onLeave jefe substitute role approvalLevel";
+const APPROVER_FIELDS = "name jobTitle active onLeave jefe substitute role roles approvalLevel";
 
 // The substitute who covers an unavailable manager, when one is set and can act now. One level
 // only: a substitute's own substitute is not followed (the chain above takes over instead).
@@ -261,12 +263,43 @@ async function assertTierStaffed(stage, request) {
   }
 }
 
+// Anti-fragmentation (Manual técnico, "Rutas"): purchases from the same supplier charged to the same
+// cost center within 30 days are approved at the level of their sum, so splitting one purchase
+// into several small requests never skips the GAF or the Gerencia General.
+export const FRAGMENTATION_WINDOW_DAYS = 30;
+const FRAGMENTATION_FLOWS = Object.freeze([FLOW_TYPE.A1, FLOW_TYPE.A2, FLOW_TYPE.B]);
+const NOT_COUNTED_STATUSES = Object.freeze(["BORRADOR", "RECHAZADO", "ANULADO"]);
+
+export async function recentSameSupplierPen(request, { now = new Date() } = {}) {
+  const FinancialRequest = mongoose.models.FinancialRequest;
+  if (!FinancialRequest || !FRAGMENTATION_FLOWS.includes(request.flowType) || !request.supplier || !request.requesterCostCenter) return 0;
+  const since = new Date(now.getTime() - FRAGMENTATION_WINDOW_DAYS * 86400000);
+  const others = await FinancialRequest.find({
+    _id: { $ne: request._id },
+    supplier: request.supplier?._id || request.supplier,
+    requesterCostCenter: request.requesterCostCenter?._id || request.requesterCostCenter,
+    status: { $nin: NOT_COUNTED_STATUSES },
+    createdAt: { $gte: since }
+  }).select("totalPENEquivalent penEquivalent").lean();
+  return others.reduce((sum, item) => sum + Number(item.totalPENEquivalent || item.penEquivalent || 0), 0);
+}
+
+// Payments to Tesorería's own staff always pass through the GAF (Manual técnico, "Controles de
+// segregación"): Tesorería would otherwise pay its own people.
+async function paysTreasuryStaff(request) {
+  if (request.flowType !== FLOW_TYPE.C) return false;
+  const payee = request.rendition?.beneficiarySnapshot?.user || request.requester || request.solicitor;
+  if (!payee) return false;
+  const person = await User.findById(payee?._id || payee).select("role roles").lean();
+  return hasRole(person, ROLES.TREASURY);
+}
+
 // The amount tiers a supplier or employee request adds after its manager chain.
 export async function amountTierStages(request, thresholds) {
   const { uit, gafUit, generalManagementUit } = thresholds || await approvalThresholds();
-  const amountUit = requestAmountInUit(request, uit);
+  const amountUit = requestAmountInUit(request, uit) + await recentSameSupplierPen(request) / uit;
   return [
-    ...(amountUit > gafUit ? [APPROVAL_STAGES.GAF] : []),
+    ...(amountUit > gafUit || await paysTreasuryStaff(request) ? [APPROVAL_STAGES.GAF] : []),
     ...(amountUit > generalManagementUit ? [APPROVAL_STAGES.GENERAL_MANAGEMENT] : [])
   ];
 }

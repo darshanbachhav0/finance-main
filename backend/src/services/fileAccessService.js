@@ -4,7 +4,7 @@ import PaymentBatch from "../models/PaymentBatch.js";
 import Supplier from "../models/Supplier.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
-import { SUPPLIER_WORK_ROLES, canViewRequest, canViewSuppliers, hasPermission } from "../utils/permissions.js";
+import { SUPPLIER_WORK_ROLES, canViewRequest, canViewSuppliers, hasPermission, hasRole } from "../utils/permissions.js";
 import { generatedRoot, uploadRoot } from "./storageService.js";
 import { isCurrentSupplierApprover } from "./supplierService.js";
 import { SUPPLIER_OVERSIGHT_ROLES, canOpenSupplier } from "./supplierVisibilityService.js";
@@ -13,9 +13,9 @@ import { assertBankFileReleased } from "../utils/bankFileVerification.js";
 // The Super Admin and the Auditor read what an Admin reads; an unverified bank file stays closed
 // to them (they do not hold bank-file:verify). The GAF verifies bank files and reads reports.
 const generatedAccess = Object.freeze({
-  "bank-files": [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.GAF, ROLES.SUPER_ADMIN, ROLES.AUDITOR],
-  reports: [ROLES.ADMIN, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT, ROLES.GAF, ROLES.SUPER_ADMIN, ROLES.AUDITOR],
-  accounting: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.SUPER_ADMIN, ROLES.AUDITOR]
+  "bank-files": [ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.GAF, ROLES.AUDITOR],
+  reports: [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT, ROLES.GAF, ROLES.AUDITOR],
+  accounting: [ROLES.ACCOUNTING, ROLES.AUDITOR]
 });
 
 function forbidden(message = "You do not have permission to access this file.") {
@@ -61,12 +61,12 @@ export async function assertStoredAssetAccess(asset, user, { requestId } = {}) {
       if (request && String(request.supplier) === asset.segments[1] && canViewRequest(request, user) && (assigned || poolApprover)) return;
     }
     if (!canViewSuppliers(user)) throw forbidden();
-    if (SUPPLIER_OVERSIGHT_ROLES.includes(user.role)) return;
+    if (hasRole(user, SUPPLIER_OVERSIGHT_ROLES)) return;
     const supplier = await Supplier.findById(asset.segments[1]).select("proposedBy departments homologationStatus homologationValidUntil");
     if (!supplier) throw forbidden();
     // Accounting reviewing the proposal opens its evidence whatever the department.
     if (await isCurrentSupplierApprover(supplier, user)) return;
-    if (SUPPLIER_WORK_ROLES.includes(user.role) || hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
+    if (hasRole(user, SUPPLIER_WORK_ROLES) || hasPermission(user, PERMISSIONS.SUPPLIER_BANK_VIEW)) {
       // Finance staff: the suppliers they can open (their department's, or one their work reaches).
       if (!(await canOpenSupplier(supplier, user))) throw forbidden();
       return;
@@ -79,7 +79,7 @@ export async function assertStoredAssetAccess(asset, user, { requestId } = {}) {
   if (asset.kind === "generated") {
     const roles = generatedAccess[asset.segments[0]];
     // Report files follow "View reports" (role default or granted), like the reports screen.
-    const allowed = asset.segments[0] === "reports" ? hasPermission(user, PERMISSIONS.REPORT_VIEW) : roles?.includes(user.role);
+    const allowed = asset.segments[0] === "reports" ? hasPermission(user, PERMISSIONS.REPORT_VIEW) : hasRole(user, roles || []);
     if (!allowed) throw forbidden();
     if (asset.segments[0] === "bank-files") return bankFileAccess(asset, user);
     return;
@@ -93,6 +93,6 @@ export async function assertStoredAssetAccess(asset, user, { requestId } = {}) {
 async function bankFileAccess(asset, user) {
   const batch = await PaymentBatch.findOne({ url: `/generated/${asset.segments.join("/")}` }).select("batchNumber checksum verification").lean();
   if (!batch) return;
-  if (!hasPermission(user, PERMISSIONS.BANK_FILE_VERIFY)) assertBankFileReleased(batch, "download");
+  if (!hasPermission(user, PERMISSIONS.BATCH_APPROVE)) assertBankFileReleased(batch, "download");
   return { checksum: batch.checksum };
 }

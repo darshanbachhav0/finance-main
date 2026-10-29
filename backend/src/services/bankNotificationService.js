@@ -9,7 +9,7 @@ const reference = (account) => ({
 
 export async function notifyEmployeeBankReview(account) {
   return notifyRoles({
-    roles: [ROLES.ACCOUNTING, ROLES.ADMIN], eventKey: reviewKey(account),
+    roles: [ROLES.ACCOUNTING], eventKey: reviewKey(account),
     type: "EMPLOYEE_BANK_REVIEW", title: notificationText("Reimbursement bank profile awaiting review"),
     message: notificationText("{bank} / {currency}: a reimbursement bank profile needs Accounting verification.", { bank: account.bank, currency: account.currency }),
     ...reference(account)
@@ -31,7 +31,7 @@ export async function notifyBouncedAccountReview({ flagged, requestNumber }) {
   if (!flagged?.accountId) return null;
   const employee = flagged.sourceType === "EMPLOYEE_REIMBURSEMENT";
   return notifyRoles({
-    roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
+    roles: [ROLES.ACCOUNTING],
     eventKey: `${employee ? "employee-bank" : "supplier-bank"}:${flagged.accountId}:bounced-review`,
     type: employee ? "EMPLOYEE_BANK_REVIEW" : "SUPPLIER_BANK_REVIEW",
     title: notificationText("Bank account needs re-verification"),

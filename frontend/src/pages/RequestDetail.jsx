@@ -89,6 +89,7 @@ import RequestComments from "../components/RequestComments.jsx";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import { celebrate } from "../utils/celebrate.js";
 import { laterStagesText, mustSendUp } from "../utils/approvalOptions.js";
+import { PERMISSIONS, ROLES, hasRole, userCan } from "../utils/access.js";
 
 const workflow = REQUEST_LIFECYCLE;
 const documentPhaseOrder = ["SUBMISSION", "PROCUREMENT", "INVOICE_REGISTRATION", "ACCOUNTING", "RENDITION"];
@@ -632,7 +633,7 @@ export default function RequestDetail() {
       </div>}
       <Tabs idPrefix="request" label="Request sections" value={activeTab} onChange={setActiveTab} tabs={simpleAdvance
         ? [{ id: "General", label: "Summary", icon: tabIcons.General }, { id: "Documents", label: "Receipts", icon: tabIcons.Documents }, { id: "Approvals", label: "History", icon: tabIcons.History }]
-        : (usesPlainStatuses(user) ? ["General", "Documents", "Approvals", "Comments", "Payment"] : ["General", "Documents", "Approvals", "Comments", "Budget", ...(["Admin", "Accounting"].includes(user.role) ? ["Accounting"] : []), "Payment", "History"]).map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
+        : (usesPlainStatuses(user) ? ["General", "Documents", "Approvals", "Comments", "Payment"] : ["General", "Documents", "Approvals", "Comments", "Budget", ...(user.role === "Accounting" ? ["Accounting"] : []), "Payment", "History"]).map((tab) => ({ id: tab, label: tab, icon: tabIcons[tab] }))} />
 
       <div className="request-detail-layout">
         <div className="request-detail-main">
@@ -690,7 +691,7 @@ export default function RequestDetail() {
                 <Definition label="Operation number">{transfer.operationNumber || t("Not executed yet")}</Definition>
                 {transfer.executedAt && <Definition label="Execution date">{formatDate(transfer.executedAt, language)}</Definition>}
               </DefinitionGrid>
-              {["Admin", "Treasury", "GAF", "Accounting"].includes(user.role) && <Link className="text-link" to={`/treasury/transfers?request=${request._id}`}>{t("Open in Transfers")}</Link>}
+              {userCan(user, PERMISSIONS.TREASURY_TRANSFER, PERMISSIONS.BATCH_APPROVE, PERMISSIONS.ACCOUNTING_PROVISION) && <Link className="text-link" to={`/treasury/transfers?request=${request._id}`}>{t("Open in Transfers")}</Link>}
             </Section>
           )}
 
@@ -714,7 +715,7 @@ export default function RequestDetail() {
                 { key: "itemDescription", label: "Description" },
                 { key: "costCenter", label: "Cost center", render: (row) => `${row.costCenterSnapshot?.code || row.costCenter?.code || "-"} · ${row.costCenterSnapshot?.name || row.costCenter?.name || ""}` },
                 // Accounting accounts are Accounting's decision; requesters and approvers never see them.
-                ...(["Accounting", "Admin"].includes(user?.role) ? [{ key: "expenseType", label: "Accounting account", render: (row) => `${row.expenseType?.accountNumber || row.expenseTypeSnapshot?.accountNumber || "-"} · ${row.expenseType?.name || row.expenseTypeSnapshot?.name || ""}` }] : []),
+                ...(hasRole(user, ROLES.ACCOUNTING) ? [{ key: "expenseType", label: "Accounting account", render: (row) => `${row.expenseType?.accountNumber || row.expenseTypeSnapshot?.accountNumber || "-"} · ${row.expenseType?.name || row.expenseTypeSnapshot?.name || ""}` }] : []),
                 { key: "quantity", label: "Qty", align: "right" },
                 { key: "unitPrice", label: "Unit price", align: "right", render: (row) => formatCurrency(row.unitPrice, row.currency || request.currency, language) },
                 { key: "netAmount", label: "Net", align: "right", render: (row) => formatCurrency(row.netAmount, row.currency || request.currency, language) },
@@ -854,7 +855,7 @@ export default function RequestDetail() {
               <FileCheck2 size={19} />
               <div>
                 <strong>{t(request.xmlValidation?.validated ? (request.xmlValidation.source === "PDF" ? "Invoice verified from the factura PDF" : "XML validation passed") : "Invoice verification not passed")}</strong>
-                {["Accounting", "Admin"].includes(user.role) && <details><summary>{t("Advanced validation details")}</summary><p>{request.xmlValidation
+                {hasRole(user, ROLES.ACCOUNTING) && <details><summary>{t("Advanced validation details")}</summary><p>{request.xmlValidation
                   ? ["supplierMatch", "documentNumberMatch", "netMatch", "igvMatch", "totalMatch", "currencyMatch"].map((key) => `${t(key)}: ${request.xmlValidation[key] === true ? t("Yes") : request.xmlValidation[key] === false ? t("No") : "-"}`).join(" · ")
                   : t("No XML validation result is stored.")}</p></details>}
                 {!request.xmlValidation?.validated && invoiceMismatchLines(request.xmlValidation, t).map((line) => <p key={line} className="text-danger">{line}</p>)}
@@ -879,7 +880,7 @@ export default function RequestDetail() {
                   <span>{t("Remaining PO balance")}: {formatCurrency(order?.remainingAmount, order?.currency || request.currency, language)}</span>
                   <span>{t("The server validates SUNAT, anti-duplication and the PO ceiling before creating CXP.")}</span>
                 </div>}
-                {invoiceDuplicate && <DuplicateInvoiceHelp details={invoiceDuplicate} linkRequest={["Admin", "Accounting", "Treasury"].includes(user.role)} />}
+                {invoiceDuplicate && <DuplicateInvoiceHelp details={invoiceDuplicate} linkRequest={hasRole(user, [ROLES.ACCOUNTING, ROLES.TREASURY])} />}
                 <Message type="error">{invoiceError}</Message>
                 <button className="primary-button" type="submit" disabled={invoiceSubmitting}><UploadCloud size={16} /><span>{t(invoiceSubmitting ? "Processing..." : "Validate and provision invoice")}</span></button>
               </form></DraftPanel>
@@ -905,7 +906,7 @@ export default function RequestDetail() {
                       { key: "observationDetail", label: "Observation" },
                       { key: "replacement", label: "Replacement", render: (row) => row.supersededBy
                         ? <span>{t("Replaced by")}: {related.sunatVouchers.find((item) => item._id === row.supersededBy)?.seriesNumber || row.supersededBy}</span>
-                        : ["Admin", "Accounting"].includes(user.role) && !["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"].includes(request.status) && !row.accountsPayable && !row.batch && ["OBSERVED_SUNAT", "OBSERVED_AMOUNT_EXCEEDED", "PENDING"].includes(row.validationStatus)
+                        : userCan(user, PERMISSIONS.ACCOUNTING_PROVISION) && !["RECHAZADO", "ANULADO", "CERRADO", "PAGADO_CERRADO"].includes(request.status) && !row.accountsPayable && !row.batch && ["OBSERVED_SUNAT", "OBSERVED_AMOUNT_EXCEEDED", "PENDING"].includes(row.validationStatus)
                           && related.sunatVouchers.some((item) => item.accountsPayable && !item.supersededBy)
                         ? <details><summary>{t("Replace incorrect invoice")}</summary><form onSubmit={async (event) => {
                           event.preventDefault();

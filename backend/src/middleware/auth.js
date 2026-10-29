@@ -3,8 +3,8 @@ import User from "../models/User.js";
 import { asyncHandler } from "./asyncHandler.js";
 import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
-import { ADMINISTRATOR_ROLES, ERROR_CODES, READ_ONLY_OVERSIGHT_ROLES, ROLES } from "../utils/constants.js";
-import { COST_CENTER_SCOPED_VIEWERS, hasPermission } from "../utils/permissions.js";
+import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { hasPermission, hasRole, isReadOnlyOverseer, readsByCostCenter } from "../utils/permissions.js";
 import { getPlatformSettings, passwordExpired } from "../services/platformSettingsService.js";
 import { visibleCostCenterIdsFor } from "../services/costCenterCascadeService.js";
 
@@ -22,15 +22,14 @@ function requestPath(req) {
   return String(req.originalUrl || "").split("?")[0];
 }
 
-// The Super Admin must sign in with an authenticator app. SUPER_ADMIN_2FA_REQUIRED=false turns
-// that off (local development only; never in production).
-export function superAdminTwoFactorRequired(env = process.env) {
-  if (env.NODE_ENV === "production") return true;
-  return env.SUPER_ADMIN_2FA_REQUIRED !== "false";
+// Administrator accounts may be required to sign in with an authenticator app
+// (ADMIN_2FA_REQUIRED=true). Accounts that already enrolled always use it.
+export function adminTwoFactorRequired(env = process.env) {
+  return env.ADMIN_2FA_REQUIRED === "true";
 }
 
 export function needsTwoFactorSetup(user, env = process.env) {
-  return user?.role === ROLES.SUPER_ADMIN && superAdminTwoFactorRequired(env) && !user.twoFactor?.enabled;
+  return hasRole(user, ROLES.ADMIN) && adminTwoFactorRequired(env) && !user.twoFactor?.enabled;
 }
 
 export const protect = asyncHandler(async (req, _res, next) => {
@@ -52,7 +51,7 @@ export const protect = asyncHandler(async (req, _res, next) => {
     if ((decoded.tokenVersion || 0) !== (user.tokenVersion || 0)) throw new AppError(401, "Your credentials changed. Sign in again.");
     const path = requestPath(req);
     const settings = await getPlatformSettings();
-    if (settings.maintenance?.enabled && !ADMINISTRATOR_ROLES.includes(user.role)) {
+    if (settings.maintenance?.enabled && !hasRole(user, ROLES.ADMIN)) {
       throw new AppError(503, "The platform is in maintenance. Try again later.", { message: settings.maintenance.message || undefined }, ERROR_CODES.MAINTENANCE_MODE);
     }
     if ((user.passwordResetRequired || passwordExpired(user, settings)) && !PASSWORD_CHANGE_PATHS.includes(path)) {
@@ -62,8 +61,8 @@ export const protect = asyncHandler(async (req, _res, next) => {
       throw new AppError(403, "Set up your authenticator app before using the platform.", undefined, ERROR_CODES.TWO_FACTOR_SETUP_REQUIRED);
     }
 
-    // The cost centers whose requests a Director, Vicerrector or requester reads (their cascade).
-    if (COST_CENTER_SCOPED_VIEWERS.includes(user.role)) user.$locals.visibleCostCenterIds = await visibleCostCenterIdsFor(user);
+    // The cost centers whose requests a responsible, Vicerrector or requester reads (their cascade).
+    if (readsByCostCenter(user)) user.$locals.visibleCostCenterIds = await visibleCostCenterIdsFor(user);
     req.user = user;
     next();
   } catch (error) {
@@ -72,72 +71,64 @@ export const protect = asyncHandler(async (req, _res, next) => {
   }
 });
 
-// Read-only oversight: on GET/HEAD the Super Admin and the Auditor pass every route guard an Admin
-// passes, so they see what an Admin sees. They never pass a guard on a write (superAdminReadOnly
-// below refuses those before any guard runs, outside their own personal settings).
-function superAdminReads(req, roles = [ROLES.ADMIN]) {
-  return READ_ONLY_OVERSIGHT_ROLES.includes(req.user?.role) && isSafeMethod(req) && roles.includes(ROLES.ADMIN);
+// Auditoría reads the institution's financial history (Manual técnico: "solo lectura, toda la
+// universidad"): on GET/HEAD it passes a guard whenever the guard protects financial work. It never
+// passes the administration guards (employees, roles, platform), and never a write
+// (readOnlyOversight below refuses those before any guard runs).
+const ADMINISTRATION_PERMISSIONS = Object.freeze([PERMISSIONS.EMPLOYEE_MANAGE, PERMISSIONS.ROLE_MANAGE, PERMISSIONS.PERMISSION_MANAGE, PERMISSIONS.PLATFORM_MANAGE]);
+const FINANCIAL_ROLES = Object.freeze([ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.GAF, ROLES.MANAGEMENT]);
+
+function auditorReads(req, { roles = [], permissions = [] } = {}) {
+  if (!isReadOnlyOverseer(req.user) || !isSafeMethod(req)) return false;
+  return roles.some((role) => FINANCIAL_ROLES.includes(role)) || permissions.some((permission) => !ADMINISTRATION_PERMISSIONS.includes(permission));
 }
 
+function forbidden(required) {
+  return new AppError(403, "You do not have permission to perform this action.", required ? { required } : undefined, ERROR_CODES.FORBIDDEN);
+}
+
+// Role guard: any of the person's roles (primary or additional) passes.
 export function authorize(...roles) {
   return (req, _res, next) => {
-    if (!req.user || !(roles.includes(req.user.role) || superAdminReads(req, roles))) {
-      throw new AppError(403, "You do not have permission to perform this action.", undefined, ERROR_CODES.FORBIDDEN);
-    }
+    if (!req.user || !(hasRole(req.user, roles) || auditorReads(req, { roles }))) throw forbidden();
     next();
   };
 }
 
-// Role list OR any of the permissions (role defaults plus the user's granted extras).
+// Role list OR any of the permissions (every role's grants plus the person's extra grants).
 export function authorizeAccess({ roles = [], permissions = [] }) {
   return (req, _res, next) => {
-    if (!req.user || !(roles.includes(req.user.role) || permissions.some((permission) => hasPermission(req.user, permission)) || superAdminReads(req))) {
-      throw new AppError(403, "You do not have permission to perform this action.", { required: permissions }, ERROR_CODES.FORBIDDEN);
+    if (!req.user || !(hasRole(req.user, roles) || permissions.some((permission) => hasPermission(req.user, permission)) || auditorReads(req, { roles, permissions }))) {
+      throw forbidden(permissions);
     }
     next();
   };
 }
 
+// The central guard: the route needs any of these permissions (shared/accessControl.mjs).
 export function authorizePermission(...permissions) {
   return (req, _res, next) => {
-    if (!req.user || !(permissions.some((permission) => hasPermission(req.user, permission)) || superAdminReads(req))) {
-      throw new AppError(403, "You do not have permission to perform this action.", { required: permissions }, ERROR_CODES.FORBIDDEN);
+    if (!req.user || !(permissions.some((permission) => hasPermission(req.user, permission)) || auditorReads(req, { permissions }))) {
+      throw forbidden(permissions);
     }
     next();
   };
 }
 
-// Writes the Super Admin may make: its own account administration, its personal settings
-// (notifications, email preference, form drafts) and the CECO budget plans it manages with Admin
-// and Treasury (the routes still check the role). Everything else is read-only for it.
-export const SUPER_ADMIN_WRITE_PATHS = Object.freeze(["/api/superadmin/", "/api/notifications/", "/api/users/me/notification-preferences", "/api/work-drafts/", "/api/budget/plans/", "/api/budget/plan-changes/"]);
-// Reads that still record something in a process (official export history). Not for the Super Admin.
-export const SUPER_ADMIN_BLOCKED_READS = Object.freeze(["/api/sire/export", "/api/accounting/consolidation/export"]);
-
-export function superAdminMayCall(method, rawPath) {
-  const safe = SAFE_METHODS.includes(String(method || "GET").toUpperCase());
-  // Express matches routes case-insensitively (/api/SIRE/export reaches /api/sire/export).
-  const path = String(rawPath || "").toLowerCase();
-  if (safe) return !SUPER_ADMIN_BLOCKED_READS.some((blocked) => path === blocked || path.startsWith(`${blocked}/`));
-  return SUPER_ADMIN_WRITE_PATHS.some((allowed) => path === allowed.replace(/\/$/, "") || path.startsWith(allowed));
-}
-
-// The Auditor writes only its own notification settings.
+// Reads that still record something in a process (official export history). Not for Auditoría.
+export const READ_ONLY_BLOCKED_READS = Object.freeze(["/api/sire/export", "/api/accounting/consolidation/export"]);
+// Auditoría writes only its own notification settings.
 export const AUDITOR_WRITE_PATHS = Object.freeze(["/api/notifications/", "/api/users/me/notification-preferences"]);
 
 export function auditorMayCall(method, rawPath) {
+  // Express matches routes case-insensitively (/api/SIRE/export reaches /api/sire/export).
   const path = String(rawPath || "").toLowerCase();
-  if (SAFE_METHODS.includes(String(method || "GET").toUpperCase())) return !SUPER_ADMIN_BLOCKED_READS.some((blocked) => path === blocked || path.startsWith(`${blocked}/`));
+  if (SAFE_METHODS.includes(String(method || "GET").toUpperCase())) return !READ_ONLY_BLOCKED_READS.some((blocked) => path === blocked || path.startsWith(`${blocked}/`));
   return AUDITOR_WRITE_PATHS.some((allowed) => path === allowed.replace(/\/$/, "") || path.startsWith(allowed));
 }
 
-// Mounted after protect() on the internal API: the Super Admin and the Auditor never take part in
-// a process.
-export function superAdminReadOnly(req, _res, next) {
-  if (req.user?.role === ROLES.AUDITOR) {
-    if (auditorMayCall(req.method, requestPath(req))) return next();
-    throw new AppError(403, "The Auditor account is read-only: it can view but not change the work of the platform.", undefined, ERROR_CODES.READ_ONLY_ROLE);
-  }
-  if (req.user?.role !== ROLES.SUPER_ADMIN || superAdminMayCall(req.method, requestPath(req))) return next();
-  throw new AppError(403, "The Super Admin account is read-only here: it can view but not change the work of the platform.", undefined, ERROR_CODES.READ_ONLY_ROLE);
+// Mounted after protect() on the internal API: Auditoría never takes part in a process.
+export function readOnlyOversight(req, _res, next) {
+  if (!isReadOnlyOverseer(req.user) || auditorMayCall(req.method, requestPath(req))) return next();
+  throw new AppError(403, "Auditoría es de solo lectura: puede consultar pero no modificar el trabajo de la plataforma.", undefined, ERROR_CODES.READ_ONLY_ROLE);
 }

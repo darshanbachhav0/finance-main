@@ -68,7 +68,7 @@ export default function CommandPalette({ open, onClose, pages }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const { shouldRender, phase } = useAnimatedPresence(open, 170);
   const trimmed = query.trim();
-  const canSearchRecords = Boolean(user) && user.role !== "ManagementViewer";
+  const canSearchRecords = Boolean(user);
   const searchesRecords = canSearchRecords && trimmed.length >= MIN_RECORD_QUERY;
 
   const sections = useMemo(() => {

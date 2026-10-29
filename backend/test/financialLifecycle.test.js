@@ -42,7 +42,7 @@ import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { validateInvoiceAgainstRequest } from "../src/services/xmlValidationService.js";
 import { recordAudit } from "../src/services/auditService.js";
 import { generatedRoot, tempUploadDir, uploadRoot } from "../src/services/storageService.js";
-import { AP_STATUS, BUDGET_STATUS, EXPENSE_NATURE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { AP_STATUS, BUDGET_STATUS, EXPENSE_NATURE, PERMISSIONS, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
 
 const period = "2026-08";
@@ -78,7 +78,9 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       gaf: await User.create({ name: "GAF", email: "gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" }),
       treasury: await User.create({ name: "Treasury", email: "treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
       budget: await User.create({ name: "Budget", email: "budget@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
-      admin: await User.create({ name: "Admin", email: "admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" })
+      admin: await User.create({ name: "Admin", email: "admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" }),
+      // Purchase orders are issued by whoever holds the grantable purchase_order.issue.
+      purchaser: await User.create({ name: "Purchaser", email: "purchaser@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Logistics", permissions: [PERMISSIONS.PURCHASE_ORDER_ISSUE] })
     };
     users.solicitor.jefe = users.director._id;
     users.director.jefe = users.vice._id;
@@ -107,7 +109,7 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     });
     // This lifecycle is sent with one quotation: the A1 three-quotation rule has its own tests.
     await FinanceConfiguration.create({ key: "A1_MINIMUM_QUOTATIONS", numericValue: 1, effectiveFrom: new Date("2020-01-01T00:00:00Z"), active: true });
-    await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000000001", cci: "00219100000000000001", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: users.admin._id });
+    await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000000001", cci: "00219100000000000001", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: users.treasury._id });
     await AccountingPeriod.create({ period, status: "OPEN", openedBy: users.accounting._id, history: [{ action: "CREATED", by: users.accounting._id }] });
     const mappings = [
       ["TEST-AP", "ACCOUNTS_PAYABLE", "*", "421201"],
@@ -218,7 +220,8 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
       assert.ok(request.budgetCommitment);
       assert.equal(await PurchaseOrder.countDocuments({ request: request._id }), 0, "Budget does not issue Procurement orders");
       await assert.rejects(issueProcurementOrder({ requestId: request._id, user: users.budget, req }), error => error.statusCode === 403);
-      const order = await issueProcurementOrder({ requestId: request._id, user: users.admin, req });
+      await assert.rejects(issueProcurementOrder({ requestId: request._id, user: users.admin, req }), error => error.statusCode === 403, "the Admin does not issue orders");
+      const order = await issueProcurementOrder({ requestId: request._id, user: users.purchaser, req });
       assert.equal(order.status, "ISSUED");
       request = await FinancialRequest.findById(request._id);
     });

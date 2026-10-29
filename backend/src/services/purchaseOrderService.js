@@ -148,7 +148,7 @@ export async function cancelProcurementOnVoid({ request, user, req, reason, sess
 }
 
 export async function issueProcurementOrder({ requestId, user, req }) {
-  if (!hasPermission(user, PERMISSIONS.PROCUREMENT_ORDER_CREATE)) {
+  if (!hasPermission(user, PERMISSIONS.PURCHASE_ORDER_ISSUE)) {
     throw new AppError(403, "You do not have permission to issue procurement orders.", undefined, ERROR_CODES.FORBIDDEN);
   }
   const request = await FinancialRequest.findById(requestId).populate("supplier");

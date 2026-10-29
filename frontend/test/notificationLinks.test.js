@@ -64,11 +64,11 @@ for (const file of ["services/approvalService.js", "services/treasuryService.js"
 // The bell navigates and marks the notification read.
 assert.match(read("../src/layouts/AppLayout.jsx"), /to=\{item\.path \|\| "\/"\}[^>]*onClick=\{\(\) => \{ setTaskOpen\(false\); markNotificationRead\(item\); \}\}/);
 
-// 2. Accounting mappings configuration resource for Admin and Accounting (the Super Admin reads it;
-//    ResourceManager hides the actions for it).
-assert.deepEqual(configurationAccess["accounting-mappings"], ["Admin", "Accounting", "SuperAdmin", "Auditor"]);
-for (const role of ["Admin", "Accounting", "SuperAdmin", "Auditor"]) assert.equal(canAccessNavigation(role, "/configuration/accounting-mappings"), true);
-for (const role of ["Treasury", "Solicitor"]) assert.equal(canAccessNavigation(role, "/configuration/accounting-mappings"), false);
+// 2. Accounting mappings configuration resource for Accounting (accounting.codes_manage). The
+//    administrator runs the platform, not the chart of accounts; the Auditor reads the work itself.
+assert.equal(typeof configurationAccess["accounting-mappings"], "function");
+assert.equal(canAccessNavigation("Accounting", "/configuration/accounting-mappings"), true);
+for (const role of ["Admin", "SuperAdmin", "Auditor", "Treasury", "Solicitor"]) assert.equal(canAccessNavigation(role, "/configuration/accounting-mappings"), false, `${role} does not open accounting mappings`);
 const master = read("../src/pages/MasterConfiguration.jsx");
 const block = master.slice(master.indexOf(`"accounting-mappings": {`), master.indexOf(`"bank-formats": {`));
 assert.match(block, /endpoint: "\/accounting-mappings"/);
@@ -78,7 +78,7 @@ for (const field of ["code", "name", "purpose", "requestType", "expenseNature", 
 const modelPurposes = backend("models/AccountingMapping.js").match(/enum: \[("ACCOUNTS_PAYABLE"[^\]]*)\]/)[1].match(/"([A-Z_]+)"/g).map((value) => value.replaceAll("\"", ""));
 const purposesBlock = master.slice(master.indexOf("accountingMappingPurposes = ["), master.indexOf("const purposeLabel"));
 for (const purpose of modelPurposes) assert.match(purposesBlock, new RegExp(`value: "${purpose}"`), `purpose select offers ${purpose}`);
-assert.match(backend("routes/masterDataRoutes.js"), /accountingMappingRouter\.use\(protect, authorize\(ROLES\.ADMIN, ROLES\.ACCOUNTING\)\)/);
+assert.match(backend("routes/masterDataRoutes.js"), /accountingMappingRouter\.use\(protect, authorizePermission\(P\.ACCOUNTING_CODES_MANAGE\)\)/);
 assert.match(read("../src/utils/navigationAccess.js"), /"\/configuration\/accounting-mappings": "Accounting Mappings"/, "the page has a name in the shared navigation (Settings lists it)");
 assert.match(read("../src/pages/AccountingEntries.jsx"), /\["Accounting Mappings", "\/configuration\/accounting-mappings"\]/);
 assert.doesNotMatch(read("../../docs/ARCHITECTURE.md"), /An admin screen for accounting mappings/);
@@ -90,7 +90,8 @@ for (const label of ["View pending renditions", "Review requests", "Accounting M
 }
 
 // 4. SLA escalation counters use the working-day rule.
-assert.doesNotMatch(backend("services/externalManagementService.js"), /SLA_ESCALATION_HOURS/);
+assert.equal(fs.existsSync(new URL("../../backend/src/services/externalManagementService.js", import.meta.url)), false, "the management portal service was removed");
+assert.doesNotMatch(backend("controllers/dashboardController.js"), /SLA_ESCALATION_HOURS/);
 assert.doesNotMatch(backend("controllers/dashboardController.js"), /escalationHours \* 3600000/);
 assert.match(backend("controllers/dashboardController.js"), /countEscalatedApprovals\(escalationScope/);
 

@@ -10,7 +10,7 @@ const schema=new mongoose.Schema({
   evidence:{fileName:String,hash:String,contentType:String,assetPath:{type:String,select:false}},
   revisions:[{at:Date,by:{type:mongoose.Schema.Types.ObjectId,ref:'User'},oldHash:String,oldStatus:String,notes:String}],
   status:{type:String,enum:['PENDING_REVIEW','OBSERVED','APPROVED_FOR_ACCOUNTING'],default:'PENDING_REVIEW',index:true},
-  reviewStages:{type:[{stage:{type:String,enum:['LEGAL','DIRECTOR','GAF']},actor:{type:mongoose.Schema.Types.ObjectId,ref:'User'},signedAt:Date}],default:[]},
+  reviewStages:{type:[{stage:{type:String,enum:['LEGAL','DIRECTOR','SUPERIOR','GAF','GG']},actor:{type:mongoose.Schema.Types.ObjectId,ref:'User'},signedAt:Date}],default:[]},
   reviewIndex:{type:Number,default:0,min:0},
   reviewedBy:{type:mongoose.Schema.Types.ObjectId,ref:'User'},
   reviewedAt:Date,

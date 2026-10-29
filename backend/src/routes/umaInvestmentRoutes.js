@@ -4,10 +4,12 @@ import {validateInvestment,concentrationAfter} from '../../../shared/umaInvestme
 import {nextSequence} from '../services/sequenceService.js';
 import {recordAudit} from '../services/auditService.js';
 import {asyncHandler} from '../middleware/asyncHandler.js';
-import {protect,authorize} from '../middleware/auth.js';
+import {protect,authorizePermission} from '../middleware/auth.js';
 import {AppError} from '../utils/AppError.js';
-import {ROLES} from '../utils/constants.js';
-const router=Router();router.use(protect,authorize(ROLES.ADMIN,ROLES.TREASURY,ROLES.GAF,ROLES.ACCOUNTING,ROLES.AUDITOR,ROLES.MANAGEMENT,ROLES.SUPER_ADMIN));
+import {PERMISSIONS} from '../utils/constants.js';
+const router=Router();// Inversiones live under Tesorería: Tesorería registers and settles them, the GAF approves them,
+// Contabilidad, the Gerencia General and Auditoría read them.
+router.use(protect,authorizePermission(PERMISSIONS.TREASURY_INVESTMENT,PERMISSIONS.INVESTMENT_APPROVE,PERMISSIONS.ACCOUNTING_PROVISION,PERMISSIONS.INSIGHTS_VIEW));
 router.get('/',asyncHandler(async(req,res)=>{
  const data=await UmaInvestment.find().select('-__v').sort({maturityDate:1}).limit(500).lean();
  res.json({data});
@@ -17,7 +19,7 @@ router.get('/alerts',asyncHandler(async(req,res)=>{
  const data=await UmaInvestment.find({status:'ACTIVE',maturityDate:{$lte:next}}).select('number institution currency principal maturityDate').sort({maturityDate:1}).limit(100).lean();
  res.json({data});
 }));
-router.post('/',authorize(ROLES.ADMIN,ROLES.TREASURY),asyncHandler(async(req,res)=>{
+router.post('/',authorizePermission(PERMISSIONS.TREASURY_INVESTMENT),asyncHandler(async(req,res)=>{
  let detail;try{detail=validateInvestment(req.body);}catch(e){throw new AppError(422,e.message);}
  if(new Date(detail.startDate)<new Date(Date.now()-86400000))throw new AppError(422,'No registre inversiones históricas como propuestas nuevas.');
  const number=`INV-${new Date().getFullYear()}-${String(await nextSequence('UMA_INVESTMENT',new Date().getFullYear())).padStart(4,'0')}`;
@@ -25,7 +27,7 @@ router.post('/',authorize(ROLES.ADMIN,ROLES.TREASURY),asyncHandler(async(req,res
  await recordAudit({entityType:'UmaInvestment',entity:item,action:'INVESTMENT_PROPOSED',module:'INVESTMENTS',user:req.user,req,newValues:{number,principal:item.principal,institution:item.institution}});
  res.status(201).json({data:item});
 }));
-router.post('/:id/approve',authorize(ROLES.GAF),asyncHandler(async(req,res)=>{
+router.post('/:id/approve',authorizePermission(PERMISSIONS.INVESTMENT_APPROVE),asyncHandler(async(req,res)=>{
  const item=await UmaInvestment.findById(req.params.id);
  if(!item||item.status!=='PROPOSED')throw new AppError(409,'La inversión ya no está pendiente.');
  if(String(item.createdBy)===String(req.user._id))throw new AppError(403,'No puede aprobar su propia propuesta.');
@@ -39,7 +41,7 @@ router.post('/:id/approve',authorize(ROLES.GAF),asyncHandler(async(req,res)=>{
  await recordAudit({entityType:'UmaInvestment',entity:item,action:'INVESTMENT_APPROVED',module:'INVESTMENTS',user:req.user,req,newValues:{number:item.number,status:'ACTIVE',certificateReference:item.certificateReference}});
  res.json({data:item});
 }));
-router.post('/:id/settle',authorize(ROLES.ADMIN,ROLES.TREASURY),asyncHandler(async(req,res)=>{
+router.post('/:id/settle',authorizePermission(PERMISSIONS.TREASURY_INVESTMENT),asyncHandler(async(req,res)=>{
  const item=await UmaInvestment.findById(req.params.id);
  if(!item||item.status!=='ACTIVE')throw new AppError(409,'No se puede liquidar esta inversión.');
  const principal=Number(req.body.principal),interest=Number(req.body.interest),reference=String(req.body.reference||'').trim();

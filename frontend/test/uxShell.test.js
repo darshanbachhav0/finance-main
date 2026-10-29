@@ -71,22 +71,29 @@ assert.match(shellCss, /:focus-visible::before \{/, "keyboard focus stays visibl
 
 // 5. Phone bottom navigation.
 const destinations = (user) => bottomNavigationForUser(user).map((item) => item.path);
-assert.deepEqual(destinations({ role: "Solicitor" }), ["/", "/requests", "/requests/new"]);
-assert.deepEqual(destinations({ role: "Solicitor", hasTeam: true }), ["/", "/approvals", "/requests/new"]);
-assert.deepEqual(destinations({ role: "AreaDirector" }), ["/", "/approvals", "/requests"]);
-assert.deepEqual(destinations({ role: "Treasury" }), ["/", "/treasury", "/treasury/history"]);
-assert.deepEqual(destinations({ role: "Accounting" }), ["/", "/accounting", "/accounting/invoice-observations"]);
-assert.deepEqual(destinations({ role: "ManagementViewer" }), ["/management-view"]);
-for (const role of ["Admin", "Solicitor", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Procurement", "Management", "ManagementViewer"]) {
+assert.deepEqual(destinations({ role: "Solicitor" }), ["/", "/requests/new", "/requests"]);
+assert.deepEqual(destinations({ role: "Solicitor", hasTeam: true }), ["/", "/requests/new", "/requests"], "Approvals joins a jefe's menu after the first three entries");
+assert.deepEqual(destinations({ role: "AreaDirector" }), ["/", "/requests", "/approvals"]);
+assert.deepEqual(destinations({ role: "Treasury" }), ["/", "/treasury", "/suppliers"]);
+assert.deepEqual(destinations({ role: "Accounting" }), ["/", "/accounting/payables", "/treasury/statement-reviews"]);
+assert.deepEqual(destinations({ role: "Admin" }), ["/", "/users", "/administration/access"]);
+assert.deepEqual(destinations({ role: "Auditor" }), ["/", "/consultas", "/audit"]);
+// Retired roles read as their replacement (ManagementViewer -> Auditor, Procurement -> Solicitor).
+assert.deepEqual(destinations({ role: "ManagementViewer" }), destinations({ role: "Auditor" }));
+assert.deepEqual(destinations({ role: "Procurement" }), destinations({ role: "Solicitor" }));
+assert.deepEqual(bottomNavigationForUser({ role: "Treasury" }).map((item) => item.label), ["Home", "Payments", "Suppliers"], "short bottom-bar labels");
+for (const role of ["Admin", "Solicitor", "AreaDirector", "ViceRector", "GAF", "Management", "Accounting", "Treasury", "Legal", "HumanResources", "Auditor"]) {
   const allowed = navigationForUser({ role }).map(([, path]) => path);
   for (const path of destinations({ role })) assert.ok(allowed.includes(path), `${role}: ${path} is one of the role's menu entries`);
   assert.ok(destinations({ role }).length <= 3, `${role}: at most three destinations plus Search`);
+  assert.equal(destinations({ role })[0], "/", `${role}: Home comes first`);
 }
 const bottomNav = source("../src/components/MobileBottomNav.jsx");
 assert.match(bottomNav, /useMediaQuery\(PHONE_QUERY\)/, "shown on phones only (utils/breakpoints.js)");
 assert.match(bottomNav, /\[role="dialog"\]\[aria-modal="true"\]/, "hidden while a dialog or drawer is open");
 assert.match(bottomNav, /visualViewport/, "hidden while the on-screen keyboard is open");
-assert.match(layout, /<MobileBottomNav[\s\S]*onSearch=\{managementViewer \? undefined : openCommandPalette\}/, "Search opens the command palette");
+assert.match(layout, /<MobileBottomNav[\s\S]*onSearch=\{openCommandPalette\}/, "Search opens the command palette for everyone");
+assert.doesNotMatch(layout, /managementViewer/, "no portal-only role is left in the shell");
 assert.match(layout, /suppressed=\{mobileOpen \|\| commandOpen\}/);
 assert.match(shellCss, /padding: var\(--space-1\) var\(--space-1\) env\(safe-area-inset-bottom, 0px\)/, "safe-area padding");
 assert.match(shellCss, /\.app-shell:has\(\.mobile-bottom-nav\) \.content \{ padding-bottom: calc\(var\(--bottom-nav-offset\)/, "content is never hidden behind the bar");

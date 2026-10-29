@@ -20,7 +20,7 @@ test("no native date, month or datetime-local inputs remain; every page uses Dat
   const root = fileURLToPath(new URL("../src/", import.meta.url));
   const offenders = sourceFiles(root).filter((file) => /type=["{]*["'](date|month|datetime-local)["']|type:\s*"datetime-local"/.test(readFileSync(file, "utf8")));
   assert.deepEqual(offenders, []);
-  for (const file of ["pages/RequestCreate.jsx", "pages/AccountingEntries.jsx", "pages/ExternalManagementPortal.jsx", "pages/TreasuryQueue.jsx", "components/SupplierCreditsPanel.jsx", "components/rendition/OfficialRenditionWorkspace.jsx", "components/ResourceManager.jsx", "components/ReportFilters.jsx"]) {
+  for (const file of ["pages/RequestCreate.jsx", "pages/AccountingEntries.jsx", "pages/UmaInsights.jsx", "pages/admin/AdminAudit.jsx", "pages/TreasuryQueue.jsx", "components/SupplierCreditsPanel.jsx", "components/rendition/OfficialRenditionWorkspace.jsx", "components/ResourceManager.jsx", "components/ReportFilters.jsx"]) {
     assert.match(source(`../src/${file}`), /<DateInput /, `${file} uses DateInput`);
   }
   for (const file of ["pages/AccountingEntries.jsx", "pages/AccountingPeriods.jsx", "pages/SireExport.jsx", "components/ReportFilters.jsx"]) {

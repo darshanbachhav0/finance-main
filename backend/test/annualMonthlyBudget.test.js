@@ -18,8 +18,9 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
   try {
     await Promise.all([BudgetAllocation.init(), BudgetCommitment.init(), BudgetException.init()]);
     const user = await User.create({ name: "Budget Planner", role: "Treasury", email: "budget.planner@test.invalid", passwordHash: "unused" });
-    // Changing an existing plan is Admin only; Budget creates plans and reserves funds.
-    const planEditor = await User.create({ name: "Plan Editor", role: "Admin", email: "plan.editor@test.invalid", passwordHash: "unused" });
+    // Creating and changing plans is Treasury only (budget.manage); Admin no longer touches budgets.
+    const planEditor = await User.create({ name: "Plan Editor", role: "Treasury", email: "plan.editor@test.invalid", passwordHash: "unused" });
+    const admin = await User.create({ name: "Platform Admin", role: "Admin", email: "plan.admin@test.invalid", passwordHash: "unused" });
     const center = await CostCenter.create({ code: "CC-PLAN", name: "Budget test", area: "Finance", budgetMode: "TRANSITIONAL", active: true });
     const expense = await ExpenseType.create({ code: "PLAN-EXP", name: "Supplies", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "603201", active: true });
     const req = { headers: {}, ip: "127.0.0.1" };
@@ -29,7 +30,7 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
     const adjust = (plan, action, amount, extra = {}) => adjustBudgetPlan(plan._id, { operationId: `adjustment-${++serial}`, action, amount, revision: plan.__v, reason: "Approved adjustment", ...extra }, planEditor, req);
     let monthly, yearly;
 
-    await t.test("Admin All-expenses allocations fund preview and commitment for a specific request account", async () => {
+    await t.test("Treasury All-expenses allocations fund preview and commitment for a specific request account", async () => {
       const pooled = await CostCenter.create({ code: "30007-POOL", name: "General allocation", area: "Finance", budgetMode: "ACTIVE", active: true });
       const allocation = await BudgetAllocation.create({ period: "2043-09", costCenter: pooled._id, assignedAmount: 20000 });
       const draftRequest = request("2043-09", 8000, { lines: [{ costCenter: pooled._id, expenseType: expense._id, totalAmount: 8000 }] });
@@ -174,6 +175,7 @@ test("annual and monthly budget planning and lifecycle", { timeout: 120000 }, as
       assert.equal(repeated.months[10].assignedAmount, 13000);
       await assert.rejects(() => adjustBudgetPlan(saved._id, { operationId: "stale-adjustment", action: "INCREASE", revision: 0, amount: 100, reason: "Stale" }, planEditor, req), (error) => error.statusCode === 409);
       await assert.rejects(() => adjustBudgetPlan(saved._id, { operationId: "budget-role-change", action: "INCREASE", revision: saved.__v, amount: 100, reason: "Not allowed" }, { ...user.toObject(), role: "Solicitor" }, req), (error) => error.statusCode === 403, "a requester never changes a plan");
+      await assert.rejects(() => adjustBudgetPlan(saved._id, { operationId: "budget-admin-change", action: "INCREASE", revision: saved.__v, amount: 100, reason: "Not allowed" }, admin, req), (error) => error.statusCode === 403, "Admin never changes a plan");
       await assert.rejects(() => adjust(saved, "ALLOCATE_RESERVE", 3000, { toMonth: 12 }), /annual reserve has only/);
       const attempts = await Promise.allSettled([adjust(saved, "TRANSFER", 1000, { fromMonth: 1, toMonth: 2 }), adjust(saved, "TRANSFER", 1000, { fromMonth: 1, toMonth: 3 })]);
       assert.equal(attempts.filter((item) => item.status === "fulfilled").length, 1);

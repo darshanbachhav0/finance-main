@@ -5,7 +5,7 @@ import { startBackup } from "../src/services/backupService.js";
 
 // npm run backup: MongoDB collections (Extended JSON) plus the uploaded and generated files, in a
 // timestamped folder under BACKUP_DIR (default backend/backups). Recorded in the backup history
-// the Super Admin sees (Super Admin > Platform settings > Backups).
+// administrators see (Administración > Plataforma > Backups).
 async function main() {
   await connectDB();
   const run = await startBackup({ trigger: "COMMAND", wait: true });

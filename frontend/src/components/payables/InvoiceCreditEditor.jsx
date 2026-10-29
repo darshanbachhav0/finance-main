@@ -5,6 +5,7 @@ import DateInput from "../DateInput.jsx";
 import Message from "../Message.jsx";
 import { calendarDateKey } from "../../../../shared/businessCalendar.mjs";
 import { invoiceDueDate, supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
+import { PERMISSIONS, userCan } from "../../utils/access.js";
 
 export default function InvoiceCreditEditor({ payable, onUpdated }) {
   const { user, readOnly } = useAuth();
@@ -18,7 +19,7 @@ export default function InvoiceCreditEditor({ payable, onUpdated }) {
     setDue(payable.dueDate ? calendarDateKey(payable.dueDate) : "");
     setReason(""); setError("");
   }, [payable]);
-  if (readOnly || !["Admin", "Accounting"].includes(user?.role) || payable.flowType === "C" || !["OPEN", "PARTIALLY_PAID"].includes(payable.status)) return null;
+  if (readOnly || !userCan(user, PERMISSIONS.ACCOUNTING_PROVISION) || payable.flowType === "C" || !["OPEN", "PARTIALLY_PAID"].includes(payable.status)) return null;
   async function save() {
     setSaving(true); setError("");
     try {

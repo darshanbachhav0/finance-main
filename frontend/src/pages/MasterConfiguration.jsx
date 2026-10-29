@@ -7,6 +7,8 @@ import ResourceManager from "../components/ResourceManager.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import { configurationAccess } from "../utils/navigationAccess.js";
+import { PERMISSIONS, ROLES, userCan } from "../utils/access.js";
 import { approvalLevels, currencies, expenseNatureLabels, expenseNatures, flowTypeLabels, flowTypes, requestTypeLabels, requestTypes, roles } from "../utils/options.js";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
 
@@ -99,11 +101,11 @@ export default function MasterConfiguration() {
 
   const configs = useMemo(() => ({
     "approval-rules": {
-      label: "Approval Rules", roles: ["Admin", "SuperAdmin", "Auditor"], endpoint: "/approval-rules",
+      label: "Approval Rules", writePermission: PERMISSIONS.FINANCE_PARAMETERS_MANAGE, endpoint: "/approval-rules",
       description: "Configure approval sequence, role, amount range, area, and SLA without hard-coding workflow decisions in the UI.",
       fields: [
         { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "approvalLevel", label: "Approval level", type: "select", required: true, options: approvalLevels },
-        { name: "role", label: "Role", type: "select", required: true, options: roles }, { type: "section", label: "Applies to" }, { name: "area", label: "Area", defaultValue: "*", required: true },
+        { name: "role", label: "Role", type: "select", required: true, options: roles.filter((role) => ![ROLES.ADMIN, ROLES.AUDITOR].includes(role.value)) }, { type: "section", label: "Applies to" }, { name: "area", label: "Area", defaultValue: "*", required: true },
         { name: "amountFrom", label: "Amount from", type: "number", min: 0, step: "0.01", defaultValue: 0 }, { name: "amountTo", label: "Amount to", type: "number", min: 0, step: "0.01" },
         { name: "requestType", label: "Request type", type: "select", defaultValue: "*", options: requestTypeOptions }, { name: "flowType", label: "Track", type: "select", defaultValue: "*", options: flowOptions }, { name: "sequence", label: "Sequence", type: "number", min: 1, defaultValue: 1, required: true },
         { type: "section", label: "Timing" }, { name: "slaHours", label: "SLA hours", type: "number", min: 1, defaultValue: 24, required: true }, { name: "required", label: "Required", type: "checkbox", defaultValue: true }, { name: "active", label: "Active", type: "checkbox", defaultValue: true }
@@ -111,7 +113,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "sequence", label: "Sequence" }, { key: "name", label: "Name" }, { key: "approvalLevel", label: "Approval level" }, { key: "role", label: "Role" }, { key: "area", label: "Area" }, { key: "flowType", label: "Track" }, { key: "requestType", label: "Request type" }, { key: "slaHours", label: "SLA hours" }, { key: "active", label: "Status" }]
     },
     "finance-configurations": {
-      label: "Finance Configurations", roles: ["Admin", "Accounting", "SuperAdmin", "Auditor"], endpoint: "/finance-configurations",
+      label: "Finance Configurations", endpoint: "/finance-configurations",
       description: "Numeric thresholds that change financial behavior (mobility daily limit, unsupported-expense limit, rendition overdue window, supplier homologation validity). Every change is audited.",
       fields: [
         { type: "section", label: "Value" }, { name: "key", label: "Key", type: "select", required: true, options: ["LOCAL_MOBILITY_DAILY_LIMIT", "UNSUPPORTED_EXPENSE_LIMIT", "RENDITION_OVERDUE_DAYS", "SUPPLIER_HOMOLOGATION_VALIDITY_MONTHS", "BUDGET_CHANGE_APPROVAL_THRESHOLD", "CAPEX_DETAILS_THRESHOLD", "ADVANCE_PAYMENT_CUTOFF_HOUR", "ADVANCE_RETURN_ACCOUNT", "UIT_VALUE", "SUPERIOR_APPROVAL_UIT", "GAF_APPROVAL_UIT", "GENERAL_MANAGEMENT_APPROVAL_UIT", "PAYMENT_CUTOFF_WORKING_DAYS", "A1_MINIMUM_QUOTATIONS"], hint: "ADVANCE_PAYMENT_CUTOFF_HOUR: Lima hour (0-24) from which an approved advance is paid the next working day (default 15). ADVANCE_RETURN_ACCOUNT: write the UMA account in Text value; employees see it to return unspent advance money (Value 0). BUDGET_CHANGE_APPROVAL_THRESHOLD: budget plan changes that move more than this amount (PEN) need Management approval. 0 or no record: every change applies immediately. CAPEX_DETAILS_THRESHOLD: request total from which requesters see the CAPEX planning fields (default 50000). UIT_VALUE: PEN value of one UIT (default 5500). SUPERIOR_APPROVAL_UIT: above this many UIT the jefe's superior must also approve (default 0 = always). GAF_APPROVAL_UIT: above this many UIT the GAF also approves (default 5). GENERAL_MANAGEMENT_APPROVAL_UIT: above this many UIT the Gerencia General also approves (default 20). PAYMENT_CUTOFF_WORKING_DAYS: a P3 request is paid on the first fortnightly payment day at least this many working days away (default 3). A1_MINIMUM_QUOTATIONS: quotations, from different suppliers, an A1 purchase is sent with (default 3)." },
@@ -126,7 +128,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "key", label: "Key" }, { key: "numericValue", label: "Value", render: (row) => row.textValue || row.numericValue }, { key: "currency", label: "Currency" }, { key: "behavior", label: "Behavior" }, { key: "effectiveFrom", label: "Effective from", render: (row) => row.effectiveFrom ? formatDate(row.effectiveFrom) : "-" }, { key: "effectiveTo", label: "Effective to", render: (row) => row.effectiveTo ? formatDate(row.effectiveTo) : t("No end date") }, { key: "active", label: "Status" }]
     },
     "budget-rules": {
-      label: "Budget Rules", roles: ["Admin", "Treasury", "SuperAdmin", "Auditor"], endpoint: "/budget-rules",
+      label: "Budget Rules", endpoint: "/budget-rules",
       description: "Select active or transitional control, the insufficient-budget exception strategy, and who may authorize an extraordinary exception, by dimension.",
       fields: [
         { type: "section", label: "Rule" }, { name: "name", label: "Name", required: true }, { name: "mode", label: "Mode", type: "select", options: ["TRANSITIONAL", "ACTIVE"], defaultValue: "TRANSITIONAL" },
@@ -141,7 +143,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "name", label: "Name" }, { key: "mode", label: "Mode" }, { key: "exceptionStrategy", label: "Exception strategy" }, { key: "exceptionApproverRole", label: "Exception approver", render: (row) => t(row.exceptionApproverRole || "Management") }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter?.code || "All" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "active", label: "Status" }]
     },
     "budget-allocations": {
-      label: "Budget Allocations", roles: ["Admin", "Treasury", "SuperAdmin", "Auditor"], endpoint: "/budget-allocations",
+      label: "Budget Allocations", endpoint: "/budget-allocations",
       description: "Maintain assigned budget by period, Cost Center, and project.",
       fields: [
         { name: "period", label: "Period / year", required: true, placeholder: "YYYY or YYYY-MM" },
@@ -151,7 +153,7 @@ export default function MasterConfiguration() {
       columns: [{ key: "period", label: "Period" }, { key: "costCenter", label: "Cost center", render: (row) => row.costCenter ? `${row.costCenter.code} - ${row.costCenter.name}` : "-" }, { key: "project", label: "Project", render: (row) => row.project || "All" }, { key: "assignedAmount", label: "Assigned", render: (row) => formatCurrency(row.assignedAmount || 0, "PEN", language) }, { key: "active", label: "Status" }]
     },
     "accounting-mappings": {
-      label: "Accounting Mappings", roles: ["Admin", "Accounting", "SuperAdmin", "Auditor"], endpoint: "/accounting-mappings",
+      label: "Accounting Mappings", endpoint: "/accounting-mappings",
       description: "GL accounts used by automatic postings that expense types do not cover: accounts payable, bank, advances in transit, IGV, returns, supplier credits and exchange differences. The most specific active mapping for the request type, expense nature, bank and currency wins; * matches any value. Every change is audited.",
       fields: [
         { type: "section", label: "Mapping" }, { name: "code", label: "Code", required: true, placeholder: "AP-PEN" }, { name: "name", label: "Name", required: true },
@@ -169,7 +171,7 @@ export default function MasterConfiguration() {
       // Treasury can see this section to use the certification panel below, but only Admin may
       // create/edit/delete a format's field configuration - certification is a separate, narrower
       // permission (see BankFormatCertificationPanel), not general configuration access.
-      label: "Bank Formats", roles: ["Admin", "Treasury", "SuperAdmin", "Auditor"], writeRoles: ["Admin"], endpoint: "/bank-formats",
+      label: "Bank Formats", writePermission: PERMISSIONS.BANK_FORMAT_CERTIFY, endpoint: "/bank-formats",
       description: "Configure BBVA PEN and USD formats using Treasury-confirmed field values. Existing bank files retain their original format. Certification is managed separately below.",
       transformSubmit: (form) => ({ ...form, bbva: form.bbva ? JSON.parse(form.bbva) : undefined }),
       fields: [
@@ -183,16 +185,16 @@ export default function MasterConfiguration() {
     }
   }), [masters, t, language]);
 
-  // "Certify bank formats" granted to a user opens the Bank Formats resource for them.
-  const canOpen = (key, config) => config.roles.includes(user.role) || (key === "bank-formats" && (user.permissions || []).includes("bank-format:certify"));
-  const visibleEntries = Object.entries(configs).filter(([key, config]) => canOpen(key, config));
-  if (!configs[resource] || !canOpen(resource, configs[resource])) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "approval-rules"}`} replace />;
+  // Who opens each resource and who changes it: the same permissions the API checks.
+  const canOpen = (key) => Boolean(configurationAccess[key]?.(user));
+  const visibleEntries = Object.entries(configs).filter(([key]) => canOpen(key));
+  if (!configs[resource] || !canOpen(resource)) return <Navigate to={`/configuration/${visibleEntries[0]?.[0] || "approval-rules"}`} replace />;
   const config = configs[resource];
 
   return <section>
-    {user.role === "Admin" && <details className="workspace-tools"><summary>{t("SUNAT administration")}</summary><PadronStatus /></details>}
+    {userCan(user, PERMISSIONS.PLATFORM_MANAGE) && <details className="workspace-tools"><summary>{t("SUNAT administration")}</summary><PadronStatus /></details>}
     <Message type="error">{error}</Message>
     <nav className="section-tabs configuration-sections" aria-label={t("Configuration sections")}>{visibleEntries.map(([key, item]) => <NavLink key={key} to={`/configuration/${key}`}>{t(item.label)}</NavLink>)}</nav>
-    <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" readOnly={Boolean(config.writeRoles && !config.writeRoles.includes(user.role))} renderBeforeTable={config.renderBeforeTable} />
+    <ResourceManager key={resource} title={config.label} description={config.description} endpoint={config.endpoint} fields={config.fields} columns={config.columns} transformSubmit={config.transformSubmit} deleteMode="deactivate" readOnly={Boolean(config.writePermission && !userCan(user, config.writePermission))} renderBeforeTable={config.renderBeforeTable} />
   </section>;
 }

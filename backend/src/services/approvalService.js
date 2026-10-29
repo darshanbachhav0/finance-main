@@ -52,6 +52,7 @@ import { canApproveStage, hasPermission, observationOwner } from "../utils/permi
 import { allowedRequestActions } from "./requestActionPolicy.js";
 import AccountsPayable from "../models/AccountsPayable.js";
 import { scheduledPaymentDate } from "../../../shared/invoiceFinance.mjs";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 const activeApprovalStatuses = [
   REQUEST_STATUS.PENDING_APPROVAL,
@@ -88,23 +89,23 @@ function assertApprovalActor(request, user, step, adminOverrideReason) {
   if (step.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN) {
     // Chain steps are assigned to a specific person (the requester's jefe, or
     // that jefe's own jefe once forwarded) — identity, not role/area pool.
-    if (user.role !== ROLES.ADMIN && String(step.approverUser) !== String(user._id)) {
+    if (String(step.approverUser) !== String(user._id)) {
       throw new AppError(403, "This approval step is assigned to a different manager.", undefined, ERROR_CODES.FORBIDDEN);
     }
   } else if (step.tier) {
-    // An amount tier or a Track D step: any user of the step's role decides it.
-    if (user.role !== ROLES.ADMIN && step.role !== user.role) {
+    // An amount tier or a Track D step: any user who holds the step's role decides it.
+    if (!hasRole(user, step.role)) {
       throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role, approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
     }
   } else {
     if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) {
       throw new AppError(403, "You do not have approval permission.", undefined, ERROR_CODES.FORBIDDEN);
     }
-    if (user.role !== ROLES.ADMIN) {
+    {
       if (!canApproveStage(request, user)) {
         throw new AppError(403, "This request is assigned to a different approval level.", { approvalLevel: step.approvalLevel }, ERROR_CODES.FORBIDDEN);
       }
-      if (step.role && step.role !== user.role) {
+      if (step.role && !hasRole(user, step.role)) {
         throw new AppError(403, "This approval step is assigned to another role.", { requiredRole: step.role }, ERROR_CODES.FORBIDDEN);
       }
       if (step.approvalLevel === APPROVAL_STAGES.AREA_DIRECTOR) {
@@ -169,7 +170,7 @@ export const directInvoiceReady = (request) => request.flowType === FLOW_TYPE.B 
 
 export async function listApprovalInbox(queryParams, user) {
   const query = { status: { $in: activeApprovalStatuses } };
-  if (user.role !== ROLES.ADMIN) {
+  {
     // A manager-chain approver (any role, typically Solicitor) sees requests
     // where they are the pending step's specific approver, regardless of
     // role/area. An Area Director/Vice-Rector/Management user additionally
@@ -177,10 +178,11 @@ export async function listApprovalInbox(queryParams, user) {
     const chainMatch = { "approvalRouteSnapshot": { $elemMatch: { approverUser: user._id, status: "PENDING", source: APPROVAL_ROUTING_MODE.MANAGER_CHAIN } } };
     // Tier steps (GAF, Gerencia General, Track D's Treasury step) wait on everyone of that role,
     // except on their own requests.
-    const tierMatch = Object.values(APPROVAL_TIERS).includes(user.role)
-      ? { approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: user.role, status: "PENDING" } }, requester: { $ne: user._id } }
+    const tierRoles = Object.values(APPROVAL_TIERS).filter((role) => hasRole(user, role));
+    const tierMatch = tierRoles.length
+      ? { approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: { $in: tierRoles }, status: "PENDING" } }, requester: { $ne: user._id } }
       : null;
-    if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
+    if (hasRole(user, [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT])) {
       const legacyMatch = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
       if (legacyMatch.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
         const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
@@ -431,7 +433,8 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
     return result;
   }
   await notifyRoles({
-    roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [ROLES.PROCUREMENT],
+    roles: request.flowType === FLOW_TYPE.B ? [ROLES.TREASURY] : [],
+    permission: request.flowType === FLOW_TYPE.B ? undefined : PERMISSIONS.PURCHASE_ORDER_ISSUE,
     eventKey: `request:${request._id}:${request.flowType === FLOW_TYPE.B ? "treasury" : "procurement"}`,
     type: request.flowType === FLOW_TYPE.B ? "TREASURY_PAYMENT" : "PROCUREMENT_ORDER",
     title: request.flowType === FLOW_TYPE.B ? notificationText("Priority payment ready") : notificationText("Purchase order required"),
@@ -626,7 +629,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     // Terminal - resolveBudgetCommitmentFailure already notified the requester; no Budget task to raise.
   } else if (budgetWarning) {
     await notifyRoles({
-      roles: [ROLES.TREASURY, ROLES.ADMIN],
+      roles: [ROLES.TREASURY],
       eventKey: `request:${request._id}:budget-exception`,
       type: "BUDGET_EXCEPTION",
       title: notificationText("Budget exception pending"),
@@ -643,7 +646,7 @@ export async function decideApproval({ id, action, comments, adminOverrideReason
     // create a misleading Accounting/Treasury task while the XML is observed.
   } else if (budgetDeferred) {
     await notifyRoles({
-      roles: [ROLES.TREASURY, ROLES.ADMIN],
+      roles: [ROLES.TREASURY],
       eventKey: `request:${request._id}:budget-commitment`,
       type: "BUDGET_COMMITMENT",
       title: notificationText("Budget commitment required"),
@@ -819,14 +822,15 @@ export async function reassignPendingApprovalsFor(personId, { actor, req, reason
     const { approver, coveringFor } = target;
     if (approver && String(approver._id) === String(step.approverUser) && String(coveringFor?._id || "") === String(step.coveringFor || "")) continue;
     if (!approver) {
-      // Someone who can still act keeps the step; only a stranded step needs Admin.
+      // Someone who can still act keeps the step; only a stranded step needs the administrator, who
+      // keeps the roster (they are told, they do not approve).
       const holder = await User.findById(step.approverUser).select("active onLeave role").lean();
       if (isAvailableApprover(holder)) continue;
       summary.unassigned += 1;
       await recordAudit({ entityType: "FinancialRequest", entity: request, action: "APPROVAL_REASSIGNMENT_FAILED", user: systemActor, req, module: "APPROVALS", comments: `No available substitute or supervisor for ${step.coveringForSnapshot?.name || step.approverSnapshot?.name || "the approver"} (${reason}).`, oldValues: { approverUser: step.approverUser, approvalStage: step.approvalLevel } });
       await notifyRoles({ roles: [ROLES.ADMIN], eventKey: `request:${request._id}:approval-unassigned:${step._id}`, type: "APPROVAL_UNASSIGNED", title: notificationText("Approval without an available approver"), message: step.approverSnapshot?.name
         ? notificationText("{requestNumber} waits on {approverName} and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber, approverName: step.approverSnapshot.name })
-        : notificationText("{requestNumber} waits on an unavailable approver and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber }), path: `/requests/${request._id}`, entityType: "FinancialRequest", entityId: request._id });
+        : notificationText("{requestNumber} waits on an unavailable approver and no supervisor above them is available. Update the organizational roster.", { requestNumber: request.requestNumber }), path: "/administration/access", entityType: "FinancialRequest", entityId: request._id });
       continue;
     }
     const oldNotificationKey = `request:${request._id}:approval:${step.approvalLevel}`;

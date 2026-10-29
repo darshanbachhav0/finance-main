@@ -70,7 +70,8 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       assert.equal(accounting.kind, "review");
       assert.equal(accounting.count, 1, "Accounting reviews submitted renditions");
       assert.equal(accounting.path.startsWith("/requests/"), true);
-      assert.equal((await tasksOf("Admin")).byKey.rendition.kind, "outstanding");
+      // The Admin "outstanding" rendition variant was removed: Admin has no financial tasks.
+      assert.equal((await tasksOf("Admin")).byKey.rendition, undefined, "Admin does not follow renditions");
       assert.equal((await tasksOf("Accounting")).byKey.drafts, undefined, "draft tasks are the requester's");
       await FinancialRequest.deleteMany({ requestNumber: /^T-/ });
     });
@@ -173,11 +174,8 @@ test("dashboard tasks: role work, exact-record links and the Management decision
       assert.equal(byRequest["T-EXC-OPEN"].preparationComments, "Recommended");
       assert.equal(byRequest["T-EXC-OTHER"].canDecide, false, "Management cannot decide an exception it prepared");
 
-      const admin = await call("Admin", "/dashboard/decisions/budget-exceptions");
-      assert.equal(admin.status, 200);
-      assert.equal(admin.body.canDecide, false, "Admin reads the queue but never decides");
-      assert.equal(admin.body.data.every((row) => row.canDecide === false), true);
-      for (const role of ["Treasury", "Solicitor", "AreaDirector"]) assert.equal((await call(role, "/dashboard/decisions/budget-exceptions")).status, 403, `${role} has no decision queue`);
+      // Admin no longer reads the decision queue (it is not a financial role).
+      for (const role of ["Admin", "Treasury", "Solicitor", "AreaDirector"]) assert.equal((await call(role, "/dashboard/decisions/budget-exceptions")).status, 403, `${role} has no decision queue`);
 
       const decided = await call("Management", `/budget/exceptions/${ready._id}/decision`, "POST", { status: "APPROVED", comments: "Authorized from the inbox" });
       assert.equal(decided.status, 200);

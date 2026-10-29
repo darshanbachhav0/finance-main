@@ -17,7 +17,7 @@ import { SPOT_DEFAULT_CATEGORIES, SPOT_DEFAULT_EFFECTIVE_FROM, detractionAmountP
 const NON_SPOT_REQUEST_TYPES = new Set([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_CON_SUSTENTO, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
 // Receipts for independent work (4th category), advances and internal receipts are outside SPOT.
 const NON_SPOT_VOUCHER_TYPES = new Set(["ANTICIPO", "RECIBO", "RECIBO_HONORARIOS", "RHE", "RECIBO_POR_HONORARIOS"]);
-const SPOT_ADMIN_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING];
+const SPOT_ADMIN_ROLES = [ROLES.ACCOUNTING];
 
 export async function ensureSpotCategories({ session } = {}) {
   if (await SpotCategory.countDocuments().session(session || null)) return;
@@ -52,7 +52,7 @@ export async function listSpotCategories({ at, includeHistory = false } = {}) {
 
 // A rate change never overwrites history: the current row is closed the day before the new one.
 export async function updateSpotCategory({ code, payload = {}, user, req }) {
-  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting or Admin can maintain the SPOT table.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting can maintain the SPOT table.", undefined, ERROR_CODES.FORBIDDEN);
   await ensureSpotCategories();
   const effectiveFrom = new Date(payload.effectiveFrom || Date.now());
   if (Number.isNaN(effectiveFrom.getTime())) throw new AppError(422, "A valid effective-from date is required.", { field: "effectiveFrom" }, ERROR_CODES.VALIDATION_ERROR);
@@ -161,7 +161,7 @@ export async function previewAccountingDetraction({ id, categoryCode }) {
 }
 
 export async function confirmAccountingDetraction({ id, categoryCode, user, req }) {
-  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting or Admin can confirm SPOT treatment.");
+  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting can confirm SPOT treatment.");
   if (categoryCode === undefined) throw new AppError(422, "Confirm the SPOT category or explicitly select not subject to SPOT.");
   const claims = AccountsPayable.db.collection("bbvapaymentgenerationclaims");
   const payable = await AccountsPayable.findById(id);
@@ -213,7 +213,7 @@ export async function resolveSupplierDetractionAccount(supplierId, { session } =
 }
 
 export async function setSupplierDetractionAccount({ supplierId, accountNumber, user, req }) {
-  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting or Admin can maintain the supplier detracciones account.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!SPOT_ADMIN_ROLES.includes(user?.role)) throw new AppError(403, "Only Accounting can maintain the supplier detracciones account.", undefined, ERROR_CODES.FORBIDDEN);
   const supplier = await Supplier.findById(supplierId);
   if (!supplier) throw new AppError(404, "Supplier not found.", { supplierId }, ERROR_CODES.NOT_FOUND);
   const normalized = normalizeDetractionAccount(accountNumber);

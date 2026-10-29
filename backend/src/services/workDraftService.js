@@ -4,34 +4,40 @@ import { AppError } from "../utils/AppError.js";
 import { PERMISSIONS } from "../utils/constants.js";
 import { hasPermission } from "../utils/permissions.js";
 
-const roles = {
-  request: ["Admin", "Solicitor"], supplier: ["Admin", "Accounting", "Solicitor"],
-  "supplier-bank": ["Admin", "Accounting", "Solicitor"], "supplier-tax-review": ["Admin", "Accounting"], "supplier-finance-review": ["Admin", "Accounting"], "supplier-bank-review": ["Admin", "Accounting"],
-  "employee-bank": ["Admin", "Solicitor"], rendition: ["Admin", "Solicitor"],
-  "rendition-settlement": ["Admin", "Accounting", "Treasury"],
-  "budget-plan": ["Admin", "Treasury", "Accounting"], "budget-adjustment": ["Admin", "Treasury", "Accounting"],
-  "accounting-period": ["Admin", "Accounting"], fiscal: ["Admin", "Accounting"],
-  "payment-confirmation": ["Admin", "Treasury"], "payment-bounce": ["Admin", "Treasury"],
-  "payment-reprogram": ["Admin", "Treasury"], "payment-reconciliation": ["Admin", "Treasury"],
-  "batch-invoice": ["Admin", "Accounting", "Solicitor"], "invoice-files": ["Admin", "Accounting", "Solicitor"],
-  "invoice-resolution": ["Admin", "Accounting", "Solicitor"]
+const P = PERMISSIONS;
+// Who keeps a draft of each form: whoever holds a permission that opens the form
+// (shared/accessControl.mjs), never by role name.
+const scopes = {
+  request: [P.REQUEST_CREATE], rendition: [P.REQUEST_CREATE], "invoice-files": [P.REQUEST_CREATE, P.ACCOUNTING_PROVISION],
+  supplier: [P.SUPPLIER_CREATE, P.SUPPLIER_VALIDATE], "supplier-bank": [P.SUPPLIER_CREATE, P.SUPPLIER_VALIDATE],
+  "supplier-tax-review": [P.SUPPLIER_VALIDATE], "supplier-finance-review": [P.SUPPLIER_VALIDATE], "supplier-bank-review": [P.SUPPLIER_VALIDATE],
+  "employee-bank": [P.EMPLOYEE_BANK_MANAGE_OWN],
+  "rendition-settlement": [P.RENDITION_REVIEW, P.TREASURY_EXECUTE_PAYMENT],
+  "budget-plan": [P.BUDGET_MANAGE], "budget-adjustment": [P.BUDGET_MANAGE],
+  "accounting-period": [P.ACCOUNTING_CLOSE_PERIOD], fiscal: [P.ACCOUNTING_PROVISION],
+  "payment-confirmation": [P.TREASURY_EXECUTE_PAYMENT], "payment-bounce": [P.TREASURY_EXECUTE_PAYMENT],
+  "payment-reprogram": [P.TREASURY_SCHEDULE], "payment-reconciliation": [P.RECONCILIATION_PREPARE],
+  "batch-invoice": [P.BATCH_INVOICE_UPLOAD], "invoice-resolution": [P.BATCH_INVOICE_REVIEW, P.REQUEST_CREATE]
 };
-// A permission granted in Administration > Users opens the drafts of the form it opens.
-const grants = {
-  request: [PERMISSIONS.REQUEST_CREATE], rendition: [PERMISSIONS.REQUEST_CREATE], "invoice-files": [PERMISSIONS.REQUEST_CREATE],
-  supplier: [PERMISSIONS.SUPPLIER_PROPOSE], "supplier-bank": [PERMISSIONS.SUPPLIER_PROPOSE],
-  "employee-bank": [PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],
-  "batch-invoice": [PERMISSIONS.BATCH_INVOICE_UPLOAD], "invoice-resolution": [PERMISSIONS.BATCH_INVOICE_REVIEW]
-};
-const resources = new Set(["cost-centers", "expense-types", "exchange-rates", "projects", "approval-rules", "budget-rules", "budget-allocations", "document-rules", "accounting-mappings", "bank-formats", "finance-configurations", "users"]);
+// Master-data forms (resource:<name>): the permission that maintains each resource.
+export const RESOURCE_DRAFT_PERMISSIONS = Object.freeze({
+  users: [P.EMPLOYEE_MANAGE],
+  "cost-centers": [P.COST_CENTER_MANAGE],
+  "approval-rules": [P.FINANCE_PARAMETERS_MANAGE],
+  "finance-configurations": [P.FINANCE_PARAMETERS_MANAGE],
+  "bank-formats": [P.BANK_FORMAT_CERTIFY],
+  "budget-rules": [P.BUDGET_MANAGE],
+  "budget-allocations": [P.BUDGET_MANAGE],
+  "expense-types": [P.ACCOUNTING_CODES_MANAGE],
+  "exchange-rates": [P.ACCOUNTING_CODES_MANAGE, P.TREASURY_SCHEDULE],
+  projects: [P.ACCOUNTING_CODES_MANAGE],
+  "document-rules": [P.ACCOUNTING_CODES_MANAGE],
+  "accounting-mappings": [P.ACCOUNTING_CODES_MANAGE]
+});
 export function assertDraftScope(user, scope) {
   if (typeof scope !== "string") throw new AppError(422, "Invalid draft form.");
-  const resource = String(scope).replace(/^resource:/, "");
-  const allowed = scope?.startsWith("resource:") && resources.has(resource)
-    ? ["users", "approval-rules", "bank-formats", "finance-configurations"].includes(resource) ? ["Admin"]
-      : ["budget-rules", "budget-allocations"].includes(resource) ? ["Admin", "Treasury"] : ["Admin", "Accounting"] : roles[scope];
-  const granted = (grants[scope] || []).some((permission) => hasPermission(user, permission));
-  if (!allowed?.includes(user.role) && !granted) throw new AppError(403, "Draft access is not available for this role.");
+  const allowed = scope.startsWith("resource:") ? RESOURCE_DRAFT_PERMISSIONS[scope.slice("resource:".length)] : scopes[scope];
+  if (!(allowed || []).some((permission) => hasPermission(user, permission))) throw new AppError(403, "Draft access is not available for this role.");
 }
 function key() {
   const secret = process.env.DRAFT_ENCRYPTION_KEY || process.env.JWT_SECRET;

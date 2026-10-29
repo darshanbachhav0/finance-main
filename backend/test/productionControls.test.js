@@ -112,16 +112,16 @@ test("production control regressions", { timeout: 60000 }, async t => {
     await t.test("BBVA production requires current certification; layout edits invalidate it", async () => {
       await installBbvaTestConfiguration();
       const config = await BankFormatConfiguration.findOne({ bank: "BBVA", currency: "PEN" });
-      const admin = { _id: new mongoose.Types.ObjectId(), role: "Admin" };
+      const treasury = { _id: new mongoose.Types.ObjectId(), role: "Treasury" };
       process.env.NODE_ENV = "production";
       assert.throws(() => new BbvaBankFileAdapter(config.toObject()), /certification/);
-      await certifyBankFormatConfiguration({ id: config._id, certified: true, certificationReference: "Test acceptance only", user: admin });
+      await certifyBankFormatConfiguration({ id: config._id, certified: true, certificationReference: "Test acceptance only", user: treasury });
       const certified = await BankFormatConfiguration.findById(config._id);
       assert.doesNotThrow(() => new BbvaBankFileAdapter(certified.toObject()));
       certified.specificationVersion += "-CHANGED"; await certified.save();
       assert.equal(certified.certified, false);
       assert.throws(() => new BbvaBankFileAdapter(certified.toObject()), /certification/);
-      await assert.rejects(certifyBankFormatConfiguration({ id: config._id, certified: "false", user: admin }), /boolean/);
+      await assert.rejects(certifyBankFormatConfiguration({ id: config._id, certified: "false", user: treasury }), /boolean/);
       process.env.NODE_ENV = previousMode;
     });
     await t.test("document-policy migration is read-only in dry run and preserves later configuration on repeat", async () => {

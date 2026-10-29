@@ -1137,7 +1137,7 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   await resolveNotification(`request:${request._id}:accounting`);
   const needsDetractionReview = result.accountsPayable.flowType !== FLOW_TYPE.C && result.accountsPayable.supplier && !result.accountsPayable.detraction?.confirmedAt;
   await notifyRoles({
-    roles: needsDetractionReview ? ["Accounting", "Admin"] : ["Treasury"],
+    roles: needsDetractionReview ? ["Accounting"] : ["Treasury"],
     eventKey: needsDetractionReview ? `payable:${result.accountsPayable._id}:detraction-review` : `request:${request._id}:treasury`,
     type: needsDetractionReview ? "ACCOUNTING_DETRACTION_REQUIRED" : "TREASURY_PAYABLE",
     title: needsDetractionReview ? notificationText("Accounting confirmation pending") : notificationText("Payable item ready"),

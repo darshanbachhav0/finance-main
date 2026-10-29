@@ -15,6 +15,7 @@ test("bank notifications reach authorized reviewers and owners throughout the pr
     const makeUser = (role, suffix, active = true) => User.create({ name: suffix, email: `${suffix}@test.local`, passwordHash: "unused", role, area: "Finance", active });
     const owner = await makeUser("Solicitor", "owner");
     const reviewer = await makeUser("Accounting", "reviewer");
+    const secondReviewer = await makeUser("Accounting", "second-reviewer");
     const admin = await makeUser("Admin", "admin");
     const other = await makeUser("Solicitor", "other");
     const treasury = await makeUser("Treasury", "treasury");
@@ -23,8 +24,8 @@ test("bank notifications reach authorized reviewers and owners throughout the pr
     const account = await createEmployeeReimbursementBankAccount({ user: owner, req, payload: { bank: "BCP", currency: "PEN", accountHolderName: "Owner", accountNumber: "1234567890", cci: "12345678901234567890", preferred: true } });
     await notifyEmployeeBankReview(account);
     assert.equal(await countUnreadNotifications(reviewer._id), 1, "Repeated delivery is idempotent");
-    assert.equal(await countUnreadNotifications(admin._id), 1);
-    for (const user of [owner, other, treasury, inactive]) assert.equal(await countUnreadNotifications(user._id), 0);
+    assert.equal(await countUnreadNotifications(secondReviewer._id), 1, "every active Accounting reviewer is notified");
+    for (const user of [owner, other, treasury, inactive, admin]) assert.equal(await countUnreadNotifications(user._id), 0, `${user.name} is not a reviewer (Admin no longer reviews reimbursement bank profiles)`);
     const [alert] = await listUserNotifications(reviewer._id);
     assert.equal(alert.path, `/reimbursement-bank?record=${account._id}`);
     assert.ok(!alert.message.includes("1234567890"), "No account or CCI in the bell");
@@ -33,7 +34,7 @@ test("bank notifications reach authorized reviewers and owners throughout the pr
     assert.equal(await countUnreadNotifications(reviewer._id), 0);
     const replacement = await updateEmployeeReimbursementBankAccount({ accountId: account._id, user: owner, req, payload: { accountNumber: "1234567891" } });
     assert.equal(await countUnreadNotifications(reviewer._id), 1);
-    assert.equal((await listUserNotifications(admin._id)).length, 1, "Old profile's alert is resolved");
+    assert.equal((await listUserNotifications(secondReviewer._id)).length, 1, "Old profile's alert is resolved");
     const reviewed = await reviewEmployeeReimbursementBankAccount({ accountId: replacement._id, user: reviewer, req, payload: { result: "OBSERVED", comments: "Please correct the account holder." } });
     assert.equal(reviewed.verificationComments, "Please correct the account holder.");
     assert.equal(await countUnreadNotifications(reviewer._id), 0);
@@ -43,7 +44,7 @@ test("bank notifications reach authorized reviewers and owners throughout the pr
     assert.equal(await countUnreadNotifications(other._id), 0);
     const next = await updateEmployeeReimbursementBankAccount({ accountId: replacement._id, user: owner, req, payload: { accountHolderName: "Corrected Owner" } });
     await deactivateEmployeeReimbursementBankAccount({ accountId: next._id, user: owner, req });
-    assert.equal(await countUnreadNotifications(admin._id), 0);
+    assert.equal(await countUnreadNotifications(secondReviewer._id), 0);
     for (let index = 0; index < 25; index++) await notifyUser({ userId: reviewer._id, eventKey: `sample:${index}`, type: "TEST", title: "Pending request", message: "Review request", path: "/requests" });
     assert.equal((await listUserNotifications(reviewer._id, { limit: 20 })).length, 20);
     assert.equal(await countUnreadNotifications(reviewer._id), 25, "Unread count is not capped at page size");

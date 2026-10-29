@@ -6,14 +6,15 @@ import PaymentBatch from "../models/PaymentBatch.js";
 import { parseStatement, candidateMatches } from "../services/statementCsv.js";
 import { recordAudit } from "../services/auditService.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { protect, authorize } from "../middleware/auth.js";
-import { ROLES } from "../utils/constants.js";
+import { protect, authorizePermission } from "../middleware/auth.js";
+import { PERMISSIONS } from "../utils/constants.js";
 import { AppError } from "../utils/AppError.js";
 import { parsePagination } from "../services/queryService.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1_500_000, files: 1 } }).single("statement");
-router.use(protect, authorize(ROLES.ADMIN, ROLES.TREASURY, ROLES.ACCOUNTING, ROLES.GAF, ROLES.AUDITOR, ROLES.SUPER_ADMIN));
+// Conciliaciones: Tesorería prepares, Contabilidad reviews and signs, the GAF and Auditoría read.
+router.use(protect, authorizePermission(PERMISSIONS.RECONCILIATION_PREPARE, PERMISSIONS.RECONCILIATION_SIGN, PERMISSIONS.BATCH_APPROVE));
 router.get("/", asyncHandler(async (req, res) => {
   const { page, pageSize, skip } = parsePagination(req.query);
   const [data, total] = await Promise.all([
@@ -27,7 +28,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
   if (!item) throw new AppError(404, "Statement review not found.");
   res.json({ data: item });
 }));
-router.post("/", authorize(ROLES.TREASURY, ROLES.ADMIN), upload, asyncHandler(async (req, res) => {
+router.post("/", authorizePermission(PERMISSIONS.RECONCILIATION_PREPARE), upload, asyncHandler(async (req, res) => {
   if (!req.file || !/\.csv$/i.test(req.file.originalname)) throw new AppError(422, "Upload a CSV statement.");
   const checksum = crypto.createHash("sha256").update(req.file.buffer).digest("hex");
   if (await StatementReview.exists({ checksum })) throw new AppError(409, "This statement was imported previously.");
@@ -58,7 +59,7 @@ router.post("/", authorize(ROLES.TREASURY, ROLES.ADMIN), upload, asyncHandler(as
   await recordAudit({ entityType: "StatementReview", entity: review, user: req.user, req, module: "RECONCILIATION", action: "STATEMENT_IMPORTED", newValues: { count: lines.length, matched: lines.filter(l => l.matchStatus === "SUGGESTED").length, checksum } });
   res.status(201).json({ data: review });
 }));
-router.post("/:id/prepare", authorize(ROLES.TREASURY, ROLES.ADMIN), asyncHandler(async(req,res)=>{
+router.post("/:id/prepare", authorizePermission(PERMISSIONS.RECONCILIATION_PREPARE), asyncHandler(async(req,res)=>{
  const item=await StatementReview.findById(req.params.id);
  if(!item)throw new AppError(404,"Statement review not found.");
  if(item.status!=="PENDING_ACCOUNTING")throw new AppError(409,"Statement is no longer editable.");
@@ -83,7 +84,7 @@ router.post("/:id/prepare", authorize(ROLES.TREASURY, ROLES.ADMIN), asyncHandler
  await recordAudit({entityType:"StatementReview",entity:item,user:req.user,req,module:"RECONCILIATION",action:"STATEMENT_PREPARED",newValues:{statementId:item.id,accepted:item.lines.filter(l=>l.reviewDecision==="ACCEPT").length,unidentified:item.lines.filter(l=>l.reviewDecision==="UNIDENTIFIED").length}});
  res.json({data:item});
 }));
-router.post("/:id/review", authorize(ROLES.ACCOUNTING, ROLES.ADMIN), asyncHandler(async (req, res) => {
+router.post("/:id/review", authorizePermission(PERMISSIONS.RECONCILIATION_SIGN), asyncHandler(async (req, res) => {
   const item = await StatementReview.findById(req.params.id);
   if (!item) throw new AppError(404, "Statement review not found.");
   if (item.status !== "READY_FOR_ACCOUNTING") throw new AppError(409, "Treasury must classify every movement before Accounting signs.");

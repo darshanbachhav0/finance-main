@@ -235,7 +235,7 @@ export function AuthProvider({ children }) {
     user, loading, login, logout, changePassword, extendSession, refreshUser, updateUserFields,
     verifyTwoFactor, cancelTwoFactor, setupTwoFactor, enableTwoFactor, twoFactorPending: Boolean(twoFactorChallenge),
     // The Super Admin oversees read-only: pages hide their actions for it (the backend refuses them too).
-    readOnly: isReadOnlyRole(user?.role),
+    readOnly: isReadOnlyRole(user),
     sessionExpiresAt: expiresAt, isAuthenticated: Boolean(user)
   }), [user, loading, expiresAt, refreshUser, updateUserFields, twoFactorChallenge, cancelTwoFactor]);
 

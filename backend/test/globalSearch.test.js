@@ -28,7 +28,7 @@ test("global search: grouped records, strictly scoped to what the caller may ope
     const director = await person("Dora Director", "71000004", ROLES.AREA_DIRECTOR);
     const accounting = await person("Carla Accounting", "71000005", ROLES.ACCOUNTING);
     const treasury = await person("Tomas Treasury", "71000006", ROLES.TREASURY);
-    const viewer = await person("Vera Viewer", "71000007", ROLES.MANAGEMENT_VIEWER);
+    const viewer = await person("Vera Viewer", "71000007", "ManagementViewer");
     const center = await CostCenter.create({ code: "CC-SRCH", name: "Search", area: "Operations", active: true, responsible: director._id });
     // A Director reads the requests of the cost centers they lead (their cascade).
     director.costCenter = center._id;
@@ -48,13 +48,14 @@ test("global search: grouped records, strictly scoped to what the caller may ope
     const payable = await AccountsPayable.create({ request: brunoRequest._id, sunatVoucher: voucher._id, supplier: supplier._id, supplierIdentifierSnapshot: supplier.rucDni, voucher: { voucherType: "FACTURA", series: "F001", number: "00000777" }, accountingPeriod: "2026-09", originalAmount: 118, invoiceAmount: 118, invoicePenEquivalent: 118, currency: "PEN", exchangeRate: 1, penEquivalent: 118, outstandingAmount: 118 });
 
     await t.test("groups follow the list endpoints' role gates", () => {
-      assert.deepEqual(searchGroupsFor(admin), ["requests", "suppliers", "vouchers", "payables", "users"]);
+      // The administrator finds people; requests only those they raised or must decide.
+      assert.deepEqual(searchGroupsFor(admin), ["requests", "vouchers", "users"]);
       assert.deepEqual(searchGroupsFor(alice), ["requests", "suppliers", "vouchers"]);
-      // Every internal user can open Suppliers (to propose one), so the group follows.
       assert.deepEqual(searchGroupsFor(director), ["requests", "suppliers", "vouchers"]);
       assert.deepEqual(searchGroupsFor(accounting), ["requests", "suppliers", "vouchers", "payables"]);
       assert.deepEqual(searchGroupsFor(treasury), ["requests", "suppliers", "vouchers"]);
-      assert.deepEqual(searchGroupsFor(viewer), []);
+      // A not-yet-migrated ManagementViewer account reads as Auditoría (read-only, university-wide).
+      assert.deepEqual(searchGroupsFor(viewer), ["requests", "suppliers", "vouchers", "payables"]);
       assert.deepEqual(searchGroupsFor({ ...admin.toObject(), active: false }), []);
     });
 
@@ -106,9 +107,9 @@ test("global search: grouped records, strictly scoped to what the caller may ope
     });
 
     await t.test("the term is escaped: regex syntax is matched literally", async () => {
-      assert.deepEqual(ids(await globalSearch("(A+B)", admin), "requests"), [String(brunoRequest._id)]);
+      assert.deepEqual(ids(await globalSearch("(A+B)", accounting), "requests"), [String(brunoRequest._id)]);
       for (const term of [".*", "^R", "REQ.2026", "[a-z]+", "((", "\\\\"]) {
-        const result = await globalSearch(term, admin);
+        const result = await globalSearch(term, accounting);
         for (const entry of result.groups) assert.deepEqual(entry.items, [], `${term} in ${entry.type}`);
       }
     });
@@ -120,11 +121,11 @@ test("global search: grouped records, strictly scoped to what the caller may ope
       for (const entry of (await globalSearch("re", admin)).groups) assert.ok(entry.items.length <= SEARCH_GROUP_LIMIT);
     });
 
-    await t.test("over HTTP: scoped results, and ManagementViewer is refused", async () => {
+    await t.test("over HTTP: scoped results; a retired portal account reads as Auditoría", async () => {
       const token = (user) => jwt.sign({ id: user._id }, process.env.JWT_SECRET || "dev_secret_change_me");
       const get = (term, user) => fetch(`http://127.0.0.1:${server.address().port}/api/search?q=${encodeURIComponent(term)}`, { headers: { Authorization: `Bearer ${token(user)}` } });
       const viewerResponse = await get("REQ-2026", viewer);
-      assert.equal(viewerResponse.status, 403);
+      assert.equal(viewerResponse.status, 200, "ManagementViewer is read as Auditoría until migrated");
       const aliceResponse = await get("REQ-2026-970", alice);
       assert.equal(aliceResponse.status, 200);
       const body = await aliceResponse.json();

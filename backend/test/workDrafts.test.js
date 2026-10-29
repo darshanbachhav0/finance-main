@@ -16,13 +16,14 @@ test("private drafts: ownership, encrypted attachments, atomic conflicts, retry,
   await new Promise(resolve => server.on("listening", resolve));
   const base = `http://127.0.0.1:${server.address().port}/api/work-drafts`;
   try {
-    const users = await User.create([{ name: "Draft owner", email: "draft-owner@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Other owner", email: "other@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: "Accounting" }, { name: "Admin", email: "admin@test.local", passwordHash: "unused", role: "Admin" }]);
+    const users = await User.create([{ name: "Draft owner", email: "draft-owner@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Other owner", email: "other@test.local", passwordHash: "unused", role: "Solicitor" }, { name: "Accounting", email: "accounting@test.local", passwordHash: "unused", role: "Accounting" }, { name: "GAF", email: "gaf@test.local", passwordHash: "unused", role: "GAF" }]);
     const token = index => jwt.sign({ id: users[index]._id }, process.env.JWT_SECRET || "dev_secret_change_me");
     const call = async (path, method = "GET", body, index = 0) => {
       const response = await fetch(`${base}${path}`, { method, headers: { Authorization: `Bearer ${token(index)}`, ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body) });
       return { status: response.status, body: await response.json() };
     };
     // ResourceManager derives its scope from the API endpoint, not the configuration page slug.
+    // Approval rules are financial parameters: the GAF keeps their drafts.
     const eligibilityScope = "resource:approval-rules";
     const eligibilityId = crypto.randomUUID();
     const eligibilityBody = { scope: eligibilityScope, recordId: "new", route: "/configuration/approval-rules", title: "Approval Rules", revision: 0, mutationId: crypto.randomUUID(), value: { name: "IT approvals", area: "IT", role: "AreaDirector", approvalLevel: "AREA_DIRECTOR", maxAmount: 500, active: true } };

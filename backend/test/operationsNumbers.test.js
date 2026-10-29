@@ -8,7 +8,6 @@ import SupplierBankAccount from "../src/models/SupplierBankAccount.js";
 import User from "../src/models/User.js";
 import { getDashboardSummary } from "../src/controllers/dashboardController.js";
 import { managementSummary } from "../src/controllers/reportController.js";
-import { clearManagementApiCache, managementSnapshot } from "../src/services/externalManagementService.js";
 import { listRequestsPage } from "../src/services/requestService.js";
 import { OPEN_PAYABLE_STATUSES, isOpenPayable, openPayableAmountPEN } from "../../shared/openPayables.mjs";
 
@@ -31,7 +30,6 @@ test("one open-payables rule: outstanding balance, partial payments at outstandi
 test("dashboard and report numbers", { timeout: 90000 }, async (t) => {
   const database = `erp_operations_numbers_${process.pid}_${Date.now()}`;
   await mongoose.connect(`mongodb://127.0.0.1:27017/${database}`, { serverSelectionTimeoutMS: 5000 });
-  clearManagementApiCache();
   try {
     const [solicitorA, solicitorB, management, treasury] = await User.create([
       { name: "Solicitor A", dni: "70000001", passwordHash: "unused", role: "Solicitor", area: "Finance" },
@@ -100,13 +98,10 @@ test("dashboard and report numbers", { timeout: 90000 }, async (t) => {
       assert.equal(summary.metrics.find((metric) => metric.key === "missingBank").value, 2);
     });
 
-    await t.test("portal and Reports report the same pending payments", async () => {
-      const portal = (await managementSnapshot("overview", {})).data;
-      assert.equal(portal.pendingPayments, 6, "OPEN x3 + SCHEDULED + PARTIALLY_PAID + PAYMENT_BOUNCED");
-      assert.equal(portal.pendingPaymentAmountPEN, 100 + 50 + 30 + 400 + 10 + 30);
+    await t.test("Reports count every pending payment", async () => {
       const reports = (await call(managementSummary, { query: {}, user: management })).data;
-      assert.equal(reports.periodClose.blockers.openPayables, portal.pendingPayments);
-      assert.equal(reports.payableAgeing.reduce((sum, row) => sum + row.total, 0), portal.pendingPaymentAmountPEN);
+      assert.equal(reports.periodClose.blockers.openPayables, 6, "OPEN x3 + SCHEDULED + PARTIALLY_PAID + PAYMENT_BOUNCED");
+      assert.equal(reports.payableAgeing.reduce((sum, row) => sum + row.total, 0), 100 + 50 + 30 + 400 + 10 + 30);
     });
 
     await t.test("report KPIs follow the chosen filters", async () => {
@@ -118,14 +113,17 @@ test("dashboard and report numbers", { timeout: 90000 }, async (t) => {
     });
 
     await t.test("request list drill-downs: several statuses and awaiting a Purchase Order", async () => {
-      const admin = { _id: new mongoose.Types.ObjectId(), role: "Admin" };
-      const returned = await listRequestsPage({ status: "DEVUELTO,OBSERVADO" }, admin);
+      // Accounting sees every submitted request; Admin no longer sees financial requests.
+      const accounting = { _id: new mongoose.Types.ObjectId(), role: "Accounting" };
+      const returned = await listRequestsPage({ status: "DEVUELTO,OBSERVADO" }, accounting);
       assert.deepEqual((returned.data || returned.rows || []).map((row) => row.requestNumber), ["R-7"]);
-      const awaiting = await listRequestsPage({ status: "PENDIENTE_OC" }, admin);
+      const awaiting = await listRequestsPage({ status: "PENDIENTE_OC" }, accounting);
       assert.deepEqual((awaiting.data || awaiting.rows || []).map((row) => row.requestNumber), ["R-8"]);
+      const admin = { _id: new mongoose.Types.ObjectId(), role: "Admin" };
+      const adminView = await listRequestsPage({ status: "DEVUELTO,OBSERVADO" }, admin);
+      assert.deepEqual((adminView.data || adminView.rows || []).map((row) => row.requestNumber), [], "Admin sees only its own requests");
     });
   } finally {
-    clearManagementApiCache();
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
   }

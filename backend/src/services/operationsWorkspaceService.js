@@ -1,4 +1,3 @@
-import { assertDraftScope } from "./workDraftService.js";
 import User from "../models/User.js";
 import ApprovalRule from "../models/ApprovalRule.js";
 import AccountingMapping from "../models/AccountingMapping.js";
@@ -28,11 +27,7 @@ export async function configurationHealth() {
   for (const purpose of ["ACCOUNTS_PAYABLE", "BANK", "IGV", "ADVANCE_TRANSIT"]) {
     if (!await AccountingMapping.exists({ active: true, purpose })) issues.push({ message: `No active ${purpose} accounting mapping.`, owner: "Accounting", path: "/configuration/accounting-mappings" });
   }
-  for (const resource of ["users", "approval-rules", "bank-formats", "finance-configurations", "document-rules", "budget-allocations"]) {
-    try { assertDraftScope({ role: "Admin" }, `resource:${resource}`); }
-    catch { issues.push({ message: `${resource}: draft permissions do not match Admin configuration access.`, owner: "Admin", path: "/settings" }); }
-  }
-  for (const currency of ["PEN", "USD"]) if (!await BankFormatConfiguration.exists({ bank: "BBVA", currency, active: true, certified: true })) issues.push({ message: `${currency}: no active certified BBVA format.`, owner: "Treasury / Admin", path: "/configuration/bank-formats" });
+  for (const currency of ["PEN", "USD"]) if (!await BankFormatConfiguration.exists({ bank: "BBVA", currency, active: true, certified: true })) issues.push({ message: `${currency}: no active certified BBVA format.`, owner: "Treasury", path: "/configuration/bank-formats" });
   if (!durableAssetsEnabled()) issues.push({ message: "Durable cloud document storage is disabled. Verify persistent disk and backups.", owner: "Admin", path: "/settings" });
   if (process.env.NODE_ENV === "production" && !process.env.DRAFT_ENCRYPTION_KEY) issues.push({ message: "Set a stable dedicated draft encryption key before rotating authentication secrets.", owner: "Admin", path: "/settings" });
   if (process.env.OPERATIONS_WORKER_ENABLED === "false") issues.push({ message: "Automatic supplier reminders, follow-ups and the weekly report are disabled.", owner: "Admin", path: "/settings" });

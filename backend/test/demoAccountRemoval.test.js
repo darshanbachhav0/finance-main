@@ -38,6 +38,11 @@ test("retired demo accounts go with their requests, and their budget use is give
     await db.collection("budgetallocations").insertOne({ _id: plan, code: "PLAN", committedAmount: 600, executedAmount: 450, paidAmount: 100, months: [{}, {}, { month: 3, committedAmount: 600, executedAmount: 450, paidAmount: 100 }] });
     // This test models legacy duplicate commitments; only this disposable test DB
     // relaxes the modern unique index for request so the cleanup routine can be exercised.
+    // When the suite runs in one process (test/run.js) the BudgetCommitment model is registered
+    // and mongoose.connect() starts its index build in the background: wait for it, or it can
+    // recreate request_1 after the drop below. Run alone, the collection may not exist yet.
+    if (mongoose.models.BudgetCommitment) await mongoose.models.BudgetCommitment.init().catch(() => {});
+    await db.createCollection("budgetcommitments").catch((error) => { if (error.codeName !== "NamespaceExists") throw error; });
     const bcIndexes = await db.collection("budgetcommitments").indexes();
     if (bcIndexes.some((idx) => idx.name === "request_1")) await db.collection("budgetcommitments").dropIndex("request_1");
     await db.collection("budgetcommitments").insertMany([

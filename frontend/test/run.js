@@ -24,9 +24,7 @@ import "./approvalFlexibleChainContracts.test.js";
 import "./bulkActionsContracts.test.js";
 
 import "./uiCleanup.test.js";
-import "./managementPortal.test.js";
 import "./operationsAccess.test.js";
-import "./superAdminAccess.test.js";
 import "./notificationTranslations.test.js";
 import "./notificationLinks.test.js";
 import "./uiPolish.test.js";
@@ -59,3 +57,4 @@ import "./simpleRendition.test.js";
 import "./nextStep.test.js";
 import "./cecoBudget.test.js";
 import "./simplerPlatform.test.js";
+import "./roleMenus.test.js";

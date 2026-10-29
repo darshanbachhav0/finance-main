@@ -1,186 +1,44 @@
 import { PERU_BANK_CODES } from "../../../shared/peruBanks.mjs";
 import { LEGACY_REQUEST_PRIORITY_MAP, REQUEST_PRIORITIES, REQUEST_PRIORITY_RANK } from "../../../shared/requestPriority.mjs";
 
-export const ROLES = Object.freeze({
-  ADMIN: "Admin",
-  SOLICITOR: "Solicitor",
-  AREA_DIRECTOR: "AreaDirector",
-  VICE_RECTOR: "ViceRector",
-  ACCOUNTING: "Accounting",
-  TREASURY: "Treasury",
-  PROCUREMENT: "Procurement",
-  MANAGEMENT: "Management",
-  MANAGEMENT_VIEWER: "ManagementViewer",
-  // Gerencia de Administración Financiera: approves requests above GAF_APPROVAL_UIT, every Track D
-  // transfer, and the bank files Treasury generates (never one they generated).
-  GAF: "GAF",
-  // Asesoría Legal and Gestión de Personas register their area's requests like a Solicitor.
-  LEGAL: "Legal",
-  HUMAN_RESOURCES: "HumanResources",
-  // Auditoría: reads every workspace, changes nothing (middleware/auth.js readOnlyOversight).
-  AUDITOR: "Auditor",
-  // Manages administrator accounts and oversees the platform read-only; never acts in a process.
-  SUPER_ADMIN: "SuperAdmin"
-});
+// Roles, permissions and their scopes live in one catalog shared with the frontend
+// (shared/accessControl.mjs). These re-exports keep the backend's existing imports working.
+import {
+  ALL_PERMISSIONS,
+  CANONICAL_ROLES,
+  GRANTABLE_PERMISSIONS as CATALOG_GRANTABLE_PERMISSIONS,
+  PERMISSIONS as CATALOG_PERMISSIONS,
+  READ_ONLY_ROLES,
+  RETIRED_ROLES as CATALOG_RETIRED_ROLES,
+  ROLE_CODES,
+  ROLE_GRANTS,
+  ROLE_LABELS,
+  ROLES as CATALOG_ROLES,
+  SCOPES
+} from "../../../shared/accessControl.mjs";
+
+export const ROLES = CATALOG_ROLES;
+export { ALL_PERMISSIONS, CANONICAL_ROLES, ROLE_CODES, ROLE_GRANTS, ROLE_LABELS, SCOPES };
 
 // Roles that raise their own area's requests (requester controls apply to them).
-export const REQUESTER_ROLES = Object.freeze([ROLES.SOLICITOR, ROLES.LEGAL, ROLES.HUMAN_RESOURCES]);
+export const REQUESTER_ROLES = Object.freeze([ROLES.SOLICITOR]);
 // Roles that read every workspace and never act in a process.
-export const READ_ONLY_OVERSIGHT_ROLES = Object.freeze([ROLES.SUPER_ADMIN, ROLES.AUDITOR]);
+export const READ_ONLY_OVERSIGHT_ROLES = READ_ONLY_ROLES;
 
-// Accounts only the Super Admin creates, edits, deactivates or resets.
-// Roles that no longer exist and the role that took over their work. The Budget role was folded
-// into Treasury: users, approval rules and previous roles still stored as "Budget" are moved at
-// server start (services/legacyRoleService.js).
-export const RETIRED_ROLES = Object.freeze({ Budget: "Treasury" });
+// Retired role -> the canonical role that took over its work (shared/accessControl.mjs). Only
+// Budget is still moved at server start (services/legacyRoleService.js); the others are read
+// through the map at run time and rewritten by scripts/migrateCanonicalRoles.js (dry run first).
+export const RETIRED_ROLES = CATALOG_RETIRED_ROLES;
+export const AUTO_RETIRED_ROLES = Object.freeze({ Budget: ROLES.TREASURY });
 
-export const ADMINISTRATOR_ROLES = Object.freeze([ROLES.ADMIN, ROLES.SUPER_ADMIN]);
+export const ADMINISTRATOR_ROLES = Object.freeze([ROLES.ADMIN]);
 // Who sets each CECO's annual budget and spreads it over the months (equally or not).
-export const BUDGET_PLAN_MANAGERS = Object.freeze([ROLES.ADMIN, ROLES.TREASURY, ROLES.SUPER_ADMIN]);
-// Super Admin accounts are created from the server (npm run superadmin:create), never from the UI.
-export const MAX_SUPER_ADMINS = 2;
+export const BUDGET_PLAN_MANAGERS = Object.freeze([ROLES.TREASURY]);
 
-export const PERMISSIONS = Object.freeze({
-  REQUEST_CREATE: "request:create",
-  REQUEST_VIEW_ALL: "request:view-all",
-  REQUEST_APPROVE: "request:approve",
-  REQUEST_VOID: "request:void",
-  SUPPLIER_PROPOSE: "supplier:propose",
-  // No longer grants anything: the proposer's jefe approves suppliers. Kept so stored permission
-  // lists stay valid.
-  SUPPLIER_HOMOLOGATE: "supplier:homologate",
-  SUPPLIER_BANK_VIEW: "supplier:bank-view",
-  BUDGET_VIEW: "budget:view",
-  BUDGET_MANAGE: "budget:manage",
-  ACCOUNTING_PROCESS: "accounting:process",
-  PERIOD_MANAGE: "period:manage",
-  TREASURY_SCHEDULE: "treasury:schedule",
-  TREASURY_FILE: "treasury:file",
-  PAYMENT_CONFIRM: "payment:confirm",
-  RECONCILE: "payment:reconcile",
-  REPORT_VIEW: "report:view",
-  MANAGEMENT_PORTAL_VIEW: "management-portal:view",
-  AUDIT_VIEW: "audit:view",
-  MASTER_DATA_MANAGE: "master-data:manage",
-  USER_MANAGE: "user:manage",
-  EMPLOYEE_BANK_MANAGE_OWN: "employee-bank:manage-own",
-  EMPLOYEE_BANK_REVIEW: "employee-bank:review",
-  EMPLOYEE_BANK_VIEW_PAYMENT: "employee-bank:view-payment",
-  RENDITION_REVIEW: "rendition:review",
-  PROCUREMENT_ORDER_CREATE: "procurement-order:create",
-  BATCH_INVOICE_UPLOAD: "batch-invoice:upload",
-  BATCH_INVOICE_REVIEW: "batch-invoice:review",
-  PAYMENT_REPROCESS: "payment:reprocess",
-  BANK_FORMAT_CERTIFY: "bank-format:certify",
-  // GAF approves each generated bank TXT before Treasury may download it. A department
-  // duty (with Admin), so it is not grantable piecemeal.
-  BANK_FILE_VERIFY: "bank-file:verify"
-});
-
-// Permissions Admin can grant to one person on top of their role ("Additional permissions").
-// Each one opens a self-contained feature and is enforced by the server for that user. Job
-// duties of a department (posting accounting, paying, confirming payments, managing periods,
-// users or master data, verifying bank accounts, managing budget) are not grantable piecemeal:
-// they come with the role, which keeps separation of duties intact. Approval authority comes
-// from the approval routes (rules and manager chain), not from a checkbox; suppliers are approved
-// by the proposer's jefe the same way.
-export const GRANTABLE_PERMISSIONS = Object.freeze([
-  PERMISSIONS.REQUEST_CREATE,
-  PERMISSIONS.REQUEST_VIEW_ALL,
-  PERMISSIONS.REQUEST_VOID,
-  PERMISSIONS.SUPPLIER_BANK_VIEW,
-  PERMISSIONS.BUDGET_VIEW,
-  PERMISSIONS.REPORT_VIEW,
-  PERMISSIONS.MANAGEMENT_PORTAL_VIEW,
-  PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN,
-  PERMISSIONS.EMPLOYEE_BANK_REVIEW,
-  PERMISSIONS.RENDITION_REVIEW,
-  PERMISSIONS.PROCUREMENT_ORDER_CREATE,
-  PERMISSIONS.BATCH_INVOICE_UPLOAD,
-  PERMISSIONS.BATCH_INVOICE_REVIEW,
-  PERMISSIONS.BANK_FORMAT_CERTIFY
-]);
-
-const ROLE_BASE_PERMISSIONS = Object.freeze({
-  [ROLES.ADMIN]: Object.values(PERMISSIONS),
-  [ROLES.SOLICITOR]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.BATCH_INVOICE_UPLOAD],
-  // Vice-Rector is a Area Director's escalation target and holds the identical permission
-  // set - the only difference between the two is directional (an Area Director may forward
-  // an approval up to the Vice-Rector; the Vice-Rector, being the top of this pair, cannot
-  // forward back down). See resolveManagerChain/activateNextChainStep in approvalRuleService.js.
-  [ROLES.AREA_DIRECTOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW],
-  [ROLES.VICE_RECTOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW],
-  [ROLES.ACCOUNTING]: [
-    PERMISSIONS.REQUEST_VIEW_ALL,
-    PERMISSIONS.REQUEST_VOID,
-    PERMISSIONS.SUPPLIER_BANK_VIEW,
-    PERMISSIONS.BUDGET_VIEW,
-    PERMISSIONS.ACCOUNTING_PROCESS,
-    PERMISSIONS.PERIOD_MANAGE,
-    PERMISSIONS.REPORT_VIEW,
-    PERMISSIONS.MASTER_DATA_MANAGE,
-    PERMISSIONS.AUDIT_VIEW,
-    PERMISSIONS.EMPLOYEE_BANK_REVIEW,
-    PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT,
-    PERMISSIONS.RENDITION_REVIEW,
-    PERMISSIONS.BATCH_INVOICE_UPLOAD,
-    PERMISSIONS.BATCH_INVOICE_REVIEW,
-  ],
-  [ROLES.TREASURY]: [
-    PERMISSIONS.REQUEST_VIEW_ALL,
-    PERMISSIONS.SUPPLIER_BANK_VIEW,
-    PERMISSIONS.TREASURY_SCHEDULE,
-    PERMISSIONS.TREASURY_FILE,
-    PERMISSIONS.PAYMENT_CONFIRM,
-    PERMISSIONS.RECONCILE,
-    PERMISSIONS.REPORT_VIEW,
-    PERMISSIONS.EMPLOYEE_BANK_VIEW_PAYMENT,
-    PERMISSIONS.PAYMENT_REPROCESS,
-    PERMISSIONS.BANK_FORMAT_CERTIFY,
-    // Treasury also does what the former Budget role did: budget plans, commitments and the
-    // review of budget exceptions (Management still decides them). Purchase Orders stay with
-    // Procurement.
-    PERMISSIONS.BUDGET_VIEW,
-    PERMISSIONS.BUDGET_MANAGE
-  ],
-  [ROLES.PROCUREMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.PROCUREMENT_ORDER_CREATE, PERMISSIONS.REPORT_VIEW],
-  // Management is the Gerencia General: it approves above GENERAL_MANAGEMENT_APPROVAL_UIT.
-  [ROLES.MANAGEMENT]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
-  [ROLES.GAF]: [
-    PERMISSIONS.REQUEST_VIEW_ALL,
-    PERMISSIONS.REQUEST_APPROVE,
-    PERMISSIONS.SUPPLIER_BANK_VIEW,
-    PERMISSIONS.BUDGET_VIEW,
-    PERMISSIONS.REPORT_VIEW,
-    PERMISSIONS.AUDIT_VIEW,
-    PERMISSIONS.MANAGEMENT_PORTAL_VIEW,
-    // Approves each bank file (lote) before Treasury downloads it.
-    PERMISSIONS.BANK_FILE_VERIFY
-  ],
-  [ROLES.LEGAL]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN],
-  [ROLES.HUMAN_RESOURCES]: [PERMISSIONS.REQUEST_CREATE, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN, PERMISSIONS.REPORT_VIEW],
-  // Read-only oversight, bank details masked. Do not add write permissions here.
-  [ROLES.AUDITOR]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.AUDIT_VIEW],
-  // Management portal only: the aggregate /api/management/v1 API and nothing internal (no
-  // Reports, dashboards, audit or request data). Enforced for custom grants too - see
-  // MANAGEMENT_VIEWER_PERMISSIONS below. Do not add permissions here.
-  [ROLES.MANAGEMENT_VIEWER]: [PERMISSIONS.MANAGEMENT_PORTAL_VIEW],
-  // Read-only oversight. Route guards also let the Super Admin read whatever an Admin reads (GET
-  // only, see middleware/auth.js); these are what services check for data-level decisions, so bank
-  // details stay masked and no workflow action is ever offered. Do not add write permissions here.
-  [ROLES.SUPER_ADMIN]: [PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.BUDGET_VIEW, PERMISSIONS.REPORT_VIEW, PERMISSIONS.MANAGEMENT_PORTAL_VIEW, PERMISSIONS.AUDIT_VIEW, PERMISSIONS.USER_MANAGE]
-});
-
-// Every internal user can propose a supplier (the proposer's jefe then approves it).
-// The portal-only ManagementViewer and the read-only Super Admin cannot.
-export const ROLE_PERMISSIONS = Object.freeze(Object.fromEntries(Object.entries(ROLE_BASE_PERMISSIONS).map(([role, permissions]) => [
-  role,
-  [ROLES.MANAGEMENT_VIEWER, ...READ_ONLY_OVERSIGHT_ROLES].includes(role) ? permissions : [...new Set([...permissions, PERMISSIONS.SUPPLIER_PROPOSE])]
-])));
-
-// The only permissions a ManagementViewer account may ever hold, including per-user extras.
-// User validation rejects anything else and permissionsFor() ignores it for legacy records.
-export const MANAGEMENT_VIEWER_PERMISSIONS = Object.freeze([PERMISSIONS.MANAGEMENT_PORTAL_VIEW]);
+export const PERMISSIONS = CATALOG_PERMISSIONS;
+export const GRANTABLE_PERMISSIONS = CATALOG_GRANTABLE_PERMISSIONS;
+// Role -> the permissions it grants (their scope is in ROLE_GRANTS).
+export const ROLE_PERMISSIONS = Object.freeze(Object.fromEntries(Object.entries(ROLE_GRANTS).map(([role, grants]) => [role, Object.freeze(Object.keys(grants))])));
 
 export const REQUEST_TYPE = Object.freeze({
   OPEX: "OPEX",
@@ -501,7 +359,7 @@ export const ERROR_CODES = Object.freeze({
   SUPPLIER_INACTIVE: "SUPPLIER_INACTIVE",
   SUPPLIER_NOT_HOMOLOGATED: "SUPPLIER_NOT_HOMOLOGATED",
   DUPLICATE_SUPPLIER: "DUPLICATE_SUPPLIER",
-  // The supplier belongs to another area's list; Accounting or Admin can share it with the user's area.
+  // The supplier belongs to another area's list; Treasury can share it with the user's area.
   SUPPLIER_OTHER_DEPARTMENT: "SUPPLIER_OTHER_DEPARTMENT",
   DUPLICATE_VOUCHER: "DUPLICATE_VOUCHER",
   PURCHASE_ORDER_AMOUNT_EXCEEDED: "PURCHASE_ORDER_AMOUNT_EXCEEDED",

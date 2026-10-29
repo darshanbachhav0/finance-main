@@ -9,10 +9,10 @@ test("the Budget role is folded into Treasury", async (t) => {
     assert.equal(Object.values(ROLES).includes("Budget"), false);
     assert.equal(ROLE_PERMISSIONS.Budget, undefined);
     assert.equal(RETIRED_ROLES.Budget, ROLES.TREASURY);
-    for (const permission of [PERMISSIONS.BUDGET_VIEW, PERMISSIONS.BUDGET_MANAGE, PERMISSIONS.REQUEST_VIEW_ALL, PERMISSIONS.REPORT_VIEW]) {
+    for (const permission of [PERMISSIONS.BUDGET_VIEW, PERMISSIONS.BUDGET_MANAGE, PERMISSIONS.REQUEST_VIEW, PERMISSIONS.REPORT_VIEW]) {
       assert.ok(ROLE_PERMISSIONS[ROLES.TREASURY].includes(permission), `Treasury has ${permission}`);
     }
-    assert.ok(!ROLE_PERMISSIONS[ROLES.TREASURY].includes(PERMISSIONS.PROCUREMENT_ORDER_CREATE), "orders stay with Procurement");
+    assert.ok(!ROLE_PERMISSIONS[ROLES.TREASURY].includes(PERMISSIONS.PURCHASE_ORDER_ISSUE), "orders are a separate grant");
   });
 
   await t.test("stored users, previous roles and approval rules move to Treasury once, with an audit entry", async () => {

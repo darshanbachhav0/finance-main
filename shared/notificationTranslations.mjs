@@ -4,7 +4,7 @@
 // notification emails (backend/src/services/notificationEmailService.js) use the bell's wording.
 export default {
   "Provider review pending": "Proveedor pendiente de revisión",
-  "{supplier} requires Accounting review.": "{supplier} requiere revisión de Contabilidad.",
+  "{supplier} requires Treasury review.": "{supplier} requiere revisión de Tesorería.",
   "Accounting confirmation pending": "Pendiente de confirmación contable",
   "{requestNumber}: confirm SPOT treatment and net payable.": "{requestNumber}: confirma la detracción y el neto a pagar.",
   // Approvals

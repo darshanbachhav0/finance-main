@@ -1,24 +1,30 @@
 import mongoose from "mongoose";
 import { canonicalRequestStatus, isTerminalRequest } from "../../../shared/workflowStatus.mjs";
+import { can, effectivePermissions, extraGrants as catalogExtraGrants, hasRole, permissionScope, permissionScopes, primaryRole, rolesOf } from "../../../shared/accessControl.mjs";
 import { activeApprovalStep } from "../services/approvalRuleService.js";
-import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, PERMISSIONS, READ_ONLY_OVERSIGHT_ROLES, REQUEST_STATUS, REQUESTER_ROLES, ROLE_PERMISSIONS, ROLES } from "./constants.js";
+import { APPROVAL_ROUTING_MODE, APPROVAL_STAGES, PERMISSIONS, READ_ONLY_OVERSIGHT_ROLES, REQUEST_STATUS, REQUESTER_ROLES, ROLES, SCOPES } from "./constants.js";
 
-export const SUPPLIER_VIEW_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ...REQUESTER_ROLES, ROLES.PROCUREMENT, ROLES.GAF, ...READ_ONLY_OVERSIGHT_ROLES];
+export { hasRole, permissionScopes, primaryRole, rolesOf };
+
 // Roles whose work reaches supplier records (and their files) beyond their own proposals. Which
 // suppliers each one sees is still their department's list (services/supplierVisibilityService.js);
-// only the Admin, the GAF and the read-only overseers see every department.
-export const SUPPLIER_WORK_ROLES = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.GAF, ...READ_ONLY_OVERSIGHT_ROLES];
-export const REQUEST_CREATOR_ROLES = [ROLES.ADMIN, ...REQUESTER_ROLES];
-// Who sees which requests (Manual técnico, "Seguridad, perfiles y auditoría": alcance de lectura).
-// The GAF, the Gerencia General and Auditoría read every submitted request of the university, never
-// other people's drafts.
-const SUBMITTED_REQUEST_VIEWERS = [ROLES.MANAGEMENT, ROLES.GAF, ROLES.AUDITOR];
-// A Director or Vicerrector reads the submitted requests of their cascade, and a requester those of
-// their own cost center (services/costCenterCascadeService.js, computed when they sign in).
-export const CASCADE_REQUEST_VIEWERS = [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR];
-export const COST_CENTER_SCOPED_VIEWERS = [...CASCADE_REQUEST_VIEWERS, ...REQUESTER_ROLES];
+// only the GAF and Auditoría see every department.
+export const SUPPLIER_WORK_ROLES = [ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.GAF, ...READ_ONLY_OVERSIGHT_ROLES];
 
 const idString = (value) => String(value?._id || value || "");
+
+// The data scope of "request.view" for this person (shared/accessControl.mjs): OWN, COST_CENTER,
+// APPROVAL_HIERARCHY or UNIVERSITY; null when they hold no request view at all (the
+// administrator, unless they also hold a business role).
+export function requestViewScope(user) {
+  return permissionScope(user, PERMISSIONS.REQUEST_VIEW);
+}
+
+// Whose cost-center cascade is computed when they sign in (middleware/auth.js): requesters read
+// their own cost center, a responsible or Vicerrector the cascade below them.
+export function readsByCostCenter(user) {
+  return [SCOPES.COST_CENTER, SCOPES.APPROVAL_HIERARCHY].includes(requestViewScope(user));
+}
 
 // The cost centers whose submitted requests this person reads besides their own.
 export function visibleCostCenterIds(user) {
@@ -31,55 +37,43 @@ function requestCostCenterIds(request) {
   return [request.requesterCostCenter, ...(request.costAllocations || []).map((allocation) => allocation.costCenter)].map(idString).filter(Boolean);
 }
 
-export function isSuperAdmin(user) {
-  return user?.role === ROLES.SUPER_ADMIN;
-}
-
-// The Super Admin and the Auditor: they read every workspace and never act in a process.
+// Auditoría: reads the institution's financial history and never acts in a process.
 export function isReadOnlyOverseer(user) {
-  return READ_ONLY_OVERSIGHT_ROLES.includes(user?.role);
+  return hasRole(user, READ_ONLY_OVERSIGHT_ROLES);
 }
 
 export function permissionsFor(userOrRole) {
-  const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
-  const rolePermissions = ROLE_PERMISSIONS[role] || [];
-  return [...new Set([...rolePermissions, ...extraGrants(userOrRole)])];
+  return effectivePermissions(userOrRole);
 }
 
 // The extra grants that are in force for a user: only grantable permissions (a stored legacy
-// value such as "accounting:process" never widens access), and nothing beyond the portal for a
-// ManagementViewer.
+// value such as "accounting:process" never widens access).
 export function extraGrants(user) {
-  if (!user || typeof user !== "object") return [];
-  const allowed = user.role === ROLES.MANAGEMENT_VIEWER ? MANAGEMENT_VIEWER_PERMISSIONS : GRANTABLE_PERMISSIONS;
-  return (user.permissions || []).filter((permission) => allowed.includes(permission));
+  return catalogExtraGrants(user);
 }
 
 export function hasPermission(userOrRole, permission) {
-  return permissionsFor(userOrRole).includes(permission);
+  return can(userOrRole, permission);
 }
 
-// A person who raises their own requests: every Solicitor, Legal and Gestión de Personas user,
-// plus anyone granted "Create requests". Requester controls (only own requests, only authorized
-// cost centers) apply to them.
+// A person who raises their own requests: every Solicitante, plus anyone granted "Registrar
+// requerimientos". Requester controls (only own requests, only authorized cost centers) apply.
 export function actsAsRequester(user) {
-  return REQUESTER_ROLES.includes(user?.role) || extraGrants(user).includes(PERMISSIONS.REQUEST_CREATE);
+  return hasRole(user, REQUESTER_ROLES) || extraGrants(user).includes(PERMISSIONS.REQUEST_CREATE);
 }
 
-// A person who proposes suppliers without being Accounting/Admin (every other internal user):
-// their proposals stay theirs to correct.
+// A person who proposes suppliers without validating them (everyone but Tesorería): their
+// proposals stay theirs to correct.
 export function actsAsSupplierProposer(user) {
-  return ![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user?.role) && hasPermission(user, PERMISSIONS.SUPPLIER_PROPOSE);
+  return !hasPermission(user, PERMISSIONS.SUPPLIER_VALIDATE) && hasPermission(user, PERMISSIONS.SUPPLIER_CREATE);
 }
 
-export function canCreateRequest(role) {
-  return REQUEST_CREATOR_ROLES.includes(role);
+export function canCreateRequest(userOrRole) {
+  return hasPermission(userOrRole, PERMISSIONS.REQUEST_CREATE);
 }
 
 export function canViewSuppliers(userOrRole) {
-  const role = typeof userOrRole === "string" ? userOrRole : userOrRole?.role;
-  if (SUPPLIER_VIEW_ROLES.includes(role)) return true;
-  return [PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW].some((permission) => hasPermission(userOrRole, permission));
+  return [PERMISSIONS.SUPPLIER_VIEW, PERMISSIONS.SUPPLIER_CREATE, PERMISSIONS.SUPPLIER_BANK_VIEW].some((permission) => hasPermission(userOrRole, permission));
 }
 
 // SUNAT confirmed the supplier but could not verify the individual invoice (SUNAT down, or the
@@ -110,8 +104,6 @@ export function canModifyRequest(request, user) {
   // An issued order is an approved snapshot. Invoice observations must be
   // corrected through invoice registration, not by restarting request approval.
   if (request.purchaseOrder) return false;
-  if (user.role === ROLES.ADMIN && !["BORRADOR", "DEVUELTO", "OBSERVADO", "OBSERVADO_PRESUPUESTO", "OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO", "OBSERVADO_CARGA_MASIVA"].includes(request.status)) return false;
-  if (user.role === ROLES.ADMIN) return true;
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
   return (
     actsAsRequester(user) &&
@@ -142,38 +134,38 @@ export function canWithdrawRequest(request, user) {
   return !(request.approvalRouteSnapshot || []).some((step) => step.status === "APPROVED");
 }
 
-// Visibility is identity-based for the manager chain: a plain Solicitor (which
-// most chain approvers are) has no blanket view of other people's requests —
-// they see their own, and anything specifically routed to them for approval.
-// Roles with REQUEST_VIEW_ALL (Accounting, Treasury, Budget, Management, and
-// the Area Director/Vice-Rector approval-pool roles) are unaffected.
-export function canViewRequest(request, user) {
-  if (!request || !user) return false;
-  if (user.role === ROLES.ADMIN) return true;
+// Who reads a request (Manual técnico, "Alcance de lectura"): its requester, anyone a step of its
+// route is assigned to, the heads of the CECOs it is charged to, and - never over other people's
+// drafts - whoever holds "request.view": OWN reads nothing more, COST_CENTER / APPROVAL_HIERARCHY
+// the cost centers computed at sign-in (their own, or their cascade), UNIVERSITY everything
+// submitted. The administrator holds no request view: administering accounts is not reading
+// financial work.
+function involved(request, user) {
   if (requesterIdOf(request) === String(user._id)) return true;
   if ((request.approvalRouteSnapshot || []).some((step) => step.approverUser && String(step.approverUser?._id || step.approverUser) === String(user._id))) return true;
-  // The heads of the CECOs a Por Encargo request is charged to review it (they are not approvers).
-  if ((request.costCenterReviewers || []).some((reviewer) => String(reviewer?._id || reviewer) === String(user._id))) return true;
-  // Broad but never over other people's drafts. Everyone else with REQUEST_VIEW_ALL
-  // (Accounting, Treasury, Procurement) keeps its unrestricted access.
-  if (SUBMITTED_REQUEST_VIEWERS.includes(user.role)) return request.status !== REQUEST_STATUS.DRAFT;
-  if (COST_CENTER_SCOPED_VIEWERS.includes(user.role)) {
-    if (request.status === REQUEST_STATUS.DRAFT) return false;
+  return (request.costCenterReviewers || []).some((reviewer) => String(reviewer?._id || reviewer) === String(user._id));
+}
+
+export function canViewRequest(request, user) {
+  if (!request || !user) return false;
+  if (involved(request, user)) return true;
+  if (request.status === REQUEST_STATUS.DRAFT) return false;
+  const scope = requestViewScope(user);
+  if (scope === SCOPES.UNIVERSITY) return true;
+  if (scope === SCOPES.COST_CENTER || scope === SCOPES.APPROVAL_HIERARCHY) {
     const visible = new Set(visibleCostCenterIds(user));
     return requestCostCenterIds(request).some((id) => visible.has(id));
   }
-  return hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL);
+  return false;
 }
 
 export function requestVisibilityFilter(user) {
   if (!user) return { _id: null };
-  if (user.role === ROLES.ADMIN) return {};
-  if (SUBMITTED_REQUEST_VIEWERS.includes(user.role)) {
+  const scope = requestViewScope(user);
+  if (scope === SCOPES.UNIVERSITY) {
     return { $or: [{ status: { $ne: REQUEST_STATUS.DRAFT } }, { requester: user._id }, { solicitor: user._id }] };
   }
-  const scoped = COST_CENTER_SCOPED_VIEWERS.includes(user.role);
-  if (!scoped && hasPermission(user, PERMISSIONS.REQUEST_VIEW_ALL)) return {};
-  const centers = scoped ? visibleCostCenterIds(user).filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id)) : [];
+  const centers = readsByCostCenter(user) ? visibleCostCenterIds(user).filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id)) : [];
   return {
     $or: [
       { requester: user._id },
@@ -193,7 +185,6 @@ export function isActiveChainApprover(request, user) {
 
 export function canApproveStage(request, user) {
   if (!request || !user || !hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) return false;
-  if (user.role === ROLES.ADMIN) return true;
   const level = user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR;
   return level === (request.approvalStage || APPROVAL_STAGES.AREA_DIRECTOR);
 }
@@ -203,12 +194,11 @@ export function canApproveStage(request, user) {
 export const ENCARGO_JOB_CATEGORIES = Object.freeze([3, 5, 6]);
 
 export function mayChargeAnotherCostCenter(user) {
-  return user?.role === ROLES.ADMIN || ENCARGO_JOB_CATEGORIES.includes(Number(user?.jobCategory));
+  return ENCARGO_JOB_CATEGORIES.includes(Number(user?.jobCategory));
 }
 
 export function canUseCostCenter(user, costCenterId) {
   if (!user || !costCenterId) return false;
-  if (user.role === ROLES.ADMIN) return true;
   const allowed = [user.costCenter, ...(user.authorizedCostCenters || [])]
     .filter(Boolean)
     .map((value) => String(value?._id || value));

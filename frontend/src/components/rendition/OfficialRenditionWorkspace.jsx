@@ -30,6 +30,7 @@ import { canonicalRequestStatus } from "../../../../shared/workflowStatus.mjs";
 import { celebrate } from "../../utils/celebrate.js";
 import { formatCurrency, formatDate, formatDateTime } from "../../utils/formatters.js";
 import { todayIso } from "../../utils/dateInput.js";
+import { PERMISSIONS, ROLES, hasRole, userCan } from "../../utils/access.js";
 
 const today = () => todayIso();
 const key = () => `${Date.now()}-${Math.random()}`;
@@ -101,20 +102,20 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
   const owner = String(ownerId) === String(user._id);
   const isAdvance = request.requestType === "ENTREGA_RENDIR";
   const isReimbursement = request.requestType === "REEMBOLSO_SIN_SUSTENTO";
-  const canSubmit = (user.role === "Admin" || owner)
+  const canSubmit = owner
     && ["PENDING", "OBSERVED", "NOT_REQUIRED"].includes(request.rendition?.status || "NOT_REQUIRED")
     && (isAdvance ? ["PAGADO", "CONCILIADO"].includes(canonicalRequestStatus(request.status)) : canonicalRequestStatus(request.status) === "COMPROMISO_PRESUPUESTAL")
     && request.rendition?.financeReview?.result !== "REJECTED";
-  const canReview = ["Admin", "Accounting"].includes(user.role)
+  const canReview = userCan(user, PERMISSIONS.RENDITION_REVIEW)
     && request.rendition?.status === "SUBMITTED"
     && request.rendition?.financeReview?.result === "PENDING";
-  const canSettle = ["Admin", "Accounting", "Treasury"].includes(user.role)
+  const canSettle = userCan(user, PERMISSIONS.RENDITION_REVIEW, PERMISSIONS.TREASURY_EXECUTE_PAYMENT)
     && isAdvance
     && request.rendition?.status === "VALIDATED"
     && Number(request.rendition?.nonDeductibleOutstanding || 0) > 0;
   const recoveryRecord = request.rendition?.recovery || {};
   const recoveryOutstanding = Number(recoveryRecord.outstandingAmount || 0);
-  const canRecover = ["Admin", "Accounting", "Treasury"].includes(user.role)
+  const canRecover = userCan(user, PERMISSIONS.RENDITION_REVIEW, PERMISSIONS.TREASURY_EXECUTE_PAYMENT)
     && isAdvance
     && request.rendition?.status === "REJECTED"
     && recoveryRecord.status === "PENDING";
@@ -269,7 +270,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     <Section icon={ReceiptText} title="Expenses Without Supporting Documents" description="Exceptional lines require a detailed description and do not fabricate fiscal evidence." action={editable && <button type="button" className="secondary-button compact-button" onClick={() => setUnsupportedLines((rows) => [...rows, emptyUnsupported()])}><Plus size={15} />{t("Add row")}</button>}>
       {editable ? <div className="repeatable-lines">{unsupportedLines.map((line, index) => <div className="repeatable-line unsupported-line" key={line.clientId}><span className="line-number">{index + 1}</span><label className="field"><span>{t("Date")} *</span><DateInput required value={line.date} onChange={(event) => updateRows(setUnsupportedLines, index, "date", event.target.value)} /></label><label className="field line-description"><span>{t("Detailed Expense Description")} *</span><input required value={line.description} onChange={(event) => updateRows(setUnsupportedLines, index, "description", event.target.value)} /></label><label className="field"><span>{t("Goods / Services")} *</span><select value={line.goodsServiceType} onChange={(event) => updateRows(setUnsupportedLines, index, "goodsServiceType", event.target.value)}><option value="GOODS">{t("Goods")}</option><option value="SERVICES">{t("Services")}</option></select></label><label className="field"><span>{t("Gross Amount")} (PEN) *</span><input type="number" min="0.01" step="0.01" required value={line.grossAmount} onChange={(event) => updateRows(setUnsupportedLines, index, "grossAmount", event.target.value)} /></label><button type="button" className="icon-button danger-icon" onClick={() => setUnsupportedLines((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} aria-label={t("Remove row")}><Trash2 size={16} /></button></div>)}{!unsupportedLines.length && <EmptyState compact title="No unsupported-expense rows added." />}</div> : <ReadOnlyRows rows={request.rendition?.unsupportedExpenseLines || []} type="unsupported" />}
       <div className="rendition-section-footer"><span>{t("Unsupported Expense Subtotal")}</span><strong>{formatCurrency(editable ? unsupportedSubtotal : request.rendition?.unsupportedExpenseSubtotal || 0, "PEN", language)}</strong></div>
-      {!policy.unsupportedExpense && ["Admin", "Accounting"].includes(user.role) && <p className="section-note warning-note">{t("No system-configured unsupported-expense management limit exists. No numeric threshold has been invented.")}</p>}
+      {!policy.unsupportedExpense && hasRole(user, ROLES.ACCOUNTING) && <p className="section-note warning-note">{t("No system-configured unsupported-expense management limit exists. No numeric threshold has been invented.")}</p>}
     </Section>
 
     {isReimbursement && <Section icon={Landmark} title="Reimbursement Banking" description="A verified employee account is required only because this workflow expects reimbursement to the employee.">
@@ -277,7 +278,7 @@ export default function OfficialRenditionWorkspace({ request, masters, user, onR
     </Section>}
 
     {isAdvance && <Section icon={ReceiptText} title="Accounting Allocation" description="Existing Accounting dimensions remain authoritative for posting and advance clearance.">
-      {editable ? <div className="repeatable-lines">{accountingLines.map((line, index) => <div className="repeatable-line accounting-rendition-line" key={line.clientId}><span className="line-number">{index + 1}</span><label className="field"><span>{t("Cost center")} *</span><select required value={line.costCenter} onChange={(event) => updateRows(setAccountingLines, index, "costCenter", event.target.value)}><option value="">{t("Select")}</option>{masters.costCenters.map((item) => <option key={item._id} value={item._id}>{item.code} - {item.name}</option>)}</select></label><label className="field"><span>{t("Net")} *</span><input type="number" min="0" step="0.01" required value={line.netAmount} onChange={(event) => updateRows(setAccountingLines, index, "netAmount", event.target.value)} /></label><label className="field"><span>{t("IGV")} *</span><input type="number" min="0" step="0.01" required value={line.igvAmount} onChange={(event) => updateRows(setAccountingLines, index, "igvAmount", event.target.value)} /></label><label className="field"><span>{t("Total")} *</span><input type="number" min="0.01" step="0.01" required value={line.totalAmount} onChange={(event) => updateRows(setAccountingLines, index, "totalAmount", event.target.value)} /></label></div>)}</div> : <div className="rendition-record-list">{(request.rendition?.lines || []).map((line, index) => <div key={line._id || index}><span>{line.costCenter?.code || "CECO"}</span>{["Accounting", "Admin"].includes(user?.role) && <><strong>{line.expenseType?.accountNumber || "-"}</strong><small>{line.expenseType?.name || "-"}</small></>}<b>{formatCurrency(line.totalAmount || 0, request.currency, language)}</b></div>)}</div>}
+      {editable ? <div className="repeatable-lines">{accountingLines.map((line, index) => <div className="repeatable-line accounting-rendition-line" key={line.clientId}><span className="line-number">{index + 1}</span><label className="field"><span>{t("Cost center")} *</span><select required value={line.costCenter} onChange={(event) => updateRows(setAccountingLines, index, "costCenter", event.target.value)}><option value="">{t("Select")}</option>{masters.costCenters.map((item) => <option key={item._id} value={item._id}>{item.code} - {item.name}</option>)}</select></label><label className="field"><span>{t("Net")} *</span><input type="number" min="0" step="0.01" required value={line.netAmount} onChange={(event) => updateRows(setAccountingLines, index, "netAmount", event.target.value)} /></label><label className="field"><span>{t("IGV")} *</span><input type="number" min="0" step="0.01" required value={line.igvAmount} onChange={(event) => updateRows(setAccountingLines, index, "igvAmount", event.target.value)} /></label><label className="field"><span>{t("Total")} *</span><input type="number" min="0.01" step="0.01" required value={line.totalAmount} onChange={(event) => updateRows(setAccountingLines, index, "totalAmount", event.target.value)} /></label></div>)}</div> : <div className="rendition-record-list">{(request.rendition?.lines || []).map((line, index) => <div key={line._id || index}><span>{line.costCenter?.code || "CECO"}</span>{user?.role === "Accounting" && <><strong>{line.expenseType?.accountNumber || "-"}</strong><small>{line.expenseType?.name || "-"}</small></>}<b>{formatCurrency(line.totalAmount || 0, request.currency, language)}</b></div>)}</div>}
       <div className="rendition-section-footer"><span>{t("Accounting Amount")}</span><strong>{formatCurrency(accountingAmount, request.currency, language)}</strong></div>
     </Section>}
 

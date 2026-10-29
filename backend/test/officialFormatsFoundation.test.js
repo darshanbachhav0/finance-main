@@ -214,6 +214,23 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
       role: ROLES.ACCOUNTING,
       area: "Finance"
     });
+    // Tesorería validates suppliers and their bank accounts; one registers, another verifies.
+    const treasurer = await User.create({
+      employeeCode: "UMA-TEST-TREASURY",
+      name: "Finance Treasurer",
+      email: "finance.treasurer@test.local",
+      passwordHash: "unused",
+      role: ROLES.TREASURY,
+      area: "Finance"
+    });
+    const treasurer2 = await User.create({
+      employeeCode: "UMA-TEST-TREASURY-2",
+      name: "Finance Treasurer 2",
+      email: "finance.treasurer2@test.local",
+      passwordHash: "unused",
+      role: ROLES.TREASURY,
+      area: "Finance"
+    });
     const employee = await User.create({
       employeeCode: "UMA-TEST-EMPLOYEE",
       name: "Requesting Employee",
@@ -239,7 +256,7 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
         taxpayerStatus: "MANUALLY_VALIDATED",
         complianceStatus: "COMPLIANT",
         compliance: { taxpayerActive: true, compliant: true },
-        complianceReview: { result: "APPROVED", reviewedBy: admin._id, reviewedAt: new Date(), comments: "Foundation review" },
+        complianceReview: { result: "APPROVED", reviewedBy: accountant._id, reviewedAt: new Date(), comments: "Foundation review" },
         declarations: {
           stateSanctions: { answer: "NO", declaredAt: new Date() },
           complianceModel: { answer: "YES", declaredAt: new Date() }
@@ -262,14 +279,17 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
           accountHolderName: supplier.legalName,
           ownershipResult: "MATCH"
         },
-        user: admin,
-        verifier: accountant,
+        user: treasurer,
+        verifier: treasurer2,
         req
       });
-      // Accounting/Admin can no longer homologate through an edit; this proposal has no proposer and
-      // so no jefe, which leaves the decision to the Admin.
-      await assert.rejects(() => updateAndReviewSupplier({ supplierId: supplier._id, payload: { homologationStatus: "HOMOLOGATED" }, files: {}, user: admin, req }), (error) => error.code === "FORBIDDEN");
-      const result = await decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE", comments: "Approved in test" }, user: admin, req });
+      // Nobody homologates through an edit (not Treasury, not the Admin); the supplier is approved
+      // through the review decision, which is Tesorería's.
+      for (const user of [treasurer, admin]) {
+        await assert.rejects(() => updateAndReviewSupplier({ supplierId: supplier._id, payload: { homologationStatus: "HOMOLOGATED" }, files: {}, user, req }), (error) => error.code === "FORBIDDEN");
+      }
+      await assert.rejects(() => decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE", comments: "Approved in test" }, user: admin, req }), (error) => error.code === "FORBIDDEN", "the Admin does not review suppliers");
+      const result = await decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE", comments: "Approved in test" }, user: treasurer, req });
       assert.match(result.supplier.supplierCode, /^PRV-\d{4,}$/);
       const originalCode = result.supplier.supplierCode;
       await addVerifiedSupplierBankAccount({
@@ -284,8 +304,8 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
           accountHolderName: result.supplier.legalName,
           ownershipResult: "MATCH"
         },
-        user: admin,
-        verifier: accountant
+        user: treasurer,
+        verifier: treasurer2
       });
       assert.equal(await SupplierBankAccount.countDocuments({ supplier: supplier._id, active: true }), 2);
       assert.equal((await Supplier.findById(supplier._id)).supplierCode, originalCode);
@@ -294,7 +314,7 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
       await assert.rejects(() => codeProtected.save(), /immutable after assignment/);
 
       const rejected = await Supplier.create({ rucDni: "20600000034", name: "Rejected Foundation Supplier" });
-      const rejectedResult = await decideSupplierApproval({ supplierId: rejected._id, payload: { decision: "REJECT", comments: "Rejected in test" }, user: admin, req });
+      const rejectedResult = await decideSupplierApproval({ supplierId: rejected._id, payload: { decision: "REJECT", comments: "Rejected in test" }, user: treasurer, req });
       assert.equal(rejectedResult.supplier.homologationStatus, "REJECTED");
       assert.equal(rejectedResult.supplier.supplierCode, undefined);
 
@@ -319,7 +339,7 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
         supplierId: legacyBankSupplier._id,
         payload: { website: "https://legacy.example.test" },
         files: {},
-        user: admin,
+        user: treasurer,
         req
       });
       assert.equal(legacyEdit.supplier.website, "https://legacy.example.test");
@@ -336,10 +356,10 @@ test("official UMA format Phase 1 foundations remain additive and migration-safe
         active: true,
         preferred: true,
         verificationStatus: "VERIFIED",
-        verifiedBy: admin._id,
+        verifiedBy: accountant._id,
         verifiedAt: new Date(),
         verificationSource: "TEST_REVIEW",
-        createdBy: admin._id
+        createdBy: employee._id
       });
       const hidden = await EmployeeReimbursementBankAccount.findById(account._id);
       assert.equal(hidden.accountNumber, undefined);

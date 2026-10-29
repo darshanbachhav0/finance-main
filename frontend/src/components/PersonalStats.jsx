@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatNumber } from "../utils/formatters.js";
 import CountUp from "./CountUp.jsx";
+import { ROLES } from "../utils/access.js";
 
 const APPROVER_ROLES = ["AreaDirector", "ViceRector", "Management", "GAF"];
 
@@ -19,7 +20,7 @@ export default function PersonalStats({ personal, role }) {
   const { requests = {}, payments = {}, approvals = {} } = personal;
   const showApprovals = approvals.decidedThisMonth > 0 || APPROVER_ROLES.includes(role);
   // Someone who only decides (a director who never raises requests) is not shown rows of zeros.
-  const showRequests = ["Solicitor", "Legal", "HumanResources"].includes(role) || requests.submittedThisYear > 0 || requests.inProgress > 0 || requests.drafts > 0 || payments.paidThisYearPen > 0;
+  const showRequests = role === ROLES.SOLICITOR || requests.submittedThisYear > 0 || requests.inProgress > 0 || requests.drafts > 0 || payments.paidThisYearPen > 0;
   const money = (value) => formatCurrency(value, "PEN", language);
   const next = payments.next;
 

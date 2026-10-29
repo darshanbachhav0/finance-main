@@ -112,6 +112,9 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
     const allocations = (...pairs) => JSON.stringify(pairs.map(([costCenter, percentage]) => ({ costCenter: String(costCenter._id), ...(percentage === undefined ? {} : { percentage }) })));
     // Drafts are saved through the form's API; the quote goes on before it is sent.
     const sendWithQuote = async (draft, owner = requester) => {
+      // Every request here buys from the same supplier for the same CECO: move the earlier ones out
+      // of the 30-day anti-fragmentation window so each route is measured on its own amount.
+      await FinancialRequest.collection.updateMany({ _id: { $ne: draft._id } }, { $set: { createdAt: new Date("2025-01-01T00:00:00Z") } });
       await FinancialRequest.updateOne({ _id: draft._id }, { $push: { attachments: quoteAttachment(owner._id) }, $set: { quotations: [recommendedQuote(supplier._id, 10000)] } });
       return submitFinancialRequest({ id: draft._id, user: owner, req });
     };
@@ -277,10 +280,20 @@ test("Tipo de Centro de Costo: Propio and Por Encargo, with one or several benef
       assert.equal(String(own.lines[0].costCenter._id || own.lines[0].costCenter), String(it._id));
     });
 
-    await t.test("an Admin requester cannot approve their own Por Encargo request either", async () => {
-      const draft = await createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: allocations([nursing]) }), files: {}, user: admin, req });
-      const sent = await sendWithQuote(draft, admin);
-      await assert.rejects(() => approve(sent, admin), (error) => error.statusCode === 403 && error.details?.segregationOfDuties === true);
+    await t.test("a requester who also approves cannot approve their own Por Encargo request, and the Admin cannot approve it either", async () => {
+      // An Area Director who also raises requests (Solicitante as an additional role).
+      const directorRequester = await person("Directora TI", { role: ROLES.AREA_DIRECTOR, roles: [ROLES.SOLICITOR], approvalLevel: "AREA_DIRECTOR", approvalAreas: ["*"], area: "Tecnología de la Información", costCenter: it._id, authorizedCostCenters: [it._id], jefe: itJefe._id, jobCategory: 5 });
+      const draft = await createFinancialRequest({ payload: payload({ costCenterType: "POR_ENCARGO", costAllocations: allocations([nursing]) }), files: {}, user: directorRequester, req });
+      const sent = await sendWithQuote(draft, directorRequester);
+      await assert.rejects(() => approve(sent, directorRequester), (error) => error.statusCode === 403);
+      assert.equal(allowedRequestActions(await FinancialRequest.findById(sent._id), directorRequester).includes("APPROVE"), false);
+      // Even a step that ended up assigned to the requester is refused: segregation of duties.
+      const stored = await FinancialRequest.findById(sent._id);
+      activeApprovalStep(stored).approverUser = directorRequester._id;
+      await stored.save();
+      await assert.rejects(() => approve(sent, directorRequester), (error) => error.statusCode === 403 && error.details?.segregationOfDuties === true);
+      // The administrator has no approval authority over the route.
+      await assert.rejects(() => approve(sent, admin), (error) => error.statusCode === 403);
     });
 
     await t.test("requests saved before the field exist read as Propio and keep working", async () => {

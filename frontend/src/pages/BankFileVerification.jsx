@@ -17,6 +17,7 @@ import { useToast } from "../context/ToastContext.jsx";
 import useDeepLink from "../hooks/useDeepLink.js";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters.js";
+import { PERMISSIONS, userCan } from "../utils/access.js";
 
 // Treasury downloads a bank TXT and sends it to the bank only after GAF verifies it here.
 // Rejecting a file cancels it: its payments return to Treasury's queue with the reason.
@@ -156,7 +157,7 @@ export default function BankFileVerification() {
         title={pending ? "Verify bank file" : "Bank file"}
         description={selected ? `${selected.batchNumber} · ${money(selected.currency, selected.totalAmount)} · ${formatDate(selected.paymentDate, language)}` : ""}
         onClose={() => !processing && setSelected(null)}
-        footer={pending && !readOnly && user?.role === "GAF" ? <>
+        footer={pending && !readOnly && userCan(user, PERMISSIONS.BATCH_APPROVE) ? <>
           <button type="button" className="danger-button" disabled={processing} onClick={() => setDecision("reject")}><XCircle size={16} />{t("Reject")}</button>
           <button type="button" className="primary-button" disabled={processing || checks.loading || checks.problems.length > 0 || Boolean(checks.error)} onClick={() => setDecision("verify")}><CheckCircle2 size={16} />{t("Verify")}</button>
         </> : <button type="button" className="secondary-button" onClick={() => setSelected(null)}>{t("Close")}</button>}

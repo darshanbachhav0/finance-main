@@ -1,0 +1,56 @@
+// Spanish for the role menus (Manual de usuario, "Perfiles y menús"), Administración and the
+// access review. Keys are the English UI strings passed to t().
+export default {
+  // Menus
+  "Home": "Inicio",
+  "To post": "Por contabilizar",
+  "Batches to approve": "Lotes por aprobar",
+  "Scheduling and payments": "Programación, lotes y pagos",
+  "Periods and closing": "Periodos y cierre",
+  "Budgets and indicators": "Presupuestos e indicadores",
+  "Refunds to validate": "Devoluciones por validar",
+  "Honorarios": "Honorarios",
+  "Financial history": "Historial financiero",
+  "Rules and parameters": "Reglas y parámetros",
+  "Employees": "Empleados",
+  "Roles and permissions": "Roles y permisos",
+  "Cost centers and hierarchy": "Costos y jerarquías",
+  "Administrative audit": "Auditoría administrativa",
+  "Platform": "Plataforma",
+  "Roles": "Roles",
+  // Menu sections
+  "Queries": "Consultas",
+  // Access review
+  "Access review": "Revisión de accesos",
+  "Permission matrix": "Matriz de permisos",
+  "Permission": "Permiso",
+  "Segregation conflicts": "Conflictos de segregación",
+  "Segregation of duties": "Segregación de funciones",
+  "Access to review": "Accesos por revisar",
+  "Without supervisor": "Sin supervisor",
+  "Requesters without cost center": "Solicitantes sin centro de costo",
+  "Cost centers without responsible": "Centros de costo sin responsable",
+  "No conflicting roles.": "No hay roles en conflicto.",
+  "Nothing flagged.": "Nada pendiente de revisión.",
+  "Everyone has a supervisor.": "Todos tienen supervisor.",
+  "Everyone has a cost center.": "Todos tienen centro de costo.",
+  "Every cost center has a responsible.": "Todos los centros de costo tienen responsable.",
+  "No active administrator.": "No hay administradores activos.",
+  "Review": "Revisar",
+  "Not allowed": "No permitido",
+  // Employees
+  "Primary role": "Rol principal",
+  "Additional roles": "Roles adicionales",
+  "Their home workspace. Nobody changes their own roles; the last active administrator keeps the role.": "Su espacio de trabajo principal. Nadie cambia sus propios roles; el último administrador activo conserva el rol.",
+  "One person, one account: add roles here instead of creating another account.": "Una persona, una cuenta: agregue roles aquí en lugar de crear otra cuenta.",
+  "Department duties (provisioning, payments, batches, budget) come only with a role.": "Las funciones de un área (provisión, pagos, lotes, presupuesto) solo vienen con un rol.",
+  "Access confirmed": "Acceso confirmado",
+  "Nothing waits for review.": "Nada pendiente de revisión.",
+  "Change history": "Historial de cambios",
+  // Platform settings
+  "For everyone except administrators (15 to 1440).": "Para todos excepto los administradores (de 15 a 1440).",
+  "Administrator session length (minutes)": "Duración de la sesión de administradores (minutos)",
+  "While it is on, only administrator accounts can sign in. Everyone else is signed out and sees the message below.": "Mientras esté activo, solo las cuentas de administrador pueden iniciar sesión. Los demás salen de la sesión y ven el mensaje de abajo.",
+  "Migration": "Migración",
+  "Authenticator sign-in is available for administrator accounts.": "El inicio de sesión con autenticador está disponible para las cuentas de administrador."
+};

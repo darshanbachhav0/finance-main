@@ -57,7 +57,6 @@ function urgencyCheck(request) {
 // refuses such a draft when it is saved; the form shows it here.
 function encargoCheck(request, user) {
   if (request.costCenterType !== COST_CENTER_TYPE.ON_BEHALF) return null;
-  if (user?.role === ROLES.ADMIN) return null;
   const category = Number(user?.jobCategory) || null;
   const allowed = mayChargeAnotherCostCenter(user);
   const title = ["Charge to other cost centers (job categories {list} only)", { list: ENCARGO_JOB_CATEGORIES.join(", ") }];

@@ -11,7 +11,7 @@ import { hasPermission } from "../utils/permissions.js";
 
 export async function submissionReadiness(payload, user) {
   if (!hasPermission(user, PERMISSIONS.REQUEST_CREATE)) throw new AppError(403, "Request preparation is not available for this role.");
-  const request = { ...payload, requesterArea: user.role === "Admin" ? payload.requesterArea || user.area : user.area, status: "BORRADOR" };
+  const request = { ...payload, requesterArea: user.area, status: "BORRADOR" };
   request.lines = Array.isArray(payload.lines) ? payload.lines : [];
   request.attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
   request.quotations = Array.isArray(payload.quotations) ? payload.quotations : [];
@@ -72,7 +72,7 @@ export async function requestReadiness(id, user) {
     PAGADO: ["Reconcile the confirmed payment with bank evidence.", "Treasury"]
   };
   if (!step && stages[request.status]) next = { message: stages[request.status][0], owner: stages[request.status][1], path };
-  if (detail.allowedActions.includes("ISSUE_ORDER")) next = { message: "Issue the purchase or service order.", owner: "Procurement", path };
+  if (detail.allowedActions.includes("ISSUE_ORDER")) next = { message: "Issue the purchase or service order.", owner: "Purchase orders", path };
   else if (detail.allowedActions.includes("REGISTER_INVOICE")) next = { message: "Register invoice evidence for accounting review.", owner: "Requester / Accounting", path };
   if (request.status === "CONCILIADO") {
     try {

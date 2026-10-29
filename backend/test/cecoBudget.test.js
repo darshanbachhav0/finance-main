@@ -15,7 +15,6 @@ import FinancialRequest from "../src/models/FinancialRequest.js";
 import JournalEntry from "../src/models/JournalEntry.js";
 import Notification from "../src/models/Notification.js";
 import User from "../src/models/User.js";
-import { superAdminMayCall } from "../src/middleware/auth.js";
 import { decideApproval } from "../src/services/approvalService.js";
 import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { adjustBudgetPlan, createBudgetPlan } from "../src/services/budgetPlanService.js";
@@ -44,13 +43,8 @@ test("an equal monthly split never goes below what a month already used", () => 
   assert.throws(() => splitAnnualBudget("100", { floors: [60, 60] }), /already used more than the annual budget/);
 });
 
-test("Admin, Treasury and the Super Admin manage CECO budgets", () => {
-  assert.deepEqual([...BUDGET_PLAN_MANAGERS], [ROLES.ADMIN, ROLES.TREASURY, ROLES.SUPER_ADMIN]);
-  assert.equal(superAdminMayCall("POST", "/api/budget/plans"), true);
-  assert.equal(superAdminMayCall("POST", "/api/budget/plans/abc/adjustments"), true);
-  assert.equal(superAdminMayCall("POST", "/api/budget/plan-changes/abc/cancel"), true, "the route still allows only plan managers");
-  assert.equal(superAdminMayCall("POST", "/api/budget/exceptions/abc/decision"), false, "budget exceptions stay with Treasury and Management");
-  assert.equal(superAdminMayCall("POST", "/api/budget/requests/abc/commit"), false);
+test("Tesorería manages CECO budgets (the former Budget role)", () => {
+  assert.deepEqual([...BUDGET_PLAN_MANAGERS], [ROLES.TREASURY]);
 });
 
 test("CECO budgets: each advance is charged to its own CECO, with or without an annual plan", { timeout: 180000 }, async (t) => {
@@ -70,7 +64,6 @@ test("CECO budgets: each advance is charged to its own CECO, with or without an 
     const accounting = await User.create({ name: "CB Accounting", email: "cb.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "CB Treasury", email: "cb.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
     const gaf = await User.create({ name: "CB GAF", email: "cb.gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
-    const superAdmin = await User.create({ name: "CB Super Admin", email: "cb.super@test.local", passwordHash: "unused", role: ROLES.SUPER_ADMIN, area: "IT" });
     const solicitor = await User.create({ name: "CB Other", email: "cb.other@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Operations" });
     await AccountingPeriod.create({ period, status: "OPEN" });
     for (const [purpose, accountNumber, bank] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101", "BCP"], ["BANK", "104102", "BBVA"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) {
@@ -108,7 +101,7 @@ test("CECO budgets: each advance is charged to its own CECO, with or without an 
     await t.test("plans are created and spread by Admin, Treasury or the Super Admin, never by a requester", async () => {
       const draft = { year: "2026", planningMode: "ANNUAL_ONLY", costCenter: String(planned._id), assignedAmount: "56", reason: "2026 budget" };
       await assert.rejects(() => createBudgetPlan(draft, solicitor, req), (error) => error.statusCode === 403);
-      const plan = await createBudgetPlan(draft, superAdmin, req);
+      const plan = await createBudgetPlan(draft, treasury, req);
       assert.equal(plan.assignedAmount, 56);
       assert.equal(plan.priorUnplannedAmount, 0);
     });
@@ -127,7 +120,7 @@ test("CECO budgets: each advance is charged to its own CECO, with or without an 
       // Treasury spreads it equally; the Super Admin then sets an unequal split.
       const equal = await adjustBudgetPlan(plan._id, { operationId: "cb-equal-split", action: "REDISTRIBUTE", months: splitAnnualBudget("1200").map(String), reason: "Equal months", revision: plan.__v }, treasury, req);
       assert.deepEqual(equal.months.map((bucket) => bucket.assignedAmount), Array(12).fill(100));
-      const unequal = await adjustBudgetPlan(plan._id, { operationId: "cb-custom-split", action: "REDISTRIBUTE", months: ["300", "100", "100", "100", "100", "100", "100", "100", "100", "100", "0", "0"], reason: "More in January", revision: equal.__v }, superAdmin, req);
+      const unequal = await adjustBudgetPlan(plan._id, { operationId: "cb-custom-split", action: "REDISTRIBUTE", months: ["300", "100", "100", "100", "100", "100", "100", "100", "100", "100", "0", "0"], reason: "More in January", revision: equal.__v }, treasury, req);
       assert.deepEqual(unequal.months.slice(0, 2).concat(unequal.months.slice(10)).map((bucket) => bucket.assignedAmount), [300, 100, 0, 0]);
       await assert.rejects(() => adjustBudgetPlan(plan._id, { operationId: "cb-solicitor", action: "REDISTRIBUTE", months: Array(12).fill("100"), reason: "No", revision: unequal.__v }, solicitor, req), (error) => error.statusCode === 403);
       // Budget-controlled usage in the year still blocks a new plan, as before.

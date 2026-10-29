@@ -44,17 +44,21 @@ test("BBVA certification is a controlled, per-format/currency action that never 
 
     await t.test("certifying without a reference/comment is rejected", async () => {
       await assert.rejects(
-        () => certifyBankFormatConfiguration({ id: penConfig._id, certified: true, user: admin, req }),
+        () => certifyBankFormatConfiguration({ id: penConfig._id, certified: true, user: treasury, req }),
         (error) => error.code === "VALIDATION_ERROR"
       );
     });
 
     let certifiedPen;
-    await t.test("an authorized administrative action certifies the PEN format and is audited", async () => {
-      certifiedPen = await certifyBankFormatConfiguration({ id: penConfig._id, certified: true, certificationReference: "Treasury accepted the PEN sample file on 2026-09-15.", user: admin, req });
+    await t.test("Treasury (bank_format.certify) certifies the PEN format and it is audited; the Admin cannot", async () => {
+      await assert.rejects(
+        () => certifyBankFormatConfiguration({ id: penConfig._id, certified: true, certificationReference: "Admin attempt", user: admin, req }),
+        (error) => error.statusCode === 403
+      );
+      certifiedPen = await certifyBankFormatConfiguration({ id: penConfig._id, certified: true, certificationReference: "Treasury accepted the PEN sample file on 2026-09-15.", user: treasury, req });
       assert.equal(certifiedPen.certified, true);
       assert.ok(certifiedPen.certifiedAt);
-      assert.equal(String(certifiedPen.certifiedBy), String(admin._id));
+      assert.equal(String(certifiedPen.certifiedBy), String(treasury._id));
       assert.equal(certifiedPen.certificationReference, "Treasury accepted the PEN sample file on 2026-09-15.");
       const audit = await AuditLog.findOne({ entityType: "BankFormatConfiguration", action: "BBVA_FORMAT_CERTIFIED", entityId: penConfig._id });
       assert.ok(audit, "certification produces its own auditable event");
@@ -105,14 +109,14 @@ test("BBVA certification is a controlled, per-format/currency action that never 
       cleanupPaths.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       firstBatch = await PaymentBatch.findById(result.batch._id);
       assert.equal(firstBatch.certificationSnapshot.certified, true);
-      assert.equal(String(firstBatch.certificationSnapshot.certifiedBy), String(admin._id));
+      assert.equal(String(firstBatch.certificationSnapshot.certifiedBy), String(treasury._id));
       assert.equal(firstBatch.certificationSnapshot.certificationReference, "Treasury accepted the PEN sample file on 2026-09-15.");
       firstGeneratedFile = await GeneratedFile.findOne({ "metadata.batchId": firstBatch._id });
       assert.equal(firstGeneratedFile.metadata.certificationSnapshot.certified, true);
     });
 
     await t.test("decertifying afterwards does not rewrite the already-generated batch/file", async () => {
-      await certifyBankFormatConfiguration({ id: penConfig._id, certified: false, user: admin, req });
+      await certifyBankFormatConfiguration({ id: penConfig._id, certified: false, user: treasury, req });
       const stillCertifiedSnapshot = await PaymentBatch.findById(firstBatch._id);
       assert.equal(stillCertifiedSnapshot.certificationSnapshot.certified, true, "a past batch keeps the certification state that applied when it was generated");
       const stillCertifiedFile = await GeneratedFile.findById(firstGeneratedFile._id);

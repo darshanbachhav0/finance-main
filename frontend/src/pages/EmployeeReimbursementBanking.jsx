@@ -15,6 +15,7 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { SELECTABLE_PERU_BANKS, cciBankProblem } from "../../../shared/peruBanks.mjs";
 import { bankOptionLabel } from "../utils/bankAccounts.js";
+import { PERMISSIONS, userCan } from "../utils/access.js";
 
 const emptyForm = { bank: "BCP", currency: "PEN", accountHolderName: "", accountNumber: "", cci: "", preferred: true };
 // The SBS list; an employee's own account is always at a listed bank ("Otro" is for suppliers).
@@ -35,8 +36,8 @@ export default function EmployeeReimbursementBanking() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [confirm, setConfirm] = useState(null);
-  const canManage = ["Admin", "Solicitor", "Legal", "HumanResources"].includes(user.role) || (user.permissions || []).includes("employee-bank:manage-own");
-  const canReview = ["Admin", "Accounting"].includes(user.role) || (user.permissions || []).includes("employee-bank:review");
+  const canManage = userCan(user, PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN);
+  const canReview = userCan(user, PERMISSIONS.EMPLOYEE_BANK_REVIEW);
   // Segregation of duties: a reviewer never verifies the account they are paid into or bank details they entered.
   const ownReviewConflict = (row) => String(row.user?._id || row.user || "") === String(user._id) || String(row.createdBy?._id || row.createdBy || "") === String(user._id);
   const canReviewRow = (row) => canReview && !ownReviewConflict(row);

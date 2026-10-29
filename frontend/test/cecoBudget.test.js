@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { splitAnnualBudget } from "../../shared/budgetPlanning.mjs";
+import { PERMISSIONS, userCan } from "../src/utils/access.js";
 import { nextStepFor } from "../src/utils/nextStep.js";
 
 const source = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
-// 1. Admin, Treasury and the Super Admin create a CECO's annual budget and spread it over the months.
+// 1. Whoever holds budget.manage (Tesorería, which took over the Budget role) creates a CECO's
+//    annual budget and spreads it over the months; the administrator does not.
 const budget = source("../src/pages/BudgetControl.jsx");
-assert.match(budget, /const canEditPlans = \["Admin", "Treasury", "SuperAdmin"\]\.includes\(user\.role\);/);
+assert.match(budget, /const canEditPlans = userCan\(user, PERMISSIONS\.BUDGET_MANAGE\);/);
+assert.equal(userCan({ role: "Treasury" }, PERMISSIONS.BUDGET_MANAGE), true);
+for (const role of ["Admin", "SuperAdmin", "Accounting", "GAF", "Management", "Auditor"]) assert.equal(userCan({ role }, PERMISSIONS.BUDGET_MANAGE), false, `${role} does not edit budget plans`);
 assert.match(budget, /canManage=\{canEditPlans\} canEdit=\{canEditPlans\}/);
 assert.match(budget, /\{ key: "area", label: "Area"/, "the budget table shows each CECO's area");
-assert.match(budget, /\{canDecide && <>[\s\S]*?<\/>\}<button type="button" className="primary-button" onClick=\{\(\) => setWorkspace\(\{ planId: null \}\)\}>\{t\("Create annual budget"\)\}/, "carry-over and imports stay with Admin and Treasury; creating a budget is for all three");
+assert.match(budget, /\{canDecide && <>[\s\S]*?<\/>\}<button type="button" className="primary-button" onClick=\{\(\) => setWorkspace\(\{ planId: null \}\)\}>\{t\("Create annual budget"\)\}/, "carry-over and imports stay with Treasury; creating a budget is for budget.manage");
 
 // 2. Equal or unequal months: two split buttons, or typed amounts.
 const workspace = source("../src/components/BudgetPlanWorkspace.jsx");
@@ -36,4 +40,4 @@ assert.equal(accounting.review, true, "Accounting can still approve from the car
 assert.match(accounting.text, /Once Management approves the budget exception, approve it again/);
 assert.equal(nextStepFor({ request: { ...waiting, observation: {} }, user: { _id: "t", role: "Treasury" } }), null, "no budget step without the observation");
 
-console.log("PASS CECO budgets: three plan managers, equal or custom months, area, own CECO, rendition budget step");
+console.log("PASS CECO budgets: budget.manage edits plans, equal or custom months, area, own CECO, rendition budget step");

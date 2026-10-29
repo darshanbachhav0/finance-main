@@ -41,6 +41,8 @@ test("a substitute covers an absent manager's approvals and hands them back on r
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20999999971", normalizedIdentifier: "20999999971", legalName: "Substitute Supplier SAC", name: "Substitute Supplier SAC", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true, supplierCode: "PRV-9771", paymentTerms: { option: "CREDIT_30", days: 30 } });
     await AccountingPeriod.create({ period: "2026-09", status: "OPEN" });
     const admin = await User.create({ name: "Admin", email: "sub.admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Systems" });
+    // Stranded approvals are reported to the administrator, who keeps the roster.
+    const rosterAdmin = admin;
     const gerente = await User.create({ name: "Gerente General", jobTitle: "GERENTE GENERAL", email: "sub.gerente@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia" });
     const deputy = await User.create({ name: "Encargado", jobTitle: "GERENTE DE ADMINISTRACION FINANCIERA", email: "sub.deputy@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia", jefe: gerente._id, costCenter: center._id });
     const other = await User.create({ name: "Otro Gerente", email: "sub.other@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Gerencia", jefe: gerente._id });
@@ -147,8 +149,8 @@ test("a substitute covers an absent manager's approvals and hands them back on r
       assert.equal((await User.findById(gerente._id)).substitute, null);
       await setUser(gerente, { onLeave: true });
       await assert.rejects(() => submit(other), /No supervisor is available/);
-      const stranded = await Notification.countDocuments({ type: "APPROVAL_UNASSIGNED" });
-      assert.ok(stranded >= 1, "Admin is told the approvals waiting on her have nobody to go to");
+      const stranded = await Notification.countDocuments({ type: "APPROVAL_UNASSIGNED", user: rosterAdmin._id });
+      assert.ok(stranded >= 1, "the administrator is told the approvals waiting on her have nobody to go to");
     });
   } finally {
     await mongoose.connection.dropDatabase();

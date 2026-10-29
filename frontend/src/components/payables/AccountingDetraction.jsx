@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { useLanguage } from "../../context/LanguageContext.jsx";
 import { formatCurrency, formatDateTime } from "../../utils/formatters.js";
 import Message from "../Message.jsx";
+import { PERMISSIONS, userCan } from "../../utils/access.js";
 
 export default function AccountingDetraction({ payable, onUpdated }) {
   const { user, readOnly } = useAuth();
@@ -15,7 +16,7 @@ export default function AccountingDetraction({ payable, onUpdated }) {
   const [busy, setBusy] = useState(false);
   const confirmed = Boolean(payable.detraction?.confirmedAt);
   const legacyPartial = payable.status === "PARTIALLY_PAID" && !confirmed;
-  const editable = !readOnly && ["Admin", "Accounting"].includes(user?.role) && (legacyPartial || (["OPEN", "SCHEDULED"].includes(payable.status) && !payable.paymentBatch && payable.outstandingAmount === payable.originalAmount));
+  const editable = !readOnly && userCan(user, PERMISSIONS.ACCOUNTING_PROVISION) && (legacyPartial || (["OPEN", "SCHEDULED"].includes(payable.status) && !payable.paymentBatch && payable.outstandingAmount === payable.originalAmount));
   useEffect(() => {
     if (!editable || confirmed || payable.flowType === "C") return;
     api.get("/treasury/spot-categories", { params: { at: payable.voucher?.documentDate } }).then(response => setCategories(response.data.data || [])).catch(err => setError(err.message));

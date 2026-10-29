@@ -9,7 +9,12 @@ assert.match(exchangeRateDescription({ source: "PEN", providerMode: "PEN", autho
 const detail = read("../src/components/FinancialValidationSummary.jsx");
 for (const text of ["Supplier / RUC validation", "Invoice validation", "Budget availability", "budgetExceptions", "exchangeRateEvidence"]) assert.ok(detail.includes(text));
 const budget = read("../src/pages/BudgetControl.jsx");
-assert.ok(budget.includes('user.role === "Management"'));
+// Gerencia General approves reviewed exceptions; Tesorería (which took over the Budget role) reviews them.
+assert.match(budget, /canApprove = hasRole\(user, ROLES\.MANAGEMENT\)/);
+assert.match(budget, /canDecide = hasRole\(user, ROLES\.TREASURY\)/);
+assert.match(budget, /canEditPlans = userCan\(user, PERMISSIONS\.BUDGET_MANAGE\)/);
+assert.match(budget, /canDecideChanges = hasRole\(user, ROLES\.MANAGEMENT\)/);
+assert.doesNotMatch(budget, /user\.role ===|\["Admin"[^\]]*\]\.includes\(user/, "no role literals: access comes from the catalog");
 assert.ok(budget.includes('status: "REVIEWED"'));
 assert.ok(budget.includes("row.preparedBy"));
 assert.ok(read("../src/pages/ExchangeRates.jsx").includes('"BCRP_FALLBACK", "SUNAT"'));

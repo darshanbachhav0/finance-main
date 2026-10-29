@@ -62,7 +62,7 @@ function requestMatch(query, user, { includeInactiveWorkflow = false } = {}) {
   }
   const constraints = [];
   if (query.area) constraints.push(areaConstraint(query.area));
-  if (user && user.role !== ROLES.ADMIN) {
+  if (user) {
     const visibility = requestVisibilityFilter(user);
     if (visibility.$or) constraints.push(visibility);
   }

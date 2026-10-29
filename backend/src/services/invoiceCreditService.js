@@ -4,9 +4,10 @@ import { AppError } from "../utils/AppError.js";
 import { invoiceDueDate } from "../../../shared/invoiceFinance.mjs";
 import { recordAudit } from "./auditService.js";
 import { runFinancialOperation } from "./transactionService.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 export async function updateInvoiceCredit({ id, payload, user, req }) {
-  if (![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) throw new AppError(403, "Accounting permission is required.");
+  if (!hasRole(user, [ROLES.ACCOUNTING])) throw new AppError(403, "Accounting permission is required.");
   const days = payload.creditDays;
   if (!["number", "string"].includes(typeof days) || String(days).trim() === "" || !Number.isSafeInteger(Number(days)) || Number(days) < 0 || Number(days) > 36500) throw new AppError(422, "Ingrese días de crédito enteros entre 0 y 36500.");
   const reason = String(payload.reason || "").trim();

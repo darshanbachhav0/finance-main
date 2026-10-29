@@ -1,29 +1,26 @@
-// The Super Admin oversees the platform read-only: it opens what an Admin opens but never acts in
-// a process, except the CECO budget plans it manages with Admin and Treasury. The backend refuses
-// its other writes (middleware/auth.js superAdminReadOnly); the UI hides the actions and, as a
-// safety net, api/client.js stops a write before it is sent. Must match SUPER_ADMIN_WRITE_PATHS in
+// Auditoría reads the institution's financial work and never changes it. The backend refuses its
+// writes (middleware/auth.js readOnlyOversight); the UI hides the actions and, as a safety net,
+// api/client.js stops a write before it is sent. Must match AUDITOR_WRITE_PATHS in
 // backend/src/middleware/auth.js.
-// The Auditor reads the same workspaces (without the Super Admin console) and writes only its own
-// notification settings (AUDITOR_WRITE_PATHS in backend/src/middleware/auth.js).
-export const READ_ONLY_ROLES = Object.freeze(["SuperAdmin", "Auditor"]);
-export const READ_ONLY_WRITE_PATHS = Object.freeze(["/superadmin/", "/notifications/", "/users/me/notification-preferences", "/work-drafts/", "/budget/plans/", "/budget/plan-changes/", "/auth/"]);
+import { hasRole, ROLES } from "./access.js";
+
+export const READ_ONLY_ROLES = Object.freeze([ROLES.AUDITOR]);
 export const AUDITOR_WRITE_PATHS = Object.freeze(["/notifications/", "/users/me/notification-preferences", "/auth/"]);
 
-export function isReadOnlyRole(role) {
-  return READ_ONLY_ROLES.includes(role);
+// Accepts a user or a role name.
+export function isReadOnlyRole(userOrRole) {
+  return hasRole(typeof userOrRole === "string" ? { role: userOrRole } : userOrRole, READ_ONLY_ROLES);
 }
 
 // Whether a read-only user may send this request (method + path relative to the API base).
-export function readOnlyMayCall(method, url, role = "SuperAdmin") {
+export function readOnlyMayCall(method, url) {
   if (["get", "head", "options"].includes(String(method || "get").toLowerCase())) return true;
   const path = String(url || "").split("?")[0];
-  const allowed = role === "Auditor" ? AUDITOR_WRITE_PATHS : READ_ONLY_WRITE_PATHS;
-  return allowed.some((item) => path === item.replace(/\/$/, "") || path.startsWith(item));
+  return AUDITOR_WRITE_PATHS.some((item) => path === item.replace(/\/$/, "") || path.startsWith(item));
 }
 
-export const READ_ONLY_MESSAGE = "The Super Admin account is read-only here: it can view but not change the work of the platform.";
-export const AUDITOR_READ_ONLY_MESSAGE = "The Auditor account is read-only: it can view but not change the work of the platform.";
+export const AUDITOR_READ_ONLY_MESSAGE = "Auditoría es de solo lectura: puede consultar pero no modificar el trabajo de la plataforma.";
 
-export function readOnlyMessage(role) {
-  return role === "Auditor" ? AUDITOR_READ_ONLY_MESSAGE : READ_ONLY_MESSAGE;
+export function readOnlyMessage() {
+  return AUDITOR_READ_ONLY_MESSAGE;
 }

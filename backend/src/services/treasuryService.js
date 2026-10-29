@@ -50,7 +50,7 @@ import { runFinancialOperation } from "./transactionService.js";
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { BANK_FILE_VERIFICATION, assertBankFileReleased, bankFileVerificationTaskKey } from "../utils/bankFileVerification.js";
-import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, PAYABLE_ACCOUNT_TYPES, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
+import { AP_STATUS, DEFAULT_RENDITION_OVERDUE_DAYS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, PAYABLE_ACCOUNT_TYPES, REQUEST_STATUS, REQUEST_TYPE, PERMISSIONS, ROLES } from "../utils/constants.js";
 
 // A payment date typed as "YYYY-MM-DD" is a Lima calendar date, not UTC midnight
 // (which would be the previous evening in Lima).
@@ -70,6 +70,7 @@ export async function renditionDueDate(fromDate) {
   return new Date(`${limaDateKey(dueDay)}T23:59:59.999-05:00`);
 }
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
+import { can as hasPermission, hasRole } from "../../../shared/accessControl.mjs";
 
 const bankFilesDir = path.join(generatedRoot, "bank-files");
 
@@ -1546,7 +1547,7 @@ export async function getEligiblePayablePaymentDestinations({ accountsPayableId,
 // field editor so certification is always a deliberate, audited administrative/Finance decision,
 // distinct from a routine configuration edit (see masterDataController.js).
 export async function certifyBankFormatConfiguration({ id, certified, certificationReference, user, req }) {
-  if (![ROLES.ADMIN, ROLES.TREASURY].includes(user?.role)) throw new AppError(403, "Only authorized bank configuration administrators may certify the format.");
+  if (!hasPermission(user, PERMISSIONS.BANK_FORMAT_CERTIFY)) throw new AppError(403, "Only authorized bank configuration administrators may certify the format.", undefined, ERROR_CODES.FORBIDDEN);
   if (typeof certified !== "boolean") throw new AppError(422, "Certification must be a boolean.");
   const configuration = await BankFormatConfiguration.findById(id);
   if (!configuration) throw new AppError(404, "BankFormatConfiguration not found.", { id }, ERROR_CODES.NOT_FOUND);
@@ -1585,7 +1586,7 @@ export async function previewPaymentBatch({ payableIds, currency, accountSelecti
   try {
     const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
     adapter = getBankFileAdapter("BBVA", configuration);
-  } catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Admin / Treasury", code: error.code }); }
+  } catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Treasury", code: error.code }); }
   const ids = [...new Set(payableIds.map(String))];
   if (ids.length !== payableIds.length) issues.push({ message: "A payable cannot be selected twice.", owner: "Treasury" });
   const existing = await AccountsPayable.distinct("_id", { _id: { $in: ids } });

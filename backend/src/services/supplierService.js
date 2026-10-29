@@ -32,7 +32,11 @@ import {
   userDepartment
 } from "./supplierVisibilityService.js";
 
-const FINANCE_ROLES = Object.freeze([ROLES.ADMIN, ROLES.ACCOUNTING]);
+// Tesorería validates suppliers and their bank accounts before they are paid (Manual de usuario:
+// "Tesorería lo valida antes del pago"). Whoever holds supplier.validate reviews; the roles below
+// get the review notices.
+const SUPPLIER_VALIDATOR_ROLES = Object.freeze([ROLES.TREASURY]);
+const validatesSuppliers = (user) => hasPermission(user, PERMISSIONS.SUPPLIER_VALIDATE);
 const EDITABLE_PROPOSAL_STATUSES = Object.freeze(["PENDING_VALIDATION", "OBSERVED"]);
 // The RUC file, legal representative ID and bank certificate are optional supporting documents:
 // the proposal form no longer asks for them, so they no longer hold back the jefe's approval.
@@ -211,8 +215,8 @@ export function assertSupplierIdentifier(value) {
   return normalized;
 }
 
-function assertFinanceUser(user, message = "Only Accounting or Admin can perform this supplier review action.") {
-  if (!FINANCE_ROLES.includes(user?.role)) {
+function assertFinanceUser(user, message = "Only Treasury can perform this supplier review action.") {
+  if (!validatesSuppliers(user)) {
     throw new AppError(403, message, undefined, ERROR_CODES.FORBIDDEN);
   }
 }
@@ -299,11 +303,11 @@ function applyProposalFields(supplier, payload) {
 function assertProposalEditable(supplier, user) {
   // Finance may still correct a homologated supplier's data (e.g. a fiscal update); doing so resets
   // homologation back to PENDING_VALIDATION (see updateSupplierProposal) so it is re-reviewed.
-  const financeMayCorrectHomologated = FINANCE_ROLES.includes(user?.role) && supplier.homologationStatus === "HOMOLOGATED";
+  const financeMayCorrectHomologated = validatesSuppliers(user) && supplier.homologationStatus === "HOMOLOGATED";
   if (!EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus) && !financeMayCorrectHomologated) {
     throw new AppError(
       409,
-      "Supplier proposal fields can only be changed while pending validation, observed, or (for Accounting/Admin) homologated.",
+      "Supplier proposal fields can only be changed while pending validation, observed, or (for Treasury) homologated.",
       { homologationStatus: supplier.homologationStatus },
       ERROR_CODES.INVALID_STATUS_TRANSITION
     );
@@ -311,7 +315,7 @@ function assertProposalEditable(supplier, user) {
   if (actsAsSupplierProposer(user) && String(idOf(supplier.proposedBy)) !== String(user._id)) {
     throw new AppError(403, "You may correct only supplier proposals you created.", undefined, ERROR_CODES.FORBIDDEN);
   }
-  if (!FINANCE_ROLES.includes(user.role) && !actsAsSupplierProposer(user)) {
+  if (!validatesSuppliers(user) && !actsAsSupplierProposer(user)) {
     throw new AppError(403, "You do not have permission to edit supplier proposals.", undefined, ERROR_CODES.FORBIDDEN);
   }
 }
@@ -342,7 +346,7 @@ function awaitingApprovalQuery(now = new Date()) {
 }
 
 function decidesSupplierApproval(supplier, user) {
-  return Boolean(user?._id && FINANCE_ROLES.includes(user.role) && awaitsApproval(supplier)
+  return Boolean(user?._id && validatesSuppliers(user) && awaitsApproval(supplier)
     && String(idOf(supplier.proposedBy)) !== String(user._id));
 }
 
@@ -361,7 +365,7 @@ async function approvalContexts(suppliers) {
 
 // Only Finance receives provider review tasks. Request approval remains independent.
 export async function suppliersAwaitingApprovalBy(user) {
-  if (!user?._id || !FINANCE_ROLES.includes(user.role)) return [];
+  if (!user?._id || !validatesSuppliers(user)) return [];
   const waiting = await Supplier.find(awaitingApprovalQuery()).select("proposedBy homologationStatus homologationValidUntil").sort({ updatedAt: 1 }).lean();
   const contexts = await approvalContexts(waiting);
   return waiting.filter((supplier) => decidesSupplierApproval(supplier, user, contexts.get(String(supplier._id))));
@@ -379,10 +383,10 @@ function supplierName(supplier) {
 
 async function notifySupplierApprover(supplier, { once = false } = {}) {
   await resolveNotification(`supplier:${supplier._id}:approval`);
-  return notifyRoles({ once, roles: FINANCE_ROLES, excludeUserId: idOf(supplier.proposedBy),
+  return notifyRoles({ once, roles: SUPPLIER_VALIDATOR_ROLES, excludeUserId: idOf(supplier.proposedBy),
     eventKey: `supplier:${supplier._id}:finance-review`, type: "SUPPLIER_REVIEW_PENDING",
     title: notificationText("Provider review pending"),
-    message: notificationText("{supplier} requires Accounting review.", { supplier: supplierName(supplier) }),
+    message: notificationText("{supplier} requires Treasury review.", { supplier: supplierName(supplier) }),
     path: `/suppliers/${supplier._id}`, entityType: "Supplier", entityId: supplier._id });
 }
 
@@ -436,11 +440,11 @@ function serializeSupplierBase(supplier, user, approval = null) {
 }
 
 function canManageSupplierDepartments(supplier, user) {
-  return FINANCE_ROLES.includes(user?.role) && canSeeSupplier(supplier, user);
+  return validatesSuppliers(user) && canSeeSupplier(supplier, user);
 }
 
 function supplierPermissions(supplier, user, approval = null) {
-  const finance = FINANCE_ROLES.includes(user?.role);
+  const finance = validatesSuppliers(user);
   const editable = EDITABLE_PROPOSAL_STATUSES.includes(supplier.homologationStatus);
   // Finance may correct a homologated supplier's data; the correction resets it to PENDING_VALIDATION.
   const financeMayCorrectHomologated = finance && supplier.homologationStatus === "HOMOLOGATED";
@@ -449,7 +453,7 @@ function supplierPermissions(supplier, user, approval = null) {
     canEditProposal: (editable || financeMayCorrectHomologated) && (finance || (actsAsSupplierProposer(user) && proposerOwns)),
     canUploadDocuments: editable && (finance || (actsAsSupplierProposer(user) && proposerOwns)),
     canAddBankAccount: finance || (editable && actsAsSupplierProposer(user) && proposerOwns),
-    // Accounting/Admin keep the SUNAT check, the bank verification Treasury pays against and the
+    // Treasury keeps the SUNAT check, the bank verification Treasury pays against and the
     // power to deactivate and to review the supplier.
     canValidateTaxpayer: finance && !supplierVerificationCurrent(supplier),
     canRevalidateTaxpayer: finance,
@@ -680,7 +684,7 @@ export async function getSupplierDetailPayload(supplierId, user) {
     AuditLog.find({ entityType: "Supplier", entityId: supplier._id }).sort({ createdAt: -1 }).limit(100).lean()
   ]);
   const reveal = canViewFullBankData(supplier, user, approval);
-  const auditHistory = audit.map((item) => FINANCE_ROLES.includes(user.role)
+  const auditHistory = audit.map((item) => validatesSuppliers(user)
     ? item
     : {
         _id: item._id,
@@ -707,7 +711,7 @@ export async function listSuppliersPage(queryParams, user) {
   // Accounting's two work queues list what it must act on whatever the department: the proposals
   // it reviews and the suppliers with a bank account waiting for its verification.
   const reviewQueue = queryParams.awaitingMyApproval === "true";
-  const bankReviewQueue = queryParams.bankReview === "pending" && FINANCE_ROLES.includes(user?.role);
+  const bankReviewQueue = queryParams.bankReview === "pending" && validatesSuppliers(user);
   const query = { $and: [reviewQueue || bankReviewQueue ? {} : supplierVisibilityQuery(user)] };
   if (bankReviewQueue) query.$and.push({ _id: { $in: await SupplierBankAccount.distinct("supplier", { active: true, verificationStatus: "PENDING" }) } });
   if (queryParams.department && !isDepartmentScoped(user)) {
@@ -780,7 +784,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     throw new AppError(
       409,
       otherDepartment
-        ? "This supplier is already registered for another area. Ask an Admin to share it with your area."
+        ? "This supplier is already registered for another area. Ask Treasury to share it with your area."
         : "A supplier with this RUC/DNI already exists. Open the existing onboarding record instead.",
       { supplier: duplicate._id, supplierCode: duplicate.supplierCode, homologationStatus: duplicate.homologationStatus, otherDepartment },
       ERROR_CODES.DUPLICATE_SUPPLIER
@@ -874,7 +878,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     if (usesAutomaticTaxpayerLookup() && identifier.length === 11) {
       try { await validateAutomaticSupplierTaxpayer(supplier, user, req); }
       catch (error) {
-        warnings.push({ code: "TAXPAYER_VALIDATION_PENDING", message: "Supplier saved. Automatic SUNAT validation is pending; Accounting can retry it from Taxpayer Validation." });
+        warnings.push({ code: "TAXPAYER_VALIDATION_PENDING", message: "Supplier saved. Automatic SUNAT validation is pending; Treasury can retry it from Taxpayer Validation." });
         console.warn("[SUPPLIER] Automatic taxpayer review pending:", error.code || error.name);
       }
     }
@@ -987,12 +991,12 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
 export async function addSupplierBankAccount({ supplierId, payload, user, req }) {
   const supplier = await loadSupplierFor(supplierId, user);
   if (actsAsSupplierProposer(user)) assertProposalEditable(supplier, user);
-  else assertFinanceUser(user, "Only an authorized proposer, Accounting or Admin can add supplier bank accounts.");
+  else assertFinanceUser(user, "Only an authorized proposer or Treasury can add supplier bank accounts.");
   return createBankAccountRecord({ supplier, payload, user, req });
 }
 
 export async function verifySupplierBankAccount({ supplierId, accountId, payload, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can verify supplier bank accounts.");
+  assertFinanceUser(user, "Only Treasury can verify supplier bank accounts.");
   const supplier = await loadSupplierFor(supplierId, user);
   const account = await SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id });
   if (!account) throw new AppError(404, "Supplier bank account not found.", { accountId }, ERROR_CODES.NOT_FOUND);
@@ -1061,7 +1065,7 @@ export async function verifySupplierBankAccount({ supplierId, accountId, payload
 }
 
 export async function setPreferredSupplierBankAccount({ supplierId, accountId, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can select a preferred supplier bank account.");
+  assertFinanceUser(user, "Only Treasury can select a preferred supplier bank account.");
   const supplier = await loadSupplierFor(supplierId, user);
   const result = await runFinancialOperation(async (session) => {
     let accountQuery = SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id });
@@ -1124,7 +1128,7 @@ export async function setPreferredSupplierBankAccount({ supplierId, accountId, u
 }
 
 export async function deactivateSupplierBankAccount({ supplierId, accountId, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can deactivate supplier bank accounts.");
+  assertFinanceUser(user, "Only Treasury can deactivate supplier bank accounts.");
   const supplier = await loadSupplierFor(supplierId, user);
   const account = await SupplierBankAccount.findOne({ _id: accountId, supplier: supplier._id });
   if (!account) throw new AppError(404, "Supplier bank account not found.", { accountId }, ERROR_CODES.NOT_FOUND);
@@ -1159,7 +1163,7 @@ export async function deactivateSupplierBankAccount({ supplierId, accountId, use
 }
 
 export async function validateSupplierTaxpayer({ supplierId, payload, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can validate supplier taxpayer information.");
+  assertFinanceUser(user, "Only Treasury can validate supplier taxpayer information.");
   const supplier = await loadSupplierFor(supplierId, user);
   if (supplierVerificationCurrent(supplier) && !payload?.revalidationReason) return supplier;
   if (payload?.revalidationReason) {
@@ -1418,7 +1422,7 @@ function isHomologationExpired(supplier) {
 
 const JEFE_DECISIONS = Object.freeze({ APPROVE: "APPROVED", OBSERVE: "OBSERVED", REJECT: "REJECTED" });
 
-// Accounting or Admin approves, observes or rejects a waiting supplier.
+// Treasury approves, observes or rejects a waiting supplier.
 // Approving homologates it: an immutable PRV code, active and usable on any requester's request.
 export async function decideSupplierApproval({ supplierId, payload = {}, user, req }) {
   const action = String(payload.decision || "").trim().toUpperCase();
@@ -1433,13 +1437,13 @@ export async function decideSupplierApproval({ supplierId, payload = {}, user, r
     throw new AppError(409, "This supplier is not waiting for approval.", { homologationStatus: supplier.homologationStatus }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (String(idOf(supplier.proposedBy)) === String(user._id)) {
-    throw new AppError(403, "Another Accounting or Admin user must review the supplier you proposed.", undefined, ERROR_CODES.FORBIDDEN);
+    throw new AppError(403, "Another Treasury user must review the supplier you proposed.", undefined, ERROR_CODES.FORBIDDEN);
   }
   const approval = await supplierApproverFor(supplier.proposedBy);
   if (!decidesSupplierApproval(supplier, user, approval)) {
     throw new AppError(
       403,
-      "Only Accounting or Admin can review this supplier.",
+      "Only Treasury can review this supplier.",
       { approver: approval.approver },
       ERROR_CODES.FORBIDDEN
     );
@@ -1570,11 +1574,11 @@ async function notifySupplierDecision(supplier, { decision, user, comments }) {
       ...reference
     });
   }
-  // Treasury pays only to an account Accounting verified, so an approved supplier's pending
-  // account goes to Accounting now.
+  // Treasury pays only to an account it verified, so an approved supplier's pending account goes
+  // to Tesorería now.
   if (decision === "APPROVED" && await SupplierBankAccount.exists({ supplier: supplier._id, active: true, verificationStatus: "PENDING" })) {
     await notifyRoles({
-      roles: [ROLES.ACCOUNTING, ROLES.ADMIN],
+      roles: SUPPLIER_VALIDATOR_ROLES,
       eventKey: `supplier:${supplier._id}:bank-review`,
       type: "SUPPLIER_BANK_REVIEW",
       title: notificationText("Supplier bank account to verify"),
@@ -1700,14 +1704,14 @@ export async function replaceActiveBankAccount(supplier, payload, userId) {
   return { account, warnings: await reusedBankWarnings({ supplierId: supplier._id, accountNumber, cci }) };
 }
 
-// Accounting/Admin correct supplier data, add accounts, record the SUNAT check, deactivate or reopen.
+// Treasury corrects supplier data, add accounts, record the SUNAT check, deactivate or reopen.
 // Approving, observing or rejecting is the proposer's jefe's decision (decideSupplierApproval).
 export async function updateAndReviewSupplier({ supplierId, payload, files = {}, user, req }) {
   assertFinanceUser(user);
   await loadSupplierFor(supplierId, user);
   const requestedStatus = payload.homologationStatus || payload.status;
   if (["HOMOLOGATED", "ACTIVE", "OBSERVED", "REJECTED"].includes(requestedStatus) || payload.complianceReviewResult || payload.complianceReview) {
-    throw new AppError(403, "Only Accounting or Admin approves, observes or rejects a supplier.", { requestedStatus }, ERROR_CODES.FORBIDDEN);
+    throw new AppError(403, "Only Treasury approves, observes or rejects a supplier.", { requestedStatus }, ERROR_CODES.FORBIDDEN);
   }
   let warnings = [];
   const proposalKeys = [...proposalScalarFields, ...structuredProposalFields, "declarations", "rucDni"];
@@ -1745,7 +1749,7 @@ export async function updateAndReviewSupplier({ supplierId, payload, files = {},
 }
 
 export async function deactivateSupplier({ supplierId, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can deactivate suppliers.");
+  assertFinanceUser(user, "Only Treasury can deactivate suppliers.");
   const supplier = await loadSupplierFor(supplierId, user);
   supplier.homologationStatus = "INACTIVE";
   supplier.active = false;
@@ -1778,7 +1782,7 @@ export async function deactivateSupplier({ supplierId, user, req }) {
 // the same as a material fiscal/legal data change - it does not restore HOMOLOGATED status directly. Bank
 // accounts stay deactivated (unrelated to homologation) and must be reverified/re-added as needed.
 export async function reactivateSupplier({ supplierId, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can reactivate suppliers.");
+  assertFinanceUser(user, "Only Treasury can reactivate suppliers.");
   const supplier = await loadSupplierFor(supplierId, user);
   if (supplier.homologationStatus !== "INACTIVE") {
     throw new AppError(
@@ -1812,13 +1816,13 @@ export async function reactivateSupplier({ supplierId, user, req }) {
   return supplier;
 }
 
-// ---- Suppliers by department. The Admin decides which areas see any supplier (none: every area);
-// Accounting only for the suppliers in its own list, never another department's.
+// ---- Suppliers by department. Tesorería (which validates every supplier) decides which areas see
+// any supplier (none: every area).
 export async function updateSupplierDepartments({ supplierId, departments, user, req }) {
-  assertFinanceUser(user, "Only Accounting or Admin can choose which areas see a supplier.");
+  assertFinanceUser(user, "Only Treasury can choose which areas see a supplier.");
   const supplier = await loadSupplier(supplierId);
   if (!canManageSupplierDepartments(supplier, user)) {
-    throw new AppError(403, "This supplier belongs to another area. Only an Admin can share it.", { supplier: supplier._id, reason: "OTHER_DEPARTMENT" }, ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT);
+    throw new AppError(403, "This supplier belongs to another area. Ask Treasury to share it.", { supplier: supplier._id, reason: "OTHER_DEPARTMENT" }, ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT);
   }
   const next = sanitizeDepartments(departments);
   const previous = [...(supplier.departments || [])];
@@ -1839,14 +1843,14 @@ export async function updateSupplierDepartments({ supplierId, departments, user,
   return supplier;
 }
 
-// Someone who needs another department's supplier asks for it: the Admin, who sees every
-// department, gets a task to share it with theirs. Nothing is shared until the Admin does it.
+// Someone who needs another department's supplier asks for it: Tesorería, which sees every
+// department, gets a task to share it with theirs. Nothing is shared until Tesorería does it.
 export async function requestSupplierAccess({ supplierId, user, req, reason = "" }) {
   const supplier = await loadSupplier(supplierId);
   if (canSeeSupplier(supplier, user)) return { alreadyVisible: true, supplier: { _id: supplier._id, supplierCode: supplier.supplierCode } };
   const area = userDepartment(user);
   await notifyRoles({
-    roles: [ROLES.ADMIN],
+    roles: SUPPLIER_VALIDATOR_ROLES,
     eventKey: `supplier:${supplier._id}:access-request:${user._id}`,
     type: "SUPPLIER_ACCESS_REQUEST",
     title: notificationText("Share a supplier with an area"),

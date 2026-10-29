@@ -106,11 +106,15 @@ export async function notifyUser({ userId, eventKey, type, title, message, path:
   return notification;
 }
 
-export async function notifyRoles({ once = false, roles, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas, excludeUserId }) {
-  const query = { active: true, role: { $in: roles } };
+// Everyone holding one of the roles (primary or additional) or, with permission, the grantable
+// permission (e.g. purchase_order.issue, which is no longer a role of its own).
+export async function notifyRoles({ once = false, roles = [], permission, eventKey, type, title, message, path, entityType, entityId, approvalLevel, areas, excludeUserId }) {
+  const holders = [...(roles.length ? [{ role: { $in: roles } }, { roles: { $in: roles } }] : []), ...(permission ? [{ permissions: permission }] : [])];
+  if (!holders.length) return [];
+  const query = { active: true, $and: [{ $or: holders }] };
   if (excludeUserId) query._id = { $ne: excludeUserId };
   if (approvalLevel) query.approvalLevel = approvalLevel;
-  if (areas?.length) query.$or = [{ area: { $in: areas } }, { approvalAreas: { $in: [...areas, "*"] } }];
+  if (areas?.length) query.$and.push({ $or: [{ area: { $in: areas } }, { approvalAreas: { $in: [...areas, "*"] } }] });
   const users = await User.find(query).select("_id");
   return Promise.all(users.map((user) => notifyUser({ once, userId: user._id, eventKey, type, title, message, path, entityType, entityId })));
 }

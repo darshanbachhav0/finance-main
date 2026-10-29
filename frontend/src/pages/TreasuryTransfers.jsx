@@ -22,6 +22,7 @@ import { SELECTABLE_PERU_BANKS, bankDisplayName } from "../../../shared/peruBank
 import { currencies, requestPriorities, requestPriorityLabels, transferPurposeLabels, treasuryAccountKindLabels } from "../utils/options.js";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 import { TIER_ROLES, transferRoute, transferStageLabels, transferStages } from "../utils/treasuryTransfer.js";
+import { PERMISSIONS, userCan } from "../utils/access.js";
 
 // Track D: transfers between UMA's own bank accounts in the same currency (funding an operating
 // account, or a placement). Treasury registers them here; another Treasury user (Head of Treasury)
@@ -53,7 +54,7 @@ export default function TreasuryTransfers() {
   const navigate = useNavigate();
   // Treasury and Admin register, execute and reconcile; everyone else (GAF, Accounting, the
   // read-only overseers) only looks.
-  const canManage = !readOnly && ["Admin", "Treasury"].includes(user.role);
+  const canManage = !readOnly && userCan(user, PERMISSIONS.TREASURY_TRANSFER);
   const deepLink = useDeepLink(["request"]);
   const [stage, setStage] = useState(() => (deepLink.active ? "all" : canManage ? "toExecute" : "pending"));
   const [rows, setRows] = useState([]);
@@ -190,7 +191,7 @@ export default function TreasuryTransfers() {
   }
 
   // A transfer sent back by an approver: its requester (or Admin) corrects it and sends it again.
-  const canResubmit = (row) => !readOnly && ["OBSERVADO", "DEVUELTO"].includes(canonicalRequestStatus(row.status)) && (user.role === "Admin" || idOf(row.requester) === idOf(user._id));
+  const canResubmit = (row) => !readOnly && ["OBSERVADO", "DEVUELTO"].includes(canonicalRequestStatus(row.status)) && idOf(row.requester) === idOf(user._id);
   const sentBackComment = (row) => row?.rejectionReason || [...(row?.approvalHistory || [])].reverse().find((event) => event.comments && /OBSERV|RETURN/.test(event.action || ""))?.comments || "";
 
   function openResubmit(row) {
