@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { ensurePadronChunkIndex, findPadronLine } from "../src/services/padronChunkIndex.js";
 import { ensureSunatPadron } from "../src/services/sunatPadronService.js";
-import { getSupplierPadronPrefill } from "../src/services/supplierPadronLookupService.js";
+import { getSupplierPadronPrefill, getSupplierAutomaticPrefill } from "../src/services/supplierPadronLookupService.js";
 
 test("indexed SUNAT lookup and nonblocking proposal prefill", async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "uma-padron-lookup-"));
@@ -56,6 +56,22 @@ test("indexed SUNAT lookup and nonblocking proposal prefill", async t => {
       await fs.writeFile(longFile, `${longRow}\n${row("20900000002")}`);
       assert.equal(await findPadronLine(longFile, "20900000001"), longRow);
       assert.equal(await findPadronLine(longFile, "20900000002"), row("20900000002"));
+    });
+
+    await t.test("automatic Padrón prefill reads the dataset directly even with a legacy Mongo cache flag", async () => {
+      const previousMode = process.env.SUNAT_PROVIDER_MODE;
+      const previousCache = process.env.SUNAT_TAXPAYER_CACHE_MODE;
+      process.env.SUNAT_PROVIDER_MODE = "PADRON";
+      process.env.SUNAT_TAXPAYER_CACHE_MODE = "MONGO";
+      try {
+        const result = await getSupplierAutomaticPrefill("20600000000", { consulta: () => assert.fail("Padrón mode must not open the website") });
+        assert.equal(result.source, "SUNAT_PUBLIC_PADRON_RUC");
+        assert.equal(result.data.legalName, "COMPAÑÍA ÁRBOL");
+        assert.equal(result.fallback, undefined, "the dataset is the primary source");
+      } finally {
+        if (previousMode === undefined) delete process.env.SUNAT_PROVIDER_MODE; else process.env.SUNAT_PROVIDER_MODE = previousMode;
+        if (previousCache === undefined) delete process.env.SUNAT_TAXPAYER_CACHE_MODE; else process.env.SUNAT_TAXPAYER_CACHE_MODE = previousCache;
+      }
     });
 
     await t.test("prefills company data and invalidates cached RUCs after a dataset replacement", async () => {

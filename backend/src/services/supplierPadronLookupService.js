@@ -1,5 +1,5 @@
 import { cachedTaxpayerProfile, cloudTaxpayerMode } from "./taxpayerProfileCache.js";
-import { usesConsultaRucOnly } from "../config/sunatMode.js";
+import { usesConsultaRucOnly, usesPublicPadron } from "../config/sunatMode.js";
 import { lookupSunatTaxpayerProfile } from "./sunatConsultaRucRepresentativesService.js";
 import { lookupSunatPadronRuc } from "./sunatPadronService.js";
 import { AppError } from "../utils/AppError.js";
@@ -187,6 +187,11 @@ export async function getSupplierPadronPrefill(rucValue) {
 // Consulta RUC is the only source unless the Padrón fallback is explicitly enabled.
 let consultaCooldown = null;
 export async function getSupplierAutomaticPrefill(rucValue, options = {}) {
+  // Padrón mode never opens Consulta RUC or reuses a website profile cache.
+  // Local lookups remain available while the daily updater builds a new generation.
+  if (options.padronOnly ?? usesPublicPadron()) {
+    return (options.padron || getSupplierPadronPrefill)(rucValue);
+  }
   if (cloudTaxpayerMode() && !options.consulta && !options.padron) {
     return cachedTaxpayerProfile(normalizeRuc(rucValue), () => lookupAutomaticProfile(rucValue));
   }

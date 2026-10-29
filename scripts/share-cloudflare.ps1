@@ -290,11 +290,11 @@ if (-not (Test-ErpServer)) {
 
   Write-Host "Starting the local ERP demo server (A2 batch and SLA workers run in-process)..." -ForegroundColor Cyan
   # The started server inherits these: backend/src/workers/inProcessWorkers.js runs the A2 batch
-  # worker and the SLA escalation worker inside it. The Padron refresh stays with its own updater.
+  # worker, SLA escalation and daily Padrón refresh inside it (the file lease prevents duplicate updaters).
   $env:BATCH_INVOICE_INLINE_PROCESSING = "false"
   $env:BATCH_INVOICE_WORKER_ENABLED = "true"
   $env:SLA_WORKER_ENABLED = "true"
-  if (-not $env:SUNAT_PADRON_WORKER_ENABLED) { $env:SUNAT_PADRON_WORKER_ENABLED = "false" }
+  if (-not $env:SUNAT_PADRON_WORKER_ENABLED) { $env:SUNAT_PADRON_WORKER_ENABLED = "true" }
   # Same-origin POSTs through the tunnel carry its origin; allow it in CORS.
   $env:PUBLIC_GATEWAY_URL = $shareUrl
   $serverEntry = Join-Path $projectRoot "backend\public-server.js"

@@ -11,7 +11,7 @@ import { PublicPadronSunatProvider } from "../integrations/sunat/PublicPadronSun
 export const AUTOMATIC_TAXPAYER_VARIANTS = Object.freeze(["CONSULTA_RUC", "PADRON"]);
 export const usesAutomaticTaxpayerLookup = (status = sunatService.status()) => AUTOMATIC_TAXPAYER_VARIANTS.includes(status.variant);
 
-// Unset means CONSULTA_RUC (config/sunatMode.js); MOCK is used only when set explicitly.
+// Unset means PADRON (config/sunatMode.js); MOCK is used only when set explicitly.
 export function getSunatProvider(
   mode =
     sunatProviderMode()

@@ -412,10 +412,10 @@ set "JWT_EXPIRES_IN=8h"
 
 
 rem ============================================================
-rem SUNAT CONSULTA RUC CONFIGURATION (verifies RUCs on SUNAT Consulta RUC; the Padron settings below apply only to PADRON mode)
+rem SUNAT PADRON CONFIGURATION (official local RUC registry, refreshed daily)
 rem ============================================================
 
-set "SUNAT_PROVIDER_MODE=CONSULTA_RUC"
+set "SUNAT_PROVIDER_MODE=PADRON"
 
 set "SUNAT_PADRON_INFO_URL=https://www.sunat.gob.pe/descargaPRR/mrc137_padron_reducido.html"
 
@@ -469,13 +469,13 @@ set "BATCH_INVOICE_STALE_MINUTES=15"
 set "BATCH_INVOICE_INLINE_PROCESSING=false"
 
 rem Background workers run inside the server process
-rem (backend/src/workers/inProcessWorkers.js). The Padron refresh
-rem stays with the separate updater started in step 4.
+rem (backend/src/workers/inProcessWorkers.js). The Padron lease
+rem prevents duplicate updates if step 4 already started its updater.
 set "BATCH_INVOICE_WORKER_ENABLED=true"
 
 set "SLA_WORKER_ENABLED=true"
 
-set "SUNAT_PADRON_WORKER_ENABLED=false"
+set "SUNAT_PADRON_WORKER_ENABLED=true"
 
 set "SLA_DUE_SOON_HOURS=4"
 

@@ -15,9 +15,8 @@ function boolFromEnv(value, fallback) {
 
 export { usesPublicPadron };
 
-// Defaults: on in production, off elsewhere (development runs batches inline and the workers
-// through their npm scripts). The batch worker is never started while inline processing is on,
-// and the Padrón refresh only when SUNAT runs in public-Padrón mode.
+// The Padrón updater defaults on wherever its dataset is used, including local servers.
+// Other workers default on in production. Explicit disable flags remain available.
 export function inProcessWorkerFlags(env = process.env) {
   const production = env.NODE_ENV === "production";
   // Same rule as inlineBatchProcessingEnabled() in queues/batchInvoiceQueue.js.
@@ -25,7 +24,7 @@ export function inProcessWorkerFlags(env = process.env) {
   return {
     batchInvoice: !inline && boolFromEnv(env.BATCH_INVOICE_WORKER_ENABLED, production),
     sla: boolFromEnv(env.SLA_WORKER_ENABLED, production),
-    padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, production),
+    padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, true),
     // Only when notification emails are switched on (NOTIFICATION_EMAIL_MODE=LOG or SMTP).
     notificationEmail: notificationEmailConfiguration(env).mode !== "OFF" && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production)
   };

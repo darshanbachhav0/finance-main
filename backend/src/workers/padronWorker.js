@@ -12,6 +12,13 @@ const LOCK_RETRY_MS = 60000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export function nextPadronCheckAt(now = Date.now()) {
+  const next = new Date(now);
+  next.setUTCHours(8, 0, 0, 0); // 03:00 America/Lima, every calendar day.
+  if (next.getTime() <= now) next.setUTCDate(next.getUTCDate() + 1);
+  return next.getTime();
+}
+
 // Returns an open lease file handle, or null when another live updater holds the lock.
 async function acquireLock(lock) {
   try { return await fs.open(lock, "wx"); }
@@ -47,7 +54,8 @@ async function migrateLegacyDirectory(directory) {
 // once: run a single refresh attempt and resolve (bootstrap). waitForLock: keep retrying the
 // lock (in-process use - a just-replaced instance's lease can take up to a minute to go stale)
 // instead of giving up immediately (CLI use). Resolves with { ran, failed }.
-export async function runPadronWorker({ once = false, waitForLock = false, shouldStop = () => false } = {}) {
+export async function runPadronWorker({ once = false, waitForLock = false, shouldStop = () => false,
+  synchronize = ensureSunatPadron } = {}) {
   const directory = (await getSunatPadronStatus()).dataDir;
   await fs.mkdir(directory, { recursive: true });
   const lock = path.join(directory, "worker.lock");
@@ -74,14 +82,12 @@ export async function runPadronWorker({ once = false, waitForLock = false, shoul
     do {
       if (Date.now() >= next) {
         try {
-          const result = await ensureSunatPadron({ check: next > 0 });
+          // Check on every startup too, so a restart catches a missed daily update.
+          const result = await synchronize({ check: true });
           if (result.refreshError) throw new Error(result.refreshError);
           await pruneSunatPadronGenerations();
           failures = 0;
-          // Next check at 03:00 America/Lima (UTC-5, no seasonal offset).
-          const tomorrow = new Date(); tomorrow.setUTCHours(8, 0, 0, 0);
-          if (tomorrow.getTime() <= Date.now()) tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-          next = tomorrow.getTime();
+          next = nextPadronCheckAt();
           console.log(`Padrón ready; next check ${new Date(next).toISOString()}`);
         } catch (error) {
           failures++;

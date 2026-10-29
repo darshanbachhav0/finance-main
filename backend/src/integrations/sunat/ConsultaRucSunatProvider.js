@@ -6,7 +6,7 @@ import { SunatProvider } from "./SunatProvider.js";
 const digits = (value) => String(value ?? "").replace(/\D/g, "");
 const text = (value) => String(value ?? "").trim();
 
-// SUNAT_PROVIDER_MODE=CONSULTA_RUC (the default): a RUC is verified on SUNAT's public Consulta RUC
+// Explicit SUNAT_PROVIDER_MODE=CONSULTA_RUC: a RUC is verified on SUNAT's public Consulta RUC
 // page - RUC, legal name, status, domicile condition and the rest of its profile. An explicitly
 // enabled Padrón fallback supplies official data if the website is unavailable. mode=PRODUCTION
 // is intentional, as for the Padrón: supplier

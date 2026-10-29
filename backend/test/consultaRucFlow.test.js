@@ -14,8 +14,8 @@ test("official Padrón fallback is an explicit opt-in and enables its refresh wo
   assert.equal(usesPublicPadronData(env), true);
   assert.equal(inProcessWorkerFlags(env).padron, true);
   assert.equal(usesPadronFallback({}), false);
-  assert.equal(usesConsultaRucOnly({}), true);
-  assert.equal(usesPublicPadronData({}), false);
+  assert.equal(usesConsultaRucOnly({}), false);
+  assert.equal(usesPublicPadronData({}), true);
   assert.equal(usesPadronFallback({ ...env, SUNAT_PROVIDER_MODE: "MOCK" }), false);
 });
 

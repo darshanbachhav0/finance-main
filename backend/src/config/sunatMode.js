@@ -1,6 +1,6 @@
-// Which SUNAT source the platform uses (SUNAT_PROVIDER_MODE). CONSULTA_RUC, the default, verifies a
-// RUC on SUNAT's public Consulta RUC page. An official Padrón fallback needs explicit opt-in.
-// PADRON (the downloaded national RUC file), PRODUCTION
+// PADRON is the default: supplier lookups use the official downloaded RUC registry.
+// CONSULTA_RUC explicitly selects the public website; its Padrón fallback is opt-in.
+// PRODUCTION
 // (a contracted CPE API), MANUAL and MOCK (offline, for the automated tests and the demo seed) are
 // used only when configured explicitly.
 const ALIASES = Object.freeze({
@@ -12,7 +12,7 @@ const ALIASES = Object.freeze({
   "PUBLIC-PADRON": "PADRON"
 });
 
-export const DEFAULT_SUNAT_PROVIDER_MODE = "CONSULTA_RUC";
+export const DEFAULT_SUNAT_PROVIDER_MODE = "PADRON";
 
 export function sunatProviderMode(env = process.env) {
   const mode = String(env.SUNAT_PROVIDER_MODE || "").trim().toUpperCase();

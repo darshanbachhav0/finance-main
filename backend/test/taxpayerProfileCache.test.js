@@ -29,6 +29,7 @@ test("inactive taxpayer result is preserved, never converted to an approval", as
   const model = { findById: () => ({ lean: async () => null }), updateOne: async () => {} };
   assert.equal((await cachedTaxpayerProfile(ruc, async () => p, { model })).data.active, false);
 });
-test("cloud cache mode disables full dataset indexing even if old worker flag is enabled", () => {
-  assert.equal(inProcessWorkerFlags({ NODE_ENV: "production", SUNAT_PROVIDER_MODE: "PADRON", SUNAT_TAXPAYER_CACHE_MODE: "MONGO", SUNAT_PADRON_WORKER_ENABLED: "true" }).padron, false);
+test("Padrón daily updates stay enabled even when a legacy Mongo cache flag remains", () => {
+  assert.equal(inProcessWorkerFlags({ NODE_ENV: "production", SUNAT_PROVIDER_MODE: "PADRON", SUNAT_TAXPAYER_CACHE_MODE: "MONGO", SUNAT_PADRON_WORKER_ENABLED: "true" }).padron, true);
+  assert.equal(inProcessWorkerFlags({ NODE_ENV: "production", SUNAT_PROVIDER_MODE: "CONSULTA_RUC", SUNAT_TAXPAYER_CACHE_MODE: "MONGO", SUNAT_CONSULTA_RUC_PADRON_FALLBACK: "true" }).padron, false);
 });

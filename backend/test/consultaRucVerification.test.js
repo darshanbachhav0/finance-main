@@ -34,18 +34,17 @@ const umaFields = {
 };
 const unavailable = () => Object.assign(new Error("Unavailable"), { statusCode: 503 });
 
-test("CONSULTA_RUC is the mode unless another is set; MOCK only when set explicitly", () => {
-  assert.equal(sunatProviderMode({}), "CONSULTA_RUC");
+test("PADRON is the default source; website and MOCK require explicit selection", () => {
+  assert.equal(sunatProviderMode({}), "PADRON");
   assert.equal(sunatProviderMode({ SUNAT_PROVIDER_MODE: " consulta-ruc " }), "CONSULTA_RUC");
   for (const alias of ["PADRON", "public_padron", "PUBLIC-PADRON"]) assert.equal(sunatProviderMode({ SUNAT_PROVIDER_MODE: alias }), "PADRON");
   assert.equal(sunatProviderMode({ SUNAT_PROVIDER_MODE: "MOCK" }), "MOCK");
-  assert.equal(usesConsultaRucOnly({}), true);
-  assert.equal(usesPublicPadron({}), false);
+  assert.equal(usesConsultaRucOnly({}), false);
+  assert.equal(usesPublicPadron({}), true);
   assert.equal(usesPublicPadron({ SUNAT_PROVIDER_MODE: "PADRON" }), true);
 
   const provider = getSunatProvider("");
-  assert.ok(provider instanceof ConsultaRucSunatProvider, "nothing set: Consulta RUC, not MOCK");
-  assert.deepEqual([provider.mode, provider.variant, provider.source, provider.configured], ["PRODUCTION", "CONSULTA_RUC", "SUNAT_CONSULTA_RUC", true]);
+  assert.deepEqual([provider.mode, provider.variant, provider.source, provider.configured], ["PRODUCTION", "PADRON", "SUNAT_PUBLIC_PADRON_RUC", true]);
   assert.equal(provider.capabilities.voucherExistence, false);
   assert.equal(getSunatProvider("MOCK").mode, "MOCK");
   assert.equal(getSunatProvider("PADRON").variant, "PADRON");

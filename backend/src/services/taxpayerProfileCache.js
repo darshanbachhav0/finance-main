@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { AppError } from "../utils/AppError.js";
+import { usesPublicPadron } from "../config/sunatMode.js";
 
 // Only public taxpayer profiles live here; never invoice approvals or manual exceptions.
 const schema = new mongoose.Schema({
@@ -10,7 +11,7 @@ const schema = new mongoose.Schema({
 }, { timestamps: true });
 export const TaxpayerProfileCache = mongoose.models.TaxpayerProfileCache || mongoose.model("TaxpayerProfileCache", schema);
 export function cloudTaxpayerMode(env = process.env) {
-  return String(env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO";
+  return !usesPublicPadron(env) && String(env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO";
 }
 
 export function profileExpiry(profile, ruc, now = Date.now()) {

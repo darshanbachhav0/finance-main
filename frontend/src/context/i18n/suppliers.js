@@ -1,5 +1,7 @@
 // Spanish copy for the supplier proposal form steps. Keys are the English UI strings passed to t().
 export default {
+  "Enter a RUC. UMA retrieves the supplier details automatically from SUNAT.": "Ingresa un RUC. UMA obtiene los datos del proveedor automáticamente de SUNAT.",
+  "RUC was not found in the latest available SUNAT Padrón.": "El RUC no se encontró en el último Padrón SUNAT disponible.",
   "Supplier saved. SUNAT verification is pending; Treasury or your jefe can approve the supplier manually.": "Proveedor guardado. La verificación SUNAT está pendiente; Tesorería o tu jefe pueden aprobar al proveedor manualmente.",
   "The supplier review has expired. Treasury or the proposer's jefe must renew it before financial processing.": "La revisión del proveedor venció. Tesorería o el jefe de quien lo registró deben renovarla antes del proceso financiero.",
   "This supplier is waiting for Treasury or the proposer's jefe approval before financial processing.": "Este proveedor espera la aprobación de Tesorería o del jefe de quien lo registró antes del proceso financiero.",

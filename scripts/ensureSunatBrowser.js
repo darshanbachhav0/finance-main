@@ -1,7 +1,10 @@
 // Render services configured manually also run this through npm run build.
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
-if (process.env.RENDER === "true") {
+// The official Padrón has no browser dependency. Install Chromium only for an
+// explicitly selected Consulta RUC website integration.
+const sunatMode = String(process.env.SUNAT_PROVIDER_MODE || "PADRON").trim().toUpperCase();
+if (process.env.RENDER === "true" && ["CONSULTA_RUC", "CONSULTA-RUC", "CONSULTARUC"].includes(sunatMode)) {
   process.env.PLAYWRIGHT_BROWSERS_PATH ||= path.resolve(__dirname, "../node_modules/.cache/uma-chromium");
   const cli = path.join(path.dirname(require.resolve("playwright/package.json")), "cli.js");
   const result = spawnSync(process.execPath, [cli, "install", "chromium"], { stdio: "inherit", env: process.env });

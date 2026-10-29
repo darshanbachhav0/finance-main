@@ -1578,7 +1578,7 @@ export default function Suppliers() {
         description={
           drawer.mode ===
           "create"
-            ? "Enter a RUC. UMA verifies it automatically on SUNAT Consulta RUC."
+            ? "Enter a RUC. UMA retrieves the supplier details automatically from SUNAT."
             : "Official supplier onboarding and homologation record."
         }
         onClose={

@@ -105,7 +105,7 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
     : padronLookup?.found
       ? { tone: padronData?.eligibleForHomologation ? "success" : "warning", icon: padronData?.eligibleForHomologation ? CheckCircle2 : AlertTriangle, title: padronLookup.source === "SUNAT_CONSULTA_RUC" ? "SUNAT Consulta RUC data loaded automatically" : "SUNAT Padrón data loaded automatically", text: padronData?.legalName || legalName }
       : padronLookup
-        ? { tone: "warning", icon: AlertTriangle, title: padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : "SUNAT Consulta RUC does not recognize this RUC.", text: padronLookup.message ? t(padronLookup.message) : t("Consulta RUC could not return a usable supplier profile.") }
+        ? { tone: "warning", icon: AlertTriangle, title: padronLookup.unavailable ? "SUNAT automatic lookup temporarily unavailable" : padronLookup.source === "SUNAT_PUBLIC_PADRON_RUC" ? "RUC was not found in the latest available SUNAT Padrón." : "SUNAT Consulta RUC does not recognize this RUC.", text: padronLookup.message ? t(padronLookup.message) : t("Consulta RUC could not return a usable supplier profile.") }
         : null;
   const people = representativeLookup?.loading
     ? { tone: "info", icon: RefreshCw, spin: true, title: "Checking SUNAT legal representatives...", text: t("The supplier form is already available while Consulta RUC is checked in the background.") }
@@ -126,7 +126,7 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
       })}
       <ConsultaRucLink pending={Boolean(padronLookup?.unavailable)} ruc={padronLookup?.ruc} assistedAvailable={padronLookup?.assistedAvailable} onVerified={onVerifiedSunat} />
       {padronLookup?.unavailable && <p className="field-hint">{t("Enter the supplier details manually and save. Treasury or your jefe can approve the supplier with one click while SUNAT is unavailable.")}</p>}
-      {padronLookup?.fallback && <p className="field-hint">{t("Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.")}</p>}
+      {padronLookup?.source === "SUNAT_PUBLIC_PADRON_RUC" && <p className="field-hint">{t("Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.")}</p>}
     </div>
   );
 }

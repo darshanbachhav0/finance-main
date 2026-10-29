@@ -13,10 +13,10 @@ Copy `backend/.env.example` to `backend/.env` and set at minimum:
 - `NODE_ENV=production` for any real deployment — this disables the dev seed and dev-reset scripts.
 
 SUNAT integration (`backend/src/services/sunatService.js`):
-- `SUNAT_PROVIDER_MODE` — `CONSULTA_RUC` (the default, in every environment): supplier RUCs are
-  verified on SUNAT's public Consulta RUC page only, with no Padrón file and no simulated answers
-  (see "Supplier automatic lookup"). Set explicitly, `PADRON` uses the downloaded public Padrón
-  (taxpayer-registry only, with Consulta RUC first), `PRODUCTION` a contracted CPE API (requires
+- `SUNAT_PROVIDER_MODE` — `PADRON` (the default): supplier RUCs are read directly from SUNAT's
+  official downloaded Padrón, updated at startup and daily at 03:00 America/Lima. Core lookup
+  never waits for the public website or Chromium. `CONSULTA_RUC` explicitly selects the public
+  website, `PRODUCTION` a contracted CPE API (requires
   the vars below) and `MANUAL` only the dedicated manual-override endpoint. `MOCK` is offline,
   used by the automated tests (`backend/test/isolateEnv.js`) and, for its own run, by the demo
   seed, whose fictional RUCs SUNAT does not have.
@@ -446,7 +446,7 @@ These require a real institutional decision or credential this codebase cannot s
   (Admin or Treasury, `/configuration/bank-formats`, linked from Treasury's menu as "Bank Formats").
 - **A contracted SUNAT CPE API** — if/when one exists, set `SUNAT_PROVIDER_MODE=PRODUCTION` and the
   associated env vars (or only `SUNAT_VOUCHER_ENDPOINT`, which `CONSULTA_RUC` and `PADRON` then use
-  for vouchers); until then, production runs on `CONSULTA_RUC` (taxpayer verification only).
+  for vouchers); until then, production runs on `PADRON` (taxpayer verification only).
 - **The organizational roster's manager-chain (`jefe`) data** — approval routing prefers this over
   configured rules; keeping it current is what keeps most requests off the "no configured rule for
   this dimension" error path (see `ARCHITECTURE.md` §3.3).
@@ -454,7 +454,13 @@ These require a real institutional decision or credential this codebase cannot s
 
 ## Supplier automatic lookup
 
-`SUNAT_PROVIDER_MODE=CONSULTA_RUC` (the default) verifies every RUC on SUNAT's official public
+`SUNAT_PROVIDER_MODE=PADRON` is the default and the production configuration. RUC, legal name,
+taxpayer status, domicile condition, ubigeo and fiscal address come directly from the indexed
+official Padrón. The API returns the publication date with the source; it never labels it as a
+live website check. The dataset does not contain legal representatives or bank accounts.
+Representatives remain a separate optional website lookup, and manually entered fields remain editable.
+
+If explicitly selected, `SUNAT_PROVIDER_MODE=CONSULTA_RUC` verifies every RUC on SUNAT's official public
 Consulta RUC website, in headless Chromium, and on nothing else. The lookup reads the whole result
 page: legal name, commercial name, taxpayer type, registration and start dates, status, domicile
 condition, fiscal address, voucher issuing and accounting systems, foreign trade activity, economic
@@ -466,26 +472,38 @@ válido") is an official negative result. If the website times out, changes its 
 human verification, the lookup is unavailable (503) and the supplier's validation stays pending:
 there is no fallback, no simulated answer, and human verification is never bypassed.
 
-With `SUNAT_PROVIDER_MODE=PADRON` instead, a failed Consulta RUC lookup falls back to the indexed
-official public Padron. Successful negative taxpayer results are never overridden with a positive
-fallback. The response identifies its source; Padron retains its dataset date. Either way this
-lookup is taxpayer evidence, not invoice validation or bank ownership proof.
+Padrón mode does not open Consulta RUC before looking up a RUC. An explicit website configuration
+can optionally use `SUNAT_CONSULTA_RUC_PADRON_FALLBACK=true`. Negative taxpayer results are never
+overridden with a positive fallback. These lookups are taxpayer evidence, not invoice validation
+or bank ownership proof.
 
-Render builds must install Chromium (`npx playwright install chromium`) with
+Explicit Consulta RUC deployments install Chromium (`npx playwright install chromium`) with
 `PLAYWRIGHT_BROWSERS_PATH=0` at build and runtime, as configured in render.yaml. Existing
 services managed outside the Blueprint need those settings applied in their dashboard too.
-The host must supply Playwright Chromium system libraries; if launch fails, use a supported
-host image with these libraries installed (in `PADRON` mode lookup still falls back to Padron).
+The host must supply Playwright Chromium system libraries for website lookups. Padrón core
+lookups and daily updates have no browser dependency.
 On a local Windows PC, `npx playwright install chromium` once, or set
 `PLAYWRIGHT_EXECUTABLE_PATH` to the installed Edge (`C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`).
 
-In `PADRON` mode only: keep `SUNAT_PADRON_WORKER_ENABLED=true` and `SUNAT_PADRON_DATA_DIR` on persistent storage.
+Keep `SUNAT_PADRON_WORKER_ENABLED=true` and `SUNAT_PADRON_DATA_DIR` on persistent storage.
+The worker defaults on for both local and production Padrón servers. A legacy
+`SUNAT_TAXPAYER_CACHE_MODE=MONGO` value cannot disable it while `SUNAT_PROVIDER_MODE=PADRON`.
 The existing in-process worker checks at 03:00 America/Lima daily, checks on startup, retries
 failures, and keeps the last usable generation. The service must be running for the scheduled
 check; a suspended service cannot execute background work. Check worker-state.json and
 server logs for the actual last refresh and next check; a schedule alone is not proof of success.
-Website lookups use a short cache (default 30 minutes, maximum 24 hours). This refreshes
-lookup evidence, not historical supplier/request snapshots.
+Updates use a file lease, validate the ZIP and indexes, and activate a complete generation
+atomically. Failed downloads keep the last usable dataset and retry after 1 minute, 5 minutes,
+15 minutes, then hourly. An unchanged ZIP is not indexed again. Historical supplier/request
+snapshots are not rewritten.
+
+Verify with `npm run sunat:padron:status --workspace backend`: check `worker.running`,
+`worker.nextCheckAt`, `synchronization.lastSuccessAt`, `manifest.datasetDate` and `ready`.
+Bootstrap immediately with `npm run sunat:padron:bootstrap --workspace backend` if needed.
+Local launchers and `render.yaml` select `PADRON` and enable its worker. For a Render service
+managed outside the Blueprint, set `SUNAT_PROVIDER_MODE=PADRON`,
+`SUNAT_PADRON_WORKER_ENABLED=true` and `SUNAT_PADRON_DATA_DIR=/var/data/sunat-padron` in its
+environment, mount a persistent disk at `/var/data`, then redeploy.
 
 Only fields supplied by the source are autofilled. Legal name, commercial name, fiscal
 address and taxpayer status come from the profile; representative lookup remains separate.
@@ -496,7 +514,7 @@ remain user-provided when absent from SUNAT. Existing user edits are not overwri
 
 ### Render lookup deployment check
 
-Use `npm ci && npm run build` for the service build. The root build now runs
+Use `npm ci && npm run build` for the service build. In explicit Consulta RUC mode the root build runs
 `scripts/ensureSunatBrowser.js` on Render: it installs Chromium and verifies a
 headless launch. A failed install or missing Linux library fails the build, instead
 of silently deploying broken autofill. If PLAYWRIGHT_BROWSERS_PATH is not set, both
@@ -530,10 +548,10 @@ eligibility or verified bank ownership.
 
 ### Automatic supplier taxpayer validation
 
-With `SUNAT_PROVIDER_MODE=CONSULTA_RUC` (or `PADRON`), saving a new 11-digit RUC proposal records
-server-fetched Consulta RUC evidence (with official Padron fallback in `PADRON` mode only). A result is
+With `SUNAT_PROVIDER_MODE=PADRON`, saving a new 11-digit RUC proposal records official dataset
+evidence. Explicit `CONSULTA_RUC` mode records website evidence. A result is
 accepted only for ACTIVO/HABIDO and matching RUC/legal name. Unavailable lookups
-leave the saved proposal pending. Accounting/Admin can retry from Supplier Detail
+leave the saved proposal pending. Treasury can retry from Supplier Detail
 using "Validate automatically with SUNAT"; final homologation rechecks the same
 control. The audit records source, evidence date, result and initiating user.
 Manual and mock provider modes retain their distinct behavior. This taxpayer
@@ -541,7 +559,11 @@ check does not verify an invoice, bank account or Finance compliance review.
 No migration is required; existing pending suppliers can use the retry action.
 
 
-## Render Free: automatic taxpayer lookup without an always-on PC
+## Optional website cache mode (not the daily Padrón deployment)
+
+The following is a legacy alternative for hosts without persistent dataset storage. It selects
+website lookups and does not satisfy a guaranteed daily official-Padrón update. Use the Padrón
+configuration above for the current deployment.
 
 Set these variables in Render Environment, then deploy the updated code:
 
@@ -551,8 +573,8 @@ SUNAT_TAXPAYER_CACHE_MODE=MONGO
 SUNAT_PADRON_WORKER_ENABLED=false
 ```
 
-`render.yaml` sets `CONSULTA_RUC`, but the live service is not synced from the Blueprint: change
-`SUNAT_PROVIDER_MODE` in the Render dashboard (Environment), or delete it to use the default.
+`render.yaml` sets `PADRON`. To explicitly choose this website alternative, change
+`SUNAT_PROVIDER_MODE` in the Render dashboard (Environment). Deleting it restores the Padrón default.
 
 Keep the existing MONGODB_URI and browser build hook (`npm ci && npm run build`).
 Keep the normal web-service start command. No PC, tunnel, additional paid worker,
