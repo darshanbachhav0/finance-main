@@ -78,6 +78,11 @@ test("indexed SUNAT lookup and nonblocking proposal prefill", async t => {
       const first = await getSupplierPadronPrefill("20600000000");
       assert.equal(first.data.legalName, "COMPAÑÍA ÁRBOL");
       assert.equal(first.data.eligibleForHomologation, true);
+      assert.equal(first.data.fiscalAddress, "AV. LIMA");
+      assert.equal(first.data.location.ubigeo, "150101");
+      assert.equal(first.data.personType, "LEGAL_ENTITY");
+      assert.equal(first.data.accountHolderName, first.data.legalName);
+      assert.equal(first.data.legalRepresentative, undefined, "The Padrón cannot supply representatives");
       await fs.writeFile(file, row("20600000000", "NOMBRE ACTUALIZADO"));
       manifest.generatedAt = new Date(Date.now() + 1000).toISOString();
       await fs.writeFile(manifestFile, JSON.stringify(manifest));

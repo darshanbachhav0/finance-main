@@ -66,7 +66,7 @@ export const lookupSupplier =
     }
   );
 
-// The legacy /padron URL now uses the configured source (Consulta RUC by default).
+// The legacy /padron URL uses the configured source (official Padrón by default).
 export const lookupSupplierPadron =
   asyncHandler(
     async (
@@ -82,7 +82,7 @@ export const lookupSupplierPadron =
             refreshForLookup();
             res.set("Retry-After", "15");
           }
-          error.details = { ...error.details, assistedAvailable: assistedConsultaAvailable(req) && !error.details?.requiresConfiguration, lookupState: "UNAVAILABLE", ...(retryable ? { retryAfterSeconds: 15 } : {}) };
+          error.details = { ...error.details, assistedAvailable: assistedConsultaAvailable(req) && !error.details?.requiresConfiguration, lookupState: error.details?.lookupState || "UNAVAILABLE", ...(retryable ? { retryAfterSeconds: 15 } : {}) };
         }
         throw error;
       }

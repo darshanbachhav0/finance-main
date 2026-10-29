@@ -1,5 +1,10 @@
 // Spanish copy for the supplier proposal form steps. Keys are the English UI strings passed to t().
 export default {
+  "Preparing the official SUNAT Padrón. We will retry automatically and fill the available details. You can keep completing this form.": "Preparando el Padrón oficial SUNAT. Reintentaremos automáticamente y completaremos los datos disponibles. Puedes seguir llenando este formulario.",
+  "SUNAT public Padrón is being prepared or refreshed. Supplier details will fill automatically when it is ready.": "El Padrón público SUNAT se está preparando o actualizando. Los datos del proveedor se completarán automáticamente cuando esté listo.",
+  "SUNAT Padrón is unavailable and its automatic updater is disabled. Ask the administrator to enable the Padrón updater.": "El Padrón SUNAT no está disponible y su actualizador automático está desactivado. Solicita al administrador que active el actualizador del Padrón.",
+  "The official Padrón fills the legal name, fiscal address, ubigeo and taxpayer status. It does not include legal representatives or bank details.": "El Padrón oficial completa la razón social, dirección fiscal, ubigeo y estado del contribuyente. No incluye representantes legales ni datos bancarios.",
+  "Retry SUNAT lookup": "Reintentar consulta SUNAT",
   "Enter a RUC. UMA retrieves the supplier details automatically from SUNAT.": "Ingresa un RUC. UMA obtiene los datos del proveedor automáticamente de SUNAT.",
   "RUC was not found in the latest available SUNAT Padrón.": "El RUC no se encontró en el último Padrón SUNAT disponible.",
   "Supplier saved. SUNAT verification is pending; Treasury or your jefe can approve the supplier manually.": "Proveedor guardado. La verificación SUNAT está pendiente; Tesorería o tu jefe pueden aprobar al proveedor manualmente.",

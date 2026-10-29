@@ -488,6 +488,17 @@ On a local Windows PC, `npx playwright install chromium` once, or set
 Keep `SUNAT_PADRON_WORKER_ENABLED=true` and `SUNAT_PADRON_DATA_DIR` on persistent storage.
 The worker defaults on for both local and production Padrón servers. A legacy
 `SUNAT_TAXPAYER_CACHE_MODE=MONGO` value cannot disable it while `SUNAT_PROVIDER_MODE=PADRON`.
+
+The inline supplier form retries a preparing Padrón lookup every 15 seconds while it stays open.
+When the dataset becomes ready, the legal name and account holder fill automatically; the fiscal
+address, ubigeo and taxpayer status appear in the SUNAT evidence and are included in the proposal.
+Manual entries are preserved. Changing the RUC cancels the previous lookup. The official file
+does not contain legal representatives or bank accounts; representatives use a separate lookup.
+If the dataset is missing or expired and `SUNAT_PADRON_WORKER_ENABLED=false`, the API reports a
+configuration error instead of asking the browser to poll indefinitely. Enable the worker on the
+same service and persistent disk before expecting automatic prefill. Both `render.yaml` and
+`backend/.env.render.example` select `PADRON` with its updater enabled; existing Render services
+must apply those environment values explicitly if they are managed outside the Blueprint.
 The existing in-process worker checks at 03:00 America/Lima daily, checks on startup, retries
 failures, and keeps the last usable generation. The service must be running for the scheduled
 check; a suspended service cannot execute background work. Check worker-state.json and

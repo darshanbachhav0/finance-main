@@ -1,5 +1,17 @@
 import { calculateRequestLineAmounts } from "../../../shared/requestLineAmounts.mjs";
 
+// Older PDF imports sometimes selected a zero exempt-operations row as the net.
+// Recover only an absent/zero net from the two known invoice amounts; retain
+// positive conflicting values so validation still catches a real discrepancy.
+export function recoverMissingInvoiceNet(line) {
+  const missingNet = line.netAmount == null || line.netAmount === "" || Number(line.netAmount) === 0;
+  const total = Math.round(Number(line.totalAmount) * 100);
+  const tax = line.igvAmount == null || line.igvAmount === "" ? NaN : Math.round(Number(line.igvAmount) * 100);
+  return missingNet && Number.isSafeInteger(total) && Number.isSafeInteger(tax) && tax >= 0 && total > tax
+    ? { ...line, netAmount: (total - tax) / 100 }
+    : line;
+}
+
 export function calculateEditorLine(line) {
   try {
     const amounts = calculateRequestLineAmounts(line);
@@ -10,6 +22,7 @@ export function calculateEditorLine(line) {
 }
 
 export function restoreEditorLine(line) {
+  line = recoverMissingInvoiceNet(line);
   if (typeof line.priceIncludesIGV === "boolean") return calculateEditorLine(line);
   // Infer a saved price basis only if all saved amounts match exactly.
   for (const priceIncludesIGV of [true, false]) {

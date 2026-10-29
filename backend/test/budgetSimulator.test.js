@@ -11,6 +11,7 @@ import User from "../src/models/User.js";
 import { createBudgetPlan } from "../src/services/budgetPlanService.js";
 import { previewFinancialRequestBudget } from "../src/services/requestService.js";
 import { simulationSources, budgetBar } from "../../frontend/src/utils/budgetSimulation.js";
+import { restoreEditorLine } from "../../frontend/src/utils/requestLineEditor.js";
 
 test("budget simulator uses live annual/monthly limits and never writes a financial record", { timeout: 30000 }, async () => {
   const db = `erp_budget_simulation_test_${process.pid}_${Date.now()}`;
@@ -51,6 +52,15 @@ test("budget simulator uses live annual/monthly limits and never writes a financ
     await ExchangeRate.create({ currency: "USD", date: new Date("2036-01-05"), period: "2036-01", rate: 3.8, providerMode: "SUNAT", source: "SUNAT", sourceLabel: "SUNAT", authoritative: true });
     assert.equal((await previewFinancialRequestBudget({ payload: usd, user })).totalRequested, 5700, "Uses stored FX, not a forged client rate");
     assert.equal(JSON.stringify(payload), input);
+    const beneficiary = await CostCenter.create({ code: "SIM-BENEFICIARY", name: "Second beneficiary", area: "Operations", active: true, annualBudget: 6000, committedAmount: 1000, budgetMode: "ACTIVE" });
+    const legacy = { ...payload.lines[0], unitPrice: "5566", priceIncludesIGV: undefined, netAmount: 0, igvAmount: 849.05, totalAmount: 5566, legacyAmounts: true };
+    await assert.rejects(() => previewFinancialRequestBudget({ payload: { ...payload, lines: [legacy] }, user }), /Net plus IGV/);
+    const restored = await previewFinancialRequestBudget({ payload: { ...payload, lines: [restoreEditorLine(legacy)], costCenterType: "POR_ENCARGO", costAllocations: [{ costCenter: String(center._id), percentage: 50 }, { costCenter: String(beneficiary._id), percentage: 50 }] }, user });
+    assert.equal(restored.totalRequested, 5566);
+    assert.deepEqual(restored.lines.map(line => line.amount), [2783, 2783]);
+    assert.equal(restored.lines[0].monthlyProjected, -1783);
+    assert.equal(restored.lines[1].projectedBalance, 2217);
+    assert.equal(restored.projectedBalance, 434);
     const tiny = await previewFinancialRequestBudget({ payload: { ...payload, lines: [{ ...payload.lines[0], unitPrice: 0.01 }], scenario: { percentage: 1 } }, user });
     assert.equal(tiny.totalRequested, 0, "A scenario rounded to zero must not reuse the original line amount");
     assert.equal(JSON.stringify(await BudgetAllocation.find().lean()), snapshot);

@@ -12,6 +12,7 @@ import { supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
 import { representativeDocumentType } from "../../../../shared/supplierSunat.mjs";
 import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
 import { dniError } from "../../utils/fieldValidation.js";
+import { lookupSupplierProfile } from "../../utils/supplierProfileLookup.js";
 
 // Registering a supplier without leaving the request (step 1, "Datos de proveedor"): the RUC is
 // checked against the registry first (an existing supplier is used, another area's is asked for),
@@ -27,6 +28,7 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
   currentRuc.current = ruc;
   const [check, setCheck] = useState({ status: "idle" });
   const [sunat, setSunat] = useState(null);
+  const [lookupAttempt, setLookupAttempt] = useState(0);
   const [legalName, setLegalName] = useState("");
   const [representative, setRepresentative] = useState({ fullName: "", documentType: "DNI", documentNumber: "" });
   const [representativeLookup, setRepresentativeLookup] = useState({ status: "idle" });
@@ -62,33 +64,45 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     api.get(`/suppliers/lookup/${value}`, { timeout: 10000 }).then((response) => {
       if (!active) return;
       if (response.data.found) { setCheck({ status: response.data.restricted ? "restricted" : "found", data: response.data.data }); return; }
-      setCheck({ status: "new" });
-      if (value.length !== 11) return;
-      setSunat({ status: "loading" });
-      api.get(`/suppliers/padron/${value}`, { timeout: 35000 }).then((lookup) => {
-        if (!active) return;
-        setSunat({ status: lookup.data?.found ? "found" : "missing", data: lookup.data?.data, lookup: lookup.data });
-        const name = lookup.data?.data?.legalName;
-        if (name && !typedName.current) {
-          setLegalName(name);
-          setAccounts((current) => current.map((account) => account.accountHolderName ? account : { ...account, accountHolderName: name }));
-          autoHolder.current = name;
-        }
-        // Padrón and representatives have different sources. A taxpayer fallback
-        // must not suppress a separate Consulta RUC lookup (or its cached result).
-        if (!lookup.data?.found || !name) return;
-        void retryRepresentatives(value, name, () => active, lookup.data.representativesLookup);
-      }).catch(error => active && setSunat({ status: "unavailable", error: error.message, assistedAvailable: error.details?.assistedAvailable === true }));
+      setCheck({ status: "new", ruc: value });
     }).catch((err) => active && setCheck({ status: "error", error: err.message }));
     return () => { active = false; };
   }, [ruc]);
+
+  useEffect(() => {
+    const value = digits(ruc);
+    if (check.status !== "new" || check.ruc !== value || value.length !== 11) return undefined;
+    const controller = new AbortController();
+    const stillActive = () => !controller.signal.aborted && digits(currentRuc.current) === value;
+    setSunat({ status: "loading" });
+    lookupSupplierProfile(
+      () => api.get(`/suppliers/padron/${value}`, { timeout: 35000, signal: controller.signal }),
+      { signal: controller.signal, onRetry: (error, retrySeconds) => {
+        if (stillActive()) setSunat({ status: "waiting", error: error.message, retrySeconds });
+      } }
+    ).then(lookup => {
+      if (!stillActive()) return;
+      setSunat({ status: lookup.data?.found ? "found" : "missing", data: lookup.data?.data, lookup: lookup.data });
+      const name = lookup.data?.data?.legalName;
+      if (name) {
+        if (!typedName.current) setLegalName(name);
+        setAccounts(current => current.map(account => account.accountHolderName ? account : { ...account, accountHolderName: name }));
+        autoHolder.current = name;
+      }
+      // Representatives are a separate source; their failure must not discard Padrón data.
+      if (lookup.data?.found && name) void retryRepresentatives(value, name, stillActive, lookup.data.representativesLookup);
+    }).catch(error => {
+      if (stillActive()) setSunat({ status: "unavailable", error: error.message, assistedAvailable: error.details?.assistedAvailable === true });
+    });
+    return () => controller.abort();
+  }, [ruc, check.status, check.ruc, lookupAttempt]);
 
   function applyAssistedProfile(profile) {
     if (profile.ruc !== digits(currentRuc.current)) return;
     setSunat({ status: profile.found ? "found" : "missing", data: profile.data, lookup: profile });
     const name = profile.data?.legalName;
-    if (name && !typedName.current) {
-      setLegalName(name);
+    if (name) {
+      if (!typedName.current) setLegalName(name);
       setAccounts(current => current.map(account => account.accountHolderName ? account : { ...account, accountHolderName: name }));
       autoHolder.current = name;
     }
@@ -213,10 +227,11 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
 
       {status === "new" && <>
         {sunat?.status === "loading" && <p className="muted-text"><Loader2 size={14} className="spin" aria-hidden="true" /> {t("Looking up the RUC in SUNAT...")}</p>}
+        {sunat?.status === "waiting" && <p className="field-hint" role="status"><Loader2 size={14} className="spin" aria-hidden="true" /> {t("Preparing the official SUNAT Padrón. We will retry automatically and fill the available details. You can keep completing this form.")}</p>}
         {sunat?.status === "found" && <SupplierSunatEvidence lookup={sunat.lookup} />}
-        {sunat?.lookup?.fallback && <p className="field-hint">{t("Taxpayer details come from the official Padrón. Legal representatives are checked separately in Consulta RUC.")}</p>}
-        {sunat?.status === "missing" && <p className="muted-text">{t("SUNAT Consulta RUC does not recognize this RUC.")}</p>}
-        {sunat?.status === "unavailable" && <div role="status"><p className="muted-text">{t(sunat.error || "Consulta RUC could not return a usable supplier profile.")}</p><ConsultaRucLink pending ruc={digits(ruc)} assistedAvailable={sunat.assistedAvailable} onVerified={applyAssistedProfile} /></div>}
+        {sunat?.lookup?.source === "SUNAT_PUBLIC_PADRON_RUC" && <p className="field-hint">{t("The official Padrón fills the legal name, fiscal address, ubigeo and taxpayer status. It does not include legal representatives or bank details.")}</p>}
+        {sunat?.status === "missing" && <p className="muted-text">{t(sunat.lookup?.source === "SUNAT_PUBLIC_PADRON_RUC" ? "RUC was not found in the latest available SUNAT Padrón." : "SUNAT Consulta RUC does not recognize this RUC.")}</p>}
+        {sunat?.status === "unavailable" && <div role="status"><p className="muted-text">{t(sunat.error || "Consulta RUC could not return a usable supplier profile.")}</p><button type="button" className="text-button" onClick={() => setLookupAttempt(attempt => attempt + 1)}>{t("Retry SUNAT lookup")}</button><ConsultaRucLink pending ruc={digits(ruc)} assistedAvailable={sunat.assistedAvailable} onVerified={applyAssistedProfile} /></div>}
         {representativeLookup.status === "unavailable" && sunat?.status !== "unavailable" && <ConsultaRucLink />}
         <div className="form-grid two-column-form">
           <label className={`field form-span-two${errors.legalName ? " field-error" : ""}`}><span>{t("Legal name")} *</span><input value={legalName} onChange={(event) => { typedName.current = true; setLegalName(event.target.value); }} aria-invalid={Boolean(errors.legalName)} />{errors.legalName && <small className="field-error-text">{t(errors.legalName)}</small>}</label>

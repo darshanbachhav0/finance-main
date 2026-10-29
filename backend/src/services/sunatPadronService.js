@@ -11,7 +11,7 @@ import { openZipEntryStream } from "../utils/zipReader.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { findPadronLine, preparePadronIndexes } from "./padronChunkIndex.js";
-import { usesPublicPadronData } from "../config/sunatMode.js";
+import { usesPublicPadron, usesPublicPadronData } from "../config/sunatMode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1368,7 +1368,8 @@ function cachePut(
 export function refreshForLookup() {
   // The downloaded file is used in Padrón mode or by an explicitly enabled fallback.
   if (!usesPublicPadronData()) return;
-  if (String(process.env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO") return;
+  // A legacy website-cache setting must not disable preparation of the primary Padrón.
+  if (!usesPublicPadron() && String(process.env.SUNAT_TAXPAYER_CACHE_MODE || "").toUpperCase() === "MONGO") return;
   if (["false", "off", "0"].includes(String(process.env.SUNAT_PADRON_WORKER_ENABLED || "").toLowerCase())) return;
   if (Date.now() < nextLookupRefreshAt) return;
   nextLookupRefreshAt = Date.now() + 5 * 60_000;
@@ -1411,10 +1412,20 @@ export async function lookupSunatPadronRuc(
       manifest
     ) || (!isFresh(manifest) && !isAcceptablyStale(manifest))
   ) {
+    const updaterDisabled = ["false", "off", "0"].includes(env("SUNAT_PADRON_WORKER_ENABLED").toLowerCase());
     throw new AppError(
       503,
-      "SUNAT public Padrón is being prepared or refreshed. You can complete the proposal manually; taxpayer validation remains required.",
-      undefined,
+      updaterDisabled
+        ? "SUNAT Padrón is unavailable and its automatic updater is disabled. Ask the administrator to enable the Padrón updater."
+        : "SUNAT public Padrón is being prepared or refreshed. Supplier details will fill automatically when it is ready.",
+      {
+        source: "SUNAT_PUBLIC_PADRON_RUC",
+        lookupState: updaterDisabled ? "CONFIGURATION_REQUIRED" : "PREPARING",
+        datasetState: datasetExists(manifest) ? "EXPIRED" : "MISSING",
+        retryable: !updaterDisabled,
+        requiresConfiguration: updaterDisabled,
+        ...(updaterDisabled ? {} : { retryAfterSeconds: 15 })
+      },
       ERROR_CODES
         .INTEGRATION_NOT_CONFIGURED
     );

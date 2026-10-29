@@ -72,7 +72,6 @@ import {
   requestFrequencies,
   requestFrequencyLabels,
   requestPriorities,
-  requestPriorityHints,
   requestPriorityLabels,
   requestTypeForFlow,
   trackCRequestTypeLabels,
@@ -1062,13 +1061,12 @@ export default function RequestCreate() {
         <MotionSurface changeKey={step} directional>
 
         {stepId === "supplier" && <div className="wizard-step">
-          <WizardSection title="Who is paid?">
-            {!isEditing ? <p className="quick-note">{payee === "employee" ? "Beneficiario: colaborador de UMA. Elija abajo si es entrega a rendir o reembolso." : "Beneficiario: proveedor. La selección del proceso anterior determina si existe OC."}</p> : <fieldset className="quick-choices" aria-label={t("Who gets the money?")}>
+          {!isEditing && payee === "employee" && <p className="quick-note">Beneficiario: colaborador de UMA. Elija abajo si es entrega a rendir o reembolso.</p>}
+          {isEditing && <fieldset className="quick-choices" aria-label={t("Who gets the money?")}>
               <legend className="sr-only">{t("Who gets the money?")}</legend>
               <Choice name="request-payee" value="supplier" current={payee} icon={Building2} title="A supplier" hint="A company or person who sells to UMA" onChange={() => changeTrack({ payee: "supplier" })} />
               <Choice name="request-payee" value="employee" current={payee} icon={UserRound} title="Me" hint="An advance or a reimbursement for you" onChange={() => changeTrack({ payee: "employee" })} />
-            </fieldset>}
-          </WizardSection>
+          </fieldset>}
 
           {payee === "employee" && <WizardSection title="What do you need?" description="Petty cash and reimbursements are handled here, in Track C.">
             <fieldset className="quick-choices">
@@ -1219,10 +1217,10 @@ export default function RequestCreate() {
                 <div className="segmented-control priority-control" role="radiogroup" aria-labelledby="request-priority-label">
                   {requestPriorities.map((value) => <label key={value} data-level={value.toLowerCase()} className={form.priority === value ? "active" : undefined}><input type="radio" className="sr-only" name="request-priority" value={value} checked={form.priority === value} onChange={() => changeForm({ priority: value })} /><span>{t(requestPriorityLabels[value])}</span></label>)}
                 </div>
-                {fieldError("priority") || <small className="field-hint">{t(requestPriorityHints[form.priority] || requestPriorityHints.P3)} {t("It never skips an approval or a control.")}</small>}
+                {fieldError("priority")}
               </div>
-              <label className={fieldClass("dueDate")}><span>{t("Due date")}</span><DateInput min={todayIso()} value={form.dueDate} onChange={(event) => changeForm({ dueDate: event.target.value })} />{fieldError("dueDate") || <small className="field-hint">{t("When the supplier must be paid. P4 (and P3 when it comes first) is paid on the last payment day before it.")}</small>}</label>
-              {["P1", "P2"].includes(form.priority) && <label className={`${fieldClass("urgencyJustification")} form-span-two`}><span>{t("Justification of the urgency")} *</span><textarea rows="2" value={form.urgencyJustification} onBlur={() => validateField("urgencyJustification")} onChange={(event) => changeForm({ urgencyJustification: event.target.value })} />{fieldError("urgencyJustification") || <small className="field-hint">{t("Why it cannot wait for the fortnightly payment. Urgent payments should stay at 10% or less.")}</small>}</label>}
+              <label className={fieldClass("dueDate")}><span>{t("Due date")}</span><DateInput min={todayIso()} value={form.dueDate} onChange={(event) => changeForm({ dueDate: event.target.value })} />{fieldError("dueDate")}</label>
+              {["P1", "P2"].includes(form.priority) && <label className={`${fieldClass("urgencyJustification")} form-span-two`}><span>{t("Justification of the urgency")} *</span><textarea rows="2" value={form.urgencyJustification} onBlur={() => validateField("urgencyJustification")} onChange={(event) => changeForm({ urgencyJustification: event.target.value })} />{fieldError("urgencyJustification")}</label>}
               <label className={fieldClass("frequency")}><span>{t("Frequency")} *</span><select value={form.frequency} onChange={(event) => changeForm({ frequency: event.target.value })}>{requestFrequencies.map((value) => <option key={value} value={value}>{t(requestFrequencyLabels[value])}</option>)}</select>{fieldError("frequency") || <small className="field-hint">{t("Recorded with the request. Nothing is requested or paid again automatically.")}</small>}</label>
             </div>
           </WizardSection>

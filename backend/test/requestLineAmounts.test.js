@@ -6,6 +6,8 @@ import { editRequestLine, restoreEditorLine } from "../../frontend/src/utils/req
 import { parseRequestLines } from "../src/services/requestService.js";
 import FinancialRequest from "../src/models/FinancialRequest.js";
 import { assertRequestLines } from "../src/services/requestRules.js";
+import { lineFromInvoice } from "../../frontend/src/utils/invoiceAutofill.js";
+import { invoiceFieldsFromLines } from "../src/services/invoicePdfService.js";
 
 const input = { quantity: 3, unitPrice: 1000, priceIncludesIGV: true };
 const ids = Array.from({ length: 4 }, () => new mongoose.Types.ObjectId());
@@ -53,6 +55,22 @@ test("legacy amounts are inferred only when consistent and otherwise remain unch
   assert.equal(exempt.legacyAmounts, true);
   assert.equal(editRequestLine(exempt, { itemDescription: "Updated name" }).igvAmount, 0);
   assert.equal(editRequestLine(exempt, { priceIncludesIGV: true }).igvAmount, 18);
+});
+test("PDF operation rows and saved drafts recover a missing net without changing total or IGV", () => {
+  const invoice = { netAmount: 0, igvAmount: 849.05, totalAmount: 5566 };
+  const parsed = invoiceFieldsFromLines(["FACTURA ELECTRONICA", "OP. GRAVADAS S/ 4716.95", "OP. EXONERADAS S/ 0.00", "IGV S/ 849.05", "IMPORTE TOTAL S/ 5566.00"]);
+  assert.equal(parsed.netAmount, 4716.95);
+  const source = { quantity: "1", unitPrice: "5566", ...invoice, costCenter: ids[2], legacyAmounts: true };
+  const restored = restoreEditorLine(source);
+  assert.deepEqual([restored.netAmount, restored.igvAmount, restored.totalAmount], [4716.95, 849.05, 5566]);
+  assert.equal(restored.priceIncludesIGV, true);
+  assert.equal(source.netAmount, 0, "Restoring a draft does not mutate its saved input");
+  assert.doesNotThrow(() => assertRequestLines(parseRequestLines([restored])));
+  assert.equal(lineFromInvoice(invoice).netAmount, 4716.95);
+  const conflict = restoreEditorLine({ ...source, netAmount: 4000 });
+  assert.equal(conflict.netAmount, 4000);
+  assert.throws(() => assertRequestLines(parseRequestLines([conflict])), /Net plus IGV/);
+  assert.equal(restoreEditorLine({ ...source, igvAmount: 6000 }).netAmount, 0, "An invalid tax is not repaired");
 });
 test("API input ignores tampered amounts for automatic lines and validates the tax option", () => {
   const [line] = parseRequestLines([{ ...input, costCenter: ids[2], expenseType: ids[3], netAmount: 1, igvAmount: 2, totalAmount: 3, commercialTotal: 4 }]);

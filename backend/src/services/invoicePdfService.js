@@ -172,7 +172,8 @@ export function invoiceFieldsFromLines(rawLines, { expectedRuc, buyerRuc } = {})
   const issuers = [...new Set(candidates.filter((candidate) => !candidate.buyer).map((candidate) => candidate.ruc))];
   // When the expected supplier's RUC is printed as a non-buyer RUC, it is the issuer.
   const ruc = (issuers.length === 1 ? issuers[0] : expectedRuc && issuers.includes(expectedRuc) ? expectedRuc : "") || "";
-  let netAmount = labelledAmount(lines, NET_LABEL);
+  // Prefer a subtotal over a single operations category (e.g. exonerated = 0).
+  let netAmount = labelledAmount(lines, /VALOR (?:DE )?VENTA|SUB ?TOTAL(?: VENTAS?)?|BASE IMPONIBLE|TOTAL POR HONORARIOS/) ?? labelledAmount(lines, NET_LABEL);
   let igvAmount = documentTypeCode === "02" ? 0 : labelledAmount(lines, IGV_LABEL);
   let totalAmount = labelledAmount(lines, TOTAL_LABEL);
   if (documentTypeCode === "02") totalAmount = netAmount ?? totalAmount;
@@ -180,6 +181,7 @@ export function invoiceFieldsFromLines(rawLines, { expectedRuc, buyerRuc } = {})
   // that agree, its IGV is zero. Any one missing amount follows from the other two.
   if (igvAmount === undefined && netAmount !== undefined && totalAmount !== undefined) igvAmount = round2(totalAmount - netAmount);
   if (netAmount === undefined && igvAmount !== undefined && totalAmount !== undefined) netAmount = round2(totalAmount - igvAmount);
+  if (netAmount === 0 && igvAmount >= 0 && totalAmount > igvAmount) netAmount = round2(totalAmount - igvAmount);
   if (totalAmount === undefined && netAmount !== undefined && igvAmount !== undefined) totalAmount = round2(netAmount + igvAmount);
   return {
     ruc,
