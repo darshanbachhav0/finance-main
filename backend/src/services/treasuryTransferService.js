@@ -33,7 +33,7 @@ import {
 // (approvalRuleService); there is no budget, supplier or payable. Treasury then makes the transfer
 // at the bank and records it here (journal: debit destination, credit source), and reconciles it.
 
-const TRANSFER_ROLES = [ROLES.ADMIN, ROLES.TREASURY];
+const TRANSFER_ROLES = [ROLES.TREASURY];
 const ACCOUNT_FIELDS = ["code", "bank", "currency", "accountNumber", "cci", "ledgerAccount", "kind", "description", "active"];
 
 function invalid(message, details) {
@@ -212,7 +212,7 @@ export async function resubmitTreasuryTransfer({ id, body = {}, user, req }) {
   if (![REQUEST_STATUS.OBSERVED, REQUEST_STATUS.RETURNED].includes(request.status)) {
     throw new AppError(409, "Only an observed or returned transfer can be sent again.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
-  if (user.role !== ROLES.ADMIN && String(request.requester) !== String(user._id)) {
+  if (String(request.requester) !== String(user._id)) {
     throw new AppError(403, "Only whoever registered the transfer sends it again.", undefined, ERROR_CODES.FORBIDDEN);
   }
   if (body.amount !== undefined) {

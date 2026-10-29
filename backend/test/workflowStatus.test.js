@@ -94,13 +94,17 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     await installBbvaTestConfiguration();
     await AccountingMapping.create({code:"STATUS-BBVA-BANK",name:"BBVA source",purpose:"BANK",bank:"BBVA",currency:"PEN",accountNumber:"104102",active:true});
     const owner = await User.create({ name: "Workflow owner", dni: "12345678", employeeCode: "UMA-EMP-1", email: "status.owner@test.local", passwordHash: "unused", role: "Solicitor", area: "Operations" });
-    const admin = await User.create({ name: "Workflow admin", email: "status.admin@test.local", passwordHash: "unused", role: "Admin", area: "Finance" });
+    const admin = await User.create({ name: "Workflow admin", email: "status.admin@test.local", passwordHash: "unused", role: "Admin", area: "Systems" });
+    // Accounting registers invoices, provisions, confirms SPOT, closes and voids; Treasury commits
+    // budget and pays; purchase orders come from the holder of purchase_order.issue.
+    const accounting = await User.create({ name: "Workflow accounting", email: "status.accounting@test.local", passwordHash: "unused", role: "Accounting", area: "Finance" });
+    const purchaser = await User.create({ name: "Workflow purchaser", email: "status.purchaser@test.local", passwordHash: "unused", role: "Solicitor", area: "Logistics", permissions: ["purchase_order.issue"] });
     const treasury = await User.create({ name: "Workflow treasury", email: "status.treasury@test.local", passwordHash: "unused", role: "Treasury", area: "Finance" });
     const gaf = await User.create({ name: "Workflow GAF", email: "status.gaf@test.local", passwordHash: "unused", role: "GAF", area: "Finance" });
     const center = await CostCenter.create({ code: "STATUS-CC", name: "Status tests", area: "Operations", budgetMode: "ACTIVE", annualBudget: 1000000, active: true });
     const expense = await ExpenseType.create({ code: "STATUS-EXP", name: "Status expense", category: "OPEX", accountingClass: "CLASS_6", accountNumber: "632101", active: true });
     const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20999999991", normalizedIdentifier: "20999999991", legalName: "Status Supplier", name: "Status Supplier", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
-    await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000000001", cci: "00219100000000000001", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: admin._id });
+    await SupplierBankAccount.create({ supplier: supplier._id, bank: "BCP", currency: "PEN", accountType: "CURRENT", accountNumber: "191000000001", cci: "00219100000000000001", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH", createdBy: treasury._id });
     await AccountingPeriod.create({ period: "2026-08", status: "OPEN" });
     await AccountingPeriod.create({ period: "2026-07", status: "CLOSED", policy: { blockPosting: false, blockUpdate: false } });
     for (const [purpose, accountNumber] of [["ACCOUNTS_PAYABLE", "421201"], ["IGV", "401111"], ["BANK", "104101"], ["ADVANCE_TRANSIT", "141301"], ["RETURN_RECEIVABLE", "101199"]]) await AccountingMapping.create({ code: "STATUS-" + purpose, name: purpose, purpose, requestType: "*", expenseNature: "*", bank: purpose === "BANK" ? "BCP" : "*", currency: "*", accountNumber, active: true });
@@ -108,15 +112,15 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     let sequence = 0;
     const makeRequest = overrides => FinancialRequest.create({ issueDate: "2026-08-10", accountingPeriod: "2026-08", flowType: "A1", requestType: "OPEX", expenseNature: "MAINTENANCE", supplier: supplier._id, solicitor: owner._id, requester: owner._id, requesterArea: "Operations", currency: "PEN", description: "Workflow regression", status: "COMPROMISO_PRESUPUESTAL", approvalStage: "COMPLETE", approvalRouteSnapshot: [{ approvalLevel: "AREA_DIRECTOR", role: "AreaDirector", sequence: 1, required: true, status: "APPROVED" }], lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }], ...overrides });
     async function payable(request, flowType = request.flowType) {
-      await reserveBudget(request, admin._id);
+      await reserveBudget(request, treasury._id);
       const voucher = { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F001", number: String(++sequence), issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
-      const evidence = request.flowType === "C" ? null : await fiscalFixture(request, supplier, voucher, admin, files);
-      const ap = await createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence?.stored, flowType, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, user: admin });
-      await syncFinancialProgress({ request, user: admin, req });
+      const evidence = request.flowType === "C" ? null : await fiscalFixture(request, supplier, voucher, accounting, files);
+      const ap = await createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence?.stored, flowType, accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, user: accounting });
+      await syncFinancialProgress({ request, user: accounting, req });
       return ap;
     }
     async function makeBatch(payables) {
-      for (const ap of payables) if (!ap.detraction?.confirmedAt && ap.flowType !== "C") await confirmAccountingDetraction({ id: ap._id, categoryCode: "", user: admin, req });
+      for (const ap of payables) if (!ap.detraction?.confirmedAt && ap.flowType !== "C") await confirmAccountingDetraction({ id: ap._id, categoryCode: "", user: accounting, req });
       const result = await generatePaymentBatch({ payableIds: payables.map(ap => String(ap._id)), bank: "BBVA", currency: "PEN", paymentDate: upcomingPaymentDate(), user: treasury, req });
       files.push(path.join(generatedRoot, "bank-files", result.batch.fileName));
       // Accounting releases the TXT before Treasury sends it to the bank.
@@ -142,10 +146,10 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         const loaded = await FinancialRequest.findById(request._id);
         assert.equal(canModifyRequest(loaded, owner), false);
         assert.equal(canModifyRequest(loaded, admin), false);
-        await assert.rejects(() => updateFinancialRequest({ id: loaded._id, payload: { description: "changed" }, files: {}, user: admin, req }));
-        await assert.rejects(() => submitFinancialRequest({ id: loaded._id, user: admin, req }));
-        await assert.rejects(() => deleteFinancialRequest({ id: loaded._id, user: admin, req }));
-        await assert.rejects(() => transitionRequest({ request: loaded, targetStatus: "EN_VALIDACION", skipControls: true, user: admin, req }));
+        await assert.rejects(() => updateFinancialRequest({ id: loaded._id, payload: { description: "changed" }, files: {}, user: owner, req }));
+        await assert.rejects(() => submitFinancialRequest({ id: loaded._id, user: owner, req }));
+        await assert.rejects(() => deleteFinancialRequest({ id: loaded._id, user: owner, req }));
+        await assert.rejects(() => transitionRequest({ request: loaded, targetStatus: "EN_VALIDACION", skipControls: true, user: accounting, req }));
         assert.equal((await FinancialRequest.collection.findOne({ _id: loaded._id })).status, status);
         assert.equal(loaded.toJSON().status, canonicalRequestStatus(status));
       }
@@ -159,12 +163,13 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     });
     await t.test("ordinary cancellation is terminal and refuses posted obligations", async () => {
       const draft = await makeRequest({ status: "BORRADOR" });
-      const cancelled = await voidFinancialRequest({ id: draft._id, user: admin, req, comments: "No longer required" });
+      await assert.rejects(() => voidFinancialRequest({ id: draft._id, user: admin, req, comments: "Admin attempt" }), error => error.statusCode === 403, "the Admin does not void requests");
+      const cancelled = await voidFinancialRequest({ id: draft._id, user: accounting, req, comments: "No longer required" });
       assert.equal(cancelled.status, "ANULADO");
-      await assert.rejects(() => voidFinancialRequest({ id: draft._id, user: admin, req, comments: "again" }));
+      await assert.rejects(() => voidFinancialRequest({ id: draft._id, user: accounting, req, comments: "again" }));
       const posted = await makeRequest();
       await payable(posted);
-      await assert.rejects(() => voidFinancialRequest({ id: posted._id, user: admin, req, comments: "No" }), /financial obligations/);
+      await assert.rejects(() => voidFinancialRequest({ id: posted._id, user: accounting, req, comments: "No" }), /financial obligations/);
     });
     await t.test("three invoices stay TXT after one payment and PAGADO until every reconciliation", async () => {
       const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 300, igvAmount: 54, totalAmount: 354 }] });
@@ -172,13 +177,13 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       for (let n = 0; n < 3; n++) children.push(await payable(request, n === 2 ? "A2" : "A1"));
       await makeBatch(children);
       assert.equal((await FinancialRequest.findById(request._id)).status, "TXT_GENERADO");
-      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }));
+      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: accounting, req }));
       await confirm(children[0]);
       assert.equal(await Notification.countDocuments({ user: treasury._id, type: "PAYMENT_CONFIRMATION", resolvedAt: null }), 2);
       let loaded = await FinancialRequest.findById(request._id);
       assert.equal(loaded.status, "TXT_GENERADO");
       assert.equal((await getFinancialProgress(loaded)).counts.paid, 1);
-      const list = await listRequestsPage({ search: loaded.requestNumber }, admin);
+      const list = await listRequestsPage({ search: loaded.requestNumber }, accounting);
       assert.equal(list.data[0].financialProgress.counts.paid, 1);
       const queue = await listReconciliationQueue({});
       assert.ok(queue.data.some(row => String(row.payableId) === String(children[0]._id)));
@@ -194,16 +199,16 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       assert.equal(loaded.status, "CONCILIADO");
       assert.equal((await getFinancialProgress(loaded)).counts.reconciled, 3);
       const evidenceBefore = await Reconciliation.countDocuments({ request: request._id });
-      const closed = await closeFinancialRequest({ id: request._id, user: admin, req });
+      const closed = await closeFinancialRequest({ id: request._id, user: accounting, req });
       assert.equal(closed.status, "CERRADO");
       assert.equal(await Reconciliation.countDocuments({ request: request._id }), evidenceBefore);
       assert.ok(await AuditLog.exists({ requestId: request._id, action: "CLOSED" }));
     });
     await t.test("Track C payment remains PAGADO while rendition is pending", async () => {
       owner.costCenter = center._id; await owner.save();
-      await EmployeeReimbursementBankAccount.create({ user: owner._id, bank: "BCP", currency: "PEN", accountHolderName: owner.name, accountNumber: "191000000001", cci: "00219100000000000001", verificationStatus: "VERIFIED", preferred: true, active: true, verifiedBy: admin._id });
+      await EmployeeReimbursementBankAccount.create({ user: owner._id, bank: "BCP", currency: "PEN", accountHolderName: owner.name, accountNumber: "191000000001", cci: "00219100000000000001", verificationStatus: "VERIFIED", preferred: true, active: true, verifiedBy: accounting._id });
       const request = await makeRequest({ flowType: "C", requestType: "ENTREGA_RENDIR", supplier: undefined, requesterCostCenter: center._id, status: "APROBADO" });
-      const { accountsPayable: ap } = await provisionTrackCAdvance({ request, user: admin, req });
+      const { accountsPayable: ap } = await provisionTrackCAdvance({ request, user: accounting, req });
       assert.equal(ap.supplierIdentifierSnapshot, owner.dni, "DNI, not employee code, identifies the bank beneficiary");
       await makeBatch([ap]);
       await confirm(ap);
@@ -220,7 +225,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       await reconcile(ap);
       loaded = await FinancialRequest.findById(request._id);
       assert.equal(loaded.status, "CONCILIADO");
-      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), /rendered/);
+      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: accounting, req }), /rendered/);
       loaded.attachments.push({ kind: "RENDITION", originalName: "rendition.pdf", filename: "rendition.pdf", url: "/test/rendition.pdf", mimetype: "application/pdf", size: 10 });
       await loaded.save();
       await submitRendition({ requestId: request._id, user: owner, req, files: {}, payload: {
@@ -228,11 +233,11 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         mobilityLines: [{ date: "2026-08-15", origin: "UMA", destination: "Campus", servicePurpose: "Institutional work", amount: 100 }],
         unsupportedExpenseLines: [], amountReturned: 18, beneficiaryAcknowledged: true
       } });
-      await reviewRendition({ requestId: request._id, action: "APPROVE", comments: "Evidence checked", user: admin, req });
+      await reviewRendition({ requestId: request._id, action: "APPROVE", comments: "Evidence checked", user: accounting, req });
       assert.ok(await JournalEntry.exists({ request: request._id, entryType: "RENDITION" }));
       const commitment = await mongoose.model("BudgetCommitment").findOne({ request: request._id });
       assert.equal(commitment.executedAmount, 100);
-      assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+      assert.equal((await closeFinancialRequest({ id: request._id, user: accounting, req })).status, "CERRADO");
     });
     await t.test("migration dry-run preserves evidence; apply is additive and idempotent", async () => {
       const request = await makeRequest({ status: "BORRADOR" });
@@ -289,24 +294,24 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       request.xmlValidation = { validated: true, status: "VALID", data: { ...voucher, invoiceNumber: "FB01-001" } };
       await request.save();
       const originalTotal = request.totalAmount; request.totalAmount = 119;
-      await assert.rejects(() => preflightDirectPayment({ request, user: admin, req }), error => error.code === "XML_AMOUNT_MISMATCH");
+      await assert.rejects(() => preflightDirectPayment({ request, user: accounting, req }), error => error.code === "XML_AMOUNT_MISMATCH");
       request.totalAmount = originalTotal;
-      await reserveBudget(request, admin._id);
-      const checked = await preflightDirectPayment({ request, user: admin, req }); assert.equal(checked.valid, true);
-      const result = await provisionDirectPayment({ request, user: admin, req, preflight: checked });
+      await reserveBudget(request, treasury._id);
+      const checked = await preflightDirectPayment({ request, user: accounting, req }); assert.equal(checked.valid, true);
+      const result = await provisionDirectPayment({ request, user: accounting, req, preflight: checked });
       assert.equal(result.accountsPayable.originalAmount, 118);
       assert.equal(result.request?.status || request.status, "CONTABILIZADO");
       assert.equal(result.accountsPayable.exchangeRateEvidence.source, "PEN");
       await makeBatch([result.accountsPayable]);
       await confirm(result.accountsPayable);
       await reconcile(result.accountsPayable);
-      assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+      assert.equal((await closeFinancialRequest({ id: request._id, user: accounting, req })).status, "CERRADO");
     });
 
     await t.test("A1 first/additional and A2 worker validate actual invoice files before posting", async () => {
       const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 400, igvAmount: 72, totalAmount: 472 }], attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
-      await reserveBudget(request, admin._id);
-      const order = await PurchaseOrder.create({ poNumber: "FISCAL-PO", request: request._id, supplier: supplier._id, amount: 472, currency: "PEN", generatedBy: admin._id });
+      await reserveBudget(request, treasury._id);
+      const order = await PurchaseOrder.create({ poNumber: "FISCAL-PO", request: request._id, supplier: supplier._id, amount: 472, currency: "PEN", generatedBy: purchaser._id });
       const directory = path.resolve(uploadRoot, "requests", String(request._id));
       const voucher = number => ({ ruc: supplier.rucDni, voucherType: "FACTURA", series: "F088", number, issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 });
       async function upload(name, content, mimetype) {
@@ -317,12 +322,12 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       }
       try {
         for (const number of ["001", "002"]) {
-          const result = await registerA1Invoice({ requestId: request._id, user: admin, req, files: { xml: [await upload(`invoice-${number}.xml`, invoiceXml(voucher(number)), "application/xml")], pdf: [await upload(`invoice-${number}.pdf`, "%PDF-1.4 test", "application/pdf")] } });
+          const result = await registerA1Invoice({ requestId: request._id, user: accounting, req, files: { xml: [await upload(`invoice-${number}.xml`, invoiceXml(voucher(number)), "application/xml")], pdf: [await upload(`invoice-${number}.pdf`, "%PDF-1.4 test", "application/pdf")] } });
           assert.equal(result.observed, false);
         }
         const content = invoiceZip({ "invoice-003.xml": invoiceXml(voucher("003")), "invoice-003.pdf": "%PDF-1.4 test", "wrong.xml": invoiceXml({ ...voucher("004"), ruc: "20111111111" }), "wrong.pdf": "%PDF-1.4 test" });
         const file = await upload("batch.zip", content, "application/zip"); files.push(file.path);
-        const batch = await MassUploadBatch.create({ batchCode: "FISCAL-BATCH", request: request._id, purchaseOrder: order._id, uploadedBy: admin._id, inputType: "ZIP", inputFile: { ...file, originalName: file.originalname }, status: "QUEUED" });
+        const batch = await MassUploadBatch.create({ batchCode: "FISCAL-BATCH", request: request._id, purchaseOrder: order._id, uploadedBy: accounting._id, inputType: "ZIP", inputFile: { ...file, originalName: file.originalname }, status: "QUEUED" });
         await processMassUploadBatch(batch._id);
         const saved = await MassUploadBatch.findById(batch._id);
         assert.equal(saved.processedSuccess, 1, JSON.stringify(saved.items));
@@ -332,9 +337,9 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         assert.equal((await mongoose.model("BudgetCommitment").findOne({ request: request._id })).executedAmount, 354);
         const observation = await mongoose.model("InvoiceObservation").findOne({ batch: batch._id, resolutionStatus: "OPEN" });
         const correction = await upload("corrected.xml", invoiceXml(voucher("004")), "application/xml");
-        await assert.rejects(() => retryInvoiceObservation({ observationId: observation._id, user: admin, req, files: { xml: [correction] } }), error => error.code === "XML_AMOUNT_MISMATCH");
+        await assert.rejects(() => retryInvoiceObservation({ observationId: observation._id, user: accounting, req, files: { xml: [correction] } }), error => error.code === "XML_AMOUNT_MISMATCH");
         assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 3);
-        const corrected = await retryInvoiceObservation({ observationId: observation._id, user: admin, req, acceptXmlValues: true });
+        const corrected = await retryInvoiceObservation({ observationId: observation._id, user: accounting, req, acceptXmlValues: true });
         const original = await SunatVoucher.findById(observation.voucher);
         assert.equal(String(original.supersededBy), String(corrected.voucher._id));
         assert.ok(original.observationDetail);
@@ -346,7 +351,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         assert.equal((await FinancialRequest.findById(request._id)).status, "TXT_GENERADO");
         for (const ap of aps.slice(1)) await confirm(ap);
         for (const ap of aps) await reconcile(ap);
-        assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+        assert.equal((await closeFinancialRequest({ id: request._id, user: accounting, req })).status, "CERRADO");
       } finally {
         assert.equal(path.dirname(directory), path.resolve(uploadRoot, "requests"));
         assert.match(path.basename(directory), /^[a-f0-9]{24}$/);
@@ -358,8 +363,8 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       const conformity = [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }];
       const makeA1 = async (poNumber) => {
         const request = await makeRequest({ attachments: conformity });
-        await reserveBudget(request, admin._id);
-        await PurchaseOrder.create({ poNumber, request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: admin._id });
+        await reserveBudget(request, treasury._id);
+        await PurchaseOrder.create({ poNumber, request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: purchaser._id });
         return request;
       };
       const first = await makeA1("DUP-PO-1");
@@ -371,7 +376,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         await fs.writeFile(filePath, content);
         return { path: filePath, filename, originalname: name, mimetype, size: Buffer.byteLength(content) };
       }
-      const register = async (request) => registerA1Invoice({ requestId: request._id, user: admin, req, files: { xml: [await upload(request, "invoice.xml", invoiceXml(voucher), "application/xml")], pdf: [await upload(request, "invoice.pdf", "%PDF-1.4 test", "application/pdf")] } });
+      const register = async (request) => registerA1Invoice({ requestId: request._id, user: accounting, req, files: { xml: [await upload(request, "invoice.xml", invoiceXml(voucher), "application/xml")], pdf: [await upload(request, "invoice.pdf", "%PDF-1.4 test", "application/pdf")] } });
       assert.equal((await register(first)).observed, false);
       const statusBefore = (await FinancialRequest.findById(first._id)).status;
       // The same invoice again on the request that has it: nothing to correct, the request is not observed.
@@ -394,7 +399,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       // posts in the current month).
       await AccountingPeriod.updateOne({ period: limaToday().slice(0, 7) }, { $setOnInsert: { status: "OPEN" } }, { upsert: true });
       const ap = await AccountsPayable.findOne({ request: first._id, status: { $ne: "CANCELLED" } });
-      await cancelAccountsPayable({ accountsPayableId: ap._id, reason: "Registered on the wrong request", user: admin, req });
+      await cancelAccountsPayable({ accountsPayableId: ap._id, reason: "Registered on the wrong request", user: accounting, req });
       assert.equal((await FinancialRequest.findById(first._id)).fiscalData?.number, undefined, "the first request no longer holds the invoice");
       assert.equal((await register(second)).observed, false);
       assert.equal((await FinancialRequest.findById(second._id)).fiscalData.number, "123");
@@ -407,16 +412,16 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       const filePath = path.join(tempUploadDir, `direct-${request._id}.pdf`); files.push(filePath);
       await fs.writeFile(filePath, invoicePdf(voucher));
       request.attachments = [{ kind: "PDF", filename: "factura.pdf", originalName: "factura.pdf", path: filePath, url: "/test/factura.pdf", mimetype: "application/pdf", size: 900 }];
-      request.xmlValidation = await validateInvoiceAgainstRequest(filePath, { supplier, currency: request.currency, totalNet: request.totalNet, totalIGV: request.totalIGV, totalAmount: request.totalAmount, issueDate: request.issueDate }, { request, user: admin, fileName: "factura.pdf" });
+      request.xmlValidation = await validateInvoiceAgainstRequest(filePath, { supplier, currency: request.currency, totalNet: request.totalNet, totalIGV: request.totalIGV, totalAmount: request.totalAmount, issueDate: request.issueDate }, { request, user: accounting, fileName: "factura.pdf" });
       assert.equal(request.xmlValidation.source, "PDF");
       await request.save();
       const originalTotal = request.totalAmount; request.totalAmount = 119;
-      await assert.rejects(() => preflightDirectPayment({ request, user: admin, req }), error => error.code === "XML_AMOUNT_MISMATCH" && /factura PDF/.test(error.message));
+      await assert.rejects(() => preflightDirectPayment({ request, user: accounting, req }), error => error.code === "XML_AMOUNT_MISMATCH" && /factura PDF/.test(error.message));
       request.totalAmount = originalTotal;
-      await reserveBudget(request, admin._id);
-      const checked = await preflightDirectPayment({ request, user: admin, req }); assert.equal(checked.valid, true, checked.detail);
+      await reserveBudget(request, treasury._id);
+      const checked = await preflightDirectPayment({ request, user: accounting, req }); assert.equal(checked.valid, true, checked.detail);
       assert.deepEqual([checked.voucher.series, Number(checked.voucher.number), checked.voucher.ruc], ["FB02", 1, supplier.rucDni], "SUNAT is consulted with the identity printed on the factura");
-      const result = await provisionDirectPayment({ request, user: admin, req, preflight: checked });
+      const result = await provisionDirectPayment({ request, user: accounting, req, preflight: checked });
       assert.equal(result.accountsPayable.originalAmount, 118);
       const evidence = await SunatVoucher.findById(result.accountsPayable.sunatVoucher).select("+xmlPath +pdfPath");
       assert.equal(evidence.evidenceSource, "PDF");
@@ -426,8 +431,8 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
 
     await t.test("A1 invoice registers from its factura PDF alone, and a scanned PDF is refused", async () => {
       const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }], attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
-      await reserveBudget(request, admin._id);
-      await PurchaseOrder.create({ poNumber: "FACTURA-PDF-PO", request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: admin._id });
+      await reserveBudget(request, treasury._id);
+      await PurchaseOrder.create({ poNumber: "FACTURA-PDF-PO", request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: purchaser._id });
       const directory = path.resolve(uploadRoot, "requests", String(request._id));
       async function upload(name, content) {
         await fs.mkdir(tempUploadDir, { recursive: true });
@@ -437,10 +442,10 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       }
       try {
         const scan = await upload("scan.pdf", textPdf([]));
-        await assert.rejects(() => registerA1Invoice({ requestId: request._id, user: admin, req, files: { pdf: [scan] } }), error => error.code === "INVOICE_PDF_UNREADABLE");
-        await assert.rejects(() => registerA1Invoice({ requestId: request._id, user: admin, req, files: {} }), error => error.code === "MISSING_REQUIRED_DOCUMENT");
+        await assert.rejects(() => registerA1Invoice({ requestId: request._id, user: accounting, req, files: { pdf: [scan] } }), error => error.code === "INVOICE_PDF_UNREADABLE");
+        await assert.rejects(() => registerA1Invoice({ requestId: request._id, user: accounting, req, files: {} }), error => error.code === "MISSING_REQUIRED_DOCUMENT");
         const voucher = { ruc: supplier.rucDni, series: "F089", number: "001", issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
-        const result = await registerA1Invoice({ requestId: request._id, user: admin, req, files: { pdf: [await upload("factura.pdf", invoicePdf(voucher))] } });
+        const result = await registerA1Invoice({ requestId: request._id, user: accounting, req, files: { pdf: [await upload("factura.pdf", invoicePdf(voucher))] } });
         assert.equal(result.observed, false, JSON.stringify(result.request?.observation || result));
         const evidence = await SunatVoucher.findOne({ request: request._id, series: "F089" }).select("+xmlPath +pdfPath");
         assert.equal(evidence.evidenceSource, "PDF");
@@ -463,27 +468,27 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       const paid = await AccountsPayable.findById(ap._id).populate("paymentJournal");
       assert.equal(paid.paymentJournal.period, "2026-09");
     });
-    await t.test("Admin cannot force a period closed over outstanding financial blockers", async () => {
+    await t.test("Accounting cannot force a period closed over outstanding financial blockers", async () => {
       const period = await AccountingPeriod.findOne({ period: "2026-08" });
-      await assert.rejects(() => closeAccountingPeriod({ id: period._id, comments: "Attempt close", force: true, overrideReason: "Emergency", user: admin, req }), /Forced period closure/);
+      await assert.rejects(() => closeAccountingPeriod({ id: period._id, comments: "Attempt close", force: true, overrideReason: "Emergency", user: accounting, req }), /Forced period closure/);
       assert.equal((await AccountingPeriod.findById(period._id)).status, "OPEN");
     });
     // Product-owner decision: the period is the invoice's (document date) period, not the request's
     // creation month. These tests previously asserted that a closed request month blocked posting.
     await t.test("closed invoice periods stop A1 entry and A2 workers before posting", async () => {
       const request = await makeRequest({ accountingPeriod: "2026-07", attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
-      await reserveBudget(request, admin._id);
-      const inserted = await PurchaseOrder.collection.insertOne({ poNumber: "CLOSED-PO", request: request._id, supplier: supplier._id, status: "ISSUED", remainingAmount: 118, amount: 118, originalAmount: 118, currency: "PEN", generatedBy: admin._id });
+      await reserveBudget(request, treasury._id);
+      const inserted = await PurchaseOrder.collection.insertOne({ poNumber: "CLOSED-PO", request: request._id, supplier: supplier._id, status: "ISSUED", remainingAmount: 118, amount: 118, originalAmount: 118, currency: "PEN", generatedBy: purchaser._id });
       await fs.mkdir(tempUploadDir, { recursive: true });
       const closedVoucher = { ruc: supplier.rucDni, series: "F077", number: "1", issueDate: "2026-07-20", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
       const xmlPath = path.join(tempUploadDir, `${request._id}-closed.xml`); files.push(xmlPath);
       await fs.writeFile(xmlPath, invoiceXml(closedVoucher));
       const pdfPath = path.join(tempUploadDir, `${request._id}-closed.pdf`); files.push(pdfPath);
       await fs.writeFile(pdfPath, "%PDF-1.4 test");
-      await assert.rejects(() => registerA1Invoice({ requestId: request._id, files: { xml: [{ path: xmlPath, filename: path.basename(xmlPath), originalname: "closed.xml", mimetype: "application/xml", size: 100 }], pdf: [{ path: pdfPath, filename: path.basename(pdfPath), originalname: "closed.pdf", mimetype: "application/pdf", size: 10 }] }, user: admin, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
+      await assert.rejects(() => registerA1Invoice({ requestId: request._id, files: { xml: [{ path: xmlPath, filename: path.basename(xmlPath), originalname: "closed.xml", mimetype: "application/xml", size: 100 }], pdf: [{ path: pdfPath, filename: path.basename(pdfPath), originalname: "closed.pdf", mimetype: "application/pdf", size: 10 }] }, user: accounting, req }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
       const zipPath = path.join(tempUploadDir, `${request._id}-closed.zip`); files.push(zipPath);
       await fs.writeFile(zipPath, invoiceZip({ "closed.xml": invoiceXml(closedVoucher), "closed.pdf": "%PDF-1.4 test" }));
-      const batch = await MassUploadBatch.create({ batchCode: "CLOSED-PERIOD", request: request._id, purchaseOrder: inserted.insertedId, uploadedBy: admin._id, inputType: "ZIP", inputFile: { originalName: "closed.zip", filename: "closed.zip", path: zipPath, url: "/unused", size: 1 }, status: "QUEUED" });
+      const batch = await MassUploadBatch.create({ batchCode: "CLOSED-PERIOD", request: request._id, purchaseOrder: inserted.insertedId, uploadedBy: accounting._id, inputType: "ZIP", inputFile: { originalName: "closed.zip", filename: "closed.zip", path: zipPath, url: "/unused", size: 1 }, status: "QUEUED" });
       await processMassUploadBatch(batch._id);
       const saved = await MassUploadBatch.findById(batch._id);
       assert.equal(saved.processedSuccess, 0);
@@ -496,13 +501,13 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     await t.test("A1, A2 and B invoices dated in a closed period cannot post; the request month does not matter", async () => {
       for (const flowType of ["A1", "A2", "B"]) {
         const request = await makeRequest();
-        await reserveBudget(request, admin._id);
+        await reserveBudget(request, treasury._id);
         const voucher = { ruc: supplier.rucDni, voucherType: "FACTURA", series: "F071", number: String(++sequence), issueDate: "2026-07-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 };
-        const evidence = await fiscalFixture(request, supplier, voucher, admin, files);
-        await assert.rejects(() => createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence.stored, flowType, user: admin }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
+        const evidence = await fiscalFixture(request, supplier, voucher, accounting, files);
+        await assert.rejects(() => createAccountsPayableFromVoucher({ request, supplier, voucher, sunatVoucher: evidence.stored, flowType, user: accounting }), error => error.code === "ACCOUNTING_PERIOD_CLOSED");
         assert.equal(await AccountsPayable.countDocuments({ request: request._id }), 0);
         assert.equal(await JournalEntry.countDocuments({ request: request._id }), 0);
-        await assert.rejects(() => transitionRequest({ request, targetStatus: "CONTABILIZADO", skipControls: true, user: admin, req }));
+        await assert.rejects(() => transitionRequest({ request, targetStatus: "CONTABILIZADO", skipControls: true, user: accounting, req }));
       }
       // A request created in the closed month can still post an invoice dated in an open month.
       const request = await makeRequest({ accountingPeriod: "2026-07" });
@@ -513,7 +518,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     await t.test("closing a request invoiced below its PO releases the PO remainder and the matching commitment", async () => {
       const BudgetCommitment = mongoose.model("BudgetCommitment");
       const request = await makeRequest({ lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 300, igvAmount: 54, totalAmount: 354 }] });
-      const order = await PurchaseOrder.create({ poNumber: `OC-CLOSE-${request._id}`, request: request._id, supplier: supplier._id, amount: 354, consumedAmount: 118, liquidatedInvoiceCount: 1, currency: "PEN", generatedBy: admin._id });
+      const order = await PurchaseOrder.create({ poNumber: `OC-CLOSE-${request._id}`, request: request._id, supplier: supplier._id, amount: 354, consumedAmount: 118, liquidatedInvoiceCount: 1, currency: "PEN", generatedBy: purchaser._id });
       assert.equal(order.status, "PARTIALLY_LIQUIDATED");
       const ap = await payable(request);
       const committedBefore = (await CostCenter.findById(center._id)).committedAmount;
@@ -521,7 +526,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
       const loaded = await FinancialRequest.findById(request._id);
       assert.equal(loaded.status, "CONCILIADO");
       assert.equal((await getFinancialProgress(loaded)).orderOpen, true, "the uninvoiced balance is still visible before closure");
-      const closed = await closeFinancialRequest({ id: request._id, user: admin, req });
+      const closed = await closeFinancialRequest({ id: request._id, user: accounting, req });
       assert.equal(closed.status, "CERRADO", "a remaining PO balance no longer blocks closure");
       const settled = await PurchaseOrder.findById(order._id);
       assert.equal(settled.status, "CLOSED");
@@ -539,10 +544,10 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     await t.test("voiding a request cancels its PO and releases its commitment", async () => {
       const BudgetCommitment = mongoose.model("BudgetCommitment");
       const request = await makeRequest();
-      await reserveBudget(request, admin._id);
-      const order = await PurchaseOrder.create({ poNumber: `OC-VOID-${request._id}`, request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: admin._id });
+      await reserveBudget(request, treasury._id);
+      const order = await PurchaseOrder.create({ poNumber: `OC-VOID-${request._id}`, request: request._id, supplier: supplier._id, amount: 118, currency: "PEN", generatedBy: purchaser._id });
       const committedBefore = (await CostCenter.findById(center._id)).committedAmount;
-      const voided = await voidFinancialRequest({ id: request._id, user: admin, req, comments: "Purchase no longer needed" });
+      const voided = await voidFinancialRequest({ id: request._id, user: accounting, req, comments: "Purchase no longer needed" });
       assert.equal(voided.status, "ANULADO");
       const cancelled = await PurchaseOrder.findById(order._id);
       assert.equal(cancelled.status, "CANCELLED");
@@ -554,18 +559,18 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
     });
     await t.test("a Track C request whose rejected rendition advance was fully recovered can be closed", async () => {
       const request = await makeRequest({ flowType: "C", requestType: "ENTREGA_RENDIR", supplier: undefined, requesterCostCenter: center._id, status: "APROBADO" });
-      const { accountsPayable: ap } = await provisionTrackCAdvance({ request, user: admin, req });
+      const { accountsPayable: ap } = await provisionTrackCAdvance({ request, user: accounting, req });
       await makeBatch([ap]); await confirm(ap); await reconcile(ap);
       await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { "rendition.status": "REJECTED", "rendition.balanceOutstanding": 118, "rendition.recovery": { status: "PENDING", outstandingAmount: 118, settlements: [] } } });
-      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "RENDITION_REQUIRED");
+      await assert.rejects(() => closeFinancialRequest({ id: request._id, user: accounting, req }), error => error.code === "RENDITION_REQUIRED");
       await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { "rendition.recovery.status": "RECOVERED", "rendition.recovery.outstandingAmount": 0 } });
-      assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+      assert.equal((await closeFinancialRequest({ id: request._id, user: accounting, req })).status, "CERRADO");
     });
     await t.test("A2: dismissing a duplicate and a never-posted invoice observation lets the request close", async () => {
       const InvoiceObservation = mongoose.model("InvoiceObservation");
       const request = await makeRequest({ flowType: "A2", lines: [{ costCenter: center._id, expenseType: expense._id, netAmount: 200, igvAmount: 36, totalAmount: 236 }], attachments: [{ kind: "CONFORMITY", originalName: "conformity.pdf", filename: "conformity.pdf", url: "/test/conformity.pdf", mimetype: "application/pdf", size: 12 }] });
-      await reserveBudget(request, admin._id);
-      const order = await PurchaseOrder.create({ poNumber: "DISMISS-PO", request: request._id, supplier: supplier._id, amount: 236, currency: "PEN", generatedBy: admin._id });
+      await reserveBudget(request, treasury._id);
+      const order = await PurchaseOrder.create({ poNumber: "DISMISS-PO", request: request._id, supplier: supplier._id, amount: 236, currency: "PEN", generatedBy: purchaser._id });
       const directory = path.resolve(uploadRoot, "requests", String(request._id));
       const voucher = number => ({ ruc: supplier.rucDni, voucherType: "FACTURA", series: "F077", number, issueDate: "2026-08-10", currency: "PEN", netAmount: 100, igvAmount: 18, totalAmount: 118 });
       async function runBatch(batchCode, entries) {
@@ -573,7 +578,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         const filename = `${request._id}-${batchCode}.zip`, filePath = path.join(tempUploadDir, filename), content = invoiceZip(entries);
         await fs.writeFile(filePath, content); files.push(filePath);
         const file = { path: filePath, filename, originalname: `${batchCode}.zip`, mimetype: "application/zip", size: content.length };
-        const batch = await MassUploadBatch.create({ batchCode, request: request._id, purchaseOrder: order._id, uploadedBy: admin._id, inputType: "ZIP", inputFile: { ...file, originalName: file.originalname }, status: "QUEUED" });
+        const batch = await MassUploadBatch.create({ batchCode, request: request._id, purchaseOrder: order._id, uploadedBy: accounting._id, inputType: "ZIP", inputFile: { ...file, originalName: file.originalname }, status: "QUEUED" });
         await processMassUploadBatch(batch._id);
         return MassUploadBatch.findById(batch._id);
       }
@@ -593,20 +598,20 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         assert.ok(foreign?.voucher, "the foreign invoice's voucher is stored without a CXP");
         const progressOf = async () => getFinancialProgress(await FinancialRequest.findById(request._id));
         assert.equal((await progressOf()).unaccountedVouchers, 1);
-        await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "INVALID_STATUS_TRANSITION");
+        await assert.rejects(() => closeFinancialRequest({ id: request._id, user: accounting, req }), error => error.code === "INVALID_STATUS_TRANSITION");
 
-        await assert.rejects(() => dismissInvoiceObservation({ observationId: duplicate._id, reason: "  ", user: admin, req }), error => error.code === "VALIDATION_ERROR" && error.details.field === "reason");
-        const dismissed = await dismissInvoiceObservation({ observationId: duplicate._id, reason: "Same invoice as F077-001, already provisioned in DISMISS-BATCH-1", user: admin, req });
+        await assert.rejects(() => dismissInvoiceObservation({ observationId: duplicate._id, reason: "  ", user: accounting, req }), error => error.code === "VALIDATION_ERROR" && error.details.field === "reason");
+        const dismissed = await dismissInvoiceObservation({ observationId: duplicate._id, reason: "Same invoice as F077-001, already provisioned in DISMISS-BATCH-1", user: accounting, req });
         assert.equal(dismissed.observation.resolutionStatus, "DISMISSED");
         assert.equal(dismissed.voucher, undefined, "the original provisioned voucher is untouched");
         const stored = await InvoiceObservation.findById(duplicate._id);
-        assert.equal(String(stored.resolvedBy), String(admin._id));
+        assert.equal(String(stored.resolvedBy), String(accounting._id));
         assert.match(stored.resolutionComments, /already provisioned/);
         assert.ok(await AuditLog.exists({ entityType: "InvoiceObservation", entityId: duplicate._id, action: "DISMISSED" }));
-        await assert.rejects(() => dismissInvoiceObservation({ observationId: duplicate._id, reason: "Again", user: admin, req }), error => error.code === "INVALID_STATUS_TRANSITION");
-        await assert.rejects(() => closeFinancialRequest({ id: request._id, user: admin, req }), error => error.code === "INVALID_STATUS_TRANSITION", "the stored foreign voucher still blocks");
+        await assert.rejects(() => dismissInvoiceObservation({ observationId: duplicate._id, reason: "Again", user: accounting, req }), error => error.code === "INVALID_STATUS_TRANSITION");
+        await assert.rejects(() => closeFinancialRequest({ id: request._id, user: accounting, req }), error => error.code === "INVALID_STATUS_TRANSITION", "the stored foreign voucher still blocks");
 
-        await dismissInvoiceObservation({ observationId: foreign._id, reason: "Not our supplier's invoice; uploaded by mistake", user: admin, req });
+        await dismissInvoiceObservation({ observationId: foreign._id, reason: "Not our supplier's invoice; uploaded by mistake", user: accounting, req });
         const annulled = await SunatVoucher.findById(foreign.voucher);
         assert.equal(annulled.validationStatus, "ANNULLED");
         assert.match(annulled.annulment.reason, /uploaded by mistake/);
@@ -621,7 +626,7 @@ test("workflow status actions preserve financial evidence", { timeout: 120000 },
         assert.equal(await InvoiceObservation.countDocuments({ request: request._id, resolutionStatus: "OPEN" }), 0);
         assert.equal((await SunatVoucher.findById(foreign.voucher)).validationStatus, "ANNULLED");
 
-        assert.equal((await closeFinancialRequest({ id: request._id, user: admin, req })).status, "CERRADO");
+        assert.equal((await closeFinancialRequest({ id: request._id, user: accounting, req })).status, "CERRADO");
       } finally {
         await fs.rm(directory, { recursive: true, force: true });
       }

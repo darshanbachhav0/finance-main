@@ -8,13 +8,14 @@ const palette = read("../src/components/CommandPalette.jsx");
 const service = backend("services/globalSearchService.js");
 
 // 1. The palette searches records through the scoped endpoint: debounced, from 2 characters,
-//    cancelled by the next keystroke, and never for ManagementViewer (refused by the API gate).
+//    cancelled by the next keystroke, for every signed-in person (the API scopes each group).
 assert.match(palette, /api\.get\("\/search", \{ params: \{ q: trimmed \}, signal: controller\.signal \}\)/);
 assert.match(palette, /const MIN_RECORD_QUERY = 2;/);
 assert.match(service, /export const SEARCH_MIN_LENGTH = 2;/, "client and server share the minimum length");
 assert.match(palette, /window\.setTimeout\(async \(\) => \{[\s\S]*?\}, SEARCH_DEBOUNCE_MS\)/);
 assert.match(palette, /controller\.abort\(\)/);
-assert.match(palette, /user\.role !== "ManagementViewer"/);
+assert.match(palette, /const canSearchRecords = Boolean\(user\);/);
+assert.doesNotMatch(palette, /ManagementViewer/, "the retired portal-only role is gone");
 assert.doesNotMatch(palette, /api\.get\("\/requests"/, "record search no longer lists requests directly");
 
 // 2. Every server group has a label, badge and icon; pages keep working as before.
@@ -49,10 +50,11 @@ assert.match(palette, /"erp_table_query:\/users"/);
 assert.match(read("../src/hooks/usePaginatedResource.js"), /`erp_table_query:\$\{persistKey \|\| endpoint\}`/);
 assert.match(read("../src/pages/AdminUsers.jsx"), /endpoint="\/users"/);
 
-// 5. The endpoint sits behind the internal gate (ManagementViewer gets 403) and each group is
-//    scoped with the list endpoints' own rules.
+// 5. The endpoint sits behind the canonical-role gate and each group is scoped with the list
+//    endpoints' own rules (people only for employee.manage).
 const routes = backend("routes/index.js");
-assert.ok(routes.indexOf('router.use("/search", searchRoutes)') > routes.indexOf("router.use(protect, authorize("));
+assert.ok(routes.indexOf('router.use("/search", searchRoutes)') > routes.indexOf("router.use(protect, authorize(...CANONICAL_ROLES)"));
+assert.match(service, /if \(group === "users"\) return hasPermission\(user, PERMISSIONS\.EMPLOYEE_MANAGE\)/);
 assert.match(service, /requestVisibilityFilter\(user\)/);
 assert.match(service, /prefixFilter\(requestVisibilityFilter\(user\), "parentRequest"\)/);
 // The supplier group follows the /suppliers gate, including permissions granted to the user.

@@ -17,7 +17,7 @@ import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime, formatNumber } from "../utils/formatters.js";
 import { todayIso } from "../utils/dateInput.js";
-import { reportDownloadRoles } from "../utils/navigationAccess.js";
+import { PERMISSIONS, userCan } from "../utils/access.js";
 
 const emptyFilters = Object.freeze({ period: "", dateFrom: "", dateTo: "", currency: "", requestType: "", area: "", costCenter: "", project: "" });
 const emptyData = Object.freeze({
@@ -36,7 +36,8 @@ export default function ManagementReports() {
   const { user } = useAuth();
   const { notify } = useToast();
   // Stored report files are downloadable only by the roles fileAccessService allows.
-  const canDownloadReportFiles = reportDownloadRoles.includes(user?.role);
+  // Stored report files: the same report.view the API checks (fileAccessService "reports").
+  const canDownloadReportFiles = userCan(user, PERMISSIONS.REPORT_VIEW);
   const navigate = useNavigate();
   const [draftFilters, setDraftFilters] = useState({ ...emptyFilters });
   const [filters, setFilters] = useState({ ...emptyFilters });

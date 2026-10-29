@@ -318,7 +318,7 @@ export default function RequestCreate() {
           const request = requestResponse.data.data;
           setSourceVersion(request.updatedAt || "");
           const owner = request.requester?._id || request.solicitor?._id;
-          if (!request.allowedActions?.includes("EDIT") || (user.role !== "Admin" && owner !== user._id)) {
+          if (!request.allowedActions?.includes("EDIT") || owner !== user._id) {
             navigate(`/requests/${id}`, { replace: true });
             return;
           }

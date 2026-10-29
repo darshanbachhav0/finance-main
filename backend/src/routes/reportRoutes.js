@@ -7,7 +7,6 @@ import { buildWeeklyReport } from "../services/weeklyReportService.js";
 
 const router = Router();
 router.use(protect, authorizePermission(PERMISSIONS.REPORT_VIEW));
-// ManagementViewer is deliberately absent: it only reaches the aggregate /management/v1 portal API.
 router.get("/management", managementSummary);
 router.get("/management/export", exportManagementReport);
 router.get("/management/exports", listManagementExports);

@@ -70,7 +70,8 @@ async function escalationRecipients(request, approvers, users) {
 export async function checkApprovalSlas({ now = new Date(), config = slaConfiguration() } = {}) {
   const assigned = await FinancialRequest.distinct("approvalRouteSnapshot.approverUser", { status: { $in: ACTIVE_STATUSES } });
   // Tier steps (GAF, Gerencia General, Track D's Treasury step) wait on everyone of their role.
-  const users = await User.find({ active: true, $or: [{ role: { $in: ["AreaDirector", "ViceRector", "Management", "Admin", ...Object.values(APPROVAL_TIERS)] } }, { _id: { $in: assigned } }] }).lean();
+  const approverRoles = ["AreaDirector", "ViceRector", "Management", ...Object.values(APPROVAL_TIERS)];
+  const users = await User.find({ active: true, $or: [{ role: { $in: approverRoles } }, { roles: { $in: approverRoles } }, { _id: { $in: assigned } }] }).lean();
   const liveEvents = new Map();
   const summary = { checked: 0, delivered: 0, escalations: 0 };
   // Stream requests so the scan does not load the whole approval queue into memory.
@@ -85,7 +86,7 @@ export async function checkApprovalSlas({ now = new Date(), config = slaConfigur
     const { alert } = classifyApprovalSla(cycle.dueAt, now, config);
     if (!alert) continue;
     const eventKey = `${cycle.key}:${alert}`;
-    const approvers = users.filter(user => allowedRequestActions(request, user).includes("APPROVE") && (user.role !== "Admin" || activeApprovalStep(request)?.role === "Admin"));
+    const approvers = users.filter(user => allowedRequestActions(request, user).includes("APPROVE"));
     const escalationTargets = alert === "SLA_ESCALATION" ? await escalationRecipients(request, approvers, users) : [];
     const deliveries = [
       ...approvers.map(user => ({ user, title: titles[alert] })),

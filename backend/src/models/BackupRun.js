@@ -5,7 +5,8 @@ import mongoose from "mongoose";
 const backupRunSchema = new mongoose.Schema(
   {
     status: { type: String, enum: ["RUNNING", "SUCCEEDED", "FAILED"], required: true, default: "RUNNING" },
-    trigger: { type: String, enum: ["SUPER_ADMIN", "COMMAND"], required: true },
+    // SUPER_ADMIN: runs started from the console before it became the administrator's.
+    trigger: { type: String, enum: ["ADMIN", "SUPER_ADMIN", "COMMAND", "MIGRATION"], required: true },
     triggeredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     triggeredByName: String,
     startedAt: { type: Date, required: true, default: Date.now },

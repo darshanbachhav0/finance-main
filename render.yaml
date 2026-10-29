@@ -32,13 +32,13 @@ services:
         value: 8h
       - key: DRAFT_ENCRYPTION_KEY
         generateValue: true
-      # Encrypts the Super Admin authenticator secrets. If a Super Admin set up their authenticator
-      # before this key existed, run `npm run superadmin:reset-2fa -- --dni=<DNI>` once.
+      # Encrypts administrator authenticator secrets. If an administrator set up their authenticator
+      # before this key existed, run `npm run admin:reset-2fa -- --dni=<DNI>` once.
       - key: TWO_FACTOR_ENCRYPTION_KEY
         generateValue: true
       - key: UMA_STORAGE_ROOT
         value: /var/data
-      # Backups (npm run backup and the Super Admin console) on the persistent disk.
+      # Backups (npm run backup, migrations and Administración > Plataforma) on the persistent disk.
       - key: BACKUP_DIR
         value: /var/data/backups
       - key: SUNAT_PADRON_DATA_DIR

@@ -74,7 +74,7 @@ test("an unpaid advance follows the employee's corrected, verified bank account"
       const interbank = await createEmployeeReimbursementBankAccount({ payload: { bank: "INTERBANK", currency: "PEN", accountHolderName: second.name, accountNumber: "8983001234567", cci: "00389800300123456789" }, user: second, req });
       assert.equal(interbank.bank, "INTERBANK");
       const supplier = await Supplier.create({ identifierType: "RUC", rucDni: "20555555571", normalizedIdentifier: "20555555571", legalName: "AR Supplier", name: "AR Supplier", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
-      await assert.rejects(() => addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BBVA", currency: "PEN", accountType: "CURRENT", accountNumber: "0011017501000123", cci: "01117500010001234567" }, user: accounting, req }),
+      await assert.rejects(() => addSupplierBankAccount({ supplierId: supplier._id, payload: { bank: "BBVA", currency: "PEN", accountType: "CURRENT", accountNumber: "0011017501000123", cci: "01117500010001234567" }, user: treasury, req }),
         (error) => error.details?.field === "accountNumber" && error.details?.required === 20);
     });
 

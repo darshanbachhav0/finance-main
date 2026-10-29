@@ -97,7 +97,9 @@ test("imports, payment runs, follow-ups and the weekly report", { timeout: 90000
         ["123", "MAL RUC", "", ""],
         ["20600000001", "", "", ""]
       ]);
-      const done = await runExcelImport({ kind: "suppliers", buffer: file, dryRun: false, user: accounting });
+      // Supplier validation moved to Treasury, so the supplier import is Treasury's too.
+      await assert.rejects(() => runExcelImport({ kind: "suppliers", buffer: file, dryRun: false, user: accounting }), /cannot run this import/);
+      const done = await runExcelImport({ kind: "suppliers", buffer: file, dryRun: false, user: treasury });
       assert.deepEqual([done.ok, done.failed], [1, 3]);
       assert.match(done.rows[1].message, /repeats an earlier row|already exists/);
       const supplier = await Supplier.findOne({ rucDni: "20512345678" }).lean();

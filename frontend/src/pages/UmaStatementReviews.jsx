@@ -4,14 +4,15 @@ import api from "../api/client.js";
 import PageHeader from "../components/PageHeader.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import { PERMISSIONS, userCan } from "../utils/access.js";
 
 export default function UmaStatementReviews() {
  const {t}=useLanguage();
  const { user, readOnly } = useAuth();
  const { notify } = useToast();
  const [rows, setRows] = useState([]), [selected, setSelected] = useState(null), [decisions,setDecisions]=useState([]), [file, setFile] = useState(null), [bank, setBank] = useState("BBVA"), [error, setError] = useState(""), [busy, setBusy] = useState(false);
- const canUpload = !readOnly && ["Admin", "Treasury"].includes(user?.role);
- const canSign = !readOnly && ["Admin", "Accounting"].includes(user?.role);
+ const canUpload = !readOnly && userCan(user, PERMISSIONS.RECONCILIATION_PREPARE);
+ const canSign = !readOnly && userCan(user, PERMISSIONS.RECONCILIATION_SIGN);
  const refresh = () => api.get("/statement-reviews").then(r => setRows(r.data.data || [])).catch(e=>setError(e.message));
  useEffect(()=>{refresh()},[]);
  async function open(id){ try { const r=await api.get(`/statement-reviews/${id}`);setSelected(r.data.data);setDecisions((r.data.data.lines||[]).map(l=>({decision:l.matchStatus==="SUGGESTED"?"ACCEPT":"UNIDENTIFIED",notes:""}))); }catch(e){setError(e.message);} }

@@ -9,13 +9,16 @@ import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
 import { AppError } from "../utils/AppError.js";
 import { assertPasswordPolicy, getPlatformSettings } from "../services/platformSettingsService.js";
-import { ADMINISTRATOR_ROLES, APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, MANAGEMENT_VIEWER_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
+import { canonicalPermission, canonicalRole, rolesOf, sodViolations } from "../../../shared/accessControl.mjs";
+import { APPROVAL_STAGES, ERROR_CODES, GRANTABLE_PERMISSIONS, REQUEST_STATUS, MAX_APPROVAL_CHAIN_DEPTH, ROLES } from "../utils/constants.js";
+import { isReadOnlyOverseer } from "../utils/permissions.js";
+import { accessReview, userChangeHistory } from "../services/accessReviewService.js";
 import { EMAIL_FREQUENCIES } from "../services/notificationEmailService.js";
 import NotificationDelivery from "../models/NotificationDelivery.js";
 
 const terminalStatuses = [REQUEST_STATUS.CLOSED, REQUEST_STATUS.PAID_CLOSED, REQUEST_STATUS.VOIDED, REQUEST_STATUS.REJECTED];
 
-const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "jobCategory", "organizationalUnit", "role", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil", "emailNotifications"];
+const editableFields = ["employeeCode", "dni", "name", "email", "jefe", "substitute", "jobTitle", "jobCategory", "organizationalUnit", "role", "roles", "approvalLevel", "approvalAreas", "costCenter", "authorizedCostCenters", "permissions", "area", "active", "onLeave", "leaveUntil", "emailNotifications"];
 
 // Area Director and Vice-Rector are single-level roles: their approvalLevel is
 // implied by the role itself, never a separate admin choice (unlike Management,
@@ -27,63 +30,62 @@ const IMPLIED_APPROVAL_LEVEL = Object.freeze({
 
 function editablePayload(body) {
   const payload = Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+  if (payload.role !== undefined) payload.role = canonicalRole(payload.role) || payload.role;
+  if (Array.isArray(payload.roles)) payload.roles = [...new Set(payload.roles.map(canonicalRole).filter((role) => role && role !== (payload.role ?? body.currentRole)))];
   if (payload.role && IMPLIED_APPROVAL_LEVEL[payload.role]) payload.approvalLevel = IMPLIED_APPROVAL_LEVEL[payload.role];
   // "No substitute" arrives as an empty choice.
   if (payload.substitute === "") payload.substitute = null;
-  // Only grantable extras are stored; a legacy, non-grantable value (which never had any effect)
-  // is dropped the next time the user is saved.
-  if (Array.isArray(payload.permissions)) payload.permissions = [...new Set(payload.permissions.filter((permission) => GRANTABLE_PERMISSIONS.includes(permission)))];
+  // Only grantable extras are stored (legacy values are read as their canonical permission).
+  if (Array.isArray(payload.permissions)) payload.permissions = [...new Set(payload.permissions.map(canonicalPermission).filter((permission) => GRANTABLE_PERMISSIONS.includes(permission)))];
   return payload;
 }
-
-// ManagementViewer is portal-only and read-only: reject any extra permission up front with a
-// clear message (the User model enforces the same rule on every save).
-function assertManagementViewerPermissions(role, permissions) {
-  if (role !== ROLES.MANAGEMENT_VIEWER) return;
-  const disallowed = (Array.isArray(permissions) ? permissions : []).filter((permission) => !MANAGEMENT_VIEWER_PERMISSIONS.includes(permission));
-  if (disallowed.length) {
-    throw new AppError(422, "A Management Viewer only has access to the management portal; additional permissions cannot be granted.", { field: "permissions", disallowed }, ERROR_CODES.VALIDATION_ERROR);
-  }
-}
-
-// Administrator accounts belong to the Super Admin (Super Admin > Administrators). On this screen an
-// Admin may still place an Admin in the organization (jefe, substitute, cost centers, approval
-// areas, leave), but not change who they are or what they can do.
-const ADMIN_IDENTITY_FIELDS = ["name", "dni", "email", "employeeCode", "role", "active", "permissions"];
-const FINANCE_ROLES = [ROLES.ACCOUNTING, ROLES.TREASURY];
 
 function protectedAccount(message, details) {
   return new AppError(403, message, details, ERROR_CODES.ADMIN_ACCOUNT_PROTECTED);
 }
 
-function sameValue(field, current, next) {
-  if (field === "permissions") {
-    const set = (values) => [...new Set((values || []).filter((permission) => GRANTABLE_PERMISSIONS.includes(permission)))].sort().join(",");
-    return set(current) === set(next);
+const sortedKey = (values) => [...new Set(values || [])].sort().join(",");
+
+// Every role a saved user would hold after this change.
+function nextRoles(target, payload) {
+  return rolesOf({ role: payload.role ?? target?.role, roles: payload.roles ?? target?.roles ?? [] });
+}
+
+// Access changes are checked here before the model's own segregation-of-duties validation:
+// - nobody changes their own roles or extra permissions (no self-escalation);
+// - a blocking role combination is refused with its reason;
+// - the last active administrator keeps the role and stays active.
+export async function assertAccessChange(target, payload, actor) {
+  const before = target ? rolesOf(target) : [];
+  const after = nextRoles(target, payload);
+  const rolesChanged = sortedKey(before) !== sortedKey(after);
+  const permissionsChanged = payload.permissions !== undefined && sortedKey((target?.permissions || []).map(canonicalPermission)) !== sortedKey(payload.permissions);
+  if (target && String(target._id) === String(actor?._id) && (rolesChanged || permissionsChanged)) {
+    throw protectedAccount("You cannot change your own roles or permissions. Ask another administrator.", { field: rolesChanged ? "roles" : "permissions" });
   }
-  if (field === "active") return Boolean(current) === Boolean(next);
-  const normalize = (value) => String(value ?? "").trim().toLowerCase();
-  return normalize(current) === normalize(next);
+  const blocked = sodViolations(after).filter((rule) => rule.severity === "block");
+  if (blocked.length) {
+    throw new AppError(422, blocked.map((rule) => rule.message).join(" "), { field: "roles", segregationOfDuties: blocked.map((rule) => rule.id) }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const losesAdmin = before.includes(ROLES.ADMIN) && (!after.includes(ROLES.ADMIN) || payload.active === false);
+  if (target && losesAdmin && target.active !== false) {
+    const others = await User.countDocuments({ active: true, _id: { $ne: target._id }, $or: [{ role: ROLES.ADMIN }, { roles: ROLES.ADMIN }] });
+    if (!others) throw new AppError(409, "At least one active administrator must remain. Assign the Admin role to someone else first.", undefined, ERROR_CODES.LAST_ADMIN);
+  }
 }
 
-export function assertAdminAccountEdit(target, body) {
-  if (target.role === ROLES.SUPER_ADMIN) throw protectedAccount("Super Admin accounts are managed from the server, not from this screen.");
-  if (body.role !== undefined && ADMINISTRATOR_ROLES.includes(body.role) && body.role !== target.role) throw protectedAccount("Only the Super Admin can give someone the Admin role.");
-  if (target.role !== ROLES.ADMIN) return;
-  if (body.password) throw protectedAccount("Only the Super Admin can reset an administrator's password.");
-  const changed = ADMIN_IDENTITY_FIELDS.filter((field) => body[field] !== undefined && !sameValue(field, target[field], body[field]));
-  if (changed.length) throw protectedAccount("Administrator accounts are managed by the Super Admin. You can still change their organization, cost centers and leave.", { fields: changed });
-}
-
-// Sensitive changes get their own audit event, which also alerts the Super Admin.
+// Role and permission changes get their own audit events (the administrative change history).
 async function auditSensitiveUserChanges(user, before, req) {
   const permissionsBefore = [...(before.permissions || [])].sort();
   const permissionsAfter = [...(user.permissions || [])].sort();
   if (permissionsBefore.join(",") !== permissionsAfter.join(",")) {
     await recordAudit({ entityType: "User", entity: user, action: "PERMISSIONS_CHANGED", user: req.user, req, module: "USER_ADMIN", oldValues: { permissions: permissionsBefore }, newValues: { name: user.name, permissions: permissionsAfter } });
   }
-  if (FINANCE_ROLES.includes(user.role) && before.role !== user.role) {
-    await recordAudit({ entityType: "User", entity: user, action: "FINANCE_ROLE_ASSIGNED", user: req.user, req, module: "USER_ADMIN", oldValues: { role: before.role }, newValues: { name: user.name, role: user.role } });
+  const rolesBefore = rolesOf({ role: before.role, roles: before.roles || [] });
+  const rolesAfter = rolesOf(user);
+  if (sortedKey(rolesBefore) !== sortedKey(rolesAfter)) {
+    const review = sodViolations(rolesAfter).filter((rule) => rule.severity === "review").map((rule) => rule.id);
+    await recordAudit({ entityType: "User", entity: user, action: "ROLES_CHANGED", user: req.user, req, module: "USER_ADMIN", oldValues: { role: before.role, roles: rolesBefore }, newValues: { name: user.name, role: user.role, roles: rolesAfter, ...(review.length ? { segregationReview: review } : {}) } });
   }
 }
 
@@ -94,8 +96,8 @@ export async function validateSupervisor(userId, supervisorId) {
   for (let depth = 0; next; depth++) {
     if (depth >= MAX_APPROVAL_CHAIN_DEPTH || visited.has(String(next))) throw new AppError(422, "Supervisor assignment creates a cycle or exceeds the hierarchy depth.");
     visited.add(String(next));
-    const manager = await User.findById(next).select("jefe active role").lean();
-    if (!manager || manager.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN, ROLES.AUDITOR].includes(manager.role)) throw new AppError(422, "Choose an active, internal supervisor.");
+    const manager = await User.findById(next).select("jefe active role roles").lean();
+    if (!manager || manager.active === false || isReadOnlyOverseer(manager)) throw new AppError(422, "Choose an active, internal supervisor.");
     next = manager.jefe;
   }
 }
@@ -105,8 +107,8 @@ export async function validateSupervisor(userId, supervisorId) {
 export async function validateSubstitute(userId, substituteId) {
   if (!substituteId) return;
   if (userId && String(substituteId) === String(userId)) throw new AppError(422, "A person cannot be their own substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
-  const substitute = await User.findById(substituteId).select("active role").lean();
-  if (!substitute || substitute.active === false || [ROLES.MANAGEMENT_VIEWER, ROLES.SUPER_ADMIN, ROLES.AUDITOR].includes(substitute.role)) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
+  const substitute = await User.findById(substituteId).select("active role roles").lean();
+  if (!substitute || substitute.active === false || isReadOnlyOverseer(substitute)) throw new AppError(422, "Choose an active, internal substitute.", { field: "substitute" }, ERROR_CODES.VALIDATION_ERROR);
 }
 
 // Availability follows active direct reports, rather than a fixed role.
@@ -132,9 +134,8 @@ export const listMyTeam = asyncHandler(async (req, res) => {
 export const listUsers = asyncHandler(async (req, res) => {
   const query = {};
   if (req.query.active !== undefined) query.active = req.query.active === "true";
-  if (req.query.role) query.role = req.query.role;
-  // Super Admin accounts are not listed to Admins: they are managed from the server.
-  if (req.user?.role !== ROLES.SUPER_ADMIN) query.$and = [{ role: { $ne: ROLES.SUPER_ADMIN } }];
+  if (req.query.role) query.$and = [{ $or: [{ role: req.query.role }, { roles: req.query.role }] }];
+  if (req.query.accessReview === "true") query["accessReview.required"] = true;
   if (req.query.search) {
     const search = new RegExp(escapedRegex(req.query.search), "i");
     query.$or = [{ name: search }, { email: search }, { employeeCode: search }, { dni: search }, { area: search }];
@@ -151,17 +152,16 @@ export const listUsers = asyncHandler(async (req, res) => {
 // One user, as the list shows it (a saved edit draft reopens its user this way).
 export const getUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).populate("costCenter authorizedCostCenters").populate("jefe substitute", "name jobTitle");
-  if (!user || (user.role === ROLES.SUPER_ADMIN && req.user?.role !== ROLES.SUPER_ADMIN)) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
+  if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   res.json({ data: user });
 });
 
 export const createUser = asyncHandler(async (req, res) => {
   const { name, dni, email, password, role } = req.body;
   if (!name || !dni || !password || !role) throw new AppError(400, "Name, DNI, password, and role are required.", undefined, ERROR_CODES.VALIDATION_ERROR);
-  if (ADMINISTRATOR_ROLES.includes(role)) throw protectedAccount("Only the Super Admin can create administrator accounts.");
   const normalizedDni = String(dni).trim();
   if (!/^\d{8}$/.test(normalizedDni)) throw new AppError(422, "DNI must contain 8 digits.");
-  assertManagementViewerPermissions(role, req.body.permissions);
+  await assertAccessChange(null, editablePayload(req.body), req.user);
   assertPasswordPolicy(String(password), await getPlatformSettings());
   await validateSupervisor(null, req.body.jefe);
   await validateSubstitute(null, req.body.substitute);
@@ -171,8 +171,8 @@ export const createUser = asyncHandler(async (req, res) => {
     if (await User.exists({ email: normalizedEmail })) throw new AppError(409, "A user with this email already exists.", undefined, ERROR_CODES.CONFLICT);
   }
   const user = await User.create({ ...editablePayload(req.body), dni: normalizedDni, email: email ? String(email).trim().toLowerCase() : undefined, passwordResetRequired: true, passwordChangedAt: new Date(), passwordHash: await bcrypt.hash(password, 12) });
-  await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, dni: user.dni, role: user.role, area: user.area, active: user.active, permissions: user.permissions } });
-  await auditSensitiveUserChanges(user, { role: undefined, permissions: [] }, req);
+  await recordAudit({ entityType: "User", entity: user, action: "CREATED", user: req.user, req, module: "USER_ADMIN", newValues: { name: user.name, dni: user.dni, role: user.role, roles: user.roles, area: user.area, active: user.active, permissions: user.permissions } });
+  await auditSensitiveUserChanges(user, { role: undefined, roles: [], permissions: [] }, req);
   res.status(201).json({ data: user });
 });
 
@@ -180,14 +180,16 @@ export const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id) && req.body.active === false) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
-  assertAdminAccountEdit(user, req.body);
-  assertManagementViewerPermissions(req.body.role ?? user.role, req.body.permissions ?? user.permissions);
+  const payload = editablePayload({ ...req.body, currentRole: user.role });
+  await assertAccessChange(user, payload, req.user);
   if (req.body.jefe !== undefined) await validateSupervisor(user._id, req.body.jefe);
   if (req.body.substitute !== undefined) await validateSubstitute(user._id, req.body.substitute);
   if (req.body.dni !== undefined && !/^\d{8}$/.test(String(req.body.dni).trim())) throw new AppError(422, "DNI must contain 8 digits.");
   if (req.body.onLeave === true && req.body.leaveUntil && !user.onLeave) assertLeaveUntil(req.body.leaveUntil);
-  const oldValues = { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveStartedAt: user.leaveStartedAt, emailNotifications: user.emailNotifications !== false, permissions: [...(user.permissions || [])] };
-  Object.assign(user, editablePayload(req.body));
+  const oldValues = { name: user.name, email: user.email, role: user.role, roles: [...(user.roles || [])], area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveStartedAt: user.leaveStartedAt, emailNotifications: user.emailNotifications !== false, permissions: [...(user.permissions || [])] };
+  Object.assign(user, payload);
+  // Saving the record is the administrator's confirmation of an access flagged for review.
+  if (req.body.accessReviewed === true && user.accessReview?.required) user.accessReview = { required: false, reasons: [] };
   applyLeaveDates(user, oldValues.onLeave);
   if (req.body.email) user.email = String(req.body.email).trim().toLowerCase();
   if (req.body.password) {
@@ -198,7 +200,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.tokenVersion = (user.tokenVersion || 0) + 1;
   }
   await user.save();
-  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, emailNotifications: user.emailNotifications !== false, passwordChanged: Boolean(req.body.password) } });
+  await recordAudit({ entityType: "User", entity: user, action: "UPDATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { name: user.name, email: user.email, role: user.role, roles: [...(user.roles || [])], area: user.area, active: user.active, approvalLevel: user.approvalLevel, jefe: user.jefe, substitute: user.substitute, onLeave: Boolean(user.onLeave), leaveUntil: user.leaveUntil, emailNotifications: user.emailNotifications !== false, passwordChanged: Boolean(req.body.password) } });
   await auditSensitiveUserChanges(user, oldValues, req);
   const approvalReassignment = await reassignAfterAvailabilityChange(user, oldValues, req);
   res.json({ data: user, approvalReassignment });
@@ -283,11 +285,22 @@ export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new AppError(404, "User not found.", { id: req.params.id }, ERROR_CODES.NOT_FOUND);
   if (String(user._id) === String(req.user._id)) throw new AppError(409, "You cannot deactivate your own signed-in account.", undefined, ERROR_CODES.CONFLICT);
-  if (ADMINISTRATOR_ROLES.includes(user.role)) throw protectedAccount("Only the Super Admin can deactivate an administrator account.");
+  await assertAccessChange(user, { active: false }, req.user);
   const oldValues = { active: user.active };
   user.active = false;
   await user.save();
   await recordAudit({ entityType: "User", entity: user, action: "DEACTIVATED", user: req.user, req, module: "USER_ADMIN", oldValues, newValues: { active: false } });
   const approvalReassignment = await reassignAfterAvailabilityChange(user, { ...oldValues, onLeave: Boolean(user.onLeave) }, req);
   res.json({ data: user, approvalReassignment });
+});
+
+// Administración > Roles y permisos: segregation-of-duties conflicts, records flagged for review,
+// people without a supervisor or cost center, cost centers without a responsible.
+export const getAccessReview = asyncHandler(async (_req, res) => {
+  res.json({ data: await accessReview() });
+});
+
+// The administrative change history of one person (role, permission, organization changes).
+export const getUserHistory = asyncHandler(async (req, res) => {
+  res.json(await userChangeHistory(req.params.id, req.query));
 });

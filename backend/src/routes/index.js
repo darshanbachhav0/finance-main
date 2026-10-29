@@ -25,8 +25,7 @@ import fileRoutes from "./fileRoutes.js";
 import userRoutes from "./userRoutes.js";
 import searchRoutes from "./searchRoutes.js";
 import employeeReimbursementBankRoutes from "./employeeReimbursementBankRoutes.js";
-import externalManagementRoutes from "./externalManagementRoutes.js";
-import superAdminRoutes from "./superAdminRoutes.js";
+import administrationRoutes from "./administrationRoutes.js";
 import {
   accountingPeriodRouter,
   accountingMappingRouter,
@@ -41,19 +40,17 @@ import {
   financeConfigurationRouter,
   projectRouter
 } from "./masterDataRoutes.js";
-import { authorize, protect, superAdminReadOnly } from "../middleware/auth.js";
-import { ROLES } from "../utils/constants.js";
+import { authorize, protect, readOnlyOversight } from "../middleware/auth.js";
+import { CANONICAL_ROLES } from "../utils/constants.js";
 
 const router = Router();
 router.use("/auth", authRoutes);
-router.use("/management/v1", externalManagementRoutes);
-// Internal API gate. ManagementViewer is portal-only: it reaches /auth and /management/v1 above
-// and is refused (403) by every internal route below. The Super Admin and the Auditor read
-// everything below; the Super Admin writes only to /superadmin and its personal settings, the
-// Auditor only to its notification settings (superAdminReadOnly).
-router.use(protect, authorize(ROLES.ADMIN, ROLES.SOLICITOR, ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT, ROLES.MANAGEMENT, ROLES.GAF, ROLES.LEGAL, ROLES.HUMAN_RESOURCES, ROLES.AUDITOR, ROLES.SUPER_ADMIN), superAdminReadOnly);
+// Internal API gate: every canonical role (a not-yet-migrated retired role is read as its
+// replacement, shared/accessControl.mjs). Auditoría reads and writes only its own notification
+// settings (readOnlyOversight). Each route below checks its own permission.
+router.use(protect, authorize(...CANONICAL_ROLES), readOnlyOversight);
 
-router.use("/superadmin", superAdminRoutes);
+router.use("/administration", administrationRoutes);
 
 router.use("/operations", operationsRoutes);
 router.use("/special-expenses", umaSpecialRoutes);

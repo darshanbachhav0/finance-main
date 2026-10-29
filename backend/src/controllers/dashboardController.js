@@ -23,11 +23,13 @@ import { budgetExceptionPath, countPendingBudgetExceptions } from "../services/b
 import { countPendingBudgetPlanChanges } from "../services/budgetPlanChangeService.js";
 import { suppliersAwaitingApprovalBy } from "../services/supplierService.js";
 import { personalDashboard } from "../services/personalDashboardService.js";
-import { APPROVAL_STAGES, APPROVAL_TIERS, AP_STATUS, READ_ONLY_OVERSIGHT_ROLES, REQUEST_STATUS, REQUESTER_ROLES, ROLES } from "../utils/constants.js";
-import { actsAsRequester, requestVisibilityFilter } from "../utils/permissions.js";
+import { APPROVAL_STAGES, APPROVAL_TIERS, AP_STATUS, PERMISSIONS, REQUEST_STATUS, REQUESTER_ROLES, ROLES } from "../utils/constants.js";
+import { actsAsRequester, hasPermission, isReadOnlyOverseer, requestVisibilityFilter } from "../utils/permissions.js";
+import { accessReview, ADMINISTRATIVE_AUDIT_MODULES } from "../services/accessReviewService.js";
 import { REPORTING_EXCLUDED_REQUEST_STATUSES } from "../../../shared/openPayables.mjs";
 import { limaDateKey, limaToday } from "../../../shared/businessCalendar.mjs";
 import { isJefe, jefeDashboard, jefeInvoices } from "../services/jefeDashboardService.js";
+import { hasRole } from "../utils/permissions.js";
 
 function currentPeriod() {
   return limaToday().slice(0, 7);
@@ -58,15 +60,18 @@ function hasVerifiedPaymentDestination(payable, supplierAccounts) {
   return (supplierAccounts.get(supplierId) || []).some((account) => isEligibleSupplierPaymentAccount(account, { currency: payable.currency }));
 }
 
-function approvalScope(user) {
+// all: every pending approval of the university (the Gerencia General's escalation view and the
+// administrator's workload counts); otherwise only the steps assigned to this person.
+function approvalScope(user, { all = false } = {}) {
   const query = { status: { $in: [REQUEST_STATUS.PENDING_APPROVAL, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED] }, approvalStage: { $ne: "COMPLETE" } };
-  if (user.role !== ROLES.ADMIN) {
+  if (!all) {
     const chain = { approvalRouteSnapshot: { $elemMatch: { approverUser: user._id, status: "PENDING", source: "MANAGER_CHAIN" } } };
     // Same pool as the Approvals inbox: the role's tier steps, never on their own requests.
-    const tier = Object.values(APPROVAL_TIERS).includes(user.role)
-      ? [{ approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: user.role, status: "PENDING" } }, requester: { $ne: user._id } }]
+    const tierRoles = Object.values(APPROVAL_TIERS).filter((role) => hasRole(user, role));
+    const tier = tierRoles.length
+      ? [{ approvalRouteSnapshot: { $elemMatch: { tier: { $exists: true }, role: { $in: tierRoles }, status: "PENDING" } }, requester: { $ne: user._id } }]
       : [];
-    if ([ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT].includes(user.role)) {
+    if (hasRole(user, [ROLES.AREA_DIRECTOR, ROLES.VICE_RECTOR, ROLES.MANAGEMENT])) {
       const legacy = { approvalStage: user.approvalLevel || APPROVAL_STAGES.AREA_DIRECTOR };
       if (legacy.approvalStage === APPROVAL_STAGES.AREA_DIRECTOR) {
         const areas = [user.area, ...(user.approvalAreas || [])].filter(Boolean);
@@ -130,11 +135,11 @@ async function openBudgetExceptions({ awaitingDecision = false } = {}) {
 // dueAt (earliest due date), overdue (how many are past due), kind (the variant of the task this
 // role sees) and partOf (a detail shown inside another task rather than as its own row).
 async function buildTasks(user) {
-  // The Super Admin and the Auditor act in no queue, so they have no tasks.
-  if (READ_ONLY_OVERSIGHT_ROLES.includes(user.role)) return { items: [], total: 0, counters: {} };
+  // Auditoría acts in no queue, so it has no tasks.
+  if (isReadOnlyOverseer(user)) return { items: [], total: 0, counters: {} };
   const items = [];
   const now = new Date();
-  if (user.role !== ROLES.MANAGEMENT_VIEWER) {
+  {
     const query = approvalScope(user);
     const [count, overdue, dueAt] = await Promise.all([
       FinancialRequest.countDocuments(query),
@@ -146,11 +151,12 @@ async function buildTasks(user) {
     items.push({ key: "approvalOverdue", label: "Approval SLA overdue", count: overdue, path: "/approvals", tone: "danger", partOf: "approval" });
     const config = slaConfiguration();
     items.push({ key: "approvalDueSoon", label: "Approval due soon", count: await FinancialRequest.countDocuments({ ...query, approvalDueAt: { $gte: now, $lte: new Date(now.getTime() + config.dueSoonHours * 3600000) } }), path: "/approvals", tone: "warning", partOf: "approval" });
-    const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope({ role: ROLES.ADMIN }) : query;
+    const escalationScope = user.role === ROLES.MANAGEMENT ? approvalScope(user, { all: true }) : query;
     items.push({ key: "approvalEscalated", label: "SLA escalation", count: await countEscalatedApprovals(escalationScope, { config }), path: user.role === ROLES.MANAGEMENT ? "/requests" : "/approvals", tone: "danger", ...(user.role === ROLES.MANAGEMENT ? {} : { partOf: "approval" }) });
 
   }
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
+  // Tesorería validates new suppliers before they are paid.
+  if (hasPermission(user, PERMISSIONS.SUPPLIER_VALIDATE)) {
     const suppliers = await suppliersAwaitingApprovalBy(user);
     items.push({ key: "suppliers", label: "Provider review pending", count: suppliers.length,
       path: suppliers.length === 1 ? `/suppliers/${suppliers[0]._id}` : "/suppliers?awaitingMyApproval=true", tone: "warning" });
@@ -166,10 +172,10 @@ async function buildTasks(user) {
     items.push({ key: "drafts", label: "Drafts to finish", count: drafts, path: (await singleRecordPath(drafts, FinancialRequest, draftQuery, (record) => `/requests/${record._id}/edit`)) || `/requests?status=${REQUEST_STATUS.DRAFT}`, tone: "neutral" });
     items.push({ key: "corrections", label: "Requests to correct", count: corrections, path: (await singleRecordPath(corrections, FinancialRequest, correctionQuery, (record) => `/requests/${record._id}`)) || `/requests?status=${OWNER_CORRECTION_STATUSES.join("%2C")}`, tone: "danger" });
   }
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING, ...REQUESTER_ROLES].includes(user.role)) {
+  if (hasRole(user, [ROLES.ACCOUNTING, ...REQUESTER_ROLES])) {
     // Each role sees the rendition work that is its own: the requester submits (PENDING or
-    // OBSERVED, against the deadline), Accounting reviews what was SUBMITTED, Admin oversees all.
-    const kind = REQUESTER_ROLES.includes(user.role) ? "submit" : user.role === ROLES.ACCOUNTING ? "review" : "outstanding";
+    // OBSERVED, against the deadline), Contabilidad reviews what was SUBMITTED.
+    const kind = REQUESTER_ROLES.includes(user.role) ? "submit" : "review";
     const statuses = { submit: ["PENDING", "OBSERVED"], review: ["SUBMITTED"], outstanding: ["PENDING", "SUBMITTED", "OBSERVED"] }[kind];
     const query = { flowType: "C", "rendition.status": { $in: statuses }, status: { $nin: TERMINAL_REQUEST_STATUSES } };
     if (REQUESTER_ROLES.includes(user.role)) query.$or = [{ requester: user._id }, { solicitor: user._id }];
@@ -182,7 +188,7 @@ async function buildTasks(user) {
     const single = await singleRecordPath(count, FinancialRequest, query, (record) => `/requests/${record._id}`);
     items.push({ key: "rendition", kind, label, count, path: single || `/requests?renditionStatus=${statuses.join("%2C")}`, tone: deadline.overdue ? "danger" : "warning", ...deadline });
   }
-  if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role)) {
+  if (hasRole(user, [ROLES.TREASURY])) {
     const payableQuery = { status: { $in: [AP_STATUS.OPEN, AP_STATUS.SCHEDULED] } };
     const confirmationQuery = { status: { $in: [AP_STATUS.PAYMENT_FILE_CREATED, AP_STATUS.PARTIALLY_PAID] } };
     const bouncedQuery = { status: AP_STATUS.PAYMENT_BOUNCED };
@@ -207,7 +213,7 @@ async function buildTasks(user) {
     const reconcile = await AccountsPayable.countDocuments(reconcileQuery);
     items.push({ key: "reconciliation", label: "Payments to reconcile", count: reconcile, path: (await singleRecordPath(reconcile, AccountsPayable, reconcileQuery, (record) => `/treasury?tab=reconcile&record=${record._id}`)) || "/treasury?tab=reconcile", tone: "accent" });
   }
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role)) {
+  if (hasRole(user, [ROLES.ACCOUNTING])) {
     const bankReviewQuery = { active: true, verificationStatus: "PENDING" };
     const [employeeBankReviews, supplierBankReviews] = await Promise.all([
       EmployeeReimbursementBankAccount.countDocuments(bankReviewQuery),
@@ -247,7 +253,7 @@ async function buildTasks(user) {
   // Treasury/Admin see every open exception (review first); Management sees the ones Treasury has
   // reviewed and that now await its decision, decided from the Approval Inbox. Moot or
   // terminal-request exceptions never count.
-  if ([ROLES.ADMIN, ROLES.TREASURY, ROLES.MANAGEMENT].includes(user.role)) {
+  if (hasRole(user, [ROLES.TREASURY, ROLES.MANAGEMENT])) {
     const management = user.role === ROLES.MANAGEMENT;
     const count = await countPendingBudgetExceptions(management ? { awaitingDecision: true } : {});
     const single = !management && count === 1 ? (await openBudgetExceptions())[0] : null;
@@ -257,7 +263,8 @@ async function buildTasks(user) {
   if (user.role === ROLES.MANAGEMENT) {
     items.push({ key: "budgetPlanChanges", kind: "decide", label: "Budget changes awaiting your decision", count: await countPendingBudgetPlanChanges(), path: "/budget?tab=changes", tone: "warning" });
   }
-  if ([ROLES.ADMIN, ROLES.PROCUREMENT].includes(user.role)) {
+  // Whoever holds purchase_order.issue issues the A1 order (no longer a role of its own).
+  if (hasPermission(user, PERMISSIONS.PURCHASE_ORDER_ISSUE)) {
     const orderQuery = { flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null };
     const awaitingOrder = await FinancialRequest.countDocuments(orderQuery);
     items.push({ key: "procurementOrders", label: "Approved requests awaiting a Purchase Order", count: awaitingOrder, path: (await singleRecordPath(awaitingOrder, FinancialRequest, orderQuery, (record) => `/requests/${record._id}`)) || AWAITING_PURCHASE_ORDER_PATH, tone: "warning" });
@@ -302,18 +309,19 @@ async function roleDetails(user, common) {
   const data = {};
   const period = currentPeriod();
 
+  // The administrator's home: people and access, never financial figures.
   if (user.role === ROLES.ADMIN) {
-    const [activeUsers, pendingSuppliers, blockedActions, recentActivity] = await Promise.all([
+    const [activeUsers, review, blockedActions, recentActivity] = await Promise.all([
       User.countDocuments({ active: true }),
-      Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }),
+      accessReview(),
       AuditLog.countDocuments({ blocked: true, createdAt: { $gte: new Date(Date.now() - 30 * 86400000) } }),
-      AuditLog.find().populate("user", "name role").sort({ createdAt: -1 }).limit(8)
+      AuditLog.find({ module: { $in: ADMINISTRATIVE_AUDIT_MODULES } }).populate("user", "name role").sort({ createdAt: -1 }).limit(8)
     ]);
     metrics.push(
-      { key: "requests", label: "Total requests", value: common.total, tone: "neutral" },
       { key: "users", label: "Active users", value: activeUsers, tone: "success" },
-      { key: "workflow", label: "In active workflow", value: common.total - statusCount(common, REQUEST_STATUS.CLOSED) - statusCount(common, REQUEST_STATUS.VOIDED) - statusCount(common, REQUEST_STATUS.REJECTED), tone: "accent" },
-      { key: "supplierWarnings", label: "Supplier validations", value: pendingSuppliers, tone: "warning" },
+      { key: "accessReview", label: "Access to review", value: review.summary.flagged, tone: review.summary.flagged ? "warning" : "neutral" },
+      { key: "sodConflicts", label: "Segregation conflicts", value: review.summary.conflicts, tone: review.summary.blockingConflicts ? "danger" : review.summary.conflicts ? "warning" : "neutral" },
+      { key: "noSupervisor", label: "Without supervisor", value: review.summary.noSupervisor, tone: review.summary.noSupervisor ? "warning" : "neutral" },
       { key: "blocked", label: "Blocked controls (30d)", value: blockedActions, tone: blockedActions ? "danger" : "neutral" }
     );
     data.recentActivity = recentActivity;
@@ -407,22 +415,6 @@ async function roleDetails(user, common) {
     data.recentFiles = recentFiles;
   }
 
-  if (user.role === ROLES.PROCUREMENT) {
-    const [awaitingOrder, openOrders, recentOrders, invoicedAgainstOrders] = await Promise.all([
-      FinancialRequest.countDocuments({ flowType: "A1", status: REQUEST_STATUS.BUDGET_COMMITTED, purchaseOrder: null }),
-      PurchaseOrder.countDocuments({ status: { $in: ["ISSUED", "PARTIALLY_LIQUIDATED"] } }),
-      PurchaseOrder.find().populate("supplier", "name legalName").sort({ issueDate: -1 }).limit(6),
-      AccountsPayable.countDocuments({ purchaseOrder: { $ne: null }, status: { $ne: AP_STATUS.CANCELLED } })
-    ]);
-    metrics.push(
-      { key: "awaitingOrder", label: "Approved, awaiting PO", value: awaitingOrder, tone: "warning" },
-      { key: "openOrders", label: "Open Purchase Orders", value: openOrders, tone: "neutral" },
-      { key: "invoicedAgainstOrders", label: "Invoices received against POs", value: invoicedAgainstOrders, tone: "accent" },
-      { key: "supplierWarnings", label: "Supplier validations", value: await Supplier.countDocuments({ homologationStatus: "PENDING_VALIDATION" }), tone: "warning" }
-    );
-    data.recentOrders = recentOrders;
-  }
-
   // Treasury also watches the budget (it took over the former Budget role).
   if (user.role === ROLES.TREASURY) {
     const overview = await budgetOverview({ period });
@@ -443,11 +435,16 @@ export const getTaskSummary = asyncHandler(async (req, res) => res.json(await bu
 // The greeting card: the signed-in person's own requests, payments and approval decisions.
 export const getPersonalDashboard = asyncHandler(async (req, res) => res.json({ data: await personalDashboard(req.user) }));
 
-// Pending work across every department, as the Admin's queues count it, for the Super Admin's
-// monitoring view. Counts only: nothing here is the Super Admin's to act on.
-export async function platformWorkload(viewer) {
-  const { items } = await buildTasks({ _id: viewer._id, role: ROLES.ADMIN, permissions: [] });
-  return items.filter((item) => !item.partOf || ["approvalOverdue", "approvalEscalated"].includes(item.key)).map(({ key, label, count, tone, overdue, dueAt }) => ({ key, label, count, tone, overdue, dueAt }));
+// Pending approvals across the university, for the administrator's platform overview (whether
+// routes are flowing or stuck). Counts only: nothing here is the administrator's to act on.
+export async function platformWorkload() {
+  const query = approvalScope(null, { all: true });
+  const now = new Date();
+  const [count, overdue] = await Promise.all([FinancialRequest.countDocuments(query), FinancialRequest.countDocuments({ ...query, approvalDueAt: { $lt: now } })]);
+  return [
+    { key: "approval", label: "Requests awaiting approval", count, tone: overdue ? "danger" : "warning", overdue },
+    { key: "approvalOverdue", label: "Approval SLA overdue", count: overdue, tone: "danger" }
+  ];
 }
 
 export const getBudgetExceptionDecisions = asyncHandler(async (req, res) => res.json(await listBudgetExceptionDecisionQueue(req.user)));

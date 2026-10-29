@@ -1,6 +1,7 @@
 import CostCenter from "../models/CostCenter.js";
 import User from "../models/User.js";
 import { MAX_APPROVAL_CHAIN_DEPTH, ROLES, VICE_RECTORATE_LEVEL } from "../utils/constants.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 // The Motor de Ingresos cascade of cost centers (CostCenter.parentCode / level / line), as the
 // approval route and request visibility read it (Manual técnico, "Ruta de aprobación").
@@ -65,13 +66,13 @@ export async function visibleCostCenterIdsFor(user) {
   if (!user) return [];
   const cascade = await loadCascade();
   const own = cascade.byId.get(idOf(user.costCenter));
-  if (!CASCADE_VIEWER_ROLES.includes(user.role)) return own ? [idOf(own._id)] : [];
+  if (!hasRole(user, CASCADE_VIEWER_ROLES)) return own ? [idOf(own._id)] : [];
   const responsibleFor = cascade.centers.filter((center) => idOf(center.responsible) === idOf(user._id));
   const roots = responsibleFor.length ? responsibleFor : own ? [own] : [];
   return [...descendantIdsIn(cascade, roots)];
 }
 
-const HEAD_FIELDS = "name jobTitle active onLeave jefe substitute role approvalLevel area costCenter";
+const HEAD_FIELDS = "name jobTitle active onLeave jefe substitute role roles approvalLevel area costCenter";
 const NOT_AN_AREA = (area) => !area || area === "*" || area.toUpperCase() === "GENERAL";
 
 // Who leads a CECO when it has no responsible: an Area Director or Vice-Rector of its area (their
@@ -80,7 +81,7 @@ const NOT_AN_AREA = (area) => !area || area === "*" || area.toUpperCase() === "G
 export async function costCenterHeads(center, { exclude = [] } = {}) {
   const excluded = new Set(exclude.filter(Boolean).map(idOf));
   const area = String(center?.area || "").trim();
-  const internal = { active: true, role: { $nin: [ROLES.SUPER_ADMIN, ROLES.AUDITOR, ROLES.MANAGEMENT_VIEWER] } };
+  const internal = { active: true, role: { $ne: ROLES.AUDITOR } };
   const [directors, people] = await Promise.all([
     NOT_AN_AREA(area) ? [] : User.find({ ...internal, role: { $in: CASCADE_VIEWER_ROLES }, $or: [{ area }, { approvalAreas: area }] }).select(HEAD_FIELDS).sort({ createdAt: 1 }).lean(),
     User.find({ ...internal, costCenter: center?._id }).select(HEAD_FIELDS).sort({ createdAt: 1 }).lean()
@@ -88,7 +89,7 @@ export async function costCenterHeads(center, { exclude = [] } = {}) {
   const leading = new Set((await User.distinct("jefe", { jefe: { $in: people.map((person) => person._id) }, active: true })).map(String));
   const jefes = await User.find({ _id: { $in: people.map((person) => person.jefe).filter(Boolean) } }).select("costCenter").lean();
   const jefeCenter = new Map(jefes.map((jefe) => [idOf(jefe._id), idOf(jefe.costCenter)]));
-  const rosterHeads = people.filter((person) => CASCADE_VIEWER_ROLES.includes(person.role)
+  const rosterHeads = people.filter((person) => hasRole(person, CASCADE_VIEWER_ROLES)
     || (leading.has(idOf(person._id)) && jefeCenter.get(idOf(person.jefe)) !== idOf(person.costCenter)));
   const heads = new Map();
   for (const person of [...directors, ...rosterHeads]) if (!excluded.has(idOf(person._id))) heads.set(idOf(person._id), person);

@@ -12,12 +12,12 @@ import { adjustBudgetPlan, createBudgetPlan, getBudgetPlan, lastEndedMonth } fro
 import { cancelBudgetPlanChange, decideBudgetPlanChange, listBudgetPlanChanges } from "../src/services/budgetPlanChangeService.js";
 import { rollForwardUnusedBudget } from "../src/services/budgetRollForwardService.js";
 
-test("flexible budget plans: Admin edits months, reserve, annual amount and mode; roll-forward; approval threshold", { timeout: 120000 }, async (t) => {
+test("flexible budget plans: Treasury edits months, reserve, annual amount and mode; roll-forward; approval threshold", { timeout: 120000 }, async (t) => {
   await mongoose.connect(`mongodb://127.0.0.1:27017/erp_flexible_budget_${process.pid}_${Date.now()}`);
   try {
     await BudgetAllocation.init();
     const admin = await User.create({ name: "Plan Admin", role: "Admin", email: "flex.admin@test.invalid", passwordHash: "unused" });
-    const budget = await User.create({ name: "Budget Officer", role: "Treasury", email: "flex.budget@test.invalid", passwordHash: "unused" });
+    const budget = await User.create({ name: "Plan Treasury", role: "Treasury", email: "flex.budget@test.invalid", passwordHash: "unused" });
     const management = await User.create({ name: "Management", role: "Management", email: "flex.management@test.invalid", passwordHash: "unused" });
     const req = { headers: {}, ip: "127.0.0.1" };
     let serial = 0;
@@ -27,14 +27,15 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       return createBudgetPlan({ year, planningMode, costCenter: String(center._id), assignedAmount: annual, distribution: "EQUAL", reason: "Approved plan" }, budget, req);
     }
     const fresh = (value) => getBudgetPlan(value._id);
-    const change = async (value, action, extra = {}, user = admin) => adjustBudgetPlan(value._id, { operationId: `flex-change-${++serial}`, action, revision: (await BudgetAllocation.findById(value._id)).__v, reason: "Approved reallocation", ...extra }, user, req);
+    const change = async (value, action, extra = {}, user = budget) => adjustBudgetPlan(value._id, { operationId: `flex-change-${++serial}`, action, revision: (await BudgetAllocation.findById(value._id)).__v, reason: "Approved reallocation", ...extra }, user, req);
     const use = (value, month, committed, executed = 0) => BudgetAllocation.updateOne({ _id: value._id }, { $inc: { committedAmount: committed, executedAmount: executed, [`months.${month - 1}.committedAmount`]: committed, [`months.${month - 1}.executedAmount`]: executed } });
     const assigned = (value) => value.months.map((bucket) => bucket.assignedAmount);
 
-    await t.test("Admin and Treasury change an existing plan; Management only decides large changes", async () => {
+    await t.test("Treasury changes an existing plan; Admin cannot; Management only decides large changes", async () => {
       const value = await plan();
       await assert.rejects(() => change(value, "INCREASE", { amount: 100 }, management), (error) => error.statusCode === 403);
-      assert.equal((await change(value, "INCREASE", { amount: 100 }, budget)).assignedAmount, 12100, "Treasury sets the annual budget too");
+      await assert.rejects(() => change(value, "INCREASE", { amount: 100 }, admin), (error) => error.statusCode === 403, "Admin is not a budget editor");
+      assert.equal((await change(value, "INCREASE", { amount: 100 }, budget)).assignedAmount, 12100, "Treasury sets the annual budget");
       assert.equal((await change(value, "INCREASE", { amount: 100 })).assignedAmount, 12200);
     });
 
@@ -94,7 +95,7 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       await assert.rejects(() => change(yearly, "TRANSFER", { amount: 1, fromMonth: 1, toMonth: 2 }), /needs annual \+ monthly budget control/);
     });
 
-    await t.test("Admin may edit months of a closed accounting period; the change records which ones", async () => {
+    await t.test("Treasury may edit months of a closed accounting period; the change records which ones", async () => {
       const value = await plan({ year: "2032" });
       await AccountingPeriod.create({ period: "2032-02", status: "CLOSED", closedAt: new Date(), closedBy: admin._id });
       const saved = await change(value, "TRANSFER", { amount: 300, fromMonth: 2, toMonth: 5 });
@@ -107,7 +108,7 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       const value = await plan();
       const loaded = await BudgetAllocation.findById(value._id);
       await change(value, "TRANSFER", { amount: 10, fromMonth: 1, toMonth: 2 });
-      await assert.rejects(() => adjustBudgetPlan(value._id, { operationId: "flex-stale-0001", action: "TRANSFER", amount: 10, fromMonth: 3, toMonth: 4, revision: loaded.__v, reason: "Stale" }, admin, req), (error) => error.statusCode === 409);
+      await assert.rejects(() => adjustBudgetPlan(value._id, { operationId: "flex-stale-0001", action: "TRANSFER", amount: 10, fromMonth: 3, toMonth: 4, revision: loaded.__v, reason: "Stale" }, budget, req), (error) => error.statusCode === 409);
     });
 
     await t.test("roll-forward moves each ended month's unused budget to the next month, once, never December", async () => {
@@ -115,7 +116,7 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       const before = new Date("2033-04-15T12:00:00Z");
       assert.equal(lastEndedMonth("2033", before), 3);
       // Turned on mid-April: January-March are already closed and keep their balances.
-      await adjustBudgetPlan(value._id, { operationId: "flex-roll-on-01", action: "SETTINGS", rollForward: true, revision: (await BudgetAllocation.findById(value._id)).__v, reason: "Roll unused budget forward" }, admin, req);
+      await adjustBudgetPlan(value._id, { operationId: "flex-roll-on-01", action: "SETTINGS", rollForward: true, revision: (await BudgetAllocation.findById(value._id)).__v, reason: "Roll unused budget forward" }, budget, req);
       assert.equal((await BudgetAllocation.findById(value._id)).rollForward.lastRolledMonth, Math.min(lastEndedMonth("2033"), 11));
       await BudgetAllocation.updateOne({ _id: value._id }, { $set: { "rollForward.lastRolledMonth": 3 } });
       await use(value, 4, 400);
@@ -139,7 +140,7 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       assert.deepEqual(assigned(await fresh(off)), assigned(off));
     });
 
-    await t.test("above the approval threshold a change waits for Management, which approves (re-checked) or rejects; Admin may withdraw", async () => {
+    await t.test("above the approval threshold a change waits for Management, which approves (re-checked) or rejects; Treasury may withdraw", async () => {
       await FinanceConfiguration.create({ key: "BUDGET_CHANGE_APPROVAL_THRESHOLD", numericValue: 1000, currency: "PEN", behavior: "BLOCK", effectiveFrom: new Date("2020-01-01") });
       const value = await plan({ year: "2035" });
       // At or under the threshold: applied at once.
@@ -162,7 +163,7 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       assert.equal(applied.months[3].assignedAmount, 2000.01);
       const entry = applied.adjustments.at(-1);
       assert.equal(entry.approvedByName, "Management");
-      assert.equal(entry.actorName, "Plan Admin");
+      assert.equal(entry.actorName, "Plan Treasury");
       await assert.rejects(() => decideBudgetPlanChange(pending._id, { decision: "REJECT", comments: "late" }, management, req), /already decided/);
       // Reject and withdraw.
       const second = (await change(value, "INCREASE", { amount: 5000 })).submittedForApproval;
@@ -170,7 +171,8 @@ test("flexible budget plans: Admin edits months, reserve, annual amount and mode
       assert.equal(rejected.status, "REJECTED");
       assert.equal((await fresh(value)).assignedAmount, 12000);
       const third = (await change(value, "RELEASE_TO_RESERVE", { amount: 1500, fromMonth: 4 })).submittedForApproval;
-      assert.equal((await cancelBudgetPlanChange(third._id, admin, req)).status, "CANCELLED");
+      await assert.rejects(() => cancelBudgetPlanChange(third._id, admin, req), (error) => error.statusCode === 403, "Admin cannot withdraw a budget change");
+      assert.equal((await cancelBudgetPlanChange(third._id, budget, req)).status, "CANCELLED");
       const listed = await listBudgetPlanChanges({ status: "PENDING" });
       assert.equal(listed.data.length, 0);
       // Structure-only changes never need approval.

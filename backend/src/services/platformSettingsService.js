@@ -3,6 +3,7 @@ import PlatformSettings from "../models/PlatformSettings.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, ROLES } from "../utils/constants.js";
 import { recordAudit } from "./auditService.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 // Platform settings (Super Admin > Platform settings): password policy, session length,
 // maintenance mode and the announcement banner. Every request reads them (protect() checks
@@ -66,10 +67,11 @@ export async function currentSettings() {
   return effectiveSettings(await getPlatformSettings());
 }
 
-// Token lifetime for a session of this user. The Super Admin's sessions are shorter.
+// Token lifetime for a session of this user.
 export function sessionLifetime(user, settings) {
   const { session } = effectiveSettings(settings);
-  if (user?.role === ROLES.SUPER_ADMIN) return `${session.superAdminMinutes}m`;
+  // Administrators get the shorter privileged session (stored as superAdminMinutes by earlier versions).
+  if (hasRole(user, ROLES.ADMIN)) return `${session.superAdminMinutes}m`;
   // Without a saved value the environment string is used as-is (e.g. "8h").
   return settings?.session?.userMinutes ? `${session.userMinutes}m` : process.env.JWT_EXPIRES_IN || "8h";
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { canAccessNavigation } from "../src/utils/navigationAccess.js";
 
 const source = (relativePath) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 const tests = [];
@@ -53,19 +54,21 @@ test("authenticated acknowledgment and exceptional declaration have explicit con
   assert.match(workspace, /!acknowledged/);
 });
 
-test("employee reimbursement banking is a protected role-aware route", () => {
+test("employee reimbursement banking is a protected permission-aware route", () => {
   const app = source("../src/App.jsx");
   const access = source("../src/utils/navigationAccess.js");
-  assert.match(app, /path="reimbursement-bank"/);
-  assert.match(app, /roles=\{\["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"\]\}/);
-  assert.match(access, /"\/reimbursement-bank": \["Admin", "Solicitor", "Legal", "HumanResources", "Accounting", "Treasury"\]/);
+  assert.match(app, /page\("\/reimbursement-bank", <EmployeeReimbursementBanking \/>\)/, "the route is guarded by its path rule");
+  assert.match(access, /"\/reimbursement-bank": any\(P\.EMPLOYEE_BANK_MANAGE_OWN, P\.EMPLOYEE_BANK_REVIEW, P\.EMPLOYEE_BANK_VIEW_PAYMENT\)/);
+  // The requester keeps their own account; Contabilidad reviews it; Tesorería reads it to pay.
+  for (const role of ["Solicitor", "Accounting", "Treasury"]) assert.equal(canAccessNavigation(role, "/reimbursement-bank"), true, `${role} opens reimbursement banking`);
+  for (const role of ["Admin", "Auditor", "GAF", "Management"]) assert.equal(canAccessNavigation(role, "/reimbursement-bank"), false, `${role} does not`);
 });
 
 test("bank UI masks values, separates Finance review, and exposes no verification field in employee form", () => {
   const page = source("../src/pages/EmployeeReimbursementBanking.jsx");
   assert.match(page, /accountNumberMasked/);
   assert.match(page, /cciMasked/);
-  assert.match(page, /canReview = \["Admin", "Accounting"\]/);
+  assert.match(page, /canReview = userCan\(user, PERMISSIONS\.EMPLOYEE_BANK_REVIEW\)/);
   assert.match(page, /result: confirm\.action/);
   assert.doesNotMatch(page, /name="verificationStatus"/);
 });

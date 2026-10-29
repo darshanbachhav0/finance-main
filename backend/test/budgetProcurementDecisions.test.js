@@ -174,8 +174,9 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
       assert.equal(String(fresh.supersedes), String(rejected._id));
       assert.equal(await BudgetException.countDocuments({ request: secondRequest._id }), 2);
       const current = await BudgetAllocation.findById(plan._id);
-      const increasedPlan = await adjustBudgetPlan(plan._id, { operationId: "dec-increase-0001", revision: current.__v, action: "INCREASE", amount: 150, reason: "Budget found funds" }, users.admin, req);
-      await adjustBudgetPlan(plan._id, { operationId: "dec-reserve-0001", revision: increasedPlan.__v, action: "ALLOCATE_RESERVE", toMonth: 8, amount: 150, reason: "Fund August" }, users.admin, req);
+      await assert.rejects(() => adjustBudgetPlan(plan._id, { operationId: "dec-increase-admin", revision: current.__v, action: "INCREASE", amount: 150, reason: "Not allowed" }, users.admin, req), (error) => error.statusCode === 403, "only Treasury changes a plan");
+      const increasedPlan = await adjustBudgetPlan(plan._id, { operationId: "dec-increase-0001", revision: current.__v, action: "INCREASE", amount: 150, reason: "Budget found funds" }, users.budget, req);
+      await adjustBudgetPlan(plan._id, { operationId: "dec-reserve-0001", revision: increasedPlan.__v, action: "ALLOCATE_RESERVE", toMonth: 8, amount: 150, reason: "Fund August" }, users.budget, req);
       const commitment = await reserveBudget(secondRequest, users.budget._id);
       assert.equal(commitment.status, BUDGET_STATUS.COMMITTED);
       const resolved = await BudgetException.findById(fresh._id);
@@ -202,6 +203,7 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
     await t.test("5. year-end carry-over moves open commitments into next year's plan, audited and idempotent", async () => {
       await executeBudgetAmount(firstRequest, users.budget._id, 50);
       await assert.rejects(() => carryOverOpenCommitments({ year: "2026", user: users.management, req }), (error) => error.statusCode === 403);
+      await assert.rejects(() => carryOverOpenCommitments({ year: "2026", user: users.admin, req }), (error) => error.statusCode === 403, "carry-over is Treasury only");
       const before = await BudgetAllocation.findById(plan._id);
       const summary = await carryOverOpenCommitments({ year: "2026", user: users.budget, req });
       assert.equal(summary.carriedCommitments, 2);
@@ -221,7 +223,7 @@ test("product-owner decisions for quotations, procurement, budget exceptions, ca
       assert.equal(carried.period, "2027-01");
       assert.deepEqual(carried.lines.map((item) => [String(item.allocation), item.amount, item.executedAmount]), [[String(plan._id), 50, 50], [String(next._id), 100, 0]]);
       assert.equal(carried.adjustments.at(-1).reason, "YEAR_END_CARRY_OVER");
-      const again = await carryOverOpenCommitments({ year: "2026", user: users.admin, req });
+      const again = await carryOverOpenCommitments({ year: "2026", user: users.budget, req });
       assert.equal(again.carriedCommitments, 0);
       assert.equal((await BudgetAllocation.findById(next._id)).assignedAmount, 250, "running it again changes nothing");
       await executeBudgetAmount(firstRequest, users.budget._id, 100);

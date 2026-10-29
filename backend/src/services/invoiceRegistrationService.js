@@ -37,6 +37,7 @@ import { assertInvoiceEvidencePair, assertReadableVoucher, fileChecksum, parseIn
 import { transitionRequest } from "./workflowService.js";
 import { AppError } from "../utils/AppError.js";
 import { DOCUMENT_PHASE, ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 const invoiceAttachmentKinds = Object.freeze({
   xml: "XML",
@@ -50,7 +51,7 @@ const invoiceAttachmentKinds = Object.freeze({
 
 // Explicit correction only: never infer that a second invoice replaces a legitimate obligation.
 export async function supersedeObservedInvoice({ requestId, voucherId, replacementId, reason, user, req }) {
-  if (![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user?.role)) throw new AppError(403, "Accounting permission is required.");
+  if (!hasRole(user, [ROLES.ACCOUNTING])) throw new AppError(403, "Accounting permission is required.");
   if (!String(reason || "").trim()) throw new AppError(422, "A replacement reason is required.");
   return runFinancialOperation(async (session) => {
     const request = await FinancialRequest.findById(requestId).session(session || null);
@@ -339,7 +340,7 @@ export async function registerA1Invoice({ requestId, files, originalVoucherId, u
   }
   await assertPostingAllowed(request, { user, req });
   const ownerId = request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
-  if (![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) && String(ownerId) !== String(user._id)) {
+  if (!hasRole(user, [ROLES.ACCOUNTING]) && String(ownerId) !== String(user._id)) {
     throw new AppError(403, "Requesters can register invoices only for their own requests.", undefined, ERROR_CODES.FORBIDDEN);
   }
   if (![REQUEST_STATUS.BUDGET_COMMITTED, REQUEST_STATUS.ACCOUNTED, REQUEST_STATUS.SCHEDULED, REQUEST_STATUS.BANK_FILE_GENERATED, REQUEST_STATUS.PAID, REQUEST_STATUS.RECONCILED, REQUEST_STATUS.OBSERVED_SUNAT, REQUEST_STATUS.OBSERVED_AMOUNT_EXCEEDED, REQUEST_STATUS.PAYMENT_BOUNCED].includes(request.status)) {

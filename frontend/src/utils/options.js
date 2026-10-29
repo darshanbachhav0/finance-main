@@ -1,3 +1,4 @@
+import { CANONICAL_ROLES, GRANTABLE_PERMISSIONS, PERMISSION_LABELS, ROLE_CODES, ROLE_LABELS } from "../../../shared/accessControl.mjs";
 import { PERU_BANK_CODES } from "../../../shared/peruBanks.mjs";
 
 export const requestTypes = [
@@ -126,28 +127,13 @@ export const requestFrequencyLabels = { ONE_OFF: "Once", MONTHLY_RECURRING: "Mon
 export const approvalLevels = ["AREA_DIRECTOR", "VICE_RECTOR", "RECTORATE", "GENERAL_MANAGEMENT"];
 // Every beneficiary bank (shared/peruBanks.mjs, the SBS list).
 export const banks = PERU_BANK_CODES;
-export const roles = ["Admin", "Solicitor", "Legal", "HumanResources", "AreaDirector", "ViceRector", "Accounting", "Treasury", "GAF", "Procurement", "Management", "ManagementViewer", "Auditor"];
+// The eleven canonical roles (shared/accessControl.mjs), shown as "SOL · Solicitante".
+export const roles = CANONICAL_ROLES.map((role) => ({ value: role, label: `${ROLE_CODES[role]} · ${ROLE_LABELS[role]}` }));
 
-// Extra grants beyond a role's default set - an exception, not the everyday path. Only
-// self-contained features are grantable (mirrors GRANTABLE_PERMISSIONS in the backend); a
-// department's duties (accounting, payments, budget management, users, master data...) come with
-// the role, so they are not offered here.
-export const permissions = [
-  { value: "request:create", label: "Create requests", hint: "Raise and submit their own requests (Solicitors already have it)." },
-  { value: "request:view-all", label: "View all requests" },
-  { value: "request:void", label: "Void requests" },
-  { value: "supplier:bank-view", label: "View supplier bank data" },
-  { value: "budget:view", label: "View budget" },
-  { value: "report:view", label: "View reports" },
-  { value: "management-portal:view", label: "View management portal" },
-  { value: "employee-bank:manage-own", label: "Manage own bank account", hint: "Needed to receive advances and reimbursements (Solicitors already have it)." },
-  { value: "employee-bank:review", label: "Review employee bank accounts" },
-  { value: "rendition:review", label: "Review renditions" },
-  { value: "procurement-order:create", label: "Create purchase orders" },
-  { value: "batch-invoice:upload", label: "Upload batch invoices" },
-  { value: "batch-invoice:review", label: "Review batch invoices" },
-  { value: "bank-format:certify", label: "Certify bank formats" }
-];
+// Extra grants beyond a person's roles - an exception, not the everyday path. Only self-contained
+// features are grantable (GRANTABLE_PERMISSIONS); a department's duties (provisioning, payments,
+// batches, budget, employees...) come only with a role, so they are not offered here.
+export const permissions = GRANTABLE_PERMISSIONS.map((permission) => ({ value: permission, label: PERMISSION_LABELS[permission] }));
 
 export const requestTypeLabels = {
   OPEX: "OPEX",

@@ -2,6 +2,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { exchangeRateDescription } from "../utils/financialEvidence.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency } from "../utils/formatters.js";
+import { ROLES, hasRole } from "../utils/access.js";
 
 
 function AdvancedFinancialValidation({ request, related }) {
@@ -36,5 +37,5 @@ export default function FinancialValidationSummary({ request, related }) {
     <div><dt>{t("Supplier")}</dt><dd>{t(supplier?.valid ? "Validated" : "Not verified")}</dd></div>
     <div><dt>{t("Invoice")}</dt><dd>{t(verified ? "Verified" : "Not verified")}</dd></div>
     {request.currency === "USD" && <div><dt>{t("Exchange rate")}</dt><dd>{request.exchangeRate} · {t(evidence?.authoritative && /SUNAT/i.test(evidence?.source || "") ? "Official SUNAT rate" : "Reference rate")}<br />{String(evidence?.date || request.exchangeRateDate || "").slice(0, 10) || "—"}</dd></div>}
-  </dl>{["Accounting", "Admin"].includes(user.role) && <details><summary>{t("Advanced validation details")}</summary><AdvancedFinancialValidation request={request} related={related} /></details>}</div>;
+  </dl>{hasRole(user, ROLES.ACCOUNTING) && <details><summary>{t("Advanced validation details")}</summary><AdvancedFinancialValidation request={request} related={related} /></details>}</div>;
 }

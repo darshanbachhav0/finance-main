@@ -24,6 +24,7 @@ import { AppError } from "../utils/AppError.js";
 import { RENDITION_RECEIPT_TYPES, APPROVAL_STAGES, DOCUMENT_PHASE, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 import { actsAsRequester, canUseCostCenter, canViewRequest } from "../utils/permissions.js";
 import { moneyEquals, multiplyMoney, roundMoney, subtractMoney, sumMoney, toMinorUnits } from "../utils/money.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 const APPLICABLE_TYPES = Object.freeze([REQUEST_TYPE.ENTREGA_RENDIR, REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO]);
 
@@ -41,7 +42,7 @@ function requestOwnerId(request) {
 }
 
 function assertOwner(request, user) {
-  if (user.role !== ROLES.ADMIN && String(requestOwnerId(request)) !== String(user._id)) {
+  if (String(requestOwnerId(request)) !== String(user._id)) {
     throw new AppError(403, "Only the requester can submit this rendition.", undefined, ERROR_CODES.FORBIDDEN);
   }
 }
@@ -132,7 +133,7 @@ function assertSubmissionState(request) {
 async function beneficiarySnapshot(request, user) {
   const costCenter = request.requesterCostCenter ? await CostCenter.findById(request.requesterCostCenter).select("code name") : null;
   if (!costCenter) throw new AppError(422, "The parent request Cost Center / CECO is required.", { field: "requesterCostCenter" }, ERROR_CODES.UNAUTHORIZED_COST_CENTER);
-  if (actsAsRequester(user) && user.role !== ROLES.ADMIN && !canUseCostCenter(user, costCenter._id)) {
+  if (actsAsRequester(user) && !canUseCostCenter(user, costCenter._id)) {
     throw new AppError(403, "The request CECO is not authorized for the current beneficiary.", { costCenter: costCenter._id, code: costCenter.code }, ERROR_CODES.UNAUTHORIZED_COST_CENTER);
   }
   return { user: user._id, employeeCode: user.employeeCode, name: user.name, email: user.email, area: user.area, costCenter: costCenter._id, costCenterCode: costCenter.code, costCenterName: costCenter.name };
@@ -461,7 +462,7 @@ export async function reviewRendition({ requestId, action, comments, user, req }
     }
     // The notice opens the budget exception itself, where Treasury reviews it and Management decides.
     const exceptionPath = error.details?.budgetException ? `/budget?tab=exceptions&record=${error.details.budgetException}` : "/budget?tab=exceptions&exceptionStatus=PENDING";
-    await notifyRoles({ roles: [ROLES.TREASURY, ROLES.ADMIN], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: exceptionPath, entityType: "FinancialRequest", entityId: request._id });
+    await notifyRoles({ roles: [ROLES.TREASURY], eventKey: `request:${request._id}:rendition-budget`, type: "BUDGET_EXCEPTION", title: notificationText("Rendition budget adjustment required"), message: notificationText("{requestNumber} cannot execute its final expense budget until the budget is adjusted.", { requestNumber: request.requestNumber }), path: exceptionPath, entityType: "FinancialRequest", entityId: request._id });
     throw new AppError(409, "The CECO budget is short for this rendition. Treasury reviews the budget exception and Management approves it in Budget > Exceptions; then approve the rendition again.", error.details, ERROR_CODES.INSUFFICIENT_BUDGET);
   }
 }
@@ -580,9 +581,9 @@ export async function getRenditionBankDestination({ requestId, user }) {
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   if (!canViewRequest(request, user)) throw new AppError(403, "You do not have permission to view this request.", undefined, ERROR_CODES.FORBIDDEN);
   const owner = String(requestOwnerId(request)) === String(user._id);
-  if (!owner && ![ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user.role)) throw new AppError(403, "Employee reimbursement banking is restricted.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!owner && !hasRole(user, [ROLES.ACCOUNTING, ROLES.TREASURY])) throw new AppError(403, "Employee reimbursement banking is restricted.", undefined, ERROR_CODES.FORBIDDEN);
   const snapshot = request.rendition?.reimbursementBankSnapshot;
   if (!snapshot?.profile) return null;
-  const full = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user.role);
+  const full = hasRole(user, [ROLES.ACCOUNTING, ROLES.TREASURY]);
   return { profile: snapshot.profile, bank: snapshot.bank, currency: snapshot.currency, verificationStatus: snapshot.verificationStatus, capturedAt: snapshot.capturedAt, accountHolderName: full ? snapshot.accountHolderName : undefined, accountNumber: full ? snapshot.accountNumber : undefined, cci: full ? snapshot.cci : undefined, accountNumberMasked: mask(snapshot.accountNumber), cciMasked: mask(snapshot.cci) };
 }

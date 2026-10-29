@@ -8,14 +8,14 @@ import UmaInvestment from "../models/UmaInvestment.js";
 import StatementReview from "../models/StatementReview.js";
 import Supplier from "../models/Supplier.js";
 import { escapedRegex, parsePagination } from "../services/queryService.js";
-import { protect, authorize } from "../middleware/auth.js";
+import { protect, authorizePermission } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { AppError } from "../utils/AppError.js";
-import { ROLES } from "../utils/constants.js";
+import { PERMISSIONS } from "../utils/constants.js";
 
 const router = Router();
-const FINANCE = [ROLES.ADMIN, ROLES.GAF, ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.MANAGEMENT, ROLES.AUDITOR, ROLES.SUPER_ADMIN];
-router.use(protect, authorize(...FINANCE));
+// Institution-wide Consultas e Indicadores: the finance roles and Auditoría (insights.view).
+router.use(protect, authorizePermission(PERMISSIONS.INSIGHTS_VIEW));
 const csvCell = (value) => {
   const text = String(value ?? "").replace(/[\r\n]/g, " ");
   const escaped = /^[=+\-@\t]/.test(text) ? `'${text}` : text;

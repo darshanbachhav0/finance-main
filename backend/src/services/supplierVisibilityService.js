@@ -5,13 +5,14 @@ import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import User from "../models/User.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 // Suppliers by department. Every user belongs to one department, their area (User.area, set in
 // Users or by the CECO / roster imports); someone nobody assigned one to is in "General". A new
 // supplier belongs to the department of whoever registers it, and the Proveedores list of each
 // user holds their department's suppliers, the older ones shared with every area (no department
 // set) and the proposals they made themselves. Accounting, Treasury and Procurement are scoped like
-// everyone else; only the Admin and the read-only Super Admin see every department.
+// everyone else; only Tesorería (which validates suppliers), the GAF and Auditoría see every department.
 //
 // The same rule guards the list, the detail page, every change, the RUC lookup, global search, the
 // invoice reader, supplier files and the supplier saved on a request, so it cannot be bypassed by
@@ -20,10 +21,10 @@ import { ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 
 export const DEFAULT_DEPARTMENT = "General";
 // Who sees the suppliers of every department.
-export const SUPPLIER_OVERSIGHT_ROLES = Object.freeze([ROLES.ADMIN, ROLES.GAF, ROLES.SUPER_ADMIN, ROLES.AUDITOR]);
-// Who processes every request once it is sent (invoice, purchase order, payment), so they open
-// the supplier of any submitted request.
-const REQUEST_PROCESSING_ROLES = Object.freeze([ROLES.ACCOUNTING, ROLES.TREASURY, ROLES.PROCUREMENT]);
+export const SUPPLIER_OVERSIGHT_ROLES = Object.freeze([ROLES.TREASURY, ROLES.GAF, ROLES.AUDITOR]);
+// Who processes every request once it is sent (invoice, provision, payment), so they open the
+// supplier of any submitted request.
+const REQUEST_PROCESSING_ROLES = Object.freeze([ROLES.ACCOUNTING, ROLES.TREASURY]);
 
 const idOf = (value) => String(value?._id || value || "");
 const departmentKey = (value) => normalizeDepartment(value).toLocaleUpperCase("es");
@@ -38,10 +39,10 @@ export function userDepartment(user) {
 }
 
 export function isDepartmentScoped(user) {
-  return Boolean(user) && !SUPPLIER_OVERSIGHT_ROLES.includes(user.role);
+  return Boolean(user) && !hasRole(user, SUPPLIER_OVERSIGHT_ROLES);
 }
 
-// A Mongo filter with the suppliers in this user's list, or {} for the Admin and Super Admin.
+// A Mongo filter with the suppliers in this user's list, or {} for those who see every department.
 export function supplierVisibilityQuery(user) {
   if (!isDepartmentScoped(user)) return {};
   return {
@@ -66,20 +67,19 @@ export function canSeeSupplier(supplier, user) {
 
 // Work that opens another department's supplier without adding it to the user's list:
 // - a request carrying it that the user raised or is an approver of;
-// - Accounting, Treasury and Procurement: any submitted request carrying it (they register its
-//   invoice, issue its order and pay it);
-// - Accounting: one of its bank accounts waits for their verification.
-// (Accounting's review of a proposal is checked by supplierService, which owns that rule.)
+// - Contabilidad and Tesorería: any submitted request carrying it (they provision and pay it);
+// - Tesorería: one of its bank accounts waits for their verification.
+// (Tesorería's review of a proposal is checked by supplierService, which owns that rule.)
 export async function seesSupplierThroughWork(supplier, user) {
   const supplierId = idOf(supplier);
   if (!supplierId || !user?._id) return false;
   const involved = [{ "approvalRouteSnapshot.approverUser": user._id }, { requester: user._id }, { solicitor: user._id }];
-  if (REQUEST_PROCESSING_ROLES.includes(user.role)) involved.push({ status: { $ne: REQUEST_STATUS.DRAFT } });
+  if (hasRole(user, REQUEST_PROCESSING_ROLES)) involved.push({ status: { $ne: REQUEST_STATUS.DRAFT } });
   const onRequest = await FinancialRequest.exists({
     $and: [{ $or: [{ supplier: supplierId }, { "quotations.supplier": supplierId }] }, { $or: involved }]
   });
   if (onRequest) return true;
-  return user.role === ROLES.ACCOUNTING
+  return hasRole(user, ROLES.TREASURY)
     && Boolean(await SupplierBankAccount.exists({ supplier: supplierId, active: true, verificationStatus: "PENDING" }));
 }
 
@@ -91,7 +91,7 @@ export async function assertCanOpenSupplier(supplier, user) {
   if (await canOpenSupplier(supplier, user)) return;
   throw new AppError(
     403,
-    "This supplier belongs to another area. Ask an Admin to share it with your area.",
+    "This supplier belongs to another area. Ask Tesorería to share it with your area.",
     { supplier: supplier._id, supplierCode: supplier.supplierCode, reason: "OTHER_DEPARTMENT" },
     ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT
   );
@@ -103,7 +103,7 @@ export function assertSupplierSelectable(supplier, user, { alreadyOnRequest = fa
   if (!supplier || alreadyOnRequest || canSeeSupplier(supplier, user)) return;
   throw new AppError(
     403,
-    "This supplier belongs to another area's list. Choose one of your area's suppliers, or ask an Admin to share it with your area.",
+    "This supplier belongs to another area's list. Choose one of your area's suppliers, or ask Tesorería to share it with your area.",
     { supplier: supplier._id, supplierCode: supplier.supplierCode, reason: "OTHER_DEPARTMENT" },
     ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT
   );
@@ -112,7 +112,7 @@ export function assertSupplierSelectable(supplier, user, { alreadyOnRequest = fa
 // The departments a supplier can be shared with: every area a user or a CECO belongs to.
 export async function listSupplierDepartments() {
   const [userAreas, centerAreas, supplierAreas] = await Promise.all([
-    User.distinct("area", { active: true, role: { $ne: ROLES.SUPER_ADMIN } }),
+    User.distinct("area", { active: true }),
     CostCenter.distinct("area", { active: true }),
     Supplier.distinct("departments")
   ]);

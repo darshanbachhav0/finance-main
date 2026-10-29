@@ -60,7 +60,7 @@ assert.match(read("../src/App.jsx"), /<Route path=":id" element=\{<Suppliers \/>
 const suppliers = read("../src/pages/Suppliers.jsx");
 assert.match(suppliers, /navigate\(`\/suppliers\/\$\{id\}\$\{location\.search\}`, \{ state: \{ mode \} \}\)/, "opening a record keeps draft-resume parameters");
 assert.match(suppliers, /if \(recordId\) \{\n\s*return \(\n\s*<div className="page-shell supplier-page supplier-record-page">/);
-assert.deepEqual(pageTrail("/suppliers/0123456789abcdef01234567", { role: "Accounting" }).map((item) => item.label), ["Dashboard", "Suppliers", "Supplier record"]);
+assert.deepEqual(pageTrail("/suppliers/0123456789abcdef01234567", { role: "Accounting" }).map((item) => item.label), ["Home", "Suppliers", "Supplier record"]);
 
 // 5. List actions: approvers see what they decide on; no duplicate menu actions.
 const inbox = read("../src/pages/ApprovalInbox.jsx");

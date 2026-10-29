@@ -4,7 +4,7 @@ import { defaultOpenPeriod, quickTrack, quickTrackText, showCapexDetails, titleF
 import { PLAIN_STATUSES, plainNextStep, plainStatusFilterOptions, plainStatusKey, usesPlainStatuses } from "../src/utils/plainStatus.js";
 import { linesFromInvoice } from "../src/utils/invoiceAutofill.js";
 import { exportCellValue, xlsxBytes } from "../src/utils/xlsx.js";
-import { accountMenuPaths, navigationForUser, pageTrail } from "../src/utils/navigationAccess.js";
+import { accountMenuPaths, canAccessNavigation, navigationForUser, pageTrail } from "../src/utils/navigationAccess.js";
 import { REQUEST_LIFECYCLE } from "../../shared/workflowStatus.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -67,13 +67,21 @@ assert.equal(plainStatusFilterOptions.find((option) => option.label === "Paid").
 assert.equal(usesPlainStatuses({ role: "Solicitor" }), true);
 assert.equal(usesPlainStatuses({ role: "Accounting" }), false);
 
-// 4. The requester's menu stays at their requests; their bank account is in the account menu.
+// 4. The requester's menu stays at their requests and suppliers; guides and special requests open
+//    from their pages, not the menu; their bank account is in the account menu.
 const solicitor = { role: "Solicitor", hasTeam: false, permissions: [] };
-assert.deepEqual(navigationForUser(solicitor).map(([, path]) => path), ["/", "/requests", "/requests/new", "/guides", "/special-expenses"]);
+assert.deepEqual(navigationForUser(solicitor).map(([, path]) => path), ["/", "/requests/new", "/requests", "/suppliers"]);
+for (const path of ["/guides", "/special-expenses"]) {
+  assert.ok(!navigationForUser(solicitor).some(([, item]) => item === path), `${path} is not in the Solicitor's menu`);
+  assert.ok(canAccessNavigation(solicitor, path), `${path} still opens for the Solicitor`);
+}
 assert.deepEqual(accountMenuPaths(solicitor), ["/reimbursement-bank"]);
 assert.deepEqual(accountMenuPaths({ role: "Accounting", permissions: [] }), []);
-assert.ok(navigationForUser({ role: "Accounting", permissions: [] }).some(([, path]) => path === "/suppliers"), "Finance keeps Suppliers in its menu");
-assert.deepEqual(pageTrail("/approvals/0123456789abcdef01234567", { role: "AreaDirector" }).map((item) => item.label), ["Dashboard", "Approvals", "Your decision"]);
+// Tesorería validates suppliers and their bank accounts, so Suppliers is in its menu; Contabilidad
+// still opens the page.
+assert.ok(navigationForUser({ role: "Treasury", permissions: [] }).some(([, path]) => path === "/suppliers"), "Treasury keeps Suppliers in its menu");
+assert.ok(canAccessNavigation({ role: "Accounting", permissions: [] }, "/suppliers"));
+assert.deepEqual(pageTrail("/approvals/0123456789abcdef01234567", { role: "AreaDirector" }).map((item) => item.label), ["Home", "Approvals", "Your decision"]);
 
 // 5. Approvers: three decisions and a one-page approval for the email link.
 const inbox = read("../src/pages/ApprovalInbox.jsx");

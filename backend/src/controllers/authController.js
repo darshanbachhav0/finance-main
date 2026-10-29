@@ -6,7 +6,8 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { needsTwoFactorSetup } from "../middleware/auth.js";
 import { getJwtSecret } from "../config/secrets.js";
 import { AppError } from "../utils/AppError.js";
-import { ADMINISTRATOR_ROLES, ERROR_CODES, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { ERROR_CODES, REQUEST_STATUS, ROLE_CODES, ROLES } from "../utils/constants.js";
+import { hasRole, permissionScopes, primaryRole, rolesOf } from "../utils/permissions.js";
 import { clientIp, recordAudit } from "../services/auditService.js";
 import { endExpiredLeaves } from "../services/userLeaveService.js";
 import { assertPasswordPolicy, getPlatformSettings, passwordExpired, publicPlatformStatus, sessionLifetime } from "../services/platformSettingsService.js";
@@ -24,8 +25,17 @@ export async function sessionUser(user, settings) {
     settings ? settings : getPlatformSettings()
   ]);
   const expired = passwordExpired(user, platform);
+  const roles = rolesOf(user);
   return {
     ...user.toJSON(),
+    // Access as the server computes it (shared/accessControl.mjs): every role held, their codes and
+    // the effective permissions with their scope. The menu is built from these; the API still
+    // checks each call.
+    role: primaryRole(user) || user.role,
+    roles,
+    roleCodes: roles.map((role) => ROLE_CODES[role]),
+    permissionScopes: permissionScopes(user),
+    effectivePermissions: Object.keys(permissionScopes(user)),
     // An expired password is changed the same way as an initial one.
     passwordResetRequired: Boolean(user.passwordResetRequired || expired),
     passwordExpired: expired,
@@ -82,7 +92,7 @@ async function completeSignIn(user, { req, identifier, method }) {
 // During maintenance only administrators sign in.
 async function assertNotInMaintenance(user) {
   const settings = await getPlatformSettings();
-  if (settings.maintenance?.enabled && !ADMINISTRATOR_ROLES.includes(user.role)) {
+  if (settings.maintenance?.enabled && !hasRole(user, ROLES.ADMIN)) {
     throw new AppError(503, "The platform is in maintenance. Try again later.", { message: settings.maintenance.message || undefined }, ERROR_CODES.MAINTENANCE_MODE);
   }
 }
@@ -149,7 +159,7 @@ export const loginTwoFactor = asyncHandler(async (req, res) => {
 // Enrolment, step 1: a new secret for the authenticator app. It only takes effect once a code
 // from the app confirms it (step 2), so a half-finished enrolment never locks anyone out.
 export const setupTwoFactor = asyncHandler(async (req, res) => {
-  if (req.user.role !== ROLES.SUPER_ADMIN) throw new AppError(403, "Authenticator sign-in is available for the Super Admin account.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!hasRole(req.user, ROLES.ADMIN)) throw new AppError(403, "Authenticator sign-in is available for administrator accounts.", undefined, ERROR_CODES.FORBIDDEN);
   if (req.user.twoFactor?.enabled) throw new AppError(409, "Your authenticator app is already set up.", undefined, ERROR_CODES.CONFLICT);
   const secret = generateSecret();
   await User.updateOne({ _id: req.user._id }, { $set: { "twoFactor.pendingSecret": encryptSecret(secret) } });

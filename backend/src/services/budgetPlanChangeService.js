@@ -5,7 +5,8 @@ import { applyPlanChange } from "./budgetPlanService.js";
 import { notificationText, notifyUser, resolveNotification } from "./notificationService.js";
 import { paginatedPayload, parsePagination } from "./queryService.js";
 import { AppError } from "../utils/AppError.js";
-import { BUDGET_PLAN_MANAGERS, ERROR_CODES, ROLES } from "../utils/constants.js";
+import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { can as hasPermission, hasRole } from "../../../shared/accessControl.mjs";
 
 // Budget plan changes above the approval threshold: Admin requests, Management decides, the
 // requesting Admin may withdraw while it is still pending.
@@ -37,7 +38,7 @@ async function loadPending(id) {
 }
 
 export async function decideBudgetPlanChange(id, { decision, comments } = {}, user, req) {
-  if (user?.role !== ROLES.MANAGEMENT) throw new AppError(403, "Only Management decides budget changes above the approval threshold.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!hasRole(user, ROLES.MANAGEMENT)) throw new AppError(403, "Only Management decides budget changes above the approval threshold.", undefined, ERROR_CODES.FORBIDDEN);
   const action = String(decision || "").toUpperCase();
   if (!["APPROVE", "REJECT"].includes(action)) throw new AppError(422, "Approve or reject the budget change.", undefined, ERROR_CODES.VALIDATION_ERROR);
   const text = String(comments || "").trim();
@@ -76,7 +77,7 @@ export async function decideBudgetPlanChange(id, { decision, comments } = {}, us
 }
 
 export async function cancelBudgetPlanChange(id, user, req) {
-  if (!BUDGET_PLAN_MANAGERS.includes(user?.role)) throw new AppError(403, "Only Admin, Treasury or the Super Admin can withdraw a budget change.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!hasPermission(user, PERMISSIONS.BUDGET_MANAGE)) throw new AppError(403, "Only Tesorería can withdraw a budget change.", undefined, ERROR_CODES.FORBIDDEN);
   const change = await loadPending(id);
   const cancelled = await BudgetPlanChange.findOneAndUpdate({ _id: change._id, status: "PENDING" }, { $set: { status: "CANCELLED", decidedBy: user._id, decidedByName: user.name, decidedAt: new Date() } }, { new: true });
   if (!cancelled) throw new AppError(409, "This budget change was already decided.", undefined, ERROR_CODES.CONFLICT);

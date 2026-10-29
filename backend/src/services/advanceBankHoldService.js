@@ -86,7 +86,7 @@ export async function releaseAdvancesWaitingForBank({ userId, currency, user, re
         // Anything else is left for Treasury's "Commit budget", with the reason.
         await recordAudit({ entityType: "FinancialRequest", entity: request, action: "BUDGET_COMMITMENT_DEFERRED", user, req, module: "BUDGET", message: unhandled.message, newValues: { code: unhandled.code } });
         await notifyRoles({
-          roles: [ROLES.TREASURY, ROLES.ADMIN],
+          roles: [ROLES.TREASURY],
           eventKey: `request:${request._id}:budget-commitment`,
           type: "BUDGET_COMMITMENT",
           title: notificationText("Budget commitment required"),

@@ -20,13 +20,15 @@ test("direct submit rejects an issued order before changing approvals or financi
 test("invoice observations preserve issued orders and expose invoice correction, not resubmission", () => {
   for (const status of ["OBSERVADO_SUNAT", "OBSERVADO_MONTO_EXCEDIDO"]) {
     const request = { requester: owner._id, flowType: "A1", status, purchaseOrder: "issued-order" };
-    for (const user of [owner, accounting, { _id: "admin", role: "Admin" }]) {
+    for (const user of [owner, accounting]) {
       const actions = allowedRequestActions(request, user);
       assert.ok(actions.includes("REGISTER_INVOICE"));
       assert.ok(!actions.includes("EDIT"));
       assert.ok(!actions.includes("SUBMIT"));
     }
     assert.ok(!allowedRequestActions(request, { ...owner, _id: "other" }).includes("REGISTER_INVOICE"));
+    // The administrator manages accounts, not invoices.
+    assert.deepEqual(allowedRequestActions(request, { _id: "admin", role: "Admin" }), []);
   }
   assert.ok(allowedRequestActions({ requester: owner._id, status: "OBSERVADO" }, owner).includes("SUBMIT"));
 });

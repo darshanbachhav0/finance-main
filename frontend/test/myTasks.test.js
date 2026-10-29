@@ -60,8 +60,14 @@ const dashboard = read("../src/pages/Dashboard.jsx");
 assert.match(dashboard, /<MyTasks items=\{summary\.tasks\?\.items\}/);
 assert.doesNotMatch(dashboard, /dashboard-next|Keep university operations moving/);
 const actions = [...dashboard.matchAll(/^\s+(\w+): \[(AWAITING_PURCHASE_ORDER_PATH|"[^"]+"), "([^"]+)"\]/gm)].map(([, role, path, label]) => ({ role, path: path === "AWAITING_PURCHASE_ORDER_PATH" ? "/requests" : JSON.parse(path), label }));
-assert.equal(actions.length, 11, "every internal role has a primary action (Budget was folded into Treasury; GAF, Legal and Human Resources added)");
+// Every role that does work has one; the read-only Auditor has none.
+for (const role of ["Solicitor", "AreaDirector", "ViceRector", "GAF", "Management", "Accounting", "Treasury", "Legal", "HumanResources", "Admin"]) {
+  assert.ok(actions.some((action) => action.role === role), `${role} has a primary action`);
+}
+assert.ok(!actions.some((action) => action.role === "Auditor"), "the read-only Auditor has no primary action");
 for (const action of actions) assert.ok(canAccessNavigation(action.role, action.path.split("?")[0]), `${action.role} can open ${action.path}`);
+// The administrator's action is the platform's settings, never financial work.
+assert.deepEqual(actions.find((action) => action.role === "Admin"), { role: "Admin", path: "/users", label: "Employees" });
 assert.deepEqual(actions.find((action) => action.role === "Solicitor"), { role: "Solicitor", path: "/requests/new", label: "New request" });
 const myTasks = read("../src/components/MyTasks.jsx");
 assert.match(myTasks, /All caught up/);
@@ -84,10 +90,10 @@ assert.match(inbox, /summary\.total \+ exceptionDecisions\.total/, "the header s
 const decisions = read("../src/components/BudgetExceptionDecisions.jsx");
 assert.match(decisions, /"\/dashboard\/decisions\/budget-exceptions"/);
 assert.match(decisions, /api\.post\(`\/budget\/exceptions\/\$\{confirm\.row\._id\}\/decision`, \{ status: confirm\.status, comments \}\)/, "decisions use the existing budget-exception API");
-assert.match(decisions, /BUDGET_EXCEPTION_DECISION_ROLES = \["Management", "Admin"\]/);
+assert.match(decisions, /BUDGET_EXCEPTION_DECISION_ROLES = \["Management"\]/, "only Gerencia General decides budget exceptions; the administrator does not");
 assert.match(decisions, /hidden: !row\.canDecide/, "only rows the server lets this user decide offer approve/reject");
 assert.match(decisions, /id="budget-exceptions"/);
-assert.match(backend("routes/dashboardRoutes.js"), /router\.get\("\/decisions\/budget-exceptions", authorize\(ROLES\.ADMIN, ROLES\.MANAGEMENT\)/);
+assert.match(backend("routes/dashboardRoutes.js"), /router\.get\("\/decisions\/budget-exceptions", authorize\(ROLES\.MANAGEMENT\)/);
 assert.match(read("../src/styles/global.css"), /\/\* ==== ux: role home ==== \*\/[\s\S]*\.my-task \{/);
 
 console.log("PASS my tasks: role task sentences, deadlines, urgency order, primary actions and the Management budget-exception decisions");

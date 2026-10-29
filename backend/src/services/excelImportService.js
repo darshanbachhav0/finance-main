@@ -10,6 +10,7 @@ import { assertSupplierIdentifier, createSupplierProposal } from "./supplierServ
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES, ROLES } from "../utils/constants.js";
 import { limaDateKey } from "../../../shared/businessCalendar.mjs";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 // "Import from Excel": the sheets Finance and Treasury keep today become platform records, through
 // the same services the screens use (so every rule, audit and notification still applies).
@@ -170,15 +171,15 @@ async function applyScheduleRow(checked, { user }) {
 }
 
 export const IMPORTERS = Object.freeze({
-  "budget-plans": { roles: [ROLES.ADMIN, ROLES.TREASURY], module: "BUDGET", check: checkBudgetRow, apply: applyBudgetRow },
-  suppliers: { roles: [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.PROCUREMENT], module: "SUPPLIERS", check: checkSupplierRow, apply: applySupplierRow },
-  "payment-schedule": { roles: [ROLES.ADMIN, ROLES.TREASURY], module: "TREASURY", check: checkScheduleRow, apply: applyScheduleRow }
+  "budget-plans": { roles: [ROLES.TREASURY], module: "BUDGET", check: checkBudgetRow, apply: applyBudgetRow },
+  suppliers: { roles: [ROLES.TREASURY], module: "SUPPLIERS", check: checkSupplierRow, apply: applySupplierRow },
+  "payment-schedule": { roles: [ROLES.TREASURY], module: "TREASURY", check: checkScheduleRow, apply: applyScheduleRow }
 });
 
 export async function runExcelImport({ kind, buffer, fileName, dryRun = true, user, req, now = new Date() }) {
   const importer = IMPORTERS[kind];
   if (!importer) throw new AppError(404, "Unknown import.", { kind }, ERROR_CODES.NOT_FOUND);
-  if (!importer.roles.includes(user?.role)) throw new AppError(403, "Your role cannot run this import.", { kind }, ERROR_CODES.FORBIDDEN);
+  if (!hasRole(user, importer.roles)) throw new AppError(403, "Your role cannot run this import.", { kind }, ERROR_CODES.FORBIDDEN);
   const rows = await readSheet(buffer);
   const results = [];
   const seen = new Set();

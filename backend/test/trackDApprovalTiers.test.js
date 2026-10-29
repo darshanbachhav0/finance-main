@@ -19,23 +19,29 @@ import { decideApproval, getApprovalDecisionOptions, listApprovalInbox } from ".
 import { allowedRequestActions } from "../src/services/requestActionPolicy.js";
 import { createTreasuryTransfer, executeTreasuryTransfer, listTreasuryTransfers, reconcileTreasuryTransfer, resubmitTreasuryTransfer } from "../src/services/treasuryTransferService.js";
 import { EXPENSE_NATURE, PERMISSIONS, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
-import { actsAsRequester, canViewRequest, hasPermission } from "../src/utils/permissions.js";
+import { actsAsRequester, canViewRequest, hasPermission, permissionScopes } from "../src/utils/permissions.js";
 import { quoteAttachment, recommendedQuote } from "./quoteFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
 
 test("new roles carry the manual's permissions", () => {
   assert.equal(hasPermission({ role: ROLES.GAF }, PERMISSIONS.REQUEST_APPROVE), true);
-  assert.equal(hasPermission({ role: ROLES.GAF }, PERMISSIONS.BANK_FILE_VERIFY), true, "the GAF approves bank files");
+  assert.equal(hasPermission({ role: ROLES.GAF }, PERMISSIONS.BATCH_APPROVE), true, "the GAF approves bank files");
   assert.equal(hasPermission({ role: ROLES.GAF }, PERMISSIONS.REQUEST_CREATE), false);
+  assert.equal(hasPermission({ role: ROLES.LEGAL }, PERMISSIONS.LEGAL_REVIEW), true, "Legal validates process E");
+  assert.equal(hasPermission({ role: ROLES.HUMAN_RESOURCES }, PERMISSIONS.HONORARIOS_MANAGE), true, "GP uploads process H");
   for (const role of [ROLES.LEGAL, ROLES.HUMAN_RESOURCES]) {
-    assert.equal(actsAsRequester({ role }), true, `${role} registers its area's requests`);
-    assert.equal(hasPermission({ role }, PERMISSIONS.SUPPLIER_PROPOSE), true);
-    assert.equal(hasPermission({ role }, PERMISSIONS.REQUEST_VIEW_ALL), false);
+    assert.equal(actsAsRequester({ role }), false, `${role} does not register requests by role`);
+    assert.equal(hasPermission({ role }, PERMISSIONS.REQUEST_CREATE), false);
+    assert.equal(hasPermission({ role }, PERMISSIONS.SUPPLIER_CREATE), false);
+    assert.equal(permissionScopes({ role })[PERMISSIONS.REQUEST_VIEW], "OWN", `${role} reads only its own requests`);
+    // An employee who also raises their area's requests holds Solicitante as an additional role.
+    assert.equal(actsAsRequester({ role, roles: [ROLES.SOLICITOR] }), true, `${role} + Solicitante registers its area's requests`);
+    assert.equal(hasPermission({ role, roles: [ROLES.SOLICITOR] }, PERMISSIONS.SUPPLIER_CREATE), true);
   }
-  assert.equal(hasPermission({ role: ROLES.AUDITOR }, PERMISSIONS.AUDIT_VIEW), true);
-  assert.equal(hasPermission({ role: ROLES.AUDITOR }, PERMISSIONS.REQUEST_VIEW_ALL), true);
-  for (const permission of [PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW, PERMISSIONS.TREASURY_FILE]) {
+  assert.equal(hasPermission({ role: ROLES.AUDITOR }, PERMISSIONS.AUDIT_READ), true);
+  assert.equal(hasPermission({ role: ROLES.AUDITOR }, PERMISSIONS.REQUEST_VIEW), true);
+  for (const permission of [PERMISSIONS.REQUEST_APPROVE, PERMISSIONS.REQUEST_CREATE, PERMISSIONS.SUPPLIER_CREATE, PERMISSIONS.SUPPLIER_BANK_VIEW, PERMISSIONS.TREASURY_GENERATE_BATCH]) {
     assert.equal(hasPermission({ role: ROLES.AUDITOR }, permission), false, `the Auditor never holds ${permission}`);
   }
   assert.equal(auditorMayCall("GET", "/api/requests"), true);
@@ -136,6 +142,9 @@ test("approval tiers by UIT and Track D transfers", { timeout: 120000 }, async (
 
     await t.test("the UIT thresholds are finance configuration", async () => {
       await FinanceConfiguration.create({ key: "GAF_APPROVAL_UIT", numericValue: 100, effectiveFrom: new Date(Date.now() - 86400000), active: true });
+      // Earlier requests of this test to the same supplier and CECO would count together
+      // (anti-fragmentation); close them so only the threshold is measured here.
+      await FinancialRequest.updateMany({ requestNumber: /^REQ-2026-97/ }, { $set: { status: REQUEST_STATUS.REJECTED } });
       const request = await makeRequest(30000);
       assert.deepEqual(request.approvalRouteSnapshot.map((step) => step.tier || "CHAIN"), ["CHAIN"]);
       await FinanceConfiguration.deleteMany({ key: "GAF_APPROVAL_UIT" });

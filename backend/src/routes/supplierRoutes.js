@@ -26,23 +26,18 @@ import {
 } from "../controllers/supplierController.js";
 
 import {
-  authorize,
-  authorizeAccess,
+  authorizePermission,
   protect
 } from "../middleware/auth.js";
 
 import {
-  PERMISSIONS,
-  ROLES
+  PERMISSIONS
 } from "../utils/constants.js";
 
-// Proposing a supplier: Accounting/Admin by role, every Solicitor and anyone granted
-// "Propose suppliers" by permission. The proposer's jefe then approves it.
-const proposeSupplier = authorizeAccess({ roles: [ROLES.ADMIN, ROLES.ACCOUNTING], permissions: [PERMISSIONS.SUPPLIER_PROPOSE] });
-
-import {
-  SUPPLIER_VIEW_ROLES
-} from "../utils/permissions.js";
+// Registering a supplier ("Dar de alta"): every role that holds supplier.create. Tesorería then
+// validates it and its bank accounts before anything is paid to it.
+const proposeSupplier = authorizePermission(PERMISSIONS.SUPPLIER_CREATE);
+const validateSupplier = authorizePermission(PERMISSIONS.SUPPLIER_VALIDATE);
 
 import {
   uploadFields
@@ -53,10 +48,7 @@ const router =
 
 router.use(
   protect,
-  authorizeAccess({
-    roles: SUPPLIER_VIEW_ROLES,
-    permissions: [PERMISSIONS.SUPPLIER_PROPOSE, PERMISSIONS.SUPPLIER_BANK_VIEW]
-  })
+  authorizePermission(PERMISSIONS.SUPPLIER_VIEW, PERMISSIONS.SUPPLIER_CREATE, PERMISSIONS.SUPPLIER_BANK_VIEW)
 );
 
 router.get(
@@ -118,14 +110,11 @@ router.patch(
 
 router.put(
   "/:id/departments",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   updateDepartments
 );
 
-// A requester asks Accounting / Admin to share another area's supplier with their area.
+// A requester asks Tesorería to share another area's supplier with their area.
 router.post(
   "/:id/access-request",
   proposeSupplier,
@@ -140,37 +129,25 @@ router.post(
 
 router.post(
   "/:id/bank-accounts/:accountId/verify",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   verifyBankAccount
 );
 
 router.post(
   "/:id/bank-accounts/:accountId/preferred",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   selectPreferredBankAccount
 );
 
 router.delete(
   "/:id/bank-accounts/:accountId",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   removeBankAccount
 );
 
 router.post(
   "/:id/taxpayer-validation",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   validateTaxpayer
 );
 
@@ -183,20 +160,14 @@ router.post(
 
 router.put(
   "/:id",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   uploadFields,
   updateSupplier
 );
 
 router.delete(
   "/:id",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.ACCOUNTING
-  ),
+  validateSupplier,
   deleteSupplier
 );
 

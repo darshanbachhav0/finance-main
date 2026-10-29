@@ -22,7 +22,7 @@ import { closeFinancialRequest, createFinancialRequest, normalizeRequestTypeForT
 import { confirmTreasuryPayable, generatePaymentBatch, reconcilePayment, renditionDueDate } from "../src/services/treasuryService.js";
 import { verifyBankFile } from "../src/services/bankFileVerificationService.js";
 import { generatedRoot } from "../src/services/storageService.js";
-import { AP_STATUS, ERROR_CODES, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
+import { AP_STATUS, ERROR_CODES, PERMISSIONS, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../src/utils/constants.js";
 import { installBbvaTestConfiguration, upcomingPaymentDate } from "./bbvaFixtures.js";
 
 const req = { headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } };
@@ -59,7 +59,7 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     const director = await User.create({ name: "Track C Director", email: "tc.director@test.local", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, approvalLevel: "AREA_DIRECTOR", approvalAreas: ["*"], area: "Operations" });
     owner.jefe = director._id;
     await owner.save();
-    const accounting = await User.create({ name: "Track C Accounting", email: "tc.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
+    const accounting = await User.create({ name: "Track C Accounting", email: "tc.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance", permissions: [PERMISSIONS.EMPLOYEE_BANK_MANAGE_OWN] });
     const accounting2 = await User.create({ name: "Track C Accounting 2", email: "tc.accounting2@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finance" });
     const treasury = await User.create({ name: "Track C Treasury", email: "tc.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Finance" });
     const gaf = await User.create({ name: "Track C GAF", email: "tc.gaf@test.local", passwordHash: "unused", role: ROLES.GAF, area: "Finance" });
@@ -89,11 +89,19 @@ test("Track C advances, renditions, recovery and undocumented reimbursements", {
     const approve = async (request) => (await decideApproval({ id: request._id, action: "APPROVE", comments: "Approved", forward: false, user: director, req })).request;
 
     await t.test("5. nobody verifies their own reimbursement bank account or details they entered", async () => {
-      const own = await createEmployeeReimbursementBankAccount({ payload: { ownerId: String(accounting._id), bank: "BCP", currency: "PEN", accountHolderName: accounting.name, accountNumber: "1941000000091", cci: "00219410000000000091", preferred: true }, user: admin, req });
+      // Only the employee adds their own profile (the accountant holds the grant for their own account).
+      await assert.rejects(() => createEmployeeReimbursementBankAccount({ payload: { bank: "BCP", currency: "PEN", accountHolderName: accounting.name, accountNumber: "1941000000093", cci: "00219410000000000093" }, user: admin, req }), (error) => error.code === ERROR_CODES.FORBIDDEN);
+      const own = await createEmployeeReimbursementBankAccount({ payload: { bank: "BCP", currency: "PEN", accountHolderName: accounting.name, accountNumber: "1941000000091", cci: "00219410000000000091", preferred: true }, user: accounting, req });
       await assert.rejects(() => reviewEmployeeReimbursementBankAccount({ accountId: own._id, payload: { result: "VERIFIED" }, user: accounting, req }), (error) => error.code === ERROR_CODES.FORBIDDEN && error.details?.segregationOfDuties);
-      await assert.rejects(() => reviewEmployeeReimbursementBankAccount({ accountId: own._id, payload: { result: "VERIFIED" }, user: admin, req }), (error) => error.code === ERROR_CODES.FORBIDDEN && error.details?.segregationOfDuties);
+      // The administrator does not review reimbursement banking at all.
+      await assert.rejects(() => reviewEmployeeReimbursementBankAccount({ accountId: own._id, payload: { result: "VERIFIED" }, user: admin, req }), (error) => error.code === ERROR_CODES.FORBIDDEN);
       const verified = await reviewEmployeeReimbursementBankAccount({ accountId: own._id, payload: { result: "VERIFIED" }, user: accounting2, req });
       assert.equal(verified.verificationStatus, "VERIFIED");
+      // Details an accountant keyed in for someone else (a record from before owner-only entry)
+      // are verified by another reviewer too.
+      const entered = await createEmployeeReimbursementBankAccount({ payload: { bank: "BCP", currency: "PEN", accountHolderName: director.name, accountNumber: "1941000000092", cci: "00219410000000000092" }, user: accounting, req });
+      await mongoose.model("EmployeeReimbursementBankAccount").updateOne({ _id: entered._id }, { $set: { user: director._id } });
+      await assert.rejects(() => reviewEmployeeReimbursementBankAccount({ accountId: entered._id, payload: { result: "VERIFIED" }, user: accounting, req }), (error) => error.code === ERROR_CODES.FORBIDDEN && error.details?.segregationOfDuties);
     });
 
     const ownerBank = await createEmployeeReimbursementBankAccount({ payload: { bank: "BCP", currency: "PEN", accountHolderName: owner.name, accountNumber: "1941000000001", cci: "00219410000000000001", preferred: true }, user: owner, req });

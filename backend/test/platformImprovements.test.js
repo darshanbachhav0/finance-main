@@ -67,7 +67,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
     const admin = await User.create({ name: "PI Admin Area", email: "pi.adminarea@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, area: "Administración", jefe: jefe._id });
     const noArea = await User.create({ name: "PI No Area", email: "pi.noarea@test.local", passwordHash: "unused", role: ROLES.SOLICITOR, jefe: jefe._id });
     const accounting = await User.create({ name: "PI Accounting", email: "pi.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finanzas" });
-    const umaAdmin = await User.create({ name: "PI Admin", email: "pi.admin@test.local", passwordHash: "unused", role: ROLES.ADMIN, area: "Tecnología de la Información" });
+    const treasury = await User.create({ name: "PI Treasury", email: "pi.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Tesorería" });
 
     const itSupplier = await Supplier.create({ rucDni: "20777000001", legalName: "Soporte TI SAC", name: "Soporte TI SAC", supplierCode: "PRV-0041", departments: ["Tecnología de la Información"], homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
     const adminSupplier = await Supplier.create({ rucDni: "20777000002", legalName: "Limpieza Total SAC", name: "Limpieza Total SAC", supplierCode: "PRV-0042", departments: ["Administración"], homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
@@ -95,7 +95,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       assert.deepEqual(names(await listSuppliersPage({ pageSize: 50 }, noArea)), ["Courier Nacional SAC"]);
       assert.equal((await listSuppliersPage({ pageSize: 50 }, noArea)).scope.department, "General");
       assert.deepEqual(names(await listSuppliersPage({ pageSize: 50 }, accounting)), ["Courier Nacional SAC"], "Accounting sees its own area's list like everyone else");
-      assert.equal((await listSuppliersPage({ pageSize: 50 }, umaAdmin)).data.length, 3, "the Admin sees every supplier");
+      assert.equal((await listSuppliersPage({ pageSize: 50 }, treasury)).data.length, 3, "Treasury sees every supplier");
       // Searching the API directly cannot reach another area's supplier.
       assert.equal((await listSuppliersPage({ search: "Limpieza", pageSize: 50 }, it)).data.length, 0);
       await assert.rejects(() => getSupplierDetailPayload(adminSupplier._id, it), (error) => error.code === ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT && error.statusCode === 403);
@@ -177,14 +177,14 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       await assert.rejects(() => createSupplierProposal({ payload: { rucDni: "20777000012", legalName: "Otra", proposalJustification: "x" }, files: {}, user: admin, req }), (error) => error.code === "DUPLICATE_SUPPLIER" && error.details.otherDepartment === true);
     });
 
-    await t.test("another area asks for a supplier; the Admin shares it", async () => {
+    await t.test("another area asks for a supplier; Treasury shares it", async () => {
       const asked = await requestSupplierAccess({ supplierId: proposed._id, user: admin, req });
       assert.equal(asked.requested, true);
-      const task = await Notification.findOne({ user: umaAdmin._id, type: "SUPPLIER_ACCESS_REQUEST" });
-      assert.ok(task, "the Admin is asked to share it");
+      const task = await Notification.findOne({ user: treasury._id, type: "SUPPLIER_ACCESS_REQUEST" });
+      assert.ok(task, "Treasury is asked to share it");
       await assert.rejects(() => updateSupplierDepartments({ supplierId: proposed._id, departments: ["Administración"], user: admin, req }), (error) => error.statusCode === 403);
-      await assert.rejects(() => updateSupplierDepartments({ supplierId: proposed._id, departments: ["Finanzas"], user: accounting, req }), (error) => error.code === ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT, "Accounting cannot take another area's supplier");
-      await updateSupplierDepartments({ supplierId: proposed._id, departments: ["Tecnología de la Información", "Administración", "administración "], user: umaAdmin, req });
+      await assert.rejects(() => updateSupplierDepartments({ supplierId: proposed._id, departments: ["Finanzas"], user: accounting, req }), (error) => error.statusCode === 403, "Accounting cannot take another area's supplier: only Treasury chooses the areas");
+      await updateSupplierDepartments({ supplierId: proposed._id, departments: ["Tecnología de la Información", "Administración", "administración "], user: treasury, req });
       const updated = await Supplier.findById(proposed._id);
       assert.deepEqual(updated.departments, ["Tecnología de la Información", "Administración"], "the same area is kept once");
       assert.ok(canSeeSupplier(updated, admin));

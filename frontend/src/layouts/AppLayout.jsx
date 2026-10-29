@@ -35,6 +35,7 @@ import { startTour } from "../utils/tour.js";
 import { hasUnseenRelease, markReleasesSeen } from "../utils/whatsNew.js";
 import { accountMenuLabels, accountMenuPaths, bottomNavigationForUser, counterBadgeText, groupNavigation, navigationCount, navigationForUser, pageLabel, pageTrail, settingsPagesFor } from "../utils/navigationAccess.js";
 import { navigationIcon } from "../utils/navigationIcons.js";
+import { hasRole, ROLE_LABELS, ROLES, roleCodes, rolesOf } from "../utils/access.js";
 
 // Announcement banner and maintenance state, re-read now and then while signed in, and at once
 // when the Super Admin saves the platform settings.
@@ -48,13 +49,12 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("erp_sidebar_collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobile = useMediaQuery(SIDEBAR_DRAWER_QUERY);
-  const managementViewer = user.role === "ManagementViewer";
-  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead, dismiss: dismissNotification } = useNotificationBell(user._id, !managementViewer);
+  const { tasks, notifications, error: notificationError, refresh: loadTasks, markRead: markNotificationRead, markAllRead, dismiss: dismissNotification } = useNotificationBell(user._id, true);
   const { notify } = useToast();
   const navigate = useNavigate();
   // A notification that arrives while the app is open also appears as a toast with a link.
   useLiveEvents({
-    enabled: !managementViewer,
+    enabled: true,
     onNotification: (item) => item && notify(`${notificationTitle(t, item)}: ${notificationMessage(t, item)}`, "info", item.path ? { action: { label: "View", onClick: () => navigate(item.path) }, duration: 8000 } : { duration: 8000 })
   });
   const [taskOpen, setTaskOpen] = useState(false);
@@ -62,7 +62,7 @@ export default function AppLayout() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
-  const [whatsNewUnseen, setWhatsNewUnseen] = useState(() => !managementViewer && hasUnseenRelease());
+  const [whatsNewUnseen, setWhatsNewUnseen] = useState(() => hasUnseenRelease());
   const menusRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -76,7 +76,7 @@ export default function AppLayout() {
   // The palette also finds every Settings page the person can open, not only the menu entries.
   const commandPages = useMemo(() => {
     const pages = visibleGroups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })));
-    const settings = settingsPagesFor(user).filter((path) => !pages.some((item) => item.path === path)).map((path) => ({ label: pageLabel(path, user.role), path, icon: navigationIcon(path), group: "Settings" }));
+    const settings = settingsPagesFor(user).filter((path) => !pages.some((item) => item.path === path)).map((path) => ({ label: pageLabel(path, user), path, icon: navigationIcon(path), group: "Settings" }));
     return [...pages, ...settings];
   }, [visibleGroups, user]);
   const bottomItems = useMemo(() => bottomNavigationForUser(user, { pendingApprovals }).map((item) => ({ ...item, icon: navigationIcon(item.path) })), [user, pendingApprovals > 0]);
@@ -253,11 +253,11 @@ export default function AppLayout() {
           </div>
 
           <div className="topbar-actions" ref={menusRef}>
-            {!managementViewer && <button type="button" className="command-trigger" onClick={() => setCommandOpen(true)} aria-label={t("Search the system")} aria-keyshortcuts="Control+K Meta+K" data-tour="search">
+            {<button type="button" className="command-trigger" onClick={() => setCommandOpen(true)} aria-label={t("Search the system")} aria-keyshortcuts="Control+K Meta+K" data-tour="search">
               <Search size={16} /><span>{t("Search")}</span><kbd>Ctrl K</kbd>
             </button>}
             <LanguageToggle />
-            {!managementViewer && <div className="topbar-menu">
+            {<div className="topbar-menu">
               <button type="button" className="icon-button notification-button" data-tour="notifications" onClick={() => { if (!taskOpen) loadTasks(); setTaskOpen((current) => !current); setUserOpen(false); }} aria-label={t("Open task notifications")} aria-expanded={taskOpen}>
                 <Bell size={19} />
                 {notifications.unreadCount > 0 ? <span className="notification-dot" aria-live="polite" aria-label={t(notifications.unreadCount === 1 ? "{count} unread notification" : "{count} unread notifications").replace("{count}", notifications.unreadCount)}>{notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}</span> : tasks.total > 0 && <span className="notification-dot" aria-label={t("Pending tasks")}>•</span>}
@@ -301,7 +301,7 @@ export default function AppLayout() {
             <div className="topbar-menu">
               <button type="button" className="user-menu-button" data-tour="account" aria-label={t(whatsNewUnseen ? "Account menu (something new)" : "Account menu")} onClick={() => { setUserOpen((current) => !current); setTaskOpen(false); }} aria-expanded={userOpen}>
                 <span className="user-avatar-wrap"><Avatar name={user.name} id={user._id} className="user-avatar" />{whatsNewUnseen && <span className="whats-new-dot" aria-hidden="true" />}</span>
-                <span className="user-summary" title={`${user.name} · ${t(user.role)} · ${user.area || ""}`}><strong>{user.name}</strong><small>{t(user.role)} · {user.area}</small></span>
+                <span className="user-summary" title={`${user.name} · ${roleCodes(user)} · ${user.area || ""}`}><strong>{user.name}</strong><small>{roleCodes(user)} · {user.area}</small></span>
                 <ChevronDown size={15} />
               </button>
               {userOpen && (
@@ -309,15 +309,15 @@ export default function AppLayout() {
                   <div className="user-popover-info">
                     <strong>{user.name}</strong>
                     <span>{user.email}</span>
-                    <small>{t(user.role)} · {user.area}</small>
+                    <small>{rolesOf(user).map((role) => ROLE_LABELS[role]).join(" · ")} · {user.area}</small>
                   </div>
                   {accountMenuPaths(user).map((path) => <Link key={path} to={path} onClick={() => setUserOpen(false)}><Landmark size={16} /><span>{t(accountMenuLabels[path])}</span></Link>)}
-                  {!managementViewer && !readOnly && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
-                  {!managementViewer && <button type="button" onClick={() => { setUserOpen(false); setWhatsNewOpen(true); markReleasesSeen(); setWhatsNewUnseen(false); }}><Sparkles size={16} /><span>{t("What's new")}</span>{whatsNewUnseen && <span className="menu-new-pill">{t("New")}</span>}</button>}
-                  {!managementViewer && !readOnly && <button type="button" onClick={() => { setUserOpen(false); startTour(); }}><Compass size={16} /><span>{t("Take the tour")}</span></button>}
+                  {!readOnly && <button type="button" onClick={() => { setUserOpen(false); setLeaveOpen(true); }}><CalendarClock size={16} /><span>{t(user.onLeave ? "My leave (on leave)" : "My leave")}</span></button>}
+                  {<button type="button" onClick={() => { setUserOpen(false); setWhatsNewOpen(true); markReleasesSeen(); setWhatsNewUnseen(false); }}><Sparkles size={16} /><span>{t("What's new")}</span>{whatsNewUnseen && <span className="menu-new-pill">{t("New")}</span>}</button>}
+                  {!readOnly && <button type="button" onClick={() => { setUserOpen(false); startTour(); }}><Compass size={16} /><span>{t("Take the tour")}</span></button>}
                   <button type="button" onClick={logout}><LogOut size={16} /><span>{t("Log out")}</span></button>
                   <ThemeControl />
-                  {!managementViewer && <EmailNotificationsControl />}
+                  {<EmailNotificationsControl />}
                 </div>
               )}
             </div>
@@ -327,22 +327,22 @@ export default function AppLayout() {
           <div className="uma-print-header"><UmaBrand /><span>{t(pageTitle)}</span></div>
           {platform?.announcement?.enabled && <div className={`inline-alert alert-${platform.announcement.tone === "warning" ? "warning" : "info"} platform-banner`} role="status"><Megaphone size={18} aria-hidden="true" /><div><span>{platform.announcement.message}</span></div></div>}
           {platform?.maintenance?.enabled && <div className="inline-alert alert-warning platform-banner" role="status"><Wrench size={18} aria-hidden="true" /><div><strong>{t("Maintenance mode is on")}</strong><span>{t("Only administrators can sign in and use the platform until it is turned off.")}</span></div></div>}
-          {readOnly && !location.pathname.startsWith("/super-admin") && <div className="inline-alert alert-info read-only-banner" role="status"><Eye size={18} aria-hidden="true" /><div><strong>{t("Read-only oversight")}</strong><span>{t("You can see everything here, but the work itself (requests, approvals, payments, settings) is done by the Admin and each department.")}</span></div></div>}
-          {!managementViewer && !readOnly && <PaymentDayBanner role={user.role} />}
+          {readOnly && <div className="inline-alert alert-info read-only-banner" role="status"><Eye size={18} aria-hidden="true" /><div><strong>{t("Read-only oversight")}</strong><span>{t("You can see everything here, but the work itself (requests, approvals, payments, settings) is done by the Admin and each department.")}</span></div></div>}
+          {!readOnly && <PaymentDayBanner role={hasRole(user, ROLES.TREASURY) ? ROLES.TREASURY : user.role} />}
           {user.onLeave && <div className="inline-alert alert-info leave-banner" role="status"><CalendarClock size={18} aria-hidden="true" /><div><strong>{user.leaveUntil ? t("You are on leave until {date}").replace("{date}", formatDate(`${String(user.leaveUntil).slice(0, 10)}T12:00:00Z`, language)) : t("You are on leave")}</strong><span>{t("Your approvals go to your substitute (or your jefe) until you are back.")}</span></div><button type="button" className="secondary-button" onClick={() => setLeaveOpen(true)}>{t("Manage leave")}</button></div>}
           <Suspense fallback={<WorkspaceSkeleton />}><MotionSurface changeKey={location.pathname}><Outlet /></MotionSurface></Suspense>
         </main>
       </div>
       <MobileBottomNav
         items={bottomItems.map((item) => ({ ...item, count: navigationCount(item.path, tasks.counters) }))}
-        onSearch={managementViewer ? undefined : openCommandPalette}
+        onSearch={openCommandPalette}
         suppressed={mobileOpen || commandOpen}
         pendingLabel={pendingLabel}
       />
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} pages={commandPages} />
       <MyLeavePanel open={leaveOpen} onClose={() => setLeaveOpen(false)} />
-      {!managementViewer && <WhatsNewPanel open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />}
-      {!managementViewer && !readOnly && <GuidedTour user={user} />}
+      {<WhatsNewPanel open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />}
+      {!readOnly && <GuidedTour user={user} />}
     </div>
   );
 }

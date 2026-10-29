@@ -70,7 +70,8 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       // The Director of Health Sciences reads its requests (alcance de lectura: their cascade).
       approver: await User.create({ name: "Phase 5 Director", email: "phase5.director@uma.edu.pe", passwordHash: "unused", role: ROLES.AREA_DIRECTOR, area: "Health Sciences", approvalLevel: "AREA_DIRECTOR", costCenter: center._id }),
       budget: await User.create({ name: "Phase 5 Budget", email: "phase5.budget@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Budget" }),
-      procurement: await User.create({ name: "Phase 5 Procurement", email: "phase5.procurement@uma.edu.pe", passwordHash: "unused", role: ROLES.PROCUREMENT, area: "Procurement" }),
+      // Issuing orders is the grantable purchase_order.issue permission (no Procurement role).
+      procurement: await User.create({ name: "Phase 5 Procurement", email: "phase5.procurement@uma.edu.pe", passwordHash: "unused", role: ROLES.SOLICITOR, permissions: [PERMISSIONS.PURCHASE_ORDER_ISSUE], area: "Procurement" }),
       treasury: await User.create({ name: "Phase 5 Treasury", email: "phase5.treasury@uma.edu.pe", passwordHash: "unused", role: ROLES.TREASURY, area: "Treasury" }),
       accounting: await User.create({ name: "Phase 5 Accounting", email: "phase5.accounting@uma.edu.pe", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Accounting" })
     };
@@ -203,7 +204,7 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
       assert.equal(await BudgetCommitment.countDocuments({ request: request._id }), before);
     });
 
-    await t.test("Solicitor cannot issue an order and Budget cannot either; only Procurement creates it from approved request data", async () => {
+    await t.test("Solicitor cannot issue an order and Budget cannot either; only the purchase-order holder creates it from approved request data", async () => {
       await assert.rejects(() => issueProcurementOrder({ requestId: readyRequest._id, user: users.solicitor, req }), (error) => error.code === ERROR_CODES.FORBIDDEN);
       await assert.rejects(() => issueProcurementOrder({ requestId: readyRequest._id, user: users.budget, req }), (error) => error.code === ERROR_CODES.FORBIDDEN);
       const order = await issueProcurementOrder({ requestId: readyRequest._id, user: users.procurement, req });
@@ -453,14 +454,14 @@ test("Phase 5 end-to-end workflow integration controls", { timeout: 120000 }, as
     });
 
     await t.test("Phase 5 role permissions preserve segregation of duties", () => {
-      assert.equal(hasPermission(users.procurement, PERMISSIONS.PROCUREMENT_ORDER_CREATE), true);
-      assert.equal(hasPermission(users.budget, PERMISSIONS.PROCUREMENT_ORDER_CREATE), false, "Budget commits funds but no longer issues Purchase Orders");
-      assert.equal(hasPermission(users.solicitor, PERMISSIONS.PROCUREMENT_ORDER_CREATE), false);
+      assert.equal(hasPermission(users.procurement, PERMISSIONS.PURCHASE_ORDER_ISSUE), true);
+      assert.equal(hasPermission(users.budget, PERMISSIONS.PURCHASE_ORDER_ISSUE), false, "Budget commits funds but no longer issues Purchase Orders");
+      assert.equal(hasPermission(users.solicitor, PERMISSIONS.PURCHASE_ORDER_ISSUE), false);
       assert.equal(hasPermission(users.budget, PERMISSIONS.SUPPLIER_HOMOLOGATE), false);
       assert.equal(hasPermission(users.procurement, PERMISSIONS.BUDGET_MANAGE), false, "Procurement issues Purchase Orders but cannot commit budget");
       assert.equal(hasPermission(users.treasury, PERMISSIONS.SUPPLIER_HOMOLOGATE), false);
-      assert.equal(hasPermission(users.treasury, PERMISSIONS.TREASURY_FILE), true);
-      assert.equal(hasPermission(users.accounting, PERMISSIONS.PAYMENT_CONFIRM), false);
+      assert.equal(hasPermission(users.treasury, PERMISSIONS.TREASURY_GENERATE_BATCH), true);
+      assert.equal(hasPermission(users.accounting, PERMISSIONS.TREASURY_EXECUTE_PAYMENT), false);
     });
   } finally {
     await Promise.all(fiscalFiles.map(file => fs.rm(file, { force: true })));

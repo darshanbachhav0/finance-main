@@ -64,12 +64,13 @@ import {
   ROLES
 } from "../utils/constants.js";
 import { getEffectiveFinanceConfiguration } from "./financeConfigurationService.js";
-import { actsAsRequester, canModifyRequest, canUseCostCenter, mayChargeAnotherCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
+import { actsAsRequester, canCreateRequest, canModifyRequest, canUseCostCenter, mayChargeAnotherCostCenter, canViewRequest, canWithdrawRequest, observationOwner, requestVisibilityFilter, wasSubmitted } from "../utils/permissions.js";
 import { multiplyMoney, sumMoney } from "../utils/money.js";
 import { normalizePaymentTerms, validatePaymentTerms } from "../../../shared/paymentTerms.mjs";
 import { allowedRequestActions } from "./requestActionPolicy.js";
 import { plainClone } from "../utils/plainClone.js";
 import { supplierCreditDays } from "../../../shared/invoiceFinance.mjs";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 export const requestPopulate = [
   { path: "supplier" },
@@ -170,7 +171,7 @@ function maskBankValue(value) {
 }
 
 function serializePaymentRecords(records, user) {
-  const reveal = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user?.role);
+  const reveal = hasRole(user, [ROLES.ACCOUNTING, ROLES.TREASURY]);
   return records.map((record) => {
     const value = record.toObject ? record.toObject() : { ...record };
     if (reveal || !value.bankAccountSnapshot) return value;
@@ -187,7 +188,7 @@ function serializePaymentRecords(records, user) {
 }
 
 function serializePaymentBatches(records, user) {
-  const reveal = [ROLES.ADMIN, ROLES.ACCOUNTING, ROLES.TREASURY].includes(user?.role);
+  const reveal = hasRole(user, [ROLES.ACCOUNTING, ROLES.TREASURY]);
   return records.map((record) => {
     const value = record.toObject ? record.toObject() : { ...record };
     if (reveal) return value;
@@ -493,7 +494,7 @@ async function validateHeaderCostCenter(request, user, { required = false } = {}
   if (!center?.active) {
     throw new AppError(422, "Select an active Cost Center / CECO.", { costCenter: id }, ERROR_CODES.INVALID_COST_CENTER);
   }
-  if (actsAsRequester(user) && user.role !== ROLES.ADMIN && !canUseCostCenter(user, center._id)) {
+  if (actsAsRequester(user) && !canUseCostCenter(user, center._id)) {
     throw new AppError(
       403,
       `CECO ${center.code} - ${center.name} is not assigned to the current requester.`,
@@ -1112,6 +1113,8 @@ export async function getRequestProcurementReadiness(id, user) {
 }
 
 export async function createFinancialRequest({ payload, files, user, req }) {
+  // The route checks it too; the service refuses anyone who does not register requests.
+  if (!canCreateRequest(user)) throw new AppError(403, "You do not have permission to register requests.", { required: ["request.create"] }, ERROR_CODES.FORBIDDEN);
   const requestedFlow = payload.flowType || (TRACK_C_REQUEST_TYPES.has(payload.requestType) ? FLOW_TYPE.C : FLOW_TYPE.A1);
   if (requestedFlow === FLOW_TYPE.A2) {
     throw new AppError(422, "Track A2 starts from an existing approved Purchase Order in the batch-invoice workspace.", { flowType: requestedFlow }, ERROR_CODES.VALIDATION_ERROR);
@@ -1377,7 +1380,7 @@ export async function requestFormPolicy(query) {
 
 export async function requestAuthorizedCostCenters(user) {
   const query = { active: true };
-  if (user.role !== ROLES.ADMIN && actsAsRequester(user)) {
+  if (actsAsRequester(user)) {
     const allowed = [user.costCenter, ...(mayChargeAnotherCostCenter(user) ? user.authorizedCostCenters || [] : [])]
       .filter(Boolean)
       .map((value) => value?._id || value);

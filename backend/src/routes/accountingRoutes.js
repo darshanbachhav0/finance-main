@@ -15,9 +15,9 @@ import {
   recoverCredit
 } from "../controllers/accountingController.js";
 import { listBankFiles, rejectBankFileAction, reviewBankFileChecks, verifyBankFileAction } from "../controllers/bankFileVerificationController.js";
-import { authorize, authorizePermission, protect } from "../middleware/auth.js";
+import { authorizePermission, protect } from "../middleware/auth.js";
 import { uploadFields } from "../middleware/upload.js";
-import { PERMISSIONS, ROLES } from "../utils/constants.js";
+import { PERMISSIONS } from "../utils/constants.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { updateInvoiceCredit } from "../services/invoiceCreditService.js";
 import { previewAccountingDetraction, confirmAccountingDetraction } from "../services/detractionService.js";
@@ -26,11 +26,11 @@ const router = Router();
 
 // Bank TXT approval: Treasury downloads a file only after GAF approves it
 // here. Declared before the Accounting-only guard below so the GAF reaches it.
-router.get("/bank-files", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), listBankFiles);
-router.get("/bank-files/:id/checks", protect, authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), reviewBankFileChecks);
-router.post("/bank-files/:id/verify", protect, authorize(ROLES.GAF), authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), verifyBankFileAction);
-router.post("/bank-files/:id/reject", protect, authorize(ROLES.GAF), authorizePermission(PERMISSIONS.BANK_FILE_VERIFY), rejectBankFileAction);
-router.use(protect, authorize(ROLES.ADMIN, ROLES.ACCOUNTING));
+router.get("/bank-files", protect, authorizePermission(PERMISSIONS.BATCH_APPROVE), listBankFiles);
+router.get("/bank-files/:id/checks", protect, authorizePermission(PERMISSIONS.BATCH_APPROVE), reviewBankFileChecks);
+router.post("/bank-files/:id/verify", protect, authorizePermission(PERMISSIONS.BATCH_APPROVE), verifyBankFileAction);
+router.post("/bank-files/:id/reject", protect, authorizePermission(PERMISSIONS.BATCH_APPROVE), rejectBankFileAction);
+router.use(protect, authorizePermission(PERMISSIONS.ACCOUNTING_PROVISION));
 router.get("/entries", listEntries);
 router.get("/accounts-payable", listAccountsPayable);
 router.post("/accounts-payable/:id/detraction-preview", asyncHandler(async (req, res) => res.json({ data: await previewAccountingDetraction({ id: req.params.id, categoryCode: req.body.categoryCode }) })));

@@ -1,4 +1,4 @@
-/* Super Admin console (pages/superadmin), its sign-in steps and the read-only / announcement
+/* Administración console (pages/admin), its sign-in steps and the read-only / announcement
    banners. Tokens only, so both themes work. */
 
 /* Message type="warning" (maintenance notice on the sign-in page). */
@@ -18,7 +18,6 @@
 
 /* Console layout. */
 .super-admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.super-admin-summary { margin: 0 0 12px; color: var(--gray-600); font-size: var(--font-sm); }
 .super-admin-note { display: block; margin-top: 3px; color: var(--gray-600); font-size: var(--font-xs); font-weight: 500; }
 
 .super-admin-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
@@ -29,32 +28,19 @@
 .super-admin-issues { display: grid; gap: 6px; margin: 0; padding-left: 18px; }
 .super-admin-issues small { color: var(--gray-600); }
 
-.super-admin-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-
-/* Promote: candidate list. */
-.super-admin-candidates { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.super-admin-candidates label { display: flex; align-items: flex-start; gap: 10px; padding: 9px 11px; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); cursor: pointer; }
-.super-admin-candidates label.is-selected { border-color: var(--accent); background: var(--accent-soft); }
-.super-admin-candidates input { margin-top: 3px; accent-color: var(--accent); }
-.super-admin-candidates span { display: grid; gap: 2px; }
-.super-admin-candidates small { color: var(--gray-600); font-size: var(--font-xs); }
-
-/* Activity drawer. */
-.super-admin-timeline { display: grid; gap: 0; margin: 0 0 18px; padding: 0; list-style: none; }
-.super-admin-timeline li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--gray-200); font-size: var(--font-sm); }
-.super-admin-timeline li > span { grid-column: 1; color: var(--gray-600); font-size: var(--font-xs); overflow-wrap: anywhere; }
-.super-admin-timeline li > small { grid-column: 2; grid-row: 1 / span 2; color: var(--gray-600); font-size: var(--font-xs); white-space: nowrap; }
-.super-admin-timeline li.is-blocked > strong { color: var(--red-700); }
-
-/* Temporary password, shown once. */
-.super-admin-secret { display: block; padding: 12px; color: var(--gray-950); background: var(--gray-50); border: 1px dashed var(--gray-300); border-radius: var(--radius-sm); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-lg); overflow-wrap: anywhere; user-select: all; }
-
 /* Audit log. */
 .super-admin-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .super-admin-filters .field { min-width: 180px; }
 .super-admin-changes { width: 100%; border-collapse: collapse; font-size: var(--font-xs); }
 .super-admin-changes th, .super-admin-changes td { padding: 7px 8px; border-bottom: 1px solid var(--gray-200); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .super-admin-changes thead th { color: var(--gray-600); font-weight: 750; }
+
+/* Roles y permisos: the role-permission matrix scrolls sideways instead of breaking words. */
+.access-matrix-wrap { overflow-x: auto; }
+.access-matrix { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }
+.access-matrix th, .access-matrix td { padding: 8px 10px; border-bottom: 1px solid var(--gray-200); text-align: left; vertical-align: top; white-space: nowrap; overflow-wrap: normal; }
+.access-matrix thead th { color: var(--gray-600); font-weight: 750; }
+.access-matrix td:first-child { white-space: normal; min-width: 220px; }
 
 /* Platform settings. */
 .super-admin-settings .form-grid { margin-top: 4px; }

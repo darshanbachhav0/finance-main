@@ -8,6 +8,7 @@ import { assertInvoiceEvidencePair, validateInvoiceAgainstRequest } from "./xmlV
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, ROLES } from "../utils/constants.js";
 import { actsAsRequester } from "../utils/permissions.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 const INVOICE_FIELDS = Object.freeze({ xml: "XML", pdf: "PDF" });
 
@@ -25,7 +26,7 @@ export async function registerDirectPaymentInvoice({ requestId, files = {}, user
     if (request.flowType !== FLOW_TYPE.B) throw new AppError(422, "This step is only for Track B requests.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
     if (request.status !== REQUEST_STATUS.BUDGET_COMMITTED) throw new AppError(409, "The invoice is registered once the request is approved and its budget reserved.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
     const owner = String(request.requester?._id || request.requester || request.solicitor || "") === String(user._id);
-    if (![ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) && !(owner && actsAsRequester(user))) throw new AppError(403, "Only the requester or Accounting can register this invoice.", undefined, ERROR_CODES.FORBIDDEN);
+    if (!hasRole(user, [ROLES.ACCOUNTING]) && !(owner && actsAsRequester(user))) throw new AppError(403, "Only the requester or Accounting can register this invoice.", undefined, ERROR_CODES.FORBIDDEN);
     if (!uploaded.length) throw new AppError(422, "Upload the invoice XML or its factura PDF.", { missing: ["XML", "PDF"] }, ERROR_CODES.MISSING_REQUIRED_DOCUMENT);
 
     persisted = await persistUploadedFiles(files, { domain: "requests", entityId: request._id });

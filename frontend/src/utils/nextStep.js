@@ -9,9 +9,9 @@ import { REQUESTER_INVOICE_PROBLEMS, waitsForBankAccount } from "./plainStatus.j
 
 const DOCUMENTS = "request-section-documents-and-fiscal-validation";
 const REGISTER_INVOICE = { A1: "request-section-register-a1-invoice-and-conformity", B: "request-section-register-the-invoice" };
-const FINANCE = ["Admin", "Accounting"];
-const PAYERS = ["Admin", "Treasury"];
-const SETTLERS = ["Admin", "Accounting", "Treasury"];
+const FINANCE = ["Accounting"];
+const PAYERS = ["Treasury"];
+const SETTLERS = ["Accounting", "Treasury"];
 const IN_BANK_FILE = ["PAYMENT_FILE_CREATED", "PARTIALLY_PAID"];
 const TO_PAY = ["OPEN", "SCHEDULED"];
 
@@ -53,7 +53,7 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
   const name = request.requester?.name || request.solicitor?.name || "";
 
   if (invoiceCorrection) {
-    const fixes = permissions.canRegisterInvoice || owner || role === "Admin";
+    const fixes = permissions.canRegisterInvoice || owner;
     const upload = { label: "Upload the correct invoice", open: { tab: "Documents", target: REGISTER_INVOICE[request.flowType] || DOCUMENTS } };
     const problem = invoiceProblem(request, related);
     if (problem?.code === "RUC_MISMATCH") {
@@ -109,7 +109,7 @@ export function nextStepFor({ request, user, permissions = {}, related = {}, mis
     return turn("declaration", "Send your signed declaration", "List what you paid and sign the declaration. Accounting reviews it and then you are paid.", { action: { label: "Open the declaration", open: { tab: "Documents", target: "official-rendition" } } });
   }
   // A returned transfer is corrected on the Transfers page, never in the request form.
-  if (request.flowType === "D" && (owner || role === "Admin") && ["OBSERVADO", "DEVUELTO"].includes(status)) {
+  if (request.flowType === "D" && owner && ["OBSERVADO", "DEVUELTO"].includes(status)) {
     return turn("resubmitTransfer", "Correct the transfer and send it again", "Read the approver's comment, correct the amount or the description, and send it for approval again.", { tone: "warning", action: { label: "Open Transfers", href: `/treasury/transfers?request=${request._id}` }, more: { label: "Read the comments", open: { tab: "Approvals" } } });
   }
   if (permissions.canCommitBudget) return turn("commitBudget", "Commit the budget", "Review budget availability and commit the approved request.", { action: { label: "Commit budget", run: "budget" } });

@@ -22,6 +22,7 @@ import BudgetLimitSummary from "../components/BudgetLimitSummary.jsx";
 import { BUDGET_PLANNING_MODES, BUDGET_MONTHS, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 import { todayIso } from "../utils/dateInput.js";
+import { PERMISSIONS, ROLES, hasRole, userCan } from "../utils/access.js";
 
 const TAB_VIEWS = { budget: "Budget", exceptions: "Exceptions", commitments: "Commitments", changes: "Budget changes" };
 
@@ -52,11 +53,11 @@ export default function BudgetControl() {
   const [processing, setProcessing] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [error, setError] = useState("");
-  const canDecide = ["Admin", "Treasury"].includes(user.role);
+  const canDecide = hasRole(user, ROLES.TREASURY);
   // Admin, Treasury and the Super Admin set each CECO's annual budget and spread it over the months
   // (equally or not); Management decides changes above the approval threshold.
-  const canEditPlans = ["Admin", "Treasury", "SuperAdmin"].includes(user.role);
-  const canDecideChanges = user.role === "Management";
+  const canEditPlans = userCan(user, PERMISSIONS.BUDGET_MANAGE);
+  const canDecideChanges = hasRole(user, ROLES.MANAGEMENT);
   useDraftResume("budget-plan", () => { if (canEditPlans) setWorkspace({ planId: null }); });
   useDraftResume("budget-adjustment", id => { if (canEditPlans) setWorkspace({ planId: id }); });
   const allocationTable = usePaginatedResource("/budget/allocations", { fixedParams: { period } });
@@ -155,7 +156,7 @@ export default function BudgetControl() {
     if (row.status === "PENDING" && canDecide && !row.preparedAt) return [{ label: "Prepare / review", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "REVIEWED", title: "Review budget exception", description: "Record your recommendation for Management. This does not authorize an overrun.", confirmLabel: "Save review", inputLabel: "Recommendation", inputRequired: true }) }];
     const id = value => String(value?._id || value || "");
     // Budget reviews first; Management can decide only an exception Budget has reviewed.
-    const canApprove = user.role === "Management" && Boolean(row.preparedAt) && ![row.requestedBy, row.preparedBy, row.request?.requester, row.request?.solicitor].some(value => value && id(value) === id(user._id));
+    const canApprove = hasRole(user, ROLES.MANAGEMENT) && Boolean(row.preparedAt) && ![row.requestedBy, row.preparedBy, row.request?.requester, row.request?.solicitor].some(value => value && id(value) === id(user._id));
     if (row.status === "PENDING" && !canApprove) return [];
     if (row.status === "PENDING") return [
       { label: "Approve exception", icon: CheckCircle2, onClick: () => setConfirm({ kind: "decision", row, status: "APPROVED", title: "Approve budget exception?", description: row.strategy === "REQUEST_BUDGET_INCREASE" ? "This records an audited decision and automatically adds the shortfall to the budget, so the commitment can proceed." : "This records an audited exception decision that authorizes the overrun for this request.", confirmLabel: "Approve exception", inputLabel: "Decision comments", inputRequired: true }) },

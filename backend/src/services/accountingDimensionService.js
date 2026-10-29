@@ -107,7 +107,7 @@ export async function validateAccountingDimensions({ requestType, expenseNature,
         ERROR_CODES.INVALID_COST_CENTER_LINE
       );
     }
-    if (actsAsRequester(user) && user.role !== ROLES.ADMIN && !canUseCostCenter(user, center._id)) {
+    if (actsAsRequester(user) && !canUseCostCenter(user, center._id)) {
       throw new AppError(
         403,
         `Line ${lineNumber} uses CECO ${center.code} - ${center.name}. This Cost Center is not assigned to the current requester.`,

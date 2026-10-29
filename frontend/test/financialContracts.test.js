@@ -37,7 +37,11 @@ test("request type and expense nature are separate controlled taxonomies", () =>
 });
 
 test("all required functional profiles are available", () => {
-  assert.deepEqual(roles, ["Admin", "Solicitor", "Legal", "HumanResources", "AreaDirector", "ViceRector", "Accounting", "Treasury", "GAF", "Procurement", "Management", "ManagementViewer", "Auditor"]);
+  // The eleven canonical roles, labelled with their code; retired roles are not offered.
+  assert.deepEqual(roles.map((role) => role.value), ["Solicitor", "AreaDirector", "ViceRector", "GAF", "Management", "Accounting", "Treasury", "Legal", "HumanResources", "Auditor", "Admin"]);
+  assert.equal(roles.find((role) => role.value === "Solicitor").label, "SOL · Solicitante");
+  assert.equal(roles.find((role) => role.value === "Admin").label, "ADMIN · Administrador del sistema");
+  for (const retired of ["SuperAdmin", "Procurement", "ManagementViewer", "Budget"]) assert.equal(roles.some((role) => role.value === retired), false, `${retired} is retired`);
 });
 
 test("solicitor navigation exposes work entry but no privileged finance modules", () => {
@@ -57,9 +61,10 @@ test("Treasury can use payment and reporting screens without supplier maintenanc
   assert.equal(canAccessNavigation("Treasury", "/users"), false);
 });
 
-test("Admin receives every navigation destination", () => {
-  assert.ok(visibleNavigationPaths("Admin").length >= 16);
-  assert.equal(canAccessNavigation("Admin", "/users"), true);
+test("Admin administers the platform but opens no financial module", () => {
+  for (const path of ["/users", "/administration/access", "/cost-centers", "/administration/audit", "/administration"]) assert.equal(canAccessNavigation("Admin", path), true, `Admin opens ${path}`);
+  const paths = visibleNavigationPaths("Admin");
+  for (const path of ["/requests", "/requests/new", "/accounting", "/accounting/payables", "/treasury", "/budget", "/reports", "/suppliers", "/consultas", "/audit", "/investments"]) assert.equal(paths.includes(path), false, `Admin has no ${path}`);
 });
 
 test("server table queries retain paging, filters, and sorting without empty parameters", () => {

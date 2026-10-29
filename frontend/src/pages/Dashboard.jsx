@@ -20,9 +20,10 @@ import ProtectedAssetButton from "../components/ProtectedAssetButton.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "../utils/formatters.js";
-import { AWAITING_PURCHASE_ORDER_PATH, dashboardMetricLink } from "../utils/dashboardLinks.js";
+import { dashboardMetricLink } from "../utils/dashboardLinks.js";
 import { todayIso } from "../utils/dateInput.js";
 import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
+import { PERMISSIONS, userCan } from "../utils/access.js";
 
 const AnalyticsChart = lazy(() => import("../components/AnalyticsChart.jsx"));
 
@@ -116,7 +117,7 @@ export default function Dashboard() {
   const operationalRows = summary?.oldestRequests || summary?.queue?.map((item) => item.request ? ({ ...item.request, rowId: item._id || item.request._id, supplier: item.supplier, totalAmount: item.outstandingAmount, currency: item.currency, status: item.status }) : item) || summary?.recentRequests || [];
   // The role's primary action, kept visible above its task list (and offered when all is done).
   const primaryAction = {
-    Admin: ["/settings", "Settings"],
+    Admin: ["/users", "Employees"],
     Solicitor: ["/requests/new", "New request"],
     AreaDirector: ["/approvals", "Review approvals"],
     ViceRector: ["/approvals", "Review approvals"],
@@ -124,9 +125,8 @@ export default function Dashboard() {
     Treasury: ["/treasury", "Open Treasury"],
     Management: ["/approvals", "Review decisions"],
     GAF: ["/approvals", "Review decisions"],
-    Legal: ["/requests/new", "New request"],
-    HumanResources: ["/requests/new", "New request"],
-    Procurement: [AWAITING_PURCHASE_ORDER_PATH, "Review requests"]
+    Legal: ["/special-expenses", "Refunds to validate"],
+    HumanResources: ["/special-expenses", "Honorarios"]
   }[summary?.role];
 
   return (
@@ -201,7 +201,7 @@ export default function Dashboard() {
               />
             )}
 
-            {["Admin", "AreaDirector", "ViceRector", "Accounting", "Treasury", "Management"].includes(summary.role) && <Link className="text-link dashboard-reports-link" to="/reports">{t("More insights in Reports")}</Link>}
+            {userCan(user, PERMISSIONS.REPORT_VIEW) && <Link className="text-link dashboard-reports-link" to="/reports">{t("More insights in Reports")}</Link>}
 
           </div>
         </>

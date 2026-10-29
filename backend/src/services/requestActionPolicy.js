@@ -3,6 +3,7 @@ import { activeApprovalStep } from "./approvalRuleService.js";
 import { canTransition } from "./workflowService.js";
 import { actsAsRequester, canApproveStage, canModifyRequest, canWithdrawRequest, hasPermission, isActiveChainApprover, observationOwner, wasSubmitted } from "../utils/permissions.js";
 import { APPROVAL_ROUTING_MODE, PERMISSIONS, REQUEST_STATUS, ROLES } from "../utils/constants.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 export const REQUEST_ACTION = Object.freeze({
   EDIT: "EDIT",
@@ -49,14 +50,14 @@ function approvalActionsAllowed(request, user) {
   if (ownsRequest(request, user)) return false;
   const step = activeApprovalStep(request);
   if (step?.source === APPROVAL_ROUTING_MODE.MANAGER_CHAIN) {
-    return user.role === ROLES.ADMIN || isActiveChainApprover(request, user);
+    return isActiveChainApprover(request, user);
   }
   // An amount tier or a Track D step: decided by any user of the step's role.
-  if (step?.tier) return user.role === ROLES.ADMIN || step.role === user.role;
+  if (step?.tier) return hasRole(user, step.role);
   if (!hasPermission(user, PERMISSIONS.REQUEST_APPROVE)) return false;
   if (!canApproveStage(request, user)) return false;
-  if (step?.role && user.role !== ROLES.ADMIN && step.role !== user.role) return false;
-  if ((step?.approvalLevel || request.approvalStage) === "AREA_DIRECTOR" && user.role !== ROLES.ADMIN) {
+  if (step?.role && !hasRole(user, step.role)) return false;
+  if ((step?.approvalLevel || request.approvalStage) === "AREA_DIRECTOR") {
     const area = request.requesterArea || request.requestingArea;
     const areas = new Set([user.area, ...(user.approvalAreas || [])].filter(Boolean));
     if (area && !areas.has(area) && !areas.has("*")) return false;
@@ -86,17 +87,17 @@ export function allowedRequestActions(request, user, context = {}) {
       && context.hasActiveObligations === false
       && canTransition(status, REQUEST_STATUS.VOIDED)) actions.add(REQUEST_ACTION.CANCEL);
 
-  if ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) && context.closureReady === true) actions.add(REQUEST_ACTION.CLOSE);
+  if (hasPermission(user, PERMISSIONS.ACCOUNTING_PROVISION) && context.closureReady === true) actions.add(REQUEST_ACTION.CLOSE);
   // After Management rejected the budget exception the request must be corrected and approved
   // again; committing it as it stands would bypass that decision.
-  if ([ROLES.ADMIN, ROLES.TREASURY].includes(user.role) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(status)
+  if (hasPermission(user, PERMISSIONS.BUDGET_MANAGE) && [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(status)
       && !activeApprovalStep(request) && !(status === REQUEST_STATUS.OBSERVED_BUDGET && observationOwner(request) === "REQUESTER")) actions.add(REQUEST_ACTION.COMMIT_BUDGET);
-  if (hasPermission(user, PERMISSIONS.PROCUREMENT_ORDER_CREATE) && context.procurementReady === true) actions.add(REQUEST_ACTION.ISSUE_ORDER);
+  if (hasPermission(user, PERMISSIONS.PURCHASE_ORDER_ISSUE) && context.procurementReady === true) actions.add(REQUEST_ACTION.ISSUE_ORDER);
   if (request.flowType === "A1" && request.purchaseOrder && invoiceStatuses.has(status)
-      && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
+      && (hasRole(user, [ROLES.ACCOUNTING]) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
   // Track B approved with only its quote: its invoice is registered once it arrives.
   if (request.flowType === "B" && status === REQUEST_STATUS.BUDGET_COMMITTED && !request.xmlValidation?.validated
-      && ([ROLES.ADMIN, ROLES.ACCOUNTING].includes(user.role) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
+      && (hasRole(user, [ROLES.ACCOUNTING]) || (owner && actsAsRequester(user)))) actions.add(REQUEST_ACTION.REGISTER_INVOICE);
 
   return [...actions];
 }

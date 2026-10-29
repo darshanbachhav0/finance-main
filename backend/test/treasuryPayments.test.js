@@ -321,7 +321,7 @@ test("treasury payments: partial payments, payment cycle, bounces, file cancella
       assert.ok(reopened.bouncedPayment.replacementBankDocument);
       // eligible[0] can no longer pick the bounced account.
       await assert.rejects(() => schedulePayments({ payableIds: [String(ap._id)], bank: "BBVA", currency: "PEN", user: treasury, req }), (error) => error.code === "BANK_DETAILS_MISSING");
-      await verifySupplierBankAccount({ supplierId: supplier._id, accountId: account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" }, user: accounting, req });
+      await verifySupplierBankAccount({ supplierId: supplier._id, accountId: account._id, payload: { verificationStatus: "VERIFIED", ownershipResult: "MATCH" }, user: treasury, req });
       await schedulePayments({ payableIds: [String(ap._id)], bank: "BBVA", currency: "PEN", user: treasury, req });
       assert.equal((await reload(ap)).status, AP_STATUS.SCHEDULED);
     });

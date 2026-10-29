@@ -16,51 +16,65 @@ const translateMessage = (text, language) => { const display = umaCopy[text] || 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const menu = (user) => navigationForUser(user).map(([, path]) => path);
 
-// 1. The new roles sign in; Auditor is read-only like the Super Admin but has no console.
+// 1. The new roles sign in; the Auditor is the only read-only role and opens the "/" dashboard.
 for (const role of ["GAF", "Legal", "HumanResources", "Auditor"]) assert.ok(authenticatedRoles.includes(role), `${role} signs in`);
 assert.equal(isReadOnlyRole("Auditor"), true);
+for (const role of ["Admin", "SuperAdmin", "GAF", "Treasury"]) assert.equal(isReadOnlyRole(role), false, `${role} is not read-only`);
+assert.equal(isReadOnlyRole("ManagementViewer"), true, "the retired ManagementViewer reads as Auditor");
 assert.equal(internalRoles.includes("Auditor"), false, "the Auditor never acts in a process");
-for (const path of ["/super-admin", "/requests/new", "/approvals", "/my-team", "/reimbursement-bank"]) assert.equal(canAccessNavigation("Auditor", path, { role: "Auditor", hasTeam: true }), false, `Auditor has no ${path}`);
-for (const path of ["/requests", "/treasury", "/treasury/transfers", "/accounting", "/budget", "/reports", "/management-view", "/suppliers", "/users"]) assert.equal(canAccessNavigation("Auditor", path), true, `Auditor reads ${path}`);
+for (const path of ["/super-admin", "/management-view", "/requests/new", "/approvals", "/my-team", "/reimbursement-bank"]) assert.equal(canAccessNavigation("Auditor", path, { role: "Auditor", hasTeam: true }), false, `Auditor has no ${path}`);
+for (const path of ["/", "/requests", "/budget", "/reports", "/consultas", "/indicadores", "/audit", "/investments", "/suppliers"]) assert.equal(canAccessNavigation("Auditor", path), true, `Auditor reads ${path}`);
+for (const path of ["/treasury", "/treasury/transfers", "/accounting", "/users", "/administration/audit"]) assert.equal(canAccessNavigation("Auditor", path), false, `Auditor has no ${path}`);
 assert.equal(canAccessNavigation("Auditor", "/accounting/bank-files"), false, "Auditor cannot access GAF-only bank approval");
-assert.equal(homePath("Auditor"), "/requests");
-assert.deepEqual(pageTrail("/requests/abc", { role: "Auditor" }).map((item) => item.label), ["Requests", "Request details"], "no repeated Requests level");
-assert.equal(readOnlyMayCall("post", "/notifications/abc/read", "Auditor"), true);
-assert.equal(readOnlyMayCall("put", "/users/me/notification-preferences", "Auditor"), true);
-assert.equal(readOnlyMayCall("put", "/work-drafts/x", "Auditor"), false, "the Auditor saves no drafts (backend AUDITOR_WRITE_PATHS)");
-assert.equal(readOnlyMayCall("put", "/work-drafts/x", "SuperAdmin"), true);
+assert.equal(homePath("Auditor"), "/");
+assert.deepEqual(menu({ role: "Auditor" }), ["/", "/consultas", "/audit", "/requests"]);
+assert.deepEqual(pageTrail("/requests/abc", { role: "Auditor" }).map((item) => item.label), ["Home", "Financial history", "Request details"]);
+assert.equal(readOnlyMayCall("post", "/notifications/abc/read"), true);
+assert.equal(readOnlyMayCall("put", "/users/me/notification-preferences"), true);
+assert.equal(readOnlyMayCall("get", "/requests"), true, "reads always pass");
+assert.equal(readOnlyMayCall("put", "/work-drafts/x"), false, "the Auditor saves no drafts (backend AUDITOR_WRITE_PATHS)");
+assert.equal(readOnlyMayCall("post", "/requests"), false);
 const backendAuth = read("../../backend/src/middleware/auth.js");
 const auditorPaths = JSON.parse(backendAuth.match(/AUDITOR_WRITE_PATHS = Object\.freeze\((\[[^\]]+\])\)/)[1]).map((path) => path.replace(/^\/api/, ""));
-for (const path of auditorPaths) assert.equal(readOnlyMayCall("post", `${path}x`, "Auditor"), true, `browser lets the Auditor call ${path}`);
+for (const path of auditorPaths) assert.equal(readOnlyMayCall("post", `${path}x`), true, `browser lets the Auditor call ${path}`);
 
-// 2. GAF: approvals, bank-file approval, transfers, budget, reports, management portal.
-for (const path of ["/requests", "/approvals", "/accounting/bank-files", "/budget", "/reports", "/management-view", "/treasury/transfers"]) assert.equal(canAccessNavigation("GAF", path), true, `GAF opens ${path}`);
-assert.equal(canAccessNavigation("GAF", "/requests/new"), false);
-assert.ok(menu({ role: "GAF" }).includes("/approvals") && menu({ role: "GAF" }).includes("/treasury/transfers"));
+// 2. GAF: approvals, batch approval, transfers, investments, consultas, audit, budget and reports.
+for (const path of ["/requests", "/approvals", "/accounting/bank-files", "/budget", "/reports", "/consultas", "/investments", "/audit", "/treasury/transfers", "/settings"]) assert.equal(canAccessNavigation("GAF", path), true, `GAF opens ${path}`);
+for (const path of ["/requests/new", "/management-view", "/treasury", "/accounting/payables"]) assert.equal(canAccessNavigation("GAF", path), false, `GAF has no ${path}`);
+assert.deepEqual(menu({ role: "GAF" }), ["/", "/approvals", "/accounting/bank-files", "/consultas", "/settings", "/treasury/transfers", "/investments", "/audit"]);
 assert.ok(reportDownloadRoles.includes("GAF") && reportDownloadRoles.includes("Auditor"));
 
-// 3. Legal and Human Resources work like a Solicitor: My Requests, new request, own bank account
-//    in the account menu, Approvals only as someone's jefe. Human Resources also opens Reports.
+// 3. Legal validates student refunds (process E) and Gestión de Personas uploads honorarios
+//    (process H); neither registers requests by role. Approvals only as someone's jefe.
+assert.deepEqual(menu({ role: "Legal" }), ["/", "/special-expenses", "/requests"]);
+assert.deepEqual(menu({ role: "HumanResources" }), ["/", "/special-expenses"]);
+assert.equal(pageLabel("/special-expenses", "Legal"), "Refunds to validate");
+assert.equal(pageLabel("/requests", "Legal"), "Consultas");
+assert.equal(pageLabel("/special-expenses", "HumanResources"), "Honorarios");
+assert.equal(canAccessNavigation("Legal", "/requests/new"), false, "Legal validates E, it does not register requests");
+assert.equal(canAccessNavigation("HumanResources", "/requests/new"), true, "honorarios.manage starts process H");
 for (const role of ["Legal", "HumanResources"]) {
-  assert.equal(pageLabel("/requests", role), "My Requests");
-  for (const path of ["/requests", "/requests/new", "/approvals", "/reimbursement-bank"]) assert.equal(canAccessNavigation(role, path), true, `${role} opens ${path}`);
-  assert.deepEqual(accountMenuPaths({ role }), ["/reimbursement-bank"]);
+  for (const path of ["/requests", "/special-expenses"]) assert.equal(canAccessNavigation(role, path), true, `${role} opens ${path}`);
+  for (const path of ["/reimbursement-bank", "/reports", "/suppliers", "/treasury"]) assert.equal(canAccessNavigation(role, path), false, `${role} has no ${path}`);
+  assert.deepEqual(accountMenuPaths({ role }), [], `${role} keeps no reimbursement account by role`);
   assert.ok(!menu({ role }).includes("/approvals") && menu({ role, hasTeam: true }).includes("/approvals"));
-  assert.ok(!menu({ role }).includes("/suppliers"), "requesters propose suppliers from the request form");
-  assert.deepEqual(bottomNavigationForUser({ role }).map((item) => item.path), ["/", "/requests", "/requests/new"]);
+  assert.equal(bottomNavigationForUser({ role })[0].path, "/");
 }
-assert.equal(canAccessNavigation("HumanResources", "/reports"), true);
-assert.equal(canAccessNavigation("Legal", "/reports"), false);
+assert.deepEqual(bottomNavigationForUser({ role: "Legal" }).map((item) => item.path), ["/", "/special-expenses", "/requests"]);
+// A Legal user who also holds Solicitor registers requests and keeps their bank account.
+assert.equal(canAccessNavigation({ role: "Legal", roles: ["Solicitor"] }, "/requests/new"), true);
+assert.deepEqual(accountMenuPaths({ role: "Solicitor" }), ["/reimbursement-bank"]);
 
-// 4. Transfers page: a Treasury page, read by the GAF, Accounting and the read-only overseers.
+// 4. Transfers page: Treasury registers and executes (treasury.transfer), the GAF approves the
+//    batch, Accounting posts it. The administrator and the Auditor do not open it.
 assert.equal(pageLabel("/treasury/transfers"), "Transfers");
-for (const role of ["Admin", "Treasury", "GAF", "Accounting", "SuperAdmin", "Auditor"]) assert.equal(canAccessNavigation(role, "/treasury/transfers"), true, role);
-for (const role of ["Solicitor", "Legal", "Procurement", "Management"]) assert.equal(canAccessNavigation(role, "/treasury/transfers"), false, role);
-assert.deepEqual(pageTrail("/treasury/transfers", { role: "Treasury" }).map((item) => item.label), ["Dashboard", "Payments", "Transfers"]);
-assert.match(read("../src/App.jsx"), /path="treasury\/transfers" element=\{<ProtectedRoute roles=\{navigationAccess\["\/treasury\/transfers"\]\} \/>\}/);
+for (const role of ["Treasury", "GAF", "Accounting"]) assert.equal(canAccessNavigation(role, "/treasury/transfers"), true, role);
+for (const role of ["Admin", "SuperAdmin", "Auditor", "Solicitor", "Legal", "Procurement", "Management"]) assert.equal(canAccessNavigation(role, "/treasury/transfers"), false, role);
+assert.deepEqual(pageTrail("/treasury/transfers", { role: "Treasury" }).map((item) => item.label), ["Home", "Scheduling and payments", "Transfers"]);
+assert.match(read("../src/App.jsx"), /page\("\/treasury\/transfers", <TreasuryTransfers \/>\)/);
 const page = read("../src/pages/TreasuryTransfers.jsx");
 for (const call of ['"/treasury/transfers"', '"/treasury/accounts"', "/execute`", "/reconcile`", "/resubmit`"]) assert.ok(page.includes(call), `the page calls ${call}`);
-assert.match(page, /const canManage = !readOnly && \["Admin", "Treasury"\]\.includes\(user\.role\)/, "only Treasury and Admin act");
+assert.match(page, /const canManage = !readOnly && userCan\(user, PERMISSIONS\.TREASURY_TRANSFER\)/, "only treasury.transfer acts");
 
 // 5. Track D request: journey, next step and labels without a supplier.
 const transfer = { _id: "t1", flowType: "D", requestType: "TRASPASO", status: "APROBADO", requester: { _id: "u1", name: "Ana" }, totalAmount: 1000, currency: "PEN", treasuryTransfer: { purpose: "FUNDING", sourceAccount: { code: "BBVA-PEN" }, destinationAccount: { code: "BCP-PEN" } } };

@@ -53,7 +53,6 @@ const icons = {
   "/accounting/sire": ClipboardList,
   "/budget": WalletCards,
   "/reports": ChartNoAxesCombined,
-  "/management-view": ChartNoAxesCombined,
   "/suppliers": Building2,
   "/settings": Settings2,
   "/users": Users,
@@ -62,11 +61,11 @@ const icons = {
   "/exchange-rates": CircleDollarSign,
   "/configuration/bank-formats": Landmark,
   "/configuration/accounting-mappings": BookOpenCheck,
-  "/super-admin": Gauge,
-  "/super-admin/administrators": UserCog,
-  "/super-admin/alerts": BellRing,
-  "/super-admin/audit": ScrollText,
-  "/super-admin/settings": Wrench
+  "/administration": Gauge,
+  "/administration/access": UserCog,
+  "/administration/alerts": BellRing,
+  "/administration/audit": ScrollText,
+  "/administration/settings": Wrench
 };
 
 export function navigationIcon(path) {

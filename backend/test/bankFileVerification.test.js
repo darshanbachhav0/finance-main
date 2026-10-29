@@ -68,7 +68,7 @@ test("GAF approves each bank TXT before Treasury can download it", { timeout: 12
         request: request._id, flowType: FLOW_TYPE.B, supplier: supplier._id, supplierIdentifierSnapshot: supplier.rucDni,
         voucher: { voucherType: "FACTURA", documentType: "FACTURA", series: "F001", number: String(800 + sequence), documentDate: new Date(issueDate) },
         originalAmount: 118, currency: "PEN", exchangeRate: 1, penEquivalent: 118, outstandingAmount: 118,
-        accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, detraction: { status: "NOT_APPLICABLE", confirmedAt: new Date(), confirmedBy: admin._id },
+        accountingTreatment: { spotConfirmed: true, spotCategoryCode: "" }, detraction: { status: "NOT_APPLICABLE", confirmedAt: new Date(), confirmedBy: accounting._id },
         dueDate: new Date("2026-10-10"), status: AP_STATUS.OPEN, provisionJournal: new mongoose.Types.ObjectId()
       });
     }
@@ -91,10 +91,11 @@ test("GAF approves each bank TXT before Treasury can download it", { timeout: 12
       const task = await Notification.findOne({ user: gaf._id, eventKey: `bank-file:${batch._id}:verification`, resolvedAt: null });
       assert.equal(task?.path, `/accounting/bank-files?record=${batch._id}`);
       await assert.rejects(() => download(batch, treasury), (error) => error.code === "BANK_FILE_NOT_VERIFIED" && error.statusCode === 409);
-      // GAF and Admin can open a pending TXT; Accounting cannot approve it.
+      // GAF opens a pending TXT to approve it; Accounting cannot approve it, and the Admin (no
+      // longer a superuser) has no access to Treasury's bank files at all.
       assert.equal((await download(batch, gaf)).checksum, batch.checksum);
       await assert.rejects(() => download(batch, accounting), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
-      assert.equal((await download(batch, admin)).checksum, batch.checksum);
+      await assert.rejects(() => download(batch, admin), (error) => error.statusCode === 403);
       await assert.rejects(() => confirm(ap), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
       await assert.rejects(() => markPaymentBounced({ accountsPayableId: ap._id, payload: { reason: "Bank refused", reasonCategory: "TECHNICAL" }, user: treasury, req }), (error) => error.code === "BANK_FILE_NOT_VERIFIED");
 
@@ -120,7 +121,10 @@ test("GAF approves each bank TXT before Treasury can download it", { timeout: 12
     await t.test("only GAF approves bank files and no generator can approve their own file", async () => {
       const { batch } = await makeFile([await makePayable()], gaf);
       await assert.rejects(() => verifyBankFile({ batchId: batch._id, user: gaf, req }), (error) => error.statusCode === 403);
-      const own = await makeFile([await makePayable()], admin);
+      const own = await makeFile([await makePayable()], treasury);
+      await assert.rejects(() => verifyBankFile({ batchId: own.batch._id, user: treasury, req }), (error) => error.statusCode === 403);
+      await assert.rejects(() => rejectBankFile({ batchId: own.batch._id, payload: { reason: "Test" }, user: treasury, req }), (error) => error.statusCode === 403);
+      // The Admin is not a superuser: it neither approves nor rejects bank files.
       await assert.rejects(() => verifyBankFile({ batchId: own.batch._id, user: admin, req }), (error) => error.statusCode === 403);
       await assert.rejects(() => rejectBankFile({ batchId: own.batch._id, payload: { reason: "Test" }, user: admin, req }), (error) => error.statusCode === 403);
       await verifyBankFile({ batchId: own.batch._id, user: gaf, req });

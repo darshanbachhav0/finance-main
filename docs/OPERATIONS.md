@@ -102,21 +102,21 @@ Authentication:
   nothing; add `--apply --activate` to reactivate and/or `--apply --reset-password` for a temporary
   password (printed once; it must be changed at the next sign-in, and existing sessions end). Every
   recovery is audited (`ACCOUNT_RECOVERED`).
-- Super Admin (manages the Admin accounts and oversees the platform read-only; see the role guide):
-  created only from the server, at most two, against the target `MONGODB_URI` like `account:recover`:
-  `npm run superadmin:create -- --dni=<DNI> --name="<Name>" [--email=<email>]` prints a temporary
-  password once; the first sign-in asks to change it and to set up an authenticator app.
-  `npm run superadmin:list` lists them; `npm run superadmin:reset-2fa -- --dni=<DNI>` removes the
-  authenticator of someone who lost their phone (they set it up again at the next sign-in).
+- Administrators (one ADMIN role; the Super Admin role was folded into it, see
+  docs/ROLE_PERMISSIONS_GUIDE.md). Day to day, an administrator gives the Admin role from
+  Administración > Empleados. Break-glass accounts from the server, against the target
+  `MONGODB_URI` like `account:recover`: `npm run admin:create -- --dni=<DNI> --name="<Name>"
+  [--email=<email>]` prints a temporary password once; `npm run admin:list` lists administrators;
+  `npm run admin:reset-2fa -- --dni=<DNI>` removes the authenticator of someone who lost their phone.
 - `TWO_FACTOR_ENCRYPTION_KEY` (optional, recommended in production) — encrypts the authenticator
   secrets. Without it the key derives from `JWT_SECRET`, so rotating `JWT_SECRET` means running
-  `superadmin:reset-2fa` for each Super Admin. `SUPER_ADMIN_2FA_REQUIRED=false` skips the
-  authenticator for local development only (ignored in production).
-- Platform settings saved by the Super Admin (password minimum length and expiry, session length,
+  `admin:reset-2fa` for each administrator who enrolled. `ADMIN_2FA_REQUIRED=true` makes the
+  authenticator mandatory for every administrator account (accounts that enrolled always use it).
+- Platform settings saved by an administrator (password minimum length and expiry, session length,
   maintenance mode, announcement) override `JWT_EXPIRES_IN`; an empty value falls back to the
   environment.
-- `BACKUP_DIR` (default `backend/backups`) — where `npm run backup` and the Super Admin's "Start
-  backup" write. On a host without a persistent disk, copy each backup somewhere safe.
+- `BACKUP_DIR` (default `backend/backups`) — where `npm run backup`, the migrations and Administración > Plataforma
+  "Start backup" write. On a host without a persistent disk, copy each backup somewhere safe.
 
 ## 2. Local development
 
@@ -277,9 +277,9 @@ The operations worker (`OPERATIONS_WORKER_ENABLED`, on in production) runs every
 Treasury reconciles paid payables in Payments > Reconciliation.
 
 Excel imports (`POST /api/imports/:kind`, checked first with nothing saved, then imported):
-`budget-plans` (Treasury / Admin: new annual plans per Cost Center), `suppliers` (Admin / Accounting /
-Procurement: supplier proposals, pending approval as usual) and `payment-schedule` (Treasury / Admin:
-planned payment date and priority of open payables). Each screen offers the template.
+`budget-plans` (Tesorería: new annual plans per Cost Center), `suppliers` (Tesorería: supplier
+proposals, pending validation as usual) and `payment-schedule` (Tesorería: planned payment date and
+priority of open payables). Each screen offers the template.
 
 ### Notification emails
 

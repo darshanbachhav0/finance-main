@@ -7,6 +7,7 @@ import { recordAudit } from "./auditService.js";
 import { applyBudgetExceptionIncrease } from "./budgetPlanService.js";
 import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { runFinancialOperation } from "./transactionService.js";
+import { hasRole } from "../../../shared/accessControl.mjs";
 
 // Configurable, per-dimension authority: Budget/Admin always prepare an
 // exception; who may APPROVE/REJECT it is resolved from the most specific
@@ -54,11 +55,11 @@ export function assertExceptionDecisionAllowed(exception, request, user, action,
     throw new AppError(409, "The request of this exception is already closed, voided or rejected; there is nothing left to decide.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
   if (action === "REVIEWED") {
-    if (![ROLES.TREASURY, ROLES.ADMIN].includes(user.role)) throw new AppError(403, "Budget review permission is required.");
+    if (!hasRole(user, ROLES.TREASURY)) throw new AppError(403, "Budget review permission is required.");
     return;
   }
   if (!["APPROVED", "REJECTED"].includes(action)) throw new AppError(422, "Invalid exception action.");
-  if (user.role !== approverRole) throw new AppError(403, `Only ${approverRole} may authorize a budget exception of this size/dimension.`, { requiredRole: approverRole });
+  if (!hasRole(user, approverRole)) throw new AppError(403, `Only ${approverRole} may authorize a budget exception of this size/dimension.`, { requiredRole: approverRole });
   if (!exceptionReviewed(exception)) {
     throw new AppError(409, "Budget must review this exception before Management can decide it.", { budgetException: exception._id }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   }
@@ -85,7 +86,7 @@ async function notifyAfterDecision(exception, request, action) {
   }
   await resolveNotification(`budget-exception:${exception._id}:decision`);
   await notifyRoles({
-    roles: [ROLES.TREASURY, ROLES.ADMIN],
+    roles: [ROLES.TREASURY],
     eventKey: `budget-exception:${exception._id}:${action.toLowerCase()}`,
     type: "BUDGET_EXCEPTION",
     title: action === "APPROVED" ? notificationText("Budget exception approved") : notificationText("Budget exception rejected"),

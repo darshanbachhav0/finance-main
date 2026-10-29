@@ -11,12 +11,13 @@ import { notificationText, notifyRoles } from "./notificationService.js";
 import { budgetAvailable, budgetLimits, findBudgetAllocation, isBudgetPlan } from "./budgetAllocationService.js";
 import { runFinancialOperation } from "./transactionService.js";
 import { AppError } from "../utils/AppError.js";
-import { BUDGET_PLAN_MANAGERS, BUDGET_STATUS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, ROLES } from "../utils/constants.js";
+import { BUDGET_STATUS, ERROR_CODES, FINANCE_CONFIGURATION_KEYS, PERMISSIONS, ROLES } from "../utils/constants.js";
+import { can as hasPermission } from "../../../shared/accessControl.mjs";
 import { addMoney, roundMoney, subtractMoney, sumMoney } from "../utils/money.js";
 import { BUDGET_MONTHS, BUDGET_PLANNING_MODES, budgetCents, distributeAnnualBudget, validBudgetPeriod, validBudgetYear } from "../../../shared/budgetPlanning.mjs";
 
 function assertManager(user) {
-  if (!BUDGET_PLAN_MANAGERS.includes(user?.role)) throw new AppError(403, "Only Admin, Treasury or the Super Admin can manage budget plans.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!hasPermission(user, PERMISSIONS.BUDGET_MANAGE)) throw new AppError(403, "Only Tesorería can manage budget plans.", undefined, ERROR_CODES.FORBIDDEN);
 }
 const invalid = (message, details) => new AppError(422, message, details, ERROR_CODES.VALIDATION_ERROR);
 function amount(value) {
@@ -119,7 +120,7 @@ const usedIn = (bucket) => addMoney(bucket?.committedAmount || 0, bucket?.execut
 const reserveOf = (plan) => subtractMoney(plan.assignedAmount, sumMoney((plan.months || []).map((bucket) => bucket.assignedAmount)));
 
 function assertPlanEditor(user) {
-  if (!BUDGET_PLAN_MANAGERS.includes(user?.role)) throw new AppError(403, "Only Admin, Treasury or the Super Admin can change a budget plan.", undefined, ERROR_CODES.FORBIDDEN);
+  if (!hasPermission(user, PERMISSIONS.BUDGET_MANAGE)) throw new AppError(403, "Only Tesorería can change a budget plan.", undefined, ERROR_CODES.FORBIDDEN);
 }
 
 // Lima calendar month, so a "month end" matches the university's own calendar.

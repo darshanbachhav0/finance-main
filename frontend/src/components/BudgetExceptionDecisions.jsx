@@ -9,12 +9,13 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
+import { hasRole } from "../utils/access.js";
 
 // One decision inbox for Management: the budget exceptions Budget has already reviewed are
 // decided in the Approval Inbox, next to the approvals. Only Management may approve or reject
 // one (the backend enforces it, and blocks an exception the user requested or prepared); Admin
 // sees the same queue read-only. The full record stays in Budget Control → Exceptions.
-export const BUDGET_EXCEPTION_DECISION_ROLES = ["Management", "Admin"];
+export const BUDGET_EXCEPTION_DECISION_ROLES = ["Management"];
 const QUEUE_ENDPOINT = "/dashboard/decisions/budget-exceptions";
 const ALL_EXCEPTIONS_PATH = "/budget?tab=exceptions&exceptionStatus=PENDING";
 const STRATEGY_LABELS = { REQUEST_BUDGET_INCREASE: "Budget increase", EXTRAORDINARY_APPROVAL: "Extraordinary approval" };
@@ -22,7 +23,7 @@ const strategyLabel = (strategy) => STRATEGY_LABELS[strategy] || strategy || "-"
 
 export function useBudgetExceptionDecisions() {
   const { user } = useAuth();
-  const enabled = BUDGET_EXCEPTION_DECISION_ROLES.includes(user?.role);
+  const enabled = hasRole(user, BUDGET_EXCEPTION_DECISION_ROLES);
   const [state, setState] = useState({ rows: [], total: 0, canDecide: false, loading: enabled, error: "" });
   const reload = useCallback(async () => {
     if (!enabled) return;

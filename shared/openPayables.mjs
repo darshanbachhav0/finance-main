@@ -1,6 +1,5 @@
-// One definition of "open payables" / "pending payment", shared by the management portal
-// (externalManagementService.js) and internal Reports (reportController.js) so both show the
-// same number.
+// One definition of "open payables" / "pending payment", shared by the dashboards and Reports
+// (reportController.js) so both show the same number.
 //
 // A payable is open while it still has an outstanding balance in any not-yet-settled status:
 // OPEN, SCHEDULED, PAYMENT_FILE_CREATED, PARTIALLY_PAID (counted at its outstanding balance, not

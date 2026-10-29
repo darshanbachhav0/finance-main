@@ -80,7 +80,7 @@ async function finishRun(run, work) {
 
 // Starts a backup in the background and returns its run record at once; the Super Admin's page
 // follows it from the history. Only one runs at a time.
-export async function startBackup({ user, req, trigger = "SUPER_ADMIN", wait = false } = {}) {
+export async function startBackup({ user, req, trigger = "ADMIN", wait = false } = {}) {
   const running = await BackupRun.findOne({ status: "RUNNING", startedAt: { $gte: new Date(Date.now() - STALE_RUN_MS) } }).lean();
   if (running) throw new AppError(409, "A backup is already running. Wait for it to finish.", { startedAt: running.startedAt }, ERROR_CODES.CONFLICT);
   const run = await BackupRun.create({ status: "RUNNING", trigger, triggeredBy: user?._id, triggeredByName: user?.name, startedAt: new Date(), location: backupDirectory() });

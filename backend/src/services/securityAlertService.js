@@ -18,22 +18,22 @@ function alertMessage(kind, audit, entity) {
   }
 }
 
-// Called by recordAudit for every audit it stores: a sensitive one reaches each active Super Admin
+// Called by recordAudit for every audit it stores: a sensitive one reaches each active administrator
 // as a bell notification (and its email copy). Never throws - an alert must not undo the action.
 export async function raiseSecurityAlert(audit, entity) {
   try {
     const kind = securityAlertKind(audit);
     if (!kind) return [];
     const message = alertMessage(kind, audit, entity && typeof entity === "object" ? entity : undefined);
-    const superAdmins = await User.find({ role: ROLES.SUPER_ADMIN, active: true }).select("_id").lean();
-    return await Promise.all(superAdmins.map((superAdmin) => notifyUser({
+    const administrators = await User.find({ active: true, $or: [{ role: ROLES.ADMIN }, { roles: ROLES.ADMIN }] }).select("_id").lean();
+    return await Promise.all(administrators.map((administrator) => notifyUser({
       once: true,
-      userId: superAdmin._id,
+      userId: administrator._id,
       eventKey: `security:${audit._id}`,
       type: "SECURITY_ALERT",
       title: notificationText("Security alert"),
       message,
-      path: `/super-admin/alerts?record=${audit._id}`,
+      path: `/administration/alerts?record=${audit._id}`,
       entityType: "AuditLog",
       entityId: audit._id
     })));

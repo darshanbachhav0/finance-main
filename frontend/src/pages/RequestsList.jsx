@@ -18,10 +18,10 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { expenseNatureLabels, expenseNatures, requestFlowTypes, requestPriorities, requestPriorityLabels, requestStatuses, requestTypes } from "../utils/options.js";
-import { requesterRoles } from "../utils/navigationAccess.js";
 import { isTransfer, transferRoute } from "../utils/treasuryTransfer.js";
 import PriorityBadge from "../components/PriorityBadge.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
+import { PERMISSIONS, ROLES, userCan } from "../utils/access.js";
 
 export default function RequestsList() {
   const { user } = useAuth();
@@ -36,7 +36,7 @@ export default function RequestsList() {
   const [withdrawRow, setWithdrawRow] = useState(null);
   const [withdrawing, setWithdrawing] = useState(false);
   // Solicitors see "My Requests": only their own. Their reports' requests are on My Team.
-  const ownScope = requesterRoles.includes(user.role);
+  const ownScope = user.role === ROLES.SOLICITOR;
   const requestsTable = usePaginatedResource("/requests", {
     fixedParams: ownScope ? { ownScope: true } : {},
     initialSearch: searchParams.get("search") || "",
@@ -60,7 +60,7 @@ export default function RequestsList() {
   const periods = useMemo(() => periodsResource.rows.map((row) => row.period), [periodsResource.rows]);
   const costCenters = useMemo(() => costCentersResource.rows.map((row) => ({ value: row._id, label: `${row.code} - ${row.name}` })), [costCentersResource.rows]);
   const projects = useMemo(() => projectsResource.rows.map((row) => ({ value: row.code || row.name, label: `${row.code || ""} ${row.name || ""}`.trim() })), [projectsResource.rows]);
-  const canCreate = ["Admin", ...requesterRoles].includes(user.role);
+  const canCreate = userCan(user, PERMISSIONS.REQUEST_CREATE);
   // Requesters get a short list: what, how much, its plain status and what is needed from them.
   const plain = usesPlainStatuses(user);
   const priorityOptions = requestPriorities.map((value) => ({ value, label: requestPriorityLabels[value] }));
@@ -84,7 +84,7 @@ export default function RequestsList() {
   const columns = allColumns.filter((column) => !(plain && column.plainHidden)).map(({ plainHidden, ...column }) => column);
 
   function isOwner(row) {
-    return user.role === "Admin" || (row.requester?._id || row.solicitor?._id) === user._id;
+    return (row.requester?._id || row.solicitor?._id) === user._id;
   }
 
   // The server decides what each row allows (status, issued order, who must resolve an observation).
