@@ -4,7 +4,6 @@ import { assertPostingAllowed } from "./financialProgressService.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
 import { createAccountsPayableFromVoucher } from "./accountingService.js";
-import { reserveBudget } from "./budgetService.js";
 import { getVerifiedEmployeeReimbursementBankAccount } from "./employeeReimbursementBankService.js";
 import { createSunatVoucher, findDuplicateVoucher, splitVoucherNumber, validateVoucherWithSunat } from "./sunatVoucherService.js";
 import { transitionRequest } from "./workflowService.js";
@@ -173,7 +172,7 @@ export async function provisionDirectPayment() {
 export async function provisionTrackCAdvance({ request, user, req, session, automatic = false }) {
   await assertPostingAllowed(request, { user, req });
   if (request.flowType !== FLOW_TYPE.C) throw new AppError(422, "Advance provisioning is only available for Track C.", { flowType: request.flowType }, ERROR_CODES.VALIDATION_ERROR);
-  if (![REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.OBSERVED_BUDGET].includes(request.status)) throw new AppError(409, "Track C can be provisioned only after all approvals are complete or after a budget observation is resolved.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  if (request.status !== REQUEST_STATUS.BUDGET_COMMITTED || !request.budgetCommitment) throw new AppError(409, "The Track C advance must have an approved budget commitment before Accounting provisions it.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
   const requester = await User.findById(request.requester?._id || request.requester || request.solicitor).session(session || null);
   if (!requester?.active || !/^\d{8}$/.test(requester.dni || "")) throw new AppError(422, "An active employee with a valid DNI is required for an advance payment.");
   const bank = await getVerifiedEmployeeReimbursementBankAccount({ userId: requester._id, currency: request.currency, session });
@@ -202,8 +201,8 @@ export async function provisionTrackCAdvance({ request, user, req, session, auto
     verificationStatus: bank.verificationStatus,
     capturedAt: new Date()
   };
-  const commitment = await reserveBudget(request, user._id, { session });
-  request.budgetCommitment = commitment._id;
+  // Reservation already happened at final approval. Never make a second budget hold.
+  const commitment = request.budgetCommitment;
   const voucher = {
     ruc: requester.dni,
     voucherType: "ANTICIPO",
@@ -218,6 +217,6 @@ export async function provisionTrackCAdvance({ request, user, req, session, auto
   // Paid the same working day (next working day after the cut-off), not on the 15th / 30th.
   const payDate = await advancePaymentDateKey();
   const accountsPayable = await createAccountsPayableFromVoucher({ request, voucher, user, paymentPriority: "PRIORITY", dueDate: new Date(`${payDate}T17:00:00.000Z`), session });
-  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "ADVANCE_PROVISIONED", comments: "Track C budget reserved before the advance is posted to Account 14; expense execution remains deferred until rendition validation.", session, skipControls: true, skipRoleCheck: automatic });
+  await transitionRequest({ request, targetStatus: REQUEST_STATUS.ACCOUNTED, user, req, action: "ADVANCE_PROVISIONED", comments: "Accounting provisioned the budget-committed Track C advance to Account 14; expense execution remains deferred until rendition validation.", session, skipControls: true, skipRoleCheck: automatic });
   return { accountsPayable, commitment };
 }

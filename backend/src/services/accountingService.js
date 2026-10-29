@@ -1,4 +1,5 @@
 import { requestSuggestedPaymentDate } from "./paymentWindowService.js";
+import { verifiedInvoiceConflicts } from "../../../shared/accountingInvoicePrefill.mjs";
 import { normalizeRequestPriority } from "../../../shared/requestPriority.mjs";
 import mongoose from "mongoose";
 import { assertPostingAllowed, syncFinancialProgress } from "./financialProgressService.js";
@@ -83,6 +84,9 @@ function fiscalPayload(body, supplierIdentifier) {
   const missing = Object.entries(required).filter(([, value]) => !String(value || "").trim()).map(([key]) => key);
   if (missing.length) {
     throw new AppError(422, "Required fiscal fields are missing.", { missing }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  if (series.includes("-") || number.includes("-")) {
+    throw new AppError(422, "Enter the series and document number separately. Example: series F001, number 00001234.", { series, number }, ERROR_CODES.VALIDATION_ERROR);
   }
   const postingPeriod = invoicePostingPeriod(body.documentDate);
   const requestedPeriod = String(body.fiscalPeriod || "").trim();
@@ -951,10 +955,43 @@ async function recordObservedManualEvidence({ request, voucher, validation, invo
 }
 
 export async function processAccountsPayable({ requestId, payload, user, req }) {
+  // Track C has no supplier factura and must be posted as an employee advance,
+  // not through the A1/B invoice fiscal form. The Accounting route enforces
+  // ACCOUNTING_PROVISION permissions before this service is invoked.
+
   const request = await FinancialRequest.findById(requestId).select("+attachments.path").populate("supplier");
   if (!request) throw new AppError(404, "Financial request not found.", { requestId }, ERROR_CODES.NOT_FOUND);
   if (request.status !== REQUEST_STATUS.BUDGET_COMMITTED) {
     throw new AppError(409, "Only budget-committed requests can be processed by Accounting.", { status: request.status }, ERROR_CODES.INVALID_STATUS_TRANSITION);
+  }
+  if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.ENTREGA_RENDIR) {
+    // This path is distinct from a post-payment rendition or an employee
+    // reimbursement: the advance is a receivable until receipts are validated.
+    const { provisionTrackCAdvance } = await import("./directPaymentService.js");
+    const { holdAdvanceForBankAccount, resolveBankNotices } = await import("./advanceBankHoldService.js");
+    const { runFinancialOperation } = await import("./transactionService.js");
+    let accountsPayable;
+    try {
+      accountsPayable = await runFinancialOperation(async (session) => {
+        const result = await provisionTrackCAdvance({ request, user, req, session });
+        return result.accountsPayable;
+      });
+    } catch (error) {
+      if (error.code === ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED) {
+        await holdAdvanceForBankAccount({ request, user, req, error });
+      }
+      throw error;
+    }
+    await resolveBankNotices(request);
+    await resolveNotification(`request:${request._id}:accounting`);
+    await notifyRoles({
+      roles: [ROLES.TREASURY], eventKey: `request:${request._id}:treasury`,
+      type: "TREASURY_PAYMENT", title: notificationText("Advance ready for Treasury"),
+      message: notificationText("{requestNumber} was provisioned by Accounting. Schedule payment to the verified employee account.", { requestNumber: request.requestNumber }),
+      path: `/treasury?tab=prepare&request=${request._id}`,
+      entityType: "FinancialRequest", entityId: request._id
+    });
+    return { request, accountsPayable, journal: accountsPayable.provisionJournal };
   }
   if (
     request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO
@@ -970,6 +1007,12 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
   }
   const supplierIdentifier = request.supplier?.normalizedIdentifier || request.supplier?.rucDni || request.supplierSnapshot?.identifier;
   const fiscal = fiscalPayload(payload, supplierIdentifier);
+  // A restored draft or a mistaken transcription must never silently override
+  // the invoice identity already validated from the request's own XML/PDF.
+  const invoiceConflicts = verifiedInvoiceConflicts(request.xmlValidation, fiscal);
+  if (invoiceConflicts.length) {
+    throw new AppError(422, invoiceConflicts.join(" "), { invoiceConflicts }, ERROR_CODES.XML_VALIDATION_FAILED);
+  }
   if (isAdjustmentNote(fiscal.voucherType)) {
     throw new AppError(422, "A credit or debit note is not a new payable. Register it against its original invoice from Accounts Payable.", { voucherType: fiscal.voucherType }, ERROR_CODES.VALIDATION_ERROR);
   }

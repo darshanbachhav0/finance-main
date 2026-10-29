@@ -82,12 +82,12 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
   if (status === "PENDIENTE_APROBACION" && tierTeam) return { text: tierText[activeStep.tier || activeStep.approvalLevel], holder: team(tierTeam), since: activeStep?.startedAt || since };
   if (status === "PENDIENTE_APROBACION") return { text: "Waiting for {name}'s approval.", params: { name: activeStep?.approverSnapshot?.name || "-" }, holder: person(activeStep?.approverSnapshot?.name), since: activeStep?.startedAt || since };
   if (waitsForBankAccount(request)) return request.observation.resolver === "ACCOUNTING"
-    ? { text: "Approved. Accounting is verifying the bank account; then the advance is paid.", holder: team("Accounting"), since, tone: "attention" }
+    ? { text: "A verified employee bank account is required before Accounting can provision the advance.", holder: team("Accounting"), since, tone: "attention" }
     : { text: mine ? "Approved. Register your bank account so the advance can be paid." : "Approved. Waiting for the requester's verified bank account.", holder: requester, since, tone: "attention" };
   if (status === "APROBADO" && request.flowType === "D") return { text: "Approved. Treasury makes the transfer at the bank and records its operation number.", holder: team("Treasury"), since };
   if (status === "PAGADO" && request.flowType === "D") return { text: "Transferred. Treasury reconciles it with the bank statement.", holder: team("Treasury"), since };
   if (["OBSERVADO", "DEVUELTO"].includes(status) && request.flowType === "D") return { text: mine ? "Returned to you for corrections. Correct it in Transfers and send it again." : "Returned to Treasury for corrections.", holder: requester, since, tone: "attention" };
-  if (status === "APROBADO") return { text: "Approved. Waiting for Treasury to commit the budget.", holder: team("Treasury"), since };
+  if (status === "APROBADO") return { text: "Approvals completed. Financial Control must finish the budget commitment before Accounting or Treasury can proceed.", holder: team("Financial Control"), since, tone: "attention" };
   if (["OBSERVADO", "DEVUELTO"].includes(status)) return { text: mine ? "Returned to you for corrections. Fix it and submit it again." : "Returned to the requester for corrections.", holder: requester, since, tone: "attention" };
   if (status === "OBSERVADO_PRESUPUESTO") return { text: "Waiting for a budget decision.", holder: team("Treasury"), since, tone: "attention" };
   // An invoice from another supplier, or one already registered, waits for the requester; only a
@@ -101,7 +101,8 @@ export function journeySummary(request, { activeStep, orderApplies = true, payme
   if (status === "RECHAZADO") return { text: "Rejected. No further steps.", holder: null, since, tone: "stopped" };
   if (status === "ANULADO") return { text: "Annulled. No further steps.", holder: null, since, tone: "stopped" };
   if (status === "COMPROMISO_PRESUPUESTAL") {
-    if (request.flowType === "C") return { text: mine ? "Approved. Submit your signed declaration to get paid." : "Approved. Waiting for the requester's signed declaration.", holder: requester, since };
+    if (request.flowType === "C" && request.requestType === "ENTREGA_RENDIR") return { text: "Advance approved and budget committed. Accounting must provision it to Account 14 before Treasury can pay.", holder: team("Accounting"), since };
+    if (request.flowType === "C" && request.requestType === "REEMBOLSO_SIN_SUSTENTO") return { text: "Budget committed. Complete the required expense declaration and Finance review before payment.", holder: requester, since };
     if (request.flowType === "A1" && orderApplies && !request.purchaseOrder) return { text: "Approved and budgeted. Procurement issues the purchase order next.", holder: team("Procurement"), since };
     if (request.flowType === "A1" && request.purchaseOrder) return { text: "Purchase order {order} issued. Next: register the supplier's invoice.", params: { order: request.purchaseOrder?.poNumber || "" }, holder: requester, since };
     return { text: "Approved and budgeted. Accounting books the invoice next.", holder: team("Accounting"), since };

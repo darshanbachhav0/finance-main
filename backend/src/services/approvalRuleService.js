@@ -437,7 +437,12 @@ export async function resolveCostCenterRoute(request, thresholds) {
       const above = await nearestAvailableSupervisor(first.coveringFor?._id || first.approver._id, { exclude: [...exclude, ...onRoute] });
       superior = above.approver ? { approver: above.approver, coveringFor: above.coveringFor, center: superiorCenter || center } : null;
     }
-    if (superior && !onRoute.has(idOf(superior.approver._id))) {
+    if (!superior) {
+      throw new AppError(422,
+        `The ${center.code} cost center has no available superior for the required approval. Assign its Vicerrector/Gerente or supervisor before submitting.`,
+        { costCenter: center.code, approvalLevel: "SUPERIOR" }, ERROR_CODES.APPROVAL_ROUTE_NOT_CONFIGURED);
+    }
+    if (!onRoute.has(idOf(superior.approver._id))) {
       steps.push(fixedStep(superior.approver, { kind: "SUPERIOR", center: superior.center, sequence: steps.length + 1, coveringFor: superior.coveringFor }));
     }
   }

@@ -1,6 +1,5 @@
 import { normalizeRequestPriority } from "../../../shared/requestPriority.mjs";
 import mongoose from "mongoose";
-import { limaDateKey } from "../../../shared/businessCalendar.mjs";
 import FinancialRequest from "../models/FinancialRequest.js";
 import Supplier from "../models/Supplier.js";
 import User from "../models/User.js";
@@ -22,10 +21,9 @@ import {
 } from "./approvalRuleService.js";
 import { validateAccountingDimensions } from "./accountingDimensionService.js";
 import { reserveBudget } from "./budgetService.js";
-import { preflightDirectPayment, provisionTrackCAdvance } from "./directPaymentService.js";
+import { preflightDirectPayment } from "./directPaymentService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { commitUndocumentedReimbursementBudget } from "./renditionService.js";
-import { holdAdvanceForBankAccount, resolveBankNotices } from "./advanceBankHoldService.js";
 import { applyExchangeRate } from "./exchangeRateService.js";
 import { guardAccountingPeriod } from "./periodService.js";
 import { notificationText, notifyRoles, notifyUser, notifyApprovalStep, resolveNotification } from "./notificationService.js";
@@ -339,37 +337,31 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
   if (request.flowType === FLOW_TYPE.D) return notifyTransferApproved(request);
   if (request.flowType === FLOW_TYPE.C && request.requestType === REQUEST_TYPE.REEMBOLSO_SIN_SUSTENTO) return commitUndocumentedReimbursementBudget({ request, user, req, automatic });
   if (request.flowType === FLOW_TYPE.C) {
-    let result;
-    let advancePayable;
-    try {
-      result = await runFinancialOperation(async (session) => {
-        ({ accountsPayable: advancePayable } = await provisionTrackCAdvance({ request, user, req, session, automatic }));
-        return request;
+    // Manual UMA: approval -> budget commitment -> Contabilidad (Account 14)
+    // -> Treasury. Do not issue an advance payable under the last jefe's
+    // identity: Accounting must separately authorize its provision.
+    const result = await runFinancialOperation(async (session) => {
+      const commitment = await reserveBudget(request, user._id, { session });
+      request.budgetCommitment = commitment._id;
+      await transitionRequest({
+        request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req,
+        action: "ADVANCE_BUDGET_COMMITTED",
+        comments: "Track C approved and budget committed; Accounting must provision the employee advance before Treasury scheduling.",
+        approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE,
+        dueAt: null, skipRoleCheck: automatic, session
       });
-    } catch (error) {
-      if (error.code !== ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED) throw error;
-      // No verified bank account yet: the approvals stay and the employee is told what to do;
-      // verifying the account releases the advance. A manual retry still reports why.
-      await holdAdvanceForBankAccount({ request, user, req, error });
-      if (!automatic) throw error;
       return request;
-    }
-    await resolveBankNotices(request);
-    const payDate = advancePayable?.dueDate ? limaDateKey(advancePayable.dueDate) : limaDateKey(new Date());
+    });
+    await resolveNotification(`request:${request._id}:budget-exception`);
+    await resolveNotification(`request:${request._id}:budget-commitment`);
     await notifyRoles({
-      roles: [ROLES.TREASURY],
-      eventKey: `request:${request._id}:treasury`,
-      type: "TREASURY_PAYMENT",
-      title: notificationText("Advance to pay now"),
-      message: notificationText("{requestNumber}: pay the {amount} advance to {name} on {date}. Advances are paid the same working day, outside the 15th/last working day cycle.", {
-        requestNumber: request.requestNumber,
-        amount: `${request.currency} ${Number(request.totalAmount || 0).toFixed(2)}`,
-        name: request.rendition?.beneficiarySnapshot?.name || "",
-        date: payDate.split("-").reverse().join("/")
-      }),
-      path: "/treasury?advances=due",
-      entityType: "FinancialRequest",
-      entityId: request._id
+      roles: [ROLES.ACCOUNTING],
+      eventKey: `request:${request._id}:accounting`,
+      type: "ACCOUNTING_PENDING",
+      title: notificationText("Employee advance awaits Accounting provision"),
+      message: notificationText("{requestNumber} is approved and budget committed. Review the employee advance, Account 14 and bank eligibility before creating the CXP.", { requestNumber: request.requestNumber }),
+      path: `/accounting?request=${request._id}`,
+      entityType: "FinancialRequest", entityId: request._id
     });
     return result;
   }
@@ -418,8 +410,9 @@ export async function commitApprovedRequestBudget({ request, user, req, automati
       request.observation = undefined;
     }
     await transitionRequest({ request, targetStatus: REQUEST_STATUS.BUDGET_COMMITTED, user, req, action: "BUDGET_COMMITTED", comments: "All approvals completed and budget commitment recorded.", approvalStage: APPROVAL_STAGES.COMPLETE, nextApprovalStage: APPROVAL_STAGES.COMPLETE, dueAt: null, skipRoleCheck: automatic, session });
-    // Track B stops at budget commitment: Contabilidad must review the acta,
-    // account mapping, IGV and SPOT before a payable or journal can exist.
+    // A1 goes through procurement when an OC is required; A2 attaches to the
+    // approved OC. B goes to Accounting for the invoice, acta, IGV and SPOT.
+    // This transition never creates a Treasury payable.
     return request;
   });
   await resolveNotification(`request:${request._id}:budget-exception`);

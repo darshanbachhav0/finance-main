@@ -25,7 +25,9 @@ export function plainStatusKey(request) {
   return Object.entries(PLAIN_STATUSES).find(([, item]) => item.statuses.includes(status))?.[0] || "IN_PROCESS";
 }
 
-const advanceOpen = (request) => request?.flowType === "C" && request?.requestType !== "REEMBOLSO_SIN_SUSTENTO" && ["PENDING", "OBSERVED"].includes(request?.rendition?.status);
+const advanceOpen = (request) => request?.flowType === "C" && request?.requestType !== "REEMBOLSO_SIN_SUSTENTO"
+  && ["PAGADO", "CONCILIADO", "CERRADO"].includes(canonicalRequestStatus(request?.status))
+  && ["PENDING", "OBSERVED"].includes(request?.rendition?.status);
 
 // "What we need from you": one sentence, and whether the requester has something to do.
 // An approved advance waiting for the employee's verified bank account before it can be paid.
@@ -34,7 +36,7 @@ const advanceOpen = (request) => request?.flowType === "C" && request?.requestTy
 export const REQUESTER_INVOICE_PROBLEMS = Object.freeze(["RUC_MISMATCH", "DUPLICATE_VOUCHER"]);
 export const requesterReplacesInvoice = (request) => canonicalRequestStatus(request?.status) === "OBSERVADO_SUNAT" && REQUESTER_INVOICE_PROBLEMS.includes(request?.observation?.code);
 
-export const waitsForBankAccount = (request) => canonicalRequestStatus(request?.status) === "APROBADO"
+export const waitsForBankAccount = (request) => ["APROBADO", "COMPROMISO_PRESUPUESTAL"].includes(canonicalRequestStatus(request?.status))
   && request?.observation?.code === "REIMBURSEMENT_BANK_REQUIRED" && !request.observation.resolvedAt;
 
 export function plainNextStep(request) {

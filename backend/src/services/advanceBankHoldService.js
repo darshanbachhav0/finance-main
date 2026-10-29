@@ -6,10 +6,11 @@ import { notificationText, notifyRoles, notifyUser, resolveNotification } from "
 import { ERROR_CODES, FLOW_TYPE, REQUEST_STATUS, REQUEST_TYPE, ROLES } from "../utils/constants.js";
 
 // An approved advance (Track C, entrega a rendir) is paid into the employee's verified bank
-// account. When there is none yet, the approvals stay, the request waits at APROBADO with this
-// observation, and the employee is told what to do. Verifying the account releases it.
+// account. When there is none yet, budget commitment stays intact, the request waits for
+// Accounting provision, and the employee is told what to do. Bank verification
+// resolves only the hold; it does not create a payable or execute a payment.
 export const ADVANCE_BANK_HOLD = ERROR_CODES.REIMBURSEMENT_BANK_REQUIRED;
-const APPROVED_STATUSES = [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED];
+const APPROVED_STATUSES = [REQUEST_STATUS.APPROVED, REQUEST_STATUS.DIRECTOR_APPROVED, REQUEST_STATUS.VICE_RECTOR_APPROVED, REQUEST_STATUS.BUDGET_COMMITTED];
 
 const requesterOf = (request) => request.requester?._id || request.requester || request.solicitor?._id || request.solicitor;
 export const waitsForBankAccount = (request) => request?.observation?.code === ADVANCE_BANK_HOLD && !request.observation.resolvedAt;
@@ -61,8 +62,8 @@ export async function holdAdvanceForBankAccount({ request, user, req, error }) {
 }
 
 // Runs when an employee's bank account becomes usable (verified, or chosen as preferred): every
-// approved advance of theirs in that currency still waiting is committed and provisioned, as at
-// final approval. That includes advances that stalled before this hold existed.
+// approved advance of theirs in that currency still waiting has its bank hold cleared
+// and goes to Accounting for an explicit provision. Never create CXP in this callback.
 export async function releaseAdvancesWaitingForBank({ userId, currency, user, req }) {
   const { commitApprovedRequestBudget, resolveBudgetCommitmentFailure } = await import("./approvalService.js");
   const candidates = await FinancialRequest.find({
@@ -77,8 +78,27 @@ export async function releaseAdvancesWaitingForBank({ userId, currency, user, re
     const request = await FinancialRequest.findById(_id).select("+attachments.path");
     if (!request || activeApprovalStep(request)) continue;
     try {
-      await commitApprovedRequestBudget({ request, user, req, automatic: true });
-      if (request.status === REQUEST_STATUS.ACCOUNTED) released.push(request.requestNumber);
+      if (request.status !== REQUEST_STATUS.BUDGET_COMMITTED) {
+        await commitApprovedRequestBudget({ request, user, req, automatic: true });
+      }
+      if (request.status === REQUEST_STATUS.BUDGET_COMMITTED) {
+        if (waitsForBankAccount(request)) {
+          request.observation.resolvedAt = new Date();
+          request.observation.resolvedBy = user?._id;
+          await request.save();
+        }
+        await resolveBankNotices(request);
+        await notifyRoles({
+          roles: [ROLES.ACCOUNTING],
+          eventKey: `request:${request._id}:accounting`,
+          type: "ACCOUNTING_PENDING",
+          title: notificationText("Advance bank account verified — provision in Accounting"),
+          message: notificationText("{requestNumber} has a verified employee account and an approved budget commitment. Accounting must provision it before Treasury can pay.", { requestNumber: request.requestNumber }),
+          path: `/accounting?request=${request._id}`,
+          entityType: "FinancialRequest", entityId: request._id
+        });
+        released.push(request.requestNumber);
+      }
     } catch (error) {
       try {
         await resolveBudgetCommitmentFailure({ request, error, user, req });

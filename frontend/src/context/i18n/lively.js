@@ -190,5 +190,21 @@ export default {
   "Approved. Treasury sends your advance on {date}.": "Aprobada. Tesorería envía tu anticipo el {date}.",
   "Approved. Treasury sends the advance on {date}.": "Aprobada. Tesorería envía el anticipo el {date}.",
   "Approved. Treasury sends your advance next.": "Aprobada. Tesorería envía tu anticipo a continuación.",
-  "Approved. Treasury sends the advance next.": "Aprobada. Tesorería envía el anticipo a continuación."
+  "Approved. Treasury sends the advance next.": "Aprobada. Tesorería envía el anticipo a continuación.",
+  // Financial handoff (2026 manuals): approval is not Treasury payment readiness.
+  "Approvals completed. Financial Control must finish the budget commitment before Accounting or Treasury can proceed.": "Aprobaciones completadas. Control Financiero debe registrar el compromiso presupuestal antes de que Contabilidad o Tesorería puedan continuar.",
+  "Advance approved and budget committed. Accounting must provision it to Account 14 before Treasury can pay.": "Entrega a rendir aprobada y con presupuesto comprometido. Contabilidad debe provisionarla en la cuenta 14 antes del pago por Tesorería.",
+  "A verified employee bank account is required before Accounting can provision the advance.": "Se necesita una cuenta bancaria verificada del colaborador antes de que Contabilidad pueda provisionar el adelanto.",
+  "Financial Control": "Control Financiero",
+  "Accounting provision queue": "Bandeja de provisiones contables",
+  "Budget-committed supplier invoices and employee advances waiting for Accounting. C advances do not require supplier fiscal documents.": "Facturas y entregas a rendir con presupuesto comprometido pendientes de Contabilidad. Las entregas a rendir no requieren factura de proveedor en esta etapa.",
+  "Employee advance — Accounting review": "Entrega a rendir — revisión de Contabilidad",
+  "The budget is committed. Confirm the employee has a verified bank account, then provision the advance to Account 14. No supplier invoice is required at this step; the employee must later submit the rendition.": "El presupuesto está comprometido. Verifique la cuenta bancaria del colaborador y provisione la entrega a rendir en la cuenta 14. No se requiere factura de proveedor en este paso; el colaborador deberá presentar su rendición posteriormente.",
+  "Accounting provisions the advance as an employee receivable. Actual expense execution takes place after the rendition is reviewed.": "Contabilidad provisiona la entrega a rendir como cuenta por cobrar al colaborador. La ejecución del gasto se registra tras revisar la rendición.",
+  "Review employee advance": "Revisar entrega a rendir",
+  "Provision employee advance": "Provisionar entrega a rendir",
+  "Provision advance to Account 14": "Provisionar en cuenta 14",
+  "No supplier invoice": "Sin factura de proveedor",
+  "Employee advance": "Entrega a rendir",
+
 };

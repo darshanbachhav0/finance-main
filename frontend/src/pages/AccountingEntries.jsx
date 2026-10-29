@@ -22,6 +22,7 @@ import usePaginatedResource from "../hooks/usePaginatedResource.js";
 import { formatCurrency, formatDateTime } from "../utils/formatters.js";
 import { SPOT_CATEGORY_OPTIONS, suggestedSpotCategoryCode } from "../../../shared/spotCategories.mjs";
 import { todayIso } from "../utils/dateInput.js";
+import { initialAccountingFiscalForm, requestInvoiceEvidence, splitFiscalInvoiceNumber, verifiedInvoiceConflicts } from "../../../shared/accountingInvoicePrefill.mjs";
 
 const NON_CREDITABLE_DOCUMENTS = ["BOLETA"];
 // The account category a request type books to (mirrors accountingDimensionService).
@@ -44,10 +45,14 @@ export default function AccountingEntries() {
   const [exporting, setExporting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [openingRequest, setOpeningRequest] = useState(false);
   const [fiscalForm, setFiscalForm] = useState({ documentType: "FACTURA", series: "", number: "", documentDate: "", accountingDate: todayIso(), fiscalPeriod: todayIso().slice(0, 7), dueDate: "", accountingAccount: "", igvDeductible: true, spotCategoryCode: "", subaccountNumber: "", comments: "" });
   const [accountingAccounts, setAccountingAccounts] = useState([]);
   const entriesTable = usePaginatedResource("/accounting/entries", { fixedParams: { period } });
-  const pendingTable = usePaginatedResource("/accounting/pending", { fixedParams: { period } });
+  // An unprovisioned invoice/advance remains an Accounting task even if its
+  // request belongs to an earlier month. Period filtering applies to journal
+  // reports, never silently hides pending obligations.
+  const pendingTable = usePaginatedResource("/accounting/pending");
   const historyTable = usePaginatedResource("/accounting/exports");
   const sunatTable = usePaginatedResource("/accounting/sunat-observations");
   const [exceptionTarget, setExceptionTarget] = useState(null);
@@ -125,7 +130,7 @@ export default function AccountingEntries() {
     }
   }
 
-  const draft = useWorkDraft({ scope: "fiscal", recordId: selectedRequest?._id || "new", title: "Fiscal processing", enabled: Boolean(selectedRequest), value: fiscalForm, restore: setFiscalForm, sourceVersion: selectedRequest?.updatedAt });
+  const draft = useWorkDraft({ scope: "fiscal", recordId: selectedRequest?._id || "new", title: "Fiscal processing", enabled: Boolean(selectedRequest), value: fiscalForm, restore: setFiscalForm, sourceVersion: selectedRequest?.updatedAt, resumeLatest: false });
   useDraftResume("fiscal", async id => { try { const response = await api.get(`/requests/${id}`); openFiscalProcessing(response.data.data); } catch (err) { setActionError(err.message); } });
 
   useEffect(() => {
@@ -134,34 +139,50 @@ export default function AccountingEntries() {
       .catch((err) => setActionError(err.message));
   }, []);
 
-  // The platform suggests the account (from the request type and expense nature) and the SPOT
-  // category (from the expense nature); Accounting confirms or changes both here.
-  function openFiscalProcessing(request) {
-    // The invoice's own date, read from its XML or factura PDF, may differ from the request's date.
-    const documentDate = (request.xmlValidation?.data?.issueDate || request.issueDate)?.slice(0, 10) || "";
-    const suggestedAccount = request.lines?.[0]?.expenseType?._id || request.lines?.[0]?.expenseType || "";
-    setSelectedRequest(request);
-    setFiscalForm({ documentType: "FACTURA", series: "", number: "", documentDate, accountingDate: todayIso(), fiscalPeriod: documentDate.slice(0, 7) || period, dueDate: "", accountingAccount: String(suggestedAccount), igvDeductible: true, spotCategoryCode: suggestedSpotCategoryCode(request.expenseNature), subaccountNumber: "", comments: "" });
+  // Always load the latest full request, including its original invoice evidence, before
+  // opening the fiscal form. Pending-queue rows and old autosaved drafts are not evidence.
+  async function reviewRequest(requestId) {
+    setOpeningRequest(true);
+    setActionError("");
+    try {
+      const response = await api.get(`/requests/${requestId}`);
+      openFiscalProcessing(response.data.data);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setOpeningRequest(false);
+    }
   }
 
+  function openFiscalProcessing(request) {
+    const suggested = initialAccountingFiscalForm(request, todayIso());
+    setSelectedRequest(request);
+    setFiscalForm({ ...suggested, spotCategoryCode: suggestedSpotCategoryCode(request.expenseNature) });
+  }
+
+  const employeeAdvance = selectedRequest?.flowType === "C" && selectedRequest?.requestType === "ENTREGA_RENDIR";
+  const invoiceEvidence = selectedRequest && !employeeAdvance ? requestInvoiceEvidence(selectedRequest) : null;
+  const invoiceConflicts = selectedRequest && !employeeAdvance
+    ? verifiedInvoiceConflicts(selectedRequest.xmlValidation, fiscalForm)
+    : [];
   const creditableDocument = !NON_CREDITABLE_DOCUMENTS.includes(fiscalForm.documentType);
   const accountOptions = useMemo(() => selectedRequest ? accountsFor(accountingAccounts, selectedRequest.requestType) : [], [accountingAccounts, selectedRequest]);
 
   async function processRequest(event) {
-    event.preventDefault(); if (!draft.ready || draft.status === "conflict") return;
-    event.preventDefault();
+    event.preventDefault(); if (!draft.ready || draft.status === "conflict" || draft.session.sourceChanged) return;
     setProcessing(true);
     setActionError("");
     try {
+      const isEmployeeAdvance = selectedRequest.flowType === "C" && selectedRequest.requestType === "ENTREGA_RENDIR";
       const { igvDeductible, ...fiscal } = fiscalForm;
-      await api.post(`/accounting/requests/${selectedRequest._id}/process`, {
+      await api.post(`/accounting/requests/${selectedRequest._id}/process`, isEmployeeAdvance ? {} : {
         ...fiscal,
         fiscalPeriod: fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod,
         // Boletas never give tax credit; the override only applies to creditable documents.
         ...(creditableDocument ? { igvDeductible } : {})
       });
       await draft.complete();
-      notify("Fiscal document validated and account payable created.");
+      notify(isEmployeeAdvance ? "Employee advance provisioned to Account 14. Treasury can now schedule the payment." : "Fiscal document validated and account payable created.");
       setSelectedRequest(null);
       load();
       window.dispatchEvent(new Event("erp:tasks-changed"));
@@ -203,10 +224,10 @@ export default function AccountingEntries() {
         ]} />
       </div>
       <div hidden={focusView !== "Processing"} {...tabPanelProps("accounting", "Processing")} className="workspace-panel">
-        <div className="section-heading"><div><h3>{t("CXP processing queue")}</h3><p>{t("Budget-committed requests waiting for fiscal validation and preliminary accounting.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
-        <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => readOnly ? [] : [{ label: "Review fiscal data", icon: Eye, primary: true, onClick: () => openFiscalProcessing(row) }]} columns={[
+        <div className="section-heading"><div><h3>{t("Accounting provision queue")}</h3><p>{t("Budget-committed supplier invoices and employee advances waiting for Accounting. C advances do not require supplier fiscal documents.")}</p></div><span className="section-count">{pendingTable.pagination.total}</span></div>
+        <DataTable rows={pending} loading={pendingTable.loading} remote={pendingTable.remote} searchPlaceholder="Search request, supplier, or document..." rowActions={(row) => readOnly ? [] : [{ label: row.flowType === "C" ? "Review employee advance" : "Review fiscal data", icon: Eye, primary: true, onClick: () => reviewRequest(row._id) }]} columns={[
           { key: "requestNumber", type: "code", label: "Request", render: (row) => <Link to={`/requests/${row._id}`}>{row.requestNumber}</Link> },
-          { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name}</strong><span>{row.supplier?.rucDni}</span></div> },
+          { key: "supplier", type: "name", label: "Supplier", sortable: false, getValue: (row) => row.supplier?.name, render: (row) => <div className="primary-cell"><strong>{row.supplier?.name || (row.flowType === "C" ? "Employee advance" : "-")}</strong><span>{row.supplier?.rucDni || (row.flowType === "C" ? "No supplier invoice" : "")}</span></div> },
           { key: "requestType", label: "Type" },
           { key: "expenseNature", label: "Expense nature" },
           { key: "accountingPeriod", type: "code", label: "Period" },
@@ -265,13 +286,23 @@ export default function AccountingEntries() {
         ]} />
       </div>
 
-      <Drawer open={Boolean(selectedRequest)} error={actionError} title="Process account payable" description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing || !draft.ready || draft.status === "conflict"}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : "Validate and create CXP")}</span></button></>}>
-        <div className="document-requirement required"><FileCheck2 size={20} /><div><strong>{t("Fiscal duplicate control")}</strong><p>{t("The system blocks repeated RUC + document type + series + number combinations.")}</p></div></div>
+      <Drawer open={Boolean(selectedRequest)} error={actionError} title={employeeAdvance ? "Provision employee advance" : "Process account payable"} description={selectedRequest ? `${selectedRequest.requestNumber} · ${selectedRequest.supplier?.name || selectedRequest.requester?.name || "Employee"}` : ""} onClose={() => !processing && setSelectedRequest(null)} footer={<><button type="button" className="secondary-button" disabled={processing} onClick={() => setSelectedRequest(null)}>{t("Cancel")}</button><button type="submit" form="fiscal-processing-form" className="primary-button" disabled={processing || openingRequest || !draft.ready || draft.status === "conflict" || Boolean(draft.session.sourceChanged) || Boolean(invoiceConflicts.length) || (!employeeAdvance && invoiceEvidence?.source === "missing")}><FileCheck2 size={16} /><span>{t(processing ? "Processing..." : employeeAdvance ? "Provision advance to Account 14" : "Validate and create CXP")}</span></button></>}>
+        {employeeAdvance ? <div className="document-requirement required"><FileCheck2 size={20} /><div><strong>{t("Employee advance — Accounting review")}</strong><p>{t("The budget is committed. Confirm the employee has a verified bank account, then provision the advance to Account 14. No supplier invoice is required at this step; the employee must later submit the rendition.")}</p></div></div> : <div className="document-requirement required"><FileCheck2 size={20} /><div><strong>{t("Fiscal duplicate control")}</strong><p>{t("The system blocks repeated RUC + document type + series + number combinations.")}</p></div></div>}
+        {selectedRequest && !employeeAdvance && <div className="document-requirement">
+          <FileCheck2 size={18} />
+          <div>
+            <strong>{t(invoiceEvidence?.source === "verified" ? "Invoice values read from validated request evidence" : invoiceEvidence?.source === "request" ? "Invoice values taken from the request — confirm against the original" : "Invoice identity missing from request")}</strong>
+            <p>{t(invoiceEvidence?.source === "missing" ? "Attach and validate the invoice XML/PDF in the original request before posting. Do not invent a series or number." : "Check the series, number, issue date and supplier against the original invoice before posting. Treasury receives the CXP only after successful Accounting provision.")}</p>
+            <Link to={`/requests/${selectedRequest._id}`}>{t("Open original request and documents")}</Link>
+          </div>
+        </div>}
+        {invoiceConflicts.length > 0 && <div className="document-requirement required" role="alert"><FileCheck2 size={18} /><div><strong>{t("Invoice details do not match the validated evidence")}</strong>{invoiceConflicts.map((message, index) => <p key={index}>{t(message)}</p>)}</div></div>}
         <DraftPanel busy={processing} draft={draft} onDiscard={() => setSelectedRequest(null)}><form id="fiscal-processing-form" className="form-grid two-column-form" onSubmit={processRequest}>
+          {selectedRequest?.flowType === "C" && selectedRequest?.requestType === "ENTREGA_RENDIR" ? <div className="form-span-two"><p><strong>{selectedRequest.requestNumber}</strong> · {formatCurrency(selectedRequest.totalAmount, selectedRequest.currency, language)}</p><p>{t("Accounting provisions the advance as an employee receivable. Actual expense execution takes place after the rendition is reviewed.")}</p></div> : <>
           <label className="field"><span>{t("Document type")} *</span><select value={fiscalForm.documentType} onChange={(event) => setFiscalForm({ ...fiscalForm, documentType: event.target.value })}><option value="FACTURA">{t("FACTURA")}</option><option value="BOLETA">{t("BOLETA")}</option><option value="RXH">{t("RXH")}</option></select><small className="field-hint">{t("Credit and debit notes are registered against their original invoice from Accounts Payable.")}</small></label>
           <label className="field"><span>{t("Series")} *</span><input required value={fiscalForm.series} onChange={(event) => setFiscalForm({ ...fiscalForm, series: event.target.value.toUpperCase() })} /></label>
-          <label className="field"><span>{t("Document number")} *</span><input required value={fiscalForm.number} onChange={(event) => setFiscalForm({ ...fiscalForm, number: event.target.value })} /></label>
-          <InvoiceXmlPreview key={selectedRequest?._id} expected={{ ruc: selectedRequest?.supplier?.rucDni, currency: selectedRequest?.currency, totalAmount: selectedRequest?.totalAmount, invoiceNumber: fiscalForm.series && fiscalForm.number ? `${fiscalForm.series}-${fiscalForm.number}` : undefined }} onApply={xml => { const split = String(xml.invoiceNumber || "").indexOf("-"); setFiscalForm(previous => ({ ...previous, documentType: ["FACTURA", "BOLETA", "RXH"].includes(xml.voucherType) ? xml.voucherType : previous.documentType, series: split < 0 ? "" : xml.invoiceNumber.slice(0, split), number: split < 0 ? "" : xml.invoiceNumber.slice(split + 1), documentDate: String(xml.issueDate || "").slice(0, 10), fiscalPeriod: String(xml.issueDate || "").slice(0, 7) })); }} />
+          <label className="field"><span>{t("Document number")} *</span><input required value={fiscalForm.number} onChange={(event) => setFiscalForm({ ...fiscalForm, number: event.target.value })} /><small className="field-hint">{t("Correlative number only (for example, 3041). Do not repeat the series.")}</small></label>
+          <InvoiceXmlPreview key={selectedRequest?._id} expected={{ ruc: selectedRequest?.supplier?.rucDni, currency: selectedRequest?.currency, totalAmount: selectedRequest?.totalAmount, invoiceNumber: fiscalForm.series && fiscalForm.number ? `${fiscalForm.series}-${fiscalForm.number}` : undefined }} onApply={xml => { const invoiceId = splitFiscalInvoiceNumber(xml.invoiceNumber); setFiscalForm(previous => ({ ...previous, documentType: ["FACTURA", "BOLETA", "RXH"].includes(xml.voucherType) ? xml.voucherType : previous.documentType, series: invoiceId.series, number: invoiceId.number, documentDate: String(xml.issueDate || "").slice(0, 10), fiscalPeriod: String(xml.issueDate || "").slice(0, 7) })); }} />
           <label className="field"><span>{t("Document date")} *</span><DateInput required value={fiscalForm.documentDate} onChange={(event) => setFiscalForm({ ...fiscalForm, documentDate: event.target.value, fiscalPeriod: event.target.value.slice(0, 7) })} /></label>
           <label className="field"><span>{t("Accounting date")} *</span><DateInput required value={fiscalForm.accountingDate} onChange={(event) => setFiscalForm({ ...fiscalForm, accountingDate: event.target.value })} /></label>
           <label className="field"><span>{t("Fiscal period")}</span><MonthInput readOnly value={fiscalForm.documentDate?.slice(0, 7) || fiscalForm.fiscalPeriod} /><small className="field-hint">{t("Invoices are booked in the period of their document date.")}</small></label>
@@ -281,6 +312,7 @@ export default function AccountingEntries() {
           <label className="checkbox-row with-hint form-span-two"><input type="checkbox" checked={creditableDocument && fiscalForm.igvDeductible} disabled={!creditableDocument} onChange={(event) => setFiscalForm({ ...fiscalForm, igvDeductible: event.target.checked })} /><span><strong>{t("IGV is deductible (tax credit)")}</strong><small>{t(creditableDocument ? "Clear it when this invoice's IGV cannot be claimed: it is then booked as cost." : "Boletas do not give tax credit; the IGV is booked as cost.")}</small></span></label>
           <label className="field"><span>{t("Subaccount")}</span><input value={fiscalForm.subaccountNumber} onChange={(event) => setFiscalForm({ ...fiscalForm, subaccountNumber: event.target.value })} /></label>
           <label className="field form-span-two"><span>{t("Accounting comments")}</span><textarea rows="3" value={fiscalForm.comments} onChange={(event) => setFiscalForm({ ...fiscalForm, comments: event.target.value })} /></label>
+          </>}
         </form></DraftPanel>
       </Drawer>
 
