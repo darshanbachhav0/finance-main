@@ -30,6 +30,7 @@ import { recordAudit } from "./auditService.js";
 import { assertConfiguredDocuments } from "./documentRuleService.js";
 import { assertDigitalActaForAccounting } from "./digitalActaService.js";
 import { applyExchangeRate, resolveExchangeRateSnapshot } from "./exchangeRateService.js";
+import { limaToday } from "../../../shared/businessCalendar.mjs";
 import { guardAccountingPeriod, periodFromDate } from "./periodService.js";
 import { notificationText, notifyRoles, resolveNotification } from "./notificationService.js";
 import { runFinancialOperation } from "./transactionService.js";
@@ -490,9 +491,15 @@ export async function createProvisionJournalForVoucher(request, accountsPayable,
 // detraccion deposit), never the whole CXP: debit AP / credit bank for exactly the confirmed
 // amount, keyed on the CXP id + the real operation number so a retry is idempotent and two
 // installments never collide. The period is the actual payment date's month.
-// USD: AP is relieved at the CXP rate. When EXCHANGE_GAIN and EXCHANGE_LOSS mappings exist the
-// bank is credited at the payment-date SUNAT rate and the difference is posted; otherwise the
-// bank is also credited at the CXP rate and the line description says so.
+// USD: AP is relieved at the CXP rate. When EXCHANGE_GAIN (776101) and EXCHANGE_LOSS (976101)
+// mappings exist the bank is credited at the SBS selling rate of the payment's bank date and the
+// difference is posted; otherwise the bank is also credited at the CXP rate and the line
+// description says so.
+// The date whose rate a provision uses: the day it is provisioned, in Lima.
+export function provisionRateDate(now = new Date()) {
+  return limaToday(now);
+}
+
 export async function createPaymentJournal(request, accountsPayable, userId, { bank, paymentDate, amount, amountPen, operationNumber, kind = "PAYMENT", session } = {}) {
   const currency = accountsPayable?.currency || request.currency;
   const detraction = kind === "DETRACTION";
@@ -646,8 +653,10 @@ export async function createAccountsPayableFromVoucher({
   let validatedVoucher;
   const total = roundMoney(voucher.totalAmount);
   if (request.flowType !== FLOW_TYPE.C) assertDocumentTotals({ netAmount: voucher.netAmount ?? subtractMoney(total, voucher.igvAmount || 0), igvAmount: voucher.igvAmount, totalAmount: total });
-  // The payable and its provision always use the SUNAT selling rate of the invoice date.
-  const rateEvidence = request.flowType === FLOW_TYPE.C ? request.exchangeRateEvidence : await resolveExchangeRateSnapshot(voucher.currency || request.currency, voucher.issueDate || voucher.documentDate || request.issueDate);
+  // The payable and its provision use the SBS selling rate of the provisioning date (pilot:
+  // "la provisión usa el TC de su fecha"); the payment later uses the rate of its bank date and the
+  // difference is posted as exchange gain or loss.
+  const rateEvidence = request.flowType === FLOW_TYPE.C ? request.exchangeRateEvidence : await resolveExchangeRateSnapshot(voucher.currency || request.currency, provisionRateDate());
   const exchangeRate = Number(rateEvidence?.rate || request.exchangeRate || 1);
   await assertBudgetBeforePosting(request, { session, userId: user?._id || user, amount: multiplyMoney(total, exchangeRate), allowFxTopUp: (voucher.currency || request.currency) === "USD", exchangeRateEvidence: rateEvidence });
   if (request.flowType !== FLOW_TYPE.C) {
@@ -1047,9 +1056,10 @@ export async function processAccountsPayable({ requestId, payload, user, req }) 
     await assertPurchaseOrderInvoiceFits(purchaseOrder._id, request.totalAmount, { currency: request.currency });
   }
   await applyExchangeRate(request);
-  // Supplier invoices use the SUNAT rate of the invoice date, not the rate frozen at request/budget time.
+  // Supplier invoices use the SBS selling rate of the provisioning date, not the rate frozen at
+  // request/budget time.
   const invoiceBased = request.flowType !== FLOW_TYPE.C;
-  const rateEvidence = invoiceBased ? await resolveExchangeRateSnapshot(request.currency, fiscal.documentDate) : request.exchangeRateEvidence;
+  const rateEvidence = invoiceBased ? await resolveExchangeRateSnapshot(request.currency, provisionRateDate()) : request.exchangeRateEvidence;
   const exchangeRate = Number(rateEvidence?.rate || request.exchangeRate || 1);
   const penTotal = invoiceBased ? multiplyMoney(request.totalAmount, exchangeRate) : roundMoney(request.totalPENEquivalent ?? request.penEquivalent);
   await assertBudgetBeforePosting(request, { userId: user._id, amount: penTotal, allowFxTopUp: invoiceBased && request.currency === "USD", exchangeRateEvidence: rateEvidence });

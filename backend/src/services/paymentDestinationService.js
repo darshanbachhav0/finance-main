@@ -33,6 +33,8 @@ export function supplierPaymentSnapshot(account) {
     bankAccountId: account._id,
     bank: account.bank,
     bankOtherName: account.bankOtherName || undefined,
+    scope: account.scope || "NATIONAL",
+    foreign: account.scope === "FOREIGN" ? { ...(account.foreign?.toObject ? account.foreign.toObject() : account.foreign) } : undefined,
     currency: account.currency,
     accountType: account.accountType,
     accountHolderName: account.accountHolderName,

@@ -13,7 +13,7 @@ import BudgetRule from "../models/BudgetRule.js";
 import CostCenter from "../models/CostCenter.js";
 import Counter from "../models/Counter.js";
 import DocumentRule from "../models/DocumentRule.js";
-import ExchangeRate from "../models/ExchangeRate.js";
+import { syncOfficialExchangeRates } from "../services/exchangeRateSyncService.js";
 import ExpenseType from "../models/ExpenseType.js";
 import FinanceConfiguration from "../models/FinanceConfiguration.js";
 import FinancialRequest from "../models/FinancialRequest.js";
@@ -47,8 +47,6 @@ const closedPeriod = previousMonthDate.toISOString().slice(0, 7);
 // Non-production only (guarded below): read from env so no credential is hardcoded in source.
 // If unset, a random password is generated per run and printed in the seed summary notice.
 const demoPassword = process.env.SEED_DEMO_PASSWORD || crypto.randomBytes(9).toString("base64url");
-const demoUsdRate = 3.75;
-const DEMO_RATE_LABEL = "DEMO - tipo de cambio ficticio del seed de desarrollo UMA (formato SUNAT; no publicado por SUNAT)";
 const AREAS = Object.freeze({
   HEALTH: "Facultad de Ciencias de la Salud",
   PHARMACY: "Facultad de Farmacia y Bioquímica",
@@ -524,28 +522,16 @@ async function seedPeriodsAndRates(admin) {
       { action: "CLOSED", at: now, by: admin._id, comments: "Cierre mensual demo UMA." }
     ]
   });
-  // DEMO exchange rates. The rate service only accepts a saved rate as authoritative when it is
-  // stored as a SUNAT selling rate, so the seed stores one per calendar day from the start of the
-  // closed demo period through today. They are fictional values that merely use SUNAT's record
-  // shape (sourceLabel says so) - this lets the seed run offline, without
-  // SUNAT_EXCHANGE_RATE_ENDPOINT and without EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK. Only an
-  // existing DEMO record is ever overwritten; a real rate already stored for a day is left alone.
-  for (let day = new Date(previousMonthDate); day.toISOString().slice(0, 10) <= currentDate; day.setUTCDate(day.getUTCDate() + 1)) {
-    const date = new Date(day);
-    const existing = await ExchangeRate.findOne({ currency: "USD", date }).lean();
-    if (existing && existing.sourceLabel !== DEMO_RATE_LABEL) continue;
-    await upsert(ExchangeRate, { currency: "USD", date }, {
-      quoteCurrency: "PEN",
-      period: date.toISOString().slice(0, 7),
-      rate: demoUsdRate,
-      source: "SUNAT",
-      sourceLabel: DEMO_RATE_LABEL,
-      providerMode: "SUNAT",
-      authoritative: true,
-      retrievedAt: now,
-      active: true,
-      createdBy: admin._id
-    });
+  // Exchange rates are never invented: the seed asks the official SBS sources (SUNAT / BCRPData)
+  // for the recent rates, the same synchronization the server runs every hour. Offline, nothing
+  // is stored and USD documents wait for the first successful synchronization.
+  if (process.env.EXCHANGE_RATE_ONLINE !== "false") {
+    try {
+      const result = await syncOfficialExchangeRates({ trigger: "STARTUP" });
+      console.log(`Official exchange rates: ${result.run.status}, latest ${result.latestDate || "none"}`);
+    } catch (error) {
+      console.warn("Official exchange rates could not be retrieved now:", error?.message || error);
+    }
   }
 }
 
@@ -693,7 +679,10 @@ async function seedRulesAndMappings({ costCenters }) {
     ["MAP-UMA-CXP", "Cuentas por pagar comerciales", "ACCOUNTS_PAYABLE", "*", "*", "*", "*", "421201"],
     ["MAP-UMA-IGV", "IGV crédito fiscal", "IGV", "*", "*", "*", "*", "401111"],
     ["MAP-UMA-ENTREGA", "Entregas a rendir - Cuenta 14", "ADVANCE_TRANSIT", REQUEST_TYPE.ENTREGA_RENDIR, "*", "*", "*", "141301"],
-    ["MAP-UMA-DEVOLUCION", "Devolución de entrega a rendir", "RETURN_RECEIVABLE", REQUEST_TYPE.ENTREGA_RENDIR, "*", "*", "*", "101199"]
+    ["MAP-UMA-DEVOLUCION", "Devolución de entrega a rendir", "RETURN_RECEIVABLE", REQUEST_TYPE.ENTREGA_RENDIR, "*", "*", "*", "101199"],
+    // Exchange difference on USD payments (pilot: ganancia 776101, pérdida 976101).
+    ["MAP-UMA-DIF-CAMBIO-GANANCIA", "Ganancia por diferencia de cambio", "EXCHANGE_GAIN", "*", "*", "*", "*", "776101"],
+    ["MAP-UMA-DIF-CAMBIO-PERDIDA", "Pérdida por diferencia de cambio", "EXCHANGE_LOSS", "*", "*", "*", "*", "976101"]
   ];
   for (const [code, name, purpose, requestType, expenseNature, bank, currency, accountNumber] of mappings) {
     await upsert(AccountingMapping, { code }, {
@@ -807,7 +796,7 @@ async function buildSummary(users, removedDemoAccounts) {
     removedDemoAccounts,
     password: demoPassword,
     passwordSource: process.env.SEED_DEMO_PASSWORD ? "SEED_DEMO_PASSWORD env var" : "generated for this run only",
-    notice: "Development-only fictional data. SUNAT and bank files remain manual/demo integrations; the USD rates and the BBVA format configuration are DEMO values."
+    notice: "Development-only fictional data. SUNAT and bank files remain manual/demo integrations; the BBVA format configuration is a DEMO value. USD rates are the official SBS rates from the synchronization (none when offline)."
   };
 }
 

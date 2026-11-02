@@ -811,6 +811,9 @@ h1, h2, h3 { letter-spacing: 0; color: var(--gray-950); }
 .lookup-illustration span { color: var(--gray-600); font-size: var(--font-xs); line-height: 1.5; }
 .supplier-lookup-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; }
 .supplier-lookup-form .primary-button { min-height: 38px; }
+.supplier-lookup-foreign { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 10px; color: var(--gray-600); font-size: var(--font-xs); }
+.supplier-form-grid .checkbox-field, .supplier-quick-register .checkbox-field { display: flex; flex-direction: row; align-items: center; gap: 8px; align-self: end; min-height: 38px; }
+.supplier-form-grid .checkbox-field input, .supplier-quick-register .checkbox-field input { width: auto; min-height: 0; }
 
 .supplier-official-form, .supplier-detail-stack { display: grid; gap: 0; }
 .supplier-form-section, .supplier-detail-section { padding: 20px 0; border-bottom: 1px solid var(--gray-200); }
@@ -3107,3 +3110,9 @@ details.workspace-panel > p { max-width: 80ch; color: var(--gray-600); font-size
 .page-header .page-description { max-width: 68ch; margin: var(--space-2) 0 0; color: var(--gray-600); font-size: var(--font-md); line-height: 1.6; overflow-wrap: anywhere; white-space: normal; }
 .page-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; max-width: 100%; }
 @media (max-width: 768px) { .page-header-copy { flex-basis: auto; width: 100%; } .page-actions { justify-content: flex-start; width: 100%; } }
+
+/* Today's official SBS exchange rate on the home page (components/ExchangeRateChip.jsx). */
+.exchange-rate-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--gray-200); border-left: 3px solid var(--uma-teal, #087c75); border-radius: var(--radius-md); color: var(--gray-700); font-size: var(--font-xs); white-space: nowrap; }
+.exchange-rate-chip.is-warning { border-left-color: #d18a00; }
+.exchange-rate-chip strong { color: var(--gray-900); }
+.inline-flag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-xs); color: var(--gray-700); }

@@ -1,112 +1,122 @@
-import { CloudDownload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import api from "../api/client.js";
 import ResourceManager from "../components/ResourceManager.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import { exchangeRateDescription } from "../utils/financialEvidence.js";
 import { formatDateTime } from "../utils/formatters.js";
+
+// Official SBS USD/PEN rates (compra and venta) arrive on their own: the server synchronizes them
+// every hour from SUNAT's published table and BCRPData, with nobody signed in. This page shows the
+// rate that applies today, how current the synchronization is, and the history. A person may only
+// add a manual reference rate, which is labelled as such and used only where the server allows it.
+
+const day = (value) => String(value || "").slice(0, 10);
+const four = (value) => value === null || value === undefined || value === "" ? "-" : Number(value).toFixed(4);
+const official = (row) => row.providerMode === "SBS" && row.authoritative;
+const SYNC_STATUS = { OK: "Synchronized", PARTIAL: "Partially synchronized", FAILED: "Not synchronized" };
 
 function payload(form) {
   return {
-    ...form,
+    date: form.date,
+    period: form.period || form.date?.slice(0, 7),
+    buyRate: form.buyRate === "" || form.buyRate === undefined ? undefined : Number(form.buyRate),
+    sellRate: Number(form.sellRate || form.rate || 0),
+    rate: Number(form.sellRate || form.rate || 0),
+    sourceLabel: form.sourceLabel,
     currency: "USD",
     quoteCurrency: "PEN",
-    rate: Number(form.rate || 0),
-    period: form.period || form.date?.slice(0, 7),
-    authoritative: form.providerMode === "SUNAT",
     active: true
   };
+}
+
+function ApplicableRate({ data, syncing, onSync }) {
+  const { t, language } = useLanguage();
+  if (!data) return null;
+  const rate = data.rate;
+  const stale = data.lastSync?.stale;
+  const tone = !rate || stale || !rate.official ? "warning" : "success";
+  return (
+    <div className={`exchange-rate-evidence ${tone}`}>
+      <div>
+        <strong>{t("Applicable rate today")} ({data.requestedDate})</strong>
+        {rate ? (
+          <span>
+            {t("Buy")} {four(rate.buyRate)} · {t("Sell")} <b>{four(rate.sellRate)}</b> · {t(rate.sourceLabel)} · {t("Published for")} {rate.rateDate}
+            {rate.sbsClosingDate ? ` (${t("SBS close of")} ${rate.sbsClosingDate})` : ""}
+          </span>
+        ) : <span>{t(data.unavailable || "No official rate is available yet.")}</span>}
+        {rate && rate.rateDate !== data.requestedDate && <small>{t("No new publication applies to this date (weekend, holiday or not yet published): the latest valid rate is used, with its own date.")}</small>}
+        {rate?.fallback?.used && !rate.official && <small>{t("Manual reference rate, used because no official rate could be retrieved.")}</small>}
+        {data.lastSync && <small>{t("Last synchronization")}: {formatDateTime(data.lastSync.finishedAt, language)} · {t(SYNC_STATUS[data.lastSync.status] || data.lastSync.status)}{data.lastSync.sources?.map((source) => ` · ${source.source}: ${t(source.status === "OK" ? "answered" : "did not answer")}`).join("")}</small>}
+      </div>
+      <div className="exchange-rate-evidence-badges">
+        {rate && <StatusBadge status={rate.official ? "VERIFIED" : "NOT_VERIFIED"} />}
+        {stale && <span className="inline-flag"><AlertTriangle size={14} aria-hidden="true" /> {t("Out of date")}</span>}
+        {!stale && rate?.official && <span className="inline-flag"><CheckCircle2 size={14} aria-hidden="true" /> {t("Up to date")}</span>}
+        <button type="button" className="secondary-button" onClick={onSync} disabled={syncing} title={t("Retrieve the latest official SBS rates now.")}>
+          <RefreshCw className={syncing ? "spin" : ""} size={16} aria-hidden="true" />
+          <span>{t(syncing ? "Synchronizing..." : "Synchronize now")}</span>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function ExchangeRates() {
   const { t } = useLanguage();
   const { notify } = useToast();
-  const [loadingOnline, setLoadingOnline] = useState(false);
-  const [currentEvidence, setCurrentEvidence] = useState(null);
+  const [applicable, setApplicable] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
-  async function fetchCurrentRate() {
-    const response = await api.get("/exchange-rates/current");
-    const onlineRate = response.data.data;
-    setCurrentEvidence(onlineRate);
-    return onlineRate;
+  async function loadApplicable() {
+    const response = await api.get("/exchange-rates/applicable");
+    setApplicable(response.data.data);
   }
 
-  useEffect(() => {
-    fetchCurrentRate().catch(() => setCurrentEvidence(null));
-  }, []);
+  useEffect(() => { loadApplicable().catch(() => setApplicable(null)); }, []);
 
-  async function loadOnlineRate({ rows, startCreate, startEdit }) {
-    setLoadingOnline(true);
+  async function synchronize(reload) {
+    setSyncing(true);
     try {
-      const onlineRate = await fetchCurrentRate();
-      const editableValues = {
-        date: onlineRate.date,
-        period: onlineRate.period,
-        rate: onlineRate.rate,
-        source: onlineRate.source,
-        sourceLabel: onlineRate.sourceLabel || onlineRate.source,
-        providerMode: onlineRate.providerMode,
-        authoritative: onlineRate.authoritative
-      };
-      const existing = rows.find((row) => row.date?.slice(0, 10) === onlineRate.date);
-
-      if (existing) {
-        startEdit({ ...existing, ...editableValues });
-      } else {
-        startCreate(editableValues);
-      }
+      const response = await api.post("/exchange-rates/sync");
+      const result = response.data.data;
+      notify(t(result.run.status === "OK" ? "Official rates synchronized." : result.run.status === "PARTIAL" ? "Official rates synchronized; one source did not answer." : "No source answered. The latest stored rate stays in use and the team was alerted."), result.run.status === "FAILED" ? "error" : "success");
+      await Promise.all([loadApplicable(), reload?.()]);
     } catch (error) {
       notify(error.message, "error");
     } finally {
-      setLoadingOnline(false);
+      setSyncing(false);
     }
   }
 
   return (
     <ResourceManager
       title="Exchange Rates"
-      description="SUNAT selling rates are verified on the server. Manual and BCRP/SBS records remain references; historical rates are preserved."
+      description="Official SBS buy and sell rates (USD/PEN) are retrieved automatically every business day. Each transaction keeps the rate it used; weekends and holidays use the latest valid rate with its own date."
       endpoint="/exchange-rates"
       deleteMode="deactivate"
       duplicateFields={["date"]}
       transformSubmit={payload}
-      renderHeaderActions={(actions) => (
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => loadOnlineRate(actions)}
-          disabled={loadingOnline}
-          title={t("Retrieve the applicable SUNAT selling rate and its publication date.")}
-        >
-          <CloudDownload className={loadingOnline ? "spin" : ""} size={16} />
-          <span>{t(loadingOnline ? "Getting online rate..." : "Get latest online rate")}</span>
-        </button>
-      )}
-      renderBeforeTable={() => currentEvidence && <div className={`exchange-rate-evidence ${currentEvidence.fallback?.used ? "warning" : "success"}`}>
-        <div><strong>{t("Applicable USD selling rate")}</strong><span>{exchangeRateDescription(currentEvidence, currentEvidence.source, currentEvidence.rate, currentEvidence.date)}</span></div>
-        <div className="exchange-rate-evidence-badges"><StatusBadge status={currentEvidence.authoritative ? "VERIFIED" : "NOT_VERIFIED"} />{currentEvidence.fallback?.used && <StatusBadge status="PENDING" />}</div>
-        {currentEvidence.fallback?.used && <small>{t("Fallback used")}: {currentEvidence.fallback.reason} · {t("Requested date")}: {String(currentEvidence.requestedDate || currentEvidence.fallback.requestedDate || "").slice(0, 10)} · {t("Rate date")}: {String(currentEvidence.date || "").slice(0, 10)}</small>}
-      </div>}
+      rowLocked={official}
+      renderBeforeTable={({ reload }) => <ApplicableRate data={applicable} syncing={syncing} onSync={() => synchronize(reload)} />}
       fields={[
-        { type: "section", label: "Rate" },
-        { name: "date", label: "Date", type: "date", required: true },
+        { type: "section", label: "Manual reference rate" },
+        { name: "date", label: "Date", type: "date", required: true, hint: "Only when no official rate can be retrieved. It is never treated as official." },
         { name: "period", label: "Period", required: true },
-        { name: "rate", label: "Selling rate", type: "number", step: "0.0001", min: "0.0001", required: true, validate: (value) => Number(value) > 0 ? "" : "Enter a rate greater than zero.", hint: "SUNAT values must match the provider evidence." },
-        { type: "section", label: "Source" },
-        { name: "source", label: "Source code", defaultValue: "MANUAL", hint: "Use MANUAL unless a configured provider supplied the rate." },
-        { name: "sourceLabel", label: "Source description", defaultValue: "Authorized manual entry", hint: "Keep the online source or describe the approved manual source." },
-        { name: "providerMode", label: "Provider mode", type: "select", defaultValue: "MANUAL", options: ["MANUAL", "BCRP_FALLBACK", "SUNAT"] }
+        { name: "buyRate", label: "Buy rate", type: "number", step: "0.0001", min: "0.0001" },
+        { name: "sellRate", label: "Sell rate", type: "number", step: "0.0001", min: "0.0001", required: true, validate: (value) => Number(value) > 0 ? "" : "Enter a rate greater than zero." },
+        { name: "sourceLabel", label: "Source description", defaultValue: "Authorized manual selling rate", hint: "Describe where the value comes from." }
       ]}
       columns={[
-        { key: "date", label: "Date", render: (row) => row.date?.slice(0, 10) },
-        { key: "period", label: "Period" },
-        { key: "rate", label: "Rate", render: (row) => Number(row.rate).toFixed(4) },
-        { key: "sourceLabel", label: "Source", render: (row) => row.sourceLabel || row.source },
-        { key: "providerMode", label: "Mode" },
-        { key: "authoritative", label: "Official / authoritative", render: (row) => <div className="primary-cell"><StatusBadge status={row.authoritative && row.providerMode === "SUNAT" ? "VERIFIED" : "NOT_VERIFIED"} /><span>{row.authoritative && row.providerMode === "SUNAT" ? t("Official SUNAT") : t("Reference — not authoritative")}</span></div> },
-        { key: "retrievedAt", label: "Retrieved", render: (row) => row.retrievedAt ? formatDateTime(row.retrievedAt) : "-" }
+        { key: "date", label: "Applies to", render: (row) => day(row.date) },
+        { key: "buyRate", label: "Buy", render: (row) => four(row.buyRate) },
+        { key: "sellRate", label: "Sell", render: (row) => four(row.sellRate ?? row.rate) },
+        { key: "sourceLabel", label: "Source", render: (row) => <div className="primary-cell"><span>{t(row.sourceLabel || row.source)}</span>{row.sbsClosingDate && <small>{t("SBS close of")} {day(row.sbsClosingDate)}</small>}</div> },
+        { key: "authoritative", label: "Official / authoritative", render: (row) => <div className="primary-cell"><StatusBadge status={official(row) ? "VERIFIED" : "NOT_VERIFIED"} /><span>{official(row) ? t("Official SBS") : t("Reference — not authoritative")}</span></div> },
+        { key: "retrievedAt", label: "Retrieved", render: (row) => row.retrievedAt ? formatDateTime(row.retrievedAt) : "-" },
+        { key: "active", label: "Status" }
       ]}
     />
   );

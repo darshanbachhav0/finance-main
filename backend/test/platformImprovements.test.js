@@ -69,9 +69,9 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
     const accounting = await User.create({ name: "PI Accounting", email: "pi.accounting@test.local", passwordHash: "unused", role: ROLES.ACCOUNTING, area: "Finanzas" });
     const treasury = await User.create({ name: "PI Treasury", email: "pi.treasury@test.local", passwordHash: "unused", role: ROLES.TREASURY, area: "Tesorería" });
 
-    const itSupplier = await Supplier.create({ rucDni: "20777000001", legalName: "Soporte TI SAC", name: "Soporte TI SAC", supplierCode: "PRV-0041", departments: ["Tecnología de la Información"], homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
-    const adminSupplier = await Supplier.create({ rucDni: "20777000002", legalName: "Limpieza Total SAC", name: "Limpieza Total SAC", supplierCode: "PRV-0042", departments: ["Administración"], homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
-    const shared = await Supplier.create({ rucDni: "20777000003", legalName: "Courier Nacional SAC", name: "Courier Nacional SAC", supplierCode: "PRV-0043", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
+    const itSupplier = await Supplier.create({ rucDni: "20777000005", legalName: "Soporte TI SAC", name: "Soporte TI SAC", supplierCode: "PRV-0041", departments: ["Tecnología de la Información"], homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
+    const adminSupplier = await Supplier.create({ rucDni: "20777000013", legalName: "Limpieza Total SAC", name: "Limpieza Total SAC", supplierCode: "PRV-0042", departments: ["Administración"], homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
+    const shared = await Supplier.create({ rucDni: "20777000030", legalName: "Courier Nacional SAC", name: "Courier Nacional SAC", supplierCode: "PRV-0043", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
     const [savingsUsd, currentPen] = await SupplierBankAccount.create([
       { supplier: itSupplier._id, bank: "BCP", currency: "USD", accountType: "SAVINGS", accountHolderName: "Soporte TI SAC", accountNumber: "19300000004321", cci: "00219300000000432100", active: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH" },
       { supplier: itSupplier._id, bank: "BBVA", currency: "PEN", accountType: "CURRENT", accountHolderName: "Soporte TI SAC", accountNumber: "00110175010000001234", cci: "01117500010000001234", active: true, preferred: true, verificationStatus: "VERIFIED", ownershipResult: "MATCH" }
@@ -99,7 +99,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       // Searching the API directly cannot reach another area's supplier.
       assert.equal((await listSuppliersPage({ search: "Limpieza", pageSize: 50 }, it)).data.length, 0);
       await assert.rejects(() => getSupplierDetailPayload(adminSupplier._id, it), (error) => error.code === ERROR_CODES.SUPPLIER_OTHER_DEPARTMENT && error.statusCode === 403);
-      const lookup = await lookupSupplierByIdentifier("20777000002", it);
+      const lookup = await lookupSupplierByIdentifier("20777000013", it);
       assert.equal(lookup.restricted, true, "the RUC lookup says it exists without opening it");
       assert.equal(lookup.data.permissions, undefined);
       assert.ok(canSeeSupplier(shared, it));
@@ -144,7 +144,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
     await t.test("the receipt read or typed is checked: no future date, an 11-digit RUC", () => {
       assert.throws(() => parseInvoiceDetails(JSON.stringify({ status: "ATTACHED", issueDate: "2999-01-01" })), /later than today/);
       assert.throws(() => parseInvoiceDetails(JSON.stringify({ status: "ATTACHED", ruc: "123" })), /11 digits/);
-      const parsed = parseInvoiceDetails(JSON.stringify({ status: "ATTACHED", source: "PDF", number: "F001-123", issueDate: today, ruc: "20777000001", currency: "USD", totalAmount: "590", igvAmount: "90" }));
+      const parsed = parseInvoiceDetails(JSON.stringify({ status: "ATTACHED", source: "PDF", number: "F001-123", issueDate: today, ruc: "20777000005", currency: "USD", totalAmount: "590", igvAmount: "90" }));
       assert.deepEqual([parsed.number, parsed.source, parsed.totalAmount, parsed.igvAmount], ["F001-123", "PDF", 590, 90]);
       assert.equal(parsed.issueDate.toISOString().slice(0, 10), today, "the date the receipt shows, as a calendar day");
     });
@@ -161,12 +161,12 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
 
     let proposed;
     await t.test("a requester's proposal: PRV at once, their area, several accounts, CCI checked against the bank", async () => {
-      const proposal = (ruc, accounts) => createSupplierProposal({ payload: { rucDni: ruc, legalName: `Proveedor ${ruc} SAC`, proposalJustification: "Servicio de red", bankAccounts: JSON.stringify(accounts) }, files: {}, user: it, req });
+      const proposal = (ruc, accounts) => createSupplierProposal({ payload: { rucDni: ruc, legalName: `Proveedor ${ruc} SAC`, email: "contacto@proveedor.pe", proposalJustification: "Servicio de red", bankAccounts: JSON.stringify(accounts) }, files: {}, user: it, req });
       const usdAccount = { bank: "BBVA", accountType: "CURRENT", accountCurrency: "USD", accountNumber: "00110175010000009999", cci: "01117500010000009999", accountHolderName: "Proveedor SAC" };
-      await assert.rejects(() => proposal("20777000010", [{ bank: "BCP", accountType: "SAVINGS", accountCurrency: "PEN", accountNumber: "19300000001", cci: "01119300000000000100", accountHolderName: "Proveedor SAC" }]), /another bank/);
-      await assert.rejects(() => proposal("20777000011", [{ bank: "OTHER", accountType: "SAVINGS", accountCurrency: "PEN", accountNumber: "1234567", cci: "09912300000001234567", accountHolderName: "Proveedor SAC" }]), /name of the bank/);
-      assert.equal(await Supplier.countDocuments({ rucDni: { $in: ["20777000010", "20777000011"] } }), 0, "a refused proposal leaves nothing behind");
-      const created = await proposal("20777000012", [{ bank: "BCP", accountType: "SAVINGS", accountCurrency: "PEN", accountNumber: "19300000001", cci: "00219300000000000100", accountHolderName: "Proveedor SAC" }, usdAccount]);
+      await assert.rejects(() => proposal("20777000048", [{ bank: "BCP", accountType: "SAVINGS", accountCurrency: "PEN", accountNumber: "19300000001", cci: "01119300000000000100", accountHolderName: "Proveedor SAC" }]), /another bank/);
+      await assert.rejects(() => proposal("20777000056", [{ bank: "OTHER", accountType: "SAVINGS", accountCurrency: "PEN", accountNumber: "1234567", cci: "09912300000001234567", accountHolderName: "Proveedor SAC" }]), /name of the bank/);
+      assert.equal(await Supplier.countDocuments({ rucDni: { $in: ["20777000048", "20777000056"] } }), 0, "a refused proposal leaves nothing behind");
+      const created = await proposal("20777000064", [{ bank: "BCP", accountType: "SAVINGS", accountCurrency: "PEN", accountNumber: "19300000001", cci: "00219300000000000100", accountHolderName: "Proveedor SAC" }, usdAccount]);
       proposed = created.supplier;
       assert.match(proposed.supplierCode, /^PRV-\d{4,}$/);
       assert.deepEqual(proposed.departments, ["Tecnología de la Información"]);
@@ -174,7 +174,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
       assert.deepEqual(accounts.map((account) => [account.currency, account.accountType, account.bank]), [["PEN", "SAVINGS", "BCP"], ["USD", "CURRENT", "BBVA"]]);
       assert.ok(await AuditLog.exists({ entityId: proposed._id, action: "PRV_ASSIGNED" }));
       // Another area's requester is told it exists and cannot register it again.
-      await assert.rejects(() => createSupplierProposal({ payload: { rucDni: "20777000012", legalName: "Otra", proposalJustification: "x" }, files: {}, user: admin, req }), (error) => error.code === "DUPLICATE_SUPPLIER" && error.details.otherDepartment === true);
+      await assert.rejects(() => createSupplierProposal({ payload: { rucDni: "20777000064", legalName: "Otra", email: "contacto@proveedor.pe", proposalJustification: "x" }, files: {}, user: admin, req }), (error) => error.code === "DUPLICATE_SUPPLIER" && error.details.otherDepartment === true);
     });
 
     await t.test("another area asks for a supplier; Treasury shares it", async () => {
@@ -194,9 +194,9 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
     await t.test("the invoice reader does not offer another area's supplier", async () => {
       await fs.mkdir(tempUploadDir, { recursive: true });
       const filePath = path.join(tempUploadDir, `area-preview-${process.pid}-${Date.now()}.xml`);
-      await fs.writeFile(filePath, invoiceXml({ ruc: "20777000001", series: "F001", number: "00000077", issueDate: today, currency: "USD", netAmount: 500, igvAmount: 90, totalAmount: 590 }));
+      await fs.writeFile(filePath, invoiceXml({ ruc: "20777000005", series: "F001", number: "00000077", issueDate: today, currency: "USD", netAmount: 500, igvAmount: 90, totalAmount: 590 }));
       try {
-        const env = { SIRE_TAXPAYER_RUC: "20100000001" };
+        const env = { SIRE_TAXPAYER_RUC: "20100000009" };
         const own = await previewInvoiceForRequest(filePath, { env, user: it });
         assert.equal(own.supplier.legalName, "Soporte TI SAC");
         assert.equal(own.supplier.departments, undefined, "the areas are not sent to the form");
@@ -211,7 +211,7 @@ test("requests: priority, frequency, the supplier's account and the receipt; sup
 
     await t.test("the migration numbers what has no number and ranks priorities, once", async () => {
       await Supplier.collection.insertMany([
-        { rucDni: "20777000020", normalizedIdentifier: "20777000020", legalName: "Antiguo Uno", name: "Antiguo Uno", homologationStatus: "PENDING_VALIDATION", createdAt: new Date("2025-01-01") },
+        { rucDni: "20777000072", normalizedIdentifier: "20777000072", legalName: "Antiguo Uno", name: "Antiguo Uno", homologationStatus: "PENDING_VALIDATION", createdAt: new Date("2025-01-01") },
         { rucDni: "20777000021", normalizedIdentifier: "20777000021", legalName: "Antiguo Dos", name: "Antiguo Dos", homologationStatus: "REJECTED", createdAt: new Date("2025-02-01") }
       ]);
       await FinancialRequest.collection.updateMany({}, { $unset: { priorityRank: "", frequency: "" } });

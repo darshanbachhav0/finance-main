@@ -19,6 +19,7 @@ import Supplier from "../models/Supplier.js";
 import SupplierBankAccount from "../models/SupplierBankAccount.js";
 import SunatVoucher from "../models/SunatVoucher.js";
 import { getBankFileAdapter, assertBbvaSource } from "../integrations/banks/index.js";
+import { FOREIGN_TRANSFER_FORMAT, ForeignTransferFileAdapter } from "../integrations/banks/ForeignTransferFileAdapter.js";
 import { createPaymentJournal } from "./accountingService.js";
 import { recordAudit } from "./auditService.js";
 import { addWorkingDays, nextWorkingDay } from "./businessCalendarService.js";
@@ -306,7 +307,9 @@ async function paymentRows({ requestIds = [], payableIds = [] }) {
   return rows;
 }
 
-async function loadPaymentItems(selection, bank, currency, accountSelections = {}, issues) {
+// format: "BBVA_TXT" (accounts in Peru), FOREIGN_TRANSFER (accounts abroad, by SWIFT) or "ANY" (the
+// queue's eligibility check: either file).
+async function loadPaymentItems(selection, bank, currency, accountSelections = {}, issues, { format = "ANY" } = {}) {
   assertBbvaSource(bank);
   const rows = await paymentRows(selection);
   const items = [];
@@ -339,6 +342,9 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
       await refreshEmployeeDestination(request, accountsPayable);
     }
     const destination = await resolvePaymentDestination({ request, accountsPayable, currency, selectedAccountId: selectedAccountId(accountSelections, request._id, accountsPayable._id) });
+    const abroad = destination.snapshot?.scope === "FOREIGN";
+    if (abroad && format === "BBVA_TXT") throw new AppError(422, `${request.requestNumber}: the supplier is paid abroad by SWIFT transfer; put it in a transfers-abroad file, not in the BBVA TXT.`, undefined, "FOREIGN_TRANSFER_REQUIRED");
+    if (!abroad && format === FOREIGN_TRANSFER_FORMAT) throw new AppError(422, `${request.requestNumber}: the supplier's account is in Peru; it goes in the BBVA TXT.`, undefined, "NATIONAL_TRANSFER_REQUIRED");
     const employee = accountsPayable.beneficiarySnapshot;
     items.push({
       request,
@@ -354,6 +360,7 @@ async function loadPaymentItems(selection, bank, currency, accountSelections = {
       paymentReference: accountsPayable.flowType === FLOW_TYPE.C ? request.requestNumber.replace(/^(SOL|REQ)-/, "") : undefined,
       currency,
       bankAccountSnapshot: destination.snapshot,
+      paymentFormat: abroad ? FOREIGN_TRANSFER_FORMAT : "BBVA_TXT",
       priority: accountsPayable.paymentPriority || "NORMAL"
     });
     } catch (error) {
@@ -600,13 +607,19 @@ export async function listTreasuryQueue(queryParams) {
       paymentBlock
     };
   }));
-  const eligibleIds = new Set(), eligibilityIssues = [];
+  const eligibleFormats = new Map(), eligibilityIssues = [];
   for (const code of [...new Set(data.map(row => row.accountsPayable.currency))]) {
     const ids = data.filter(row => row.accountsPayable.currency === code).map(row => String(row.accountsPayable._id));
     const loaded = await loadPaymentItems({ payableIds: ids }, "BBVA", code, {}, eligibilityIssues);
-    loaded.forEach(item => eligibleIds.add(String(item.accountsPayable._id)));
+    loaded.forEach(item => eligibleFormats.set(String(item.accountsPayable._id), item.paymentFormat));
   }
-  for (const row of data) { row.paymentEligible = eligibleIds.has(String(row.accountsPayable._id)); row.ineligibleReason = eligibilityIssues.find(issue => issue.id === String(row.accountsPayable._id))?.message; }
+  for (const row of data) {
+    const id = String(row.accountsPayable._id);
+    row.paymentEligible = eligibleFormats.has(id);
+    // BBVA_TXT, or FOREIGN_TRANSFER for a supplier paid abroad (its own Excel file).
+    row.paymentFormat = eligibleFormats.get(id) || null;
+    row.ineligibleReason = eligibilityIssues.find(issue => issue.id === id)?.message;
+  }
   return {
     ...paginatedPayload(data, total, page, pageSize),
     summary: {
@@ -666,35 +679,42 @@ export async function schedulePayments({ requestIds = [], payableIds = [], bank,
   return items.map((item) => item.request);
 }
 
-async function createPaymentBatch({ generationKey, requestIds = [], payableIds = [], bank, currency, paymentDate: requestedPaymentDate, paymentDateReason, accountSelections, user, req }) {
+// format FOREIGN_TRANSFER: suppliers paid abroad, in USD, by SWIFT from UMA's BBVA account; the
+// file is the pilot's transfers-abroad Excel instead of the BBVA TXT. Everything else (GAF
+// verification before download, confirmation with the bank's operation number) is the same.
+async function createPaymentBatch({ generationKey, requestIds = [], payableIds = [], bank, currency, format, paymentDate: requestedPaymentDate, paymentDateReason, accountSelections, user, req }) {
   if ((!Array.isArray(requestIds) || !requestIds.length) && (!Array.isArray(payableIds) || !payableIds.length)) throw new AppError(422, "Select at least one payable CXP.", undefined, ERROR_CODES.VALIDATION_ERROR);
   const normalizedBank = String(bank || "").trim().toUpperCase();
   assertBbvaSource(normalizedBank);
+  const foreignTransfer = String(format || "").trim().toUpperCase() === FOREIGN_TRANSFER_FORMAT;
+  const paymentFormat = foreignTransfer ? FOREIGN_TRANSFER_FORMAT : "BBVA_TXT";
+  if (foreignTransfer && currency !== "USD") throw new AppError(422, "Transfers abroad are paid in dollars (USD).", { currency }, ERROR_CODES.VALIDATION_ERROR);
+  const fileLabel = foreignTransfer ? "transfers-abroad file" : "BBVA file";
   if (payableIds.length) {
-    const preflight = await previewPaymentBatch({ payableIds, currency, accountSelections, paymentDate: requestedPaymentDate, paymentDateReason });
+    const preflight = await previewPaymentBatch({ payableIds, currency, format: paymentFormat, accountSelections, paymentDate: requestedPaymentDate, paymentDateReason });
     if (!preflight.ready) throw new AppError(422, "Correct or exclude the blocked payments before generating the TXT.", { issues: preflight.issues }, "PAYMENT_PREFLIGHT_FAILED");
   }
-  const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
-  const adapter = getBankFileAdapter(normalizedBank, configuration);
+  const configuration = foreignTransfer ? null : await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
+  const adapter = foreignTransfer ? new ForeignTransferFileAdapter() : getBankFileAdapter(normalizedBank, configuration);
   // Snapshot the certification state that applied AT GENERATION TIME. This is copied onto the
   // batch/file below and must never be re-derived from the live configuration later — certifying
   // (or decertifying) the configuration afterwards must not retroactively change what an
   // already-generated file reports.
   const certificationSnapshot = {
-    certified: configuration.certified === true,
-    certifiedAt: configuration.certifiedAt || null,
-    certifiedBy: configuration.certifiedBy || null,
-    certificationReference: configuration.certificationReference || "",
-    specificationVersion: configuration.specificationVersion
+    certified: configuration?.certified === true,
+    certifiedAt: configuration?.certifiedAt || null,
+    certifiedBy: configuration?.certifiedBy || null,
+    certificationReference: configuration?.certificationReference || "",
+    specificationVersion: configuration?.specificationVersion || adapter.specificationVersion
   };
-  const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections);
+  const items = await loadPaymentItems({ requestIds, payableIds }, normalizedBank, currency, accountSelections, undefined, { format: paymentFormat });
   const advanceCount = items.filter((item) => isAdvancePayable(item.accountsPayable)).length;
   const schedule = resolvePaymentSchedule({ paymentDate: requestedPaymentDate, reason: paymentDateReason, advancesOnly: items.length > 0 && advanceCount === items.length, criticalOnly: allCritical(items) });
   const { paymentDate } = schedule;
   adapter.validateBatch(items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot })));
   const batchNumber = await nextPaymentBatchNumber(paymentDate);
   const adapterItems = items.map((item) => ({ ...item, bankAccount: item.bankAccountSnapshot }));
-  const content = adapter.generateFile({ batchNumber, paymentDate, currency, items: adapterItems });
+  const content = await adapter.generateFile({ batchNumber, paymentDate, currency, items: adapterItems });
   const fileName = adapter.getFileName(batchNumber);
   const checksum = crypto.createHash("sha256").update(content).digest("hex");
   const filePath = path.join(bankFilesDir, fileName);
@@ -707,7 +727,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
       try {
         await claims.insertOne({ _id: item.accountsPayable._id, batchNumber, claimedAt: new Date() });
       } catch (error) {
-        if (error.code === 11000) throw new AppError(409, "A selected CXP is already being included in another BBVA file.");
+        if (error.code === 11000) throw new AppError(409, `A selected CXP is already being included in another ${fileLabel}.`);
         throw error;
       }
       const current = await AccountsPayable.findById(item.accountsPayable._id).select("status paymentBatch updatedAt").lean();
@@ -747,7 +767,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
         url: `/generated/bank-files/${fileName}`,
         checksum,
         paymentCount: items.length,
-        formatSnapshot: configuration.bbva,
+        formatSnapshot: configuration?.bbva,
         adapterMode: adapter.mode,
         specificationVersion: adapter.specificationVersion,
         certificationSnapshot,
@@ -762,7 +782,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
         await recordAudit({ entityType: "AccountsPayable", entity: item.accountsPayable, requestId: item.request._id,
           action: "BBVA_TXT_GENERATED", user, req, module: "TREASURY", session,
           statusFrom: item.request.status, statusTo: item.request.status,
-          comments: `BBVA batch ${batchNumber}; payment awaits bank confirmation.`,
+          comments: `${foreignTransfer ? "Transfers-abroad" : "BBVA"} batch ${batchNumber}; payment awaits bank confirmation.`,
           oldValues: { payableStatus: item.accountsPayable.status }, newValues: { payableStatus: AP_STATUS.PAYMENT_FILE_CREATED, batchId: batch._id, checksum } });
         // The unpaid remainder of a partially paid CXP moves out of its earlier file.
         if (item.accountsPayable.paymentBatch) {
@@ -778,7 +798,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
         item.accountsPayable.status = AP_STATUS.PAYMENT_FILE_CREATED;
         item.accountsPayable.paymentBatch = batch._id;
         item.accountsPayable.bankAccountSnapshot = item.bankAccountSnapshot;
-        item.accountsPayable.history.push({ status: AP_STATUS.PAYMENT_FILE_CREATED, by: user._id, comments: `Included in BBVA batch ${batchNumber}. Payment is not yet confirmed.` });
+        item.accountsPayable.history.push({ status: AP_STATUS.PAYMENT_FILE_CREATED, by: user._id, comments: `Included in ${foreignTransfer ? "transfers-abroad" : "BBVA"} batch ${batchNumber}. Payment is not yet confirmed.` });
         await item.accountsPayable.save({ session });
         if (!isPurchaseOrderInvoiceFlow(item.accountsPayable)) {
           item.request.paymentBatch = batch._id;
@@ -812,7 +832,8 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
           paymentConfirmed: false,
           paymentEntriesCreated: false,
           verification: { status: BANK_FILE_VERIFICATION.PENDING },
-          notice: "BBVA fixed-width payment instruction. Payment requires separate bank confirmation."
+          paymentFormat,
+          notice: foreignTransfer ? "Transfers abroad (SWIFT) instruction workbook. Payment requires separate bank confirmation." : "BBVA fixed-width payment instruction. Payment requires separate bank confirmation."
         }
       }], session ? { session } : undefined);
       await recordAudit({
@@ -822,7 +843,7 @@ async function createPaymentBatch({ generationKey, requestIds = [], payableIds =
         user,
         req,
         module: "TREASURY",
-        message: "BBVA fixed-width file generated; it awaits Accounting verification before download.",
+        message: foreignTransfer ? "Transfers-abroad file generated; it awaits verification before download." : "BBVA fixed-width file generated; it awaits Accounting verification before download.",
         newValues: { batchId: batch._id, batchNumber, bank: normalizedBank, currency, totalAmount: batch.totalAmount, itemCount: items.length, checksum, specificationVersion: adapter.specificationVersion, generatedAt: batch.generatedAt, adapterMode: adapter.mode },
         session
       });
@@ -1577,13 +1598,19 @@ export async function certifyBankFormatConfiguration({ id, certified, certificat
 
 
 // Read-only preflight: reuse exactly the item loader and serializer used by generation.
-export async function previewPaymentBatch({ payableIds, currency, accountSelections, paymentDate, paymentDateReason }) {
+export async function previewPaymentBatch({ payableIds, currency, format, accountSelections, paymentDate, paymentDateReason }) {
+  const foreignTransfer = String(format || "").trim().toUpperCase() === FOREIGN_TRANSFER_FORMAT;
   if (!Array.isArray(payableIds) || !payableIds.length || payableIds.length > 5000 || payableIds.some(id => !/^[a-f0-9]{24}$/i.test(String(id)))) throw new AppError(422, "Select between 1 and 5000 valid payables.");
   const issues = [], items = [], loaded = [];
   let adapter;
   try {
-    const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
-    adapter = getBankFileAdapter("BBVA", configuration);
+    if (foreignTransfer) {
+      if (currency !== "USD") throw new AppError(422, "Transfers abroad are paid in dollars (USD).", { currency }, ERROR_CODES.VALIDATION_ERROR);
+      adapter = new ForeignTransferFileAdapter();
+    } else {
+      const configuration = await BankFormatConfiguration.findOne({ bank: "BBVA", currency, active: true }).lean();
+      adapter = getBankFileAdapter("BBVA", configuration);
+    }
   } catch (error) { if (!error.statusCode) throw error; issues.push({ message: error.message, owner: "Treasury", code: error.code }); }
   const ids = [...new Set(payableIds.map(String))];
   if (ids.length !== payableIds.length) issues.push({ message: "A payable cannot be selected twice.", owner: "Treasury" });
@@ -1591,10 +1618,11 @@ export async function previewPaymentBatch({ payableIds, currency, accountSelecti
   const available = new Set(existing.map(String));
   for (const id of ids) if (!available.has(id)) issues.push({ id, message: "Accounts Payable record not found.", owner: "Treasury" });
   if (available.size) {
-    const rows = await loadPaymentItems({ payableIds: [...available] }, "BBVA", currency, accountSelections, issues);
+    const rows = await loadPaymentItems({ payableIds: [...available] }, "BBVA", currency, accountSelections, issues, { format: foreignTransfer ? FOREIGN_TRANSFER_FORMAT : "BBVA_TXT" });
     for (const item of rows) {
       try {
-        if (adapter) adapter.generateFile({ currency, items: [{ ...item, bankAccount: item.bankAccountSnapshot }] });
+        if (adapter && foreignTransfer) adapter.validatePayment({ ...item, bankAccount: item.bankAccountSnapshot });
+        else if (adapter) adapter.generateFile({ currency, items: [{ ...item, bankAccount: item.bankAccountSnapshot }] });
         loaded.push(item); items.push({ id: String(item.accountsPayable._id), ready: Boolean(adapter) });
       } catch (error) { if (!error.statusCode) throw error; issues.push({ id: String(item.accountsPayable._id), message: error.message, owner: "Treasury", code: error.code }); }
     }
@@ -1612,7 +1640,7 @@ export async function generatePaymentBatch(payload) {
   if (!payload.idempotencyKey) return createPaymentBatch(payload);
   if (!/^[a-zA-Z0-9_-]{8,100}$/.test(payload.idempotencyKey)) throw new AppError(422, "A valid generation key is required.");
   const key = crypto.createHash("sha256").update(`${payload.user._id}:${payload.idempotencyKey}`).digest("hex");
-  const fingerprint = crypto.createHash("sha256").update(JSON.stringify([...(payload.payableIds || []).map(String).sort(), ...(payload.requestIds || []).map(String).sort(), payload.bank, payload.currency, payload.paymentDate, payload.paymentDateReason || "", Object.entries(payload.accountSelections || {}).sort()])).digest("hex");
+  const fingerprint = crypto.createHash("sha256").update(JSON.stringify([...(payload.payableIds || []).map(String).sort(), ...(payload.requestIds || []).map(String).sort(), payload.bank, payload.currency, payload.format || "", payload.paymentDate, payload.paymentDateReason || "", Object.entries(payload.accountSelections || {}).sort()])).digest("hex");
   const requests = AccountsPayable.db.collection("paymentgenerationrequests");
   try { await requests.insertOne({ _id: key, fingerprint, createdAt: new Date() }); }
   catch (error) {

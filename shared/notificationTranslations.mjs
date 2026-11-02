@@ -192,5 +192,22 @@ export default {
   "{batchNumber} ({count} payments) includes {advances} advance(s) to pay today. Verify it so Treasury can send it.": "{batchNumber} ({count} pagos) incluye {advances} anticipo(s) por pagar hoy. Verifícalo para que Tesorería pueda enviarlo.",
   "{requestNumber} was paid. Submit the rendition by {dueDate} (working days, Lima time). Return any money left over to {account} and attach the deposit slip.": "{requestNumber} fue pagada. Presenta la rendición hasta el {dueDate} (días hábiles, hora de Lima). Devuelve el dinero sobrante a {account} y adjunta el voucher de depósito.",
   "Advance bank account updated": "Cuenta bancaria del anticipo actualizada",
-  "{requestNumber}: the advance now pays to {name}'s verified {bank} account ending in {ending}.": "{requestNumber}: el anticipo ahora se paga a la cuenta verificada de {name} en {bank} terminada en {ending}."
+  "{requestNumber}: the advance now pays to {name}'s verified {bank} account ending in {ending}.": "{requestNumber}: el anticipo ahora se paga a la cuenta verificada de {name} en {bank} terminada en {ending}.",
+  "Advance bank account verified — provision in Accounting": "Cuenta bancaria del anticipo verificada — provisiona en Contabilidad",
+  "Advance ready for Treasury": "Anticipo listo para Tesorería",
+  "Correct the digital acta": "Corrige el acta digital",
+  "Employee advance awaits Accounting provision": "Anticipo del colaborador pendiente de provisión contable",
+  "Track B invoice awaiting Accounting": "Factura del circuito B pendiente de Contabilidad",
+  "Track B requires Accounting review": "El circuito B requiere revisión de Contabilidad",
+  "Upload the invoice for Accounting review": "Sube la factura para la revisión de Contabilidad",
+  "{requestNumber} has a verified employee account and an approved budget commitment. Accounting must provision it before Treasury can pay.": "{requestNumber} tiene una cuenta del colaborador verificada y un compromiso presupuestal aprobado. Contabilidad debe provisionarla antes de que Tesorería pueda pagar.",
+  "{requestNumber} is approved and budget committed. Review the employee advance, Account 14 and bank eligibility before creating the CXP.": "{requestNumber} está aprobada y con presupuesto comprometido. Revisa el anticipo del colaborador, la cuenta 14 y la elegibilidad bancaria antes de crear la CXP.",
+  "{requestNumber} is approved and its budget reserved. Upload the supplier's invoice when it arrives so Accounting can validate the acta, IGV and SPOT before payment.": "{requestNumber} está aprobada y su presupuesto reservado. Sube la factura del proveedor cuando llegue para que Contabilidad valide el acta, el IGV y la detracción antes del pago.",
+  "{requestNumber} is budget committed. Review the signed acta, IGV, accounting account and SPOT before creating CXP.": "{requestNumber} tiene el presupuesto comprometido. Revisa el acta firmada, el IGV, la cuenta contable y la detracción antes de crear la CXP.",
+  "{requestNumber} was provisioned by Accounting. Schedule payment to the verified employee account.": "{requestNumber} fue provisionada por Contabilidad. Programa el pago a la cuenta verificada del colaborador.",
+  "{requestNumber}: Accounting requested a new conforming acta. Reason: {detail}": "{requestNumber}: Contabilidad solicitó una nueva acta de conformidad. Motivo: {detail}",
+  "{requestNumber}: verify the acta, GL account, IGV and SPOT; then provision CXP.": "{requestNumber}: verifica el acta, la cuenta contable, el IGV y la detracción; luego provisiona la CXP.",
+  "Official exchange rate is out of date": "El tipo de cambio oficial está desactualizado",
+  "The latest official SBS USD/PEN rate stored is for {date}; the rate for {expected} could not be retrieved. Foreign-currency postings wait until it is.": "El último tipo de cambio oficial SBS USD/PEN registrado es del {date}; no se pudo obtener el del {expected}. Los registros en moneda extranjera esperan hasta obtenerlo.",
+  "No official SBS USD/PEN rate is stored yet. Foreign-currency postings wait until one is retrieved.": "Aún no hay un tipo de cambio oficial SBS USD/PEN registrado. Los registros en moneda extranjera esperan hasta obtener uno."
 };

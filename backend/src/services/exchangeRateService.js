@@ -2,7 +2,22 @@ import ExchangeRate from "../models/ExchangeRate.js";
 import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { multiplyMoney } from "../utils/money.js";
-import { fetchSunatSellingRate, rateSnapshot } from "./sunatExchangeRateProvider.js";
+import { addDays } from "./sbsExchangeRateProvider.js";
+import { expectedLatestEffectiveDate, syncOfficialExchangeRates } from "./exchangeRateSyncService.js";
+import { rateSnapshot } from "./sunatExchangeRateProvider.js";
+
+// How far back a document date looks for its rate (the official rate of a date is always the SBS
+// close of the last business day before it, so a long holiday is still covered).
+export const RATE_LOOKBACK_DAYS = 10;
+// Official rates: the SBS publications stored by the synchronization, and authoritative SUNAT
+// adapter records kept from earlier versions.
+const OFFICIAL_MODES = Object.freeze(["SBS", "SUNAT"]);
+const REFERENCE_MODES = Object.freeze(["MANUAL", "BCRP_FALLBACK"]);
+// Fictional rates earlier development seeds stored in SUNAT's record shape: never used, and
+// deactivated by scripts/migrateExchangeRateFoundation.js.
+export const FICTIONAL_RATE_LABEL = /^DEMO -/;
+const ON_DEMAND_INTERVAL_MS = 10 * 60 * 1000;
+let lastOnDemandSync = 0;
 
 export function startOfUtcDay(value) {
   const date = new Date(value);
@@ -10,30 +25,63 @@ export function startOfUtcDay(value) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-export async function resolveExchangeRateSnapshot(currency, issueDate, { lookup, fetchRate = fetchSunatSellingRate, allowReference = process.env.EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK === "true" } = {}) {
+const isoDay = (value) => new Date(value).toISOString().slice(0, 10);
+
+function latestIn(modes, { requireAuthoritative }) {
+  return (day, oldest) => ExchangeRate.findOne({
+    currency: "USD",
+    active: true,
+    providerMode: { $in: modes },
+    ...(requireAuthoritative ? { authoritative: true } : {}),
+    sourceLabel: { $not: FICTIONAL_RATE_LABEL },
+    date: { $lte: day, $gte: oldest }
+  }).sort({ date: -1 }).lean();
+}
+
+// The automatic synchronization normally has the rate already; a date that should be published but
+// is not stored yet (the worker was asleep, a source was down) is fetched once, then re-read. At
+// most one on-demand fetch every ten minutes, and never when EXCHANGE_RATE_ONLINE=false (tests).
+async function syncOnDemand(now) {
+  if (process.env.EXCHANGE_RATE_ONLINE === "false" || Date.now() - lastOnDemandSync < ON_DEMAND_INTERVAL_MS) return;
+  lastOnDemandSync = Date.now();
+  try { await syncOfficialExchangeRates({ trigger: "ON_DEMAND", now, retry: { retries: 0 } }); }
+  catch (error) { console.error("[EXCHANGE RATES] On-demand synchronization failed", error?.message || error); }
+}
+
+// The USD/PEN rate for a document date (Manual técnico: tipo de cambio venta SBS de la fecha del
+// comprobante; a date without its own publication uses the latest published before it, and says
+// which). side: SELL (venta, default: what UMA owes) or BUY (compra).
+export async function resolveExchangeRateSnapshot(currency, issueDate, {
+  side = "SELL",
+  now = new Date(),
+  find = latestIn(OFFICIAL_MODES, { requireAuthoritative: true }),
+  findReference = latestIn(REFERENCE_MODES, { requireAuthoritative: false }),
+  syncNow = syncOnDemand,
+  allowReference = process.env.EXCHANGE_RATE_ALLOW_REFERENCE_FALLBACK === "true"
+} = {}) {
   const date = startOfUtcDay(issueDate);
-  const requested = date.toISOString().slice(0, 10);
+  const requested = isoDay(date);
   if (currency === "PEN") return { rate: 1, date, requestedDate: date, source: "PEN", providerMode: "PEN", authoritative: true, fallback: { used: false } };
-  if (currency !== "USD") throw new AppError(422, "Unsupported transaction currency.");
-  const read = lookup || (day => ExchangeRate.findOne({ currency: "USD", date: day, active: true }).lean());
-  let reference;
-  let unavailable = false;
-  for (let offset = 0; offset <= 7; offset += 1) {
-    const day = new Date(date); day.setUTCDate(day.getUTCDate() - offset);
-    if (offset > 0 && [0, 6].includes(day.getUTCDay())) continue;
-    const saved = await read(day);
-    if (saved?.authoritative === true && saved.providerMode === "SUNAT" && ["SUNAT", "SUNAT_PRODUCTION"].includes(saved.source)) return rateSnapshot(saved, requested, unavailable ? "SUNAT_UNAVAILABLE_PREVIOUS_PUBLISHED_DAY" : undefined);
-    if (!reference && saved?.rate > 0) reference = saved;
-    try {
-      const live = await fetchRate(day.toISOString().slice(0, 10));
-      const snapshot = rateSnapshot(live, requested, offset ? "PREVIOUS_PUBLISHED_BUSINESS_DAY" : undefined);
-      const age = (date - snapshot.date) / 86400000;
-      if (!snapshot.authoritative || age > 7 || (age > 0 && [0, 6].includes(snapshot.date.getUTCDay()))) throw new Error("Invalid fallback publication date");
-      return snapshot;
-    } catch { unavailable = true; }
+  if (currency !== "USD") throw new AppError(422, "Unsupported transaction currency.", { currency }, ERROR_CODES.VALIDATION_ERROR);
+  const oldest = new Date(`${addDays(requested, -RATE_LOOKBACK_DAYS)}T00:00:00Z`);
+  // The publication this date needs: the close of the last business day before it.
+  const expected = expectedLatestEffectiveDate(requested);
+  let official = await find(date, oldest);
+  if (!official || isoDay(official.date) < expected) {
+    await syncNow(now);
+    official = await find(date, oldest);
   }
-  if (allowReference && reference) return rateSnapshot(reference, requested, "SUNAT_UNAVAILABLE_REFERENCE_FALLBACK");
-  throw new AppError(422, `No authoritative SUNAT selling rate is available for ${requested} or the preceding seven days.`, { date: requested, requiresConfiguration: "SUNAT_EXCHANGE_RATE_ENDPOINT", referenceFallbackEnabled: allowReference }, ERROR_CODES.EXCHANGE_RATE_MISSING);
+  if (official && isoDay(official.date) >= expected) return rateSnapshot(official, requested, undefined, side);
+  if (allowReference) {
+    const reference = await findReference(date, oldest);
+    if (reference && isoDay(reference.date) >= expected) return rateSnapshot(reference, requested, "OFFICIAL_RATE_UNAVAILABLE_MANUAL_ENTRY", side);
+  }
+  throw new AppError(422, `No official SBS USD/PEN rate is stored for ${requested}. It is retrieved automatically; if the sources are down, Contabilidad or Tesorería is alerted.`, {
+    date: requested,
+    expectedPublication: expected,
+    latestStored: official ? isoDay(official.date) : null,
+    referenceFallbackEnabled: allowReference
+  }, ERROR_CODES.EXCHANGE_RATE_MISSING);
 }
 
 export async function applyExchangeRate(request) {

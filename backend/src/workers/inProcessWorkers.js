@@ -26,7 +26,10 @@ export function inProcessWorkerFlags(env = process.env) {
     sla: boolFromEnv(env.SLA_WORKER_ENABLED, production),
     padron: !cloudTaxpayerMode(env) && usesPublicPadron(env) && boolFromEnv(env.SUNAT_PADRON_WORKER_ENABLED, true),
     // Only when notification emails are switched on (NOTIFICATION_EMAIL_MODE=LOG or SMTP).
-    notificationEmail: notificationEmailConfiguration(env).mode !== "OFF" && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production)
+    notificationEmail: notificationEmailConfiguration(env).mode !== "OFF" && boolFromEnv(env.NOTIFICATION_EMAIL_WORKER_ENABLED, production),
+    // Official SBS exchange rates: on wherever the server runs (never in tests, which set
+    // EXCHANGE_RATE_ONLINE=false); EXCHANGE_RATE_SYNC_ENABLED=false turns it off.
+    exchangeRate: env.EXCHANGE_RATE_ONLINE !== "false" && boolFromEnv(env.EXCHANGE_RATE_SYNC_ENABLED, true)
   };
 }
 
@@ -43,10 +46,11 @@ export async function startInProcessWorkers(env = process.env) {
   if (flags.batchInvoice) workers.push((await import("./batchInvoiceWorker.js")).startBatchInvoiceWorker());
   if (flags.sla) workers.push((await import("./slaWorker.js")).startSlaWorker());
   if (flags.padron) workers.push((await import("./padronWorker.js")).startPadronWorker());
+  if (flags.exchangeRate) workers.push((await import("./exchangeRateWorker.js")).startExchangeRateWorker({ env }));
   if (flags.notificationEmail) workers.push((await import("./notificationEmailWorker.js")).startNotificationEmailWorker());
   // A mode the app does not know leaves emails off: say so loudly instead of only "off" below.
   else for (const problem of notificationEmailConfiguration(env).problems) console.error(`[WORKERS] Notification emails: ${problem}`);
-  console.log(`[WORKERS] In-process: batch-invoice=${flags.batchInvoice ? "on" : "off"}, sla=${flags.sla ? "on" : "off"}, sunat-padron=${flags.padron ? "on" : "off"}, notification-email=${flags.notificationEmail ? "on" : "off"}`);
+  console.log(`[WORKERS] In-process: batch-invoice=${flags.batchInvoice ? "on" : "off"}, sla=${flags.sla ? "on" : "off"}, sunat-padron=${flags.padron ? "on" : "off"}, notification-email=${flags.notificationEmail ? "on" : "off"}, exchange-rate=${flags.exchangeRate ? "on" : "off"}`);
   return {
     flags,
     workers,

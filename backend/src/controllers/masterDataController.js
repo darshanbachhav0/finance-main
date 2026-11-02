@@ -1,4 +1,3 @@
-import { fetchSunatSellingRate } from "../services/sunatExchangeRateProvider.js";
 import AccountingMapping from "../models/AccountingMapping.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
 import ApprovalRule from "../models/ApprovalRule.js";
@@ -14,6 +13,9 @@ import Project from "../models/Project.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { recordAudit } from "../services/auditService.js";
 import { resolveExchangeRateSnapshot } from "../services/exchangeRateService.js";
+import { lastSyncRun, latestOfficialRate, syncOfficialExchangeRates } from "../services/exchangeRateSyncService.js";
+import ExchangeRateSyncRun from "../models/ExchangeRateSyncRun.js";
+import { limaToday } from "../../../shared/businessCalendar.mjs";
 import { closeAccountingPeriod, createAccountingPeriod, reopenAccountingPeriod } from "../services/periodAdministrationService.js";
 import { certifyBankFormatConfiguration } from "../services/treasuryService.js";
 import { escapedRegex, paginatedPayload, parsePagination, parseSort } from "../services/queryService.js";
@@ -21,24 +23,28 @@ import { AppError } from "../utils/AppError.js";
 import { ERROR_CODES } from "../utils/constants.js";
 import { assertLegacyAllocationChange } from "../services/budgetPlanService.js";
 
-export async function verifyExchangeRatePayload(payload) {
-  if (!Number.isFinite(Number(payload.rate)) || Number(payload.rate) <= 0) throw new AppError(422, "A positive selling rate is required.");
+// A rate typed by a person is always a MANUAL, non-official entry: official SBS rates are written
+// only by the automatic synchronization (services/exchangeRateSyncService.js), and an official
+// rate is never edited by hand.
+const OFFICIAL_RATE_LOCKED = "Official SBS rates come from the automatic synchronization and cannot be edited.";
+
+export async function verifyExchangeRatePayload(payload, existing) {
+  if (existing && existing.providerMode === "SBS") throw new AppError(409, OFFICIAL_RATE_LOCKED, undefined, ERROR_CODES.CONFLICT);
+  const sellRate = Number(payload.sellRate ?? payload.rate);
+  if (!Number.isFinite(sellRate) || sellRate <= 0) throw new AppError(422, "A positive selling rate is required.");
+  if (payload.buyRate !== undefined && payload.buyRate !== null && payload.buyRate !== "" && !(Number(payload.buyRate) > 0 && Number(payload.buyRate) <= sellRate)) throw new AppError(422, "The buying rate must be positive and not above the selling rate.", { field: "buyRate" }, ERROR_CODES.VALIDATION_ERROR);
   const date = new Date(payload.date);
   if (Number.isNaN(date.getTime())) throw new AppError(422, "A valid exchange-rate date is required.", undefined, ERROR_CODES.VALIDATION_ERROR);
   payload.date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   payload.period = payload.date.toISOString().slice(0, 7);
+  payload.rate = sellRate;
+  payload.sellRate = sellRate;
   payload.retrievedAt = new Date();
-  if (payload.providerMode === "SUNAT") {
-    const verified = await fetchSunatSellingRate(payload.date.toISOString().slice(0, 10));
-    if (verified.date !== payload.date.toISOString().slice(0, 10) || Number(payload.rate) !== verified.rate) throw new AppError(422, "Rate/date disagree with authoritative SUNAT evidence.");
-    payload.source = payload.sourceLabel = verified.source;
-    payload.authoritative = true;
-    payload.sourceUrl = verified.sourceUrl;
-  } else {
-    payload.providerMode = payload.providerMode === "BCRP_FALLBACK" ? "BCRP_FALLBACK" : "MANUAL";
-    payload.authoritative = false;
-    payload.sourceUrl = undefined;
-  }
+  payload.providerMode = "MANUAL";
+  payload.source = "MANUAL";
+  payload.sourceLabel = payload.sourceLabel || "Authorized manual selling rate";
+  payload.authoritative = false;
+  payload.sourceUrl = undefined;
 }
 
 function pick(source, fields) {
@@ -88,9 +94,10 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
       const oldValues = data.toObject();
       const payload = pick(req.body, fields.filter((field) => field !== "createdBy"));
       if (Model === BudgetAllocation) await assertLegacyAllocationChange(payload, data);
+      if (Model === ExchangeRate && data.providerMode === "SBS") throw new AppError(409, OFFICIAL_RATE_LOCKED, undefined, ERROR_CODES.CONFLICT);
       if (Model === ExchangeRate && Object.keys(payload).some(key => key !== "active")) {
-        Object.assign(payload, { date: payload.date || data.date, rate: payload.rate ?? data.rate, providerMode: payload.providerMode || data.providerMode });
-        await verifyExchangeRatePayload(payload);
+        Object.assign(payload, { date: payload.date || data.date, rate: payload.rate ?? data.rate });
+        await verifyExchangeRatePayload(payload, data);
       }
       if (Model === FinanceConfiguration) payload.updatedBy = req.user._id;
       Object.assign(data, payload);
@@ -106,6 +113,7 @@ function resourceController({ Model, label, fields, searchFields = [], sortField
       }
       const oldValues = { active: data.active };
       if (Model === BudgetAllocation) await assertLegacyAllocationChange({ active: false }, data);
+      if (Model === ExchangeRate && data.providerMode === "SBS") throw new AppError(409, OFFICIAL_RATE_LOCKED, undefined, ERROR_CODES.CONFLICT);
       data.active = false;
       await data.save();
       await recordAudit({ entityType: label, entity: data, action: "DEACTIVATED", user: req.user, req, module: "MASTER_DATA", oldValues, newValues: { active: false } });
@@ -136,15 +144,49 @@ export const exchangeRates = {
   ...resourceController({
     Model: ExchangeRate,
     label: "ExchangeRate",
-    fields: ["currency", "quoteCurrency", "date", "period", "rate", "source", "sourceLabel", "providerMode", "authoritative", "active", "createdBy"],
+    fields: ["currency", "quoteCurrency", "date", "period", "rate", "buyRate", "sellRate", "sbsClosingDate", "source", "sourceLabel", "providerMode", "authoritative", "sourceUrl", "retrievedAt", "confirmedBy", "active", "createdBy"],
     searchFields: ["source", "sourceLabel", "period"],
     sortFields: ["date", "period", "rate", "source", "active"],
     defaultSort: { date: -1 },
     populate: [{ path: "createdBy", select: "name email role" }]
   }),
-  current: asyncHandler(async (_req, res) => {
-    const data = await resolveExchangeRateSnapshot("USD", _req.query.date || new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" }));
-    res.json({ data: { ...data, date: data.date.toISOString().slice(0, 10), period: data.date.toISOString().slice(0, 7), baseCurrency: "USD", quoteCurrency: "PEN", notice: data.authoritative ? "SUNAT selling rate" : "Reference fallback; not authoritative SUNAT" } });
+  // The rate a document of this date uses (default: today in Lima), with its source and the
+  // date it was published for, plus how current the synchronization is. Every signed-in user
+  // reads it (request forms, the home page).
+  applicable: asyncHandler(async (req, res) => {
+    const requested = String(req.query.date || limaToday());
+    const [latest, lastRun] = await Promise.all([latestOfficialRate(), lastSyncRun()]);
+    let snapshot = null;
+    let unavailable = null;
+    try { snapshot = await resolveExchangeRateSnapshot("USD", requested); } catch (error) { unavailable = error.message; }
+    res.json({
+      data: {
+        requestedDate: requested,
+        rate: snapshot ? {
+          sellRate: snapshot.sellRate, buyRate: snapshot.buyRate ?? null, rateDate: snapshot.date.toISOString().slice(0, 10),
+          sbsClosingDate: snapshot.sbsClosingDate ? new Date(snapshot.sbsClosingDate).toISOString().slice(0, 10) : null,
+          source: snapshot.source, sourceLabel: snapshot.sourceLabel || snapshot.source, official: snapshot.authoritative, fallback: snapshot.fallback
+        } : null,
+        unavailable,
+        latestOfficial: latest ? { date: latest.date.toISOString().slice(0, 10), sellRate: latest.sellRate ?? latest.rate, buyRate: latest.buyRate ?? null, source: latest.source, retrievedAt: latest.retrievedAt } : null,
+        lastSync: lastRun ? { status: lastRun.status, finishedAt: lastRun.finishedAt, stale: lastRun.stale, sources: lastRun.sources } : null
+      }
+    });
+  }),
+  current: asyncHandler(async (req, res) => {
+    const data = await resolveExchangeRateSnapshot("USD", req.query.date || limaToday());
+    res.json({ data: { ...data, date: data.date.toISOString().slice(0, 10), period: data.date.toISOString().slice(0, 7), baseCurrency: "USD", quoteCurrency: "PEN", notice: data.authoritative ? "Official SBS rate" : "Manual reference rate; not official" } });
+  }),
+  // Runs the synchronization now (Contabilidad or Tesoreria), e.g. after a source came back.
+  sync: asyncHandler(async (req, res) => {
+    const result = await syncOfficialExchangeRates({ trigger: "MANUAL", requestedBy: req.user._id });
+    await recordAudit({ entityType: "ExchangeRateSyncRun", entity: result.run._id, action: "EXCHANGE_RATE_SYNC_REQUESTED", user: req.user, req, module: "EXCHANGE_RATES", newValues: { status: result.run.status, inserted: result.inserted, updated: result.updated, latestDate: result.latestDate } });
+    res.json({ data: result });
+  }),
+  syncRuns: asyncHandler(async (req, res) => {
+    const { page, pageSize, skip } = parsePagination({ ...req.query, pageSize: req.query.pageSize || 20 });
+    const [rows, total] = await Promise.all([ExchangeRateSyncRun.find().sort({ startedAt: -1 }).skip(skip).limit(pageSize).lean(), ExchangeRateSyncRun.countDocuments()]);
+    res.json(paginatedPayload(rows, total, page, pageSize));
   })
 };
 

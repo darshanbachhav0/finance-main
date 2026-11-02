@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { SUPPLIER_ORIGINS, SUPPLY_TYPES } from "../../../shared/supplierRegistration.mjs";
 import {
   BANK_ACCOUNT_OWNERSHIP_RESULTS,
   BANK_ACCOUNT_VERIFICATION_STATUSES,
@@ -83,7 +84,16 @@ const supplierSchema = new mongoose.Schema(
     // with more areas (services/supplierVisibilityService.js).
     departments: { type: [{ type: String, trim: true }], default: [] },
     proposalJustification: { type: String, trim: true, default: "" },
-    identifierType: { type: String, enum: ["RUC", "DNI"], required: true, default: "RUC" },
+    // NATIONAL: identified by RUC (or DNI); FOREIGN (no domiciliado): by country + tax id, stored
+    // as rucDni "EXT-<COUNTRY>-<TAXID>" so the one unique key covers both (shared/supplierRegistration.mjs).
+    origin: { type: String, enum: SUPPLIER_ORIGINS, default: "NATIONAL" },
+    country: { type: String, trim: true, default: "" },
+    foreignTaxId: { type: String, trim: true, default: "" },
+    // Bienes o Servicios (pilot "Tipo").
+    supplyType: { type: String, enum: SUPPLY_TYPES },
+    // Sujeto a detraccion: then its Banco de la Nacion account (detractionAccount) is required.
+    detractionSubject: { type: Boolean, default: false },
+    identifierType: { type: String, enum: ["RUC", "DNI", "FOREIGN_TAX_ID"], required: true, default: "RUC" },
     personType: { type: String, enum: SUPPLIER_PERSON_TYPES },
     rucDni: { type: String, required: true, unique: true, trim: true },
     normalizedIdentifier: { type: String, unique: true, sparse: true, trim: true },
@@ -242,8 +252,15 @@ const supplierSchema = new mongoose.Schema(
 );
 
 supplierSchema.pre("validate", function normalizeSupplier() {
-  this.normalizedIdentifier = String(this.rucDni || "").replace(/\D/g, "");
-  this.identifierType = this.normalizedIdentifier.length === 8 ? "DNI" : "RUC";
+  if (this.origin === "FOREIGN") {
+    // "EXT-<COUNTRY>-<TAXID>" is kept whole (letters included).
+    this.normalizedIdentifier = String(this.rucDni || "").trim().toUpperCase();
+    this.identifierType = "FOREIGN_TAX_ID";
+    this.detractionSubject = false;
+  } else {
+    this.normalizedIdentifier = String(this.rucDni || "").replace(/\D/g, "");
+    this.identifierType = this.normalizedIdentifier.length === 8 ? "DNI" : "RUC";
+  }
   this.legalName ||= this.name;
   this.name ||= this.legalName;
   this.commercialName ||= this.name;

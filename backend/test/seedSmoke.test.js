@@ -60,8 +60,10 @@ test("development seed completes with the four staff accounts and no demo reques
     // collections after the drop below.
     connection = await mongoose.createConnection(uri).asPromise();
     const db = connection.db;
-    const rates = await db.collection("exchangerates").find({ authoritative: true, providerMode: "SUNAT" }).toArray();
-    assert.ok(rates.length > 0 && rates.every((rate) => /^DEMO/.test(rate.sourceLabel)), "demo rates are labelled as demo data");
+    // Exchange rates are never invented: offline (as here) the seed stores none; online it stores
+    // the official SBS rates from the synchronization.
+    assert.equal(await db.collection("exchangerates").countDocuments({ sourceLabel: { $regex: "^DEMO" } }), 0, "no fictional rates");
+    assert.equal(await db.collection("accountingmappings").countDocuments({ purpose: { $in: ["EXCHANGE_GAIN", "EXCHANGE_LOSS"] } }), 2, "exchange-difference accounts 776101 / 976101");
     // A database seeded by an earlier seed version keeps that version's demo account (another
     // number) as the supplier's preferred one. Seeding again retires it instead of failing on
     // "one active preferred account per currency and type" (E11000).

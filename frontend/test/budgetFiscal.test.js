@@ -17,5 +17,8 @@ assert.match(budget, /canDecideChanges = hasRole\(user, ROLES\.MANAGEMENT\)/);
 assert.doesNotMatch(budget, /user\.role ===|\["Admin"[^\]]*\]\.includes\(user/, "no role literals: access comes from the catalog");
 assert.ok(budget.includes('status: "REVIEWED"'));
 assert.ok(budget.includes("row.preparedBy"));
-assert.ok(read("../src/pages/ExchangeRates.jsx").includes('"BCRP_FALLBACK", "SUNAT"'));
+// Official SBS rates come from the automatic synchronization: they are locked on the page, and a
+// typed rate is only ever a manual reference.
+const exchangeRatePage = read("../src/pages/ExchangeRates.jsx");
+assert.ok(exchangeRatePage.includes("rowLocked={official}") && exchangeRatePage.includes('label: "Manual reference rate"'));
 console.log("PASS budget/fiscal UI: distinct validations, source/date/authority/fallback, historical evidence, Management approval and Budget review");

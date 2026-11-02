@@ -7,6 +7,7 @@ import Supplier from "../models/Supplier.js";
 import { recordAudit } from "./auditService.js";
 import { createBudgetPlan } from "./budgetPlanService.js";
 import { assertSupplierIdentifier, createSupplierProposal } from "./supplierService.js";
+import { isValidRuc } from "../../../shared/supplierRegistration.mjs";
 import { AppError } from "../utils/AppError.js";
 import { AP_STATUS, ERROR_CODES, ROLES } from "../utils/constants.js";
 import { limaDateKey } from "../../../shared/businessCalendar.mjs";
@@ -122,6 +123,7 @@ async function applyBudgetRow(checked, { user, req, fileName }) {
 // ---- Suppliers -----------------------------------------------------------------------------
 async function checkSupplierRow(row) {
   const identifier = assertSupplierIdentifier(pick(row, "ruc", "rucdni", "dni", "documento", "identifier"));
+  if (identifier.length === 11 && !isValidRuc(identifier)) fail("This RUC is not valid: check its digits.");
   const legalName = String(pick(row, "razonsocial", "nombre", "legalname", "name")).trim();
   if (!legalName) fail("Write the supplier's legal name (razón social).");
   if (await Supplier.exists({ $or: [{ normalizedIdentifier: identifier }, { rucDni: identifier }] })) fail("A supplier with RUC/DNI {identifier} already exists.", { identifier });
@@ -144,7 +146,7 @@ async function checkSupplierRow(row) {
 }
 
 async function applySupplierRow(checked, { user, req }) {
-  await createSupplierProposal({ payload: checked.payload, files: {}, user, req });
+  await createSupplierProposal({ payload: checked.payload, files: {}, user, req, requireContactEmail: false });
 }
 
 // ---- Payment schedule ------------------------------------------------------------------------

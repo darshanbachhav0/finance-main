@@ -1087,7 +1087,7 @@ export default function RequestCreate() {
 
             {selectedSupplier && !registering && <div className="selected-supplier-card">
               <div className="selected-supplier-head">
-                <div><strong>{supplierName(selectedSupplier)}</strong><span>{[selectedSupplier.supplierCode, `RUC ${selectedSupplier.rucDni}`].filter(Boolean).join(" · ")}</span></div>
+                <div><strong>{supplierName(selectedSupplier)}</strong><span>{[selectedSupplier.supplierCode, selectedSupplier.origin === "FOREIGN" ? `${t("Supplier abroad")} · ${selectedSupplier.country || ""}` : `RUC ${selectedSupplier.rucDni}`].filter(Boolean).join(" · ")}</span></div>
                 <StatusBadge status={supplierStatus(selectedSupplier)} />
               </div>
               <small>Días de crédito: {supplierCreditDays(selectedSupplier.paymentTerms) ?? "Sin especificar"}</small>

@@ -18,11 +18,16 @@ test("ExchangeRate carries first-class retrieval evidence (source URL, retrieval
       assert.ok(payload.retrievedAt instanceof Date && payload.retrievedAt.getTime() >= before);
     });
 
-    await t.test("a BCRP reference entry is still explicitly non-authoritative with a retrieval timestamp", async () => {
-      const payload = { rate: "3.7", date: "2026-09-14", providerMode: "BCRP_FALLBACK" };
+    await t.test("a rate typed by a person is always a manual, non-official entry (even when it claims a source)", async () => {
+      for (const providerMode of ["BCRP_FALLBACK", "SUNAT", "SBS"]) {
+        const payload = { rate: "3.7", date: "2026-09-14", providerMode, authoritative: true, source: "SUNAT_SBS" };
+        await verifyExchangeRatePayload(payload);
+        assert.equal(payload.authoritative, false);
+        assert.equal(payload.providerMode, "MANUAL");
+        assert.equal(payload.source, "MANUAL");
+      }
+      const payload = { rate: "3.7", date: "2026-09-14" };
       await verifyExchangeRatePayload(payload);
-      assert.equal(payload.authoritative, false);
-      assert.equal(payload.providerMode, "BCRP_FALLBACK");
       assert.ok(payload.retrievedAt instanceof Date);
     });
 

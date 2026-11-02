@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isValidRuc } from "../../shared/supplierRegistration.mjs";
 import test from "node:test";
 import mongoose from "mongoose";
 import AuditLog from "../src/models/AuditLog.js";
@@ -54,8 +55,9 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       jefe
     };
     const approve = (supplier, user = users.treasury, comments = "") => decideSupplierApproval({ supplierId: supplier._id, payload: { decision: "APPROVE", comments }, user, req });
-    let sequence = 20691000000;
-    const nextRuc = () => String(++sequence);
+    let sequence = 2069100000;
+    // A RUC with its SUNAT check digit (registration refuses any other).
+    const nextRuc = () => { const prefix = String(++sequence); return [...Array(10).keys()].map((digit) => `${prefix}${digit}`).find(isValidRuc); };
     // A CCI opens with its bank's entity code (BCP 002, BBVA 011, Banco de la Nación 018).
     const nextCci = (prefix = "002") => `${prefix}${String(++sequence).padStart(17, "0")}`;
 
@@ -69,7 +71,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
         fiscalAddress: "Av. Canto Bello 431, San Juan de Lurigancho, Lima",
         legalRepresentative: "Mariana Torres Rojas",
         legalRepresentativeDocument: { type: "DNI", number: "47112233" },
-        proposalJustification: "Alta requerida para servicios institucionales de UMA.",
+        email: "contacto@proveedor.pe", proposalJustification: "Alta requerida para servicios institucionales de UMA.",
         proposedBy: users.solicitor._id,
         proposedAt: new Date(),
         currency: "PEN",
@@ -133,7 +135,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
 
     await t.test("1-2. lookup-safe duplicate prevention; a new proposal gets the next PRV code at once", async () => {
       const ruc = nextRuc();
-      const payload = { rucDni: ruc, legalName: "Laboratorios Clinicos UMA SAC", proposalJustification: "Nuevo servicio para Ciencias de la Salud." };
+      const payload = { rucDni: ruc, legalName: "Laboratorios Clinicos UMA SAC", email: "contacto@proveedor.pe", proposalJustification: "Nuevo servicio para Ciencias de la Salud." };
       const created = await createSupplierProposal({ payload, files: {}, user: users.solicitor, req });
       // Every registration is numbered in order when it is made; approval no longer assigns it.
       assert.match(created.supplier.supplierCode, /^PRV-\d{4,}$/);
@@ -250,7 +252,7 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       assert.equal(isSupplierUsable(rejected), false);
       assert.throws(() => assertSupplierUsable(rejected), (error) => error.code === "SUPPLIER_REJECTED");
       await assert.rejects(
-        () => createSupplierProposal({ payload: { rucDni: ruc, legalName: "Duplicate rejected supplier", proposalJustification: "Attempted duplicate" }, files: {}, user: users.otherSolicitor, req }),
+        () => createSupplierProposal({ payload: { rucDni: ruc, legalName: "Duplicate rejected supplier", email: "contacto@proveedor.pe", proposalJustification: "Attempted duplicate" }, files: {}, user: users.otherSolicitor, req }),
         (error) => error.code === "DUPLICATE_SUPPLIER" && error.details.homologationStatus === "REJECTED"
       );
       await assert.rejects(() => approve(supplier), (error) => error.code === "INVALID_STATUS_TRANSITION");
@@ -428,8 +430,8 @@ test("RCO-FOR-002 Supplier Master and homologation controls", { timeout: 120000 
       await recordSupplierSunatRepresentatives(saved, users.treasury, req, async () => ({ ...result, representatives: [one, { ...one, fullName: "OTRO REPRESENTANTE" }] }));
       assert.equal(saved.legalRepresentative, "");
       assert.equal(saved.sunatRepresentatives.entries.length, 2);
-      await assert.rejects(recordSupplierSunatRepresentatives(saved, users.treasury, req, async () => ({ ...result, ruc: "20123456789" })), /does not match/);
-      await assert.rejects(createSupplierProposal({ payload: { rucDni: nextRuc(), legalName: "UNTRUSTED", proposalJustification: "test", sunatRepresentatives: result }, user: users.solicitor, req }), /server-controlled/);
+      await assert.rejects(recordSupplierSunatRepresentatives(saved, users.treasury, req, async () => ({ ...result, ruc: "20123456786" })), /does not match/);
+      await assert.rejects(createSupplierProposal({ payload: { rucDni: nextRuc(), legalName: "UNTRUSTED", email: "contacto@proveedor.pe", proposalJustification: "test", sunatRepresentatives: result }, user: users.solicitor, req }), /server-controlled/);
     });
 
     await t.test("23. manual, mock and not-configured taxpayer validation report their real source", async () => {

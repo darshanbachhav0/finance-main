@@ -9,6 +9,8 @@ import User from "../models/User.js";
 import { recordAudit } from "./auditService.js";
 import { notificationText, notifyRoles, notifyUser, resolveNotification } from "./notificationService.js";
 import { cleanupUploadedFiles, persistUploadedFiles } from "./storageService.js";
+import { isValidEmail, notificationEmailConfiguration } from "./notificationEmailService.js";
+import { createEmailTransport } from "../integrations/email/index.js";
 import { paginatedPayload, parsePagination, parseSort, escapedRegex } from "./queryService.js";
 import { nextSupplierCode } from "./sequenceService.js";
 import { sunatService, usesAutomaticTaxpayerLookup } from "./sunatService.js";
@@ -23,6 +25,7 @@ import { ERROR_CODES, PERMISSIONS, ROLES } from "../utils/constants.js";
 import { actsAsSupplierProposer, hasPermission } from "../utils/permissions.js";
 import { assertValidBankAccountNumber, assertValidCci } from "../utils/bankAccountValidation.js";
 import { bankDisplayName, cciBankProblem, peruBank } from "../../../shared/peruBanks.mjs";
+import { FOREIGN_BANK_CODE, SUPPLY_TYPES, detractionAccountError, emailError, foreignAccountProblems, foreignSupplierKey, isValidRuc } from "../../../shared/supplierRegistration.mjs";
 import {
   assertCanOpenSupplier,
   canSeeSupplier,
@@ -191,6 +194,7 @@ const proposalScalarFields = Object.freeze([
   "phone",
   "contactName",
   "supplierType",
+  "supplyType",
   "goodsServicesProfile",
   "currency",
   "proposalJustification"
@@ -300,6 +304,28 @@ function applyProposalFields(supplier, payload) {
   }
   const declarations = sanitizedDeclarations(payload.declarations, supplier.declarations || {});
   if (declarations) supplier.declarations = declarations;
+}
+
+// Bienes o Servicios, and the detraccion: a national supplier subject to detraccion needs its
+// 11-digit Banco de la Nacion account (pilot "Sujeto a detraccion"); a supplier abroad never is.
+function applyRegistrationRules(supplier, payload, user) {
+  if (payload.supplyType !== undefined && payload.supplyType !== "") {
+    const supplyType = String(payload.supplyType).trim().toUpperCase();
+    if (!SUPPLY_TYPES.includes(supplyType)) throw new AppError(422, "Choose goods or services.", { field: "supplyType" }, ERROR_CODES.VALIDATION_ERROR);
+    supplier.supplyType = supplyType;
+  }
+  if (payload.detractionSubject !== undefined) supplier.detractionSubject = supplier.origin !== "FOREIGN" && parseBoolean(payload.detractionSubject);
+  const accountNumber = payload.detractionAccountNumber ?? payload.detractionAccount?.accountNumber;
+  if (accountNumber !== undefined) {
+    const value = String(accountNumber || "").replace(/[\s-]/g, "");
+    const problem = detractionAccountError(value);
+    if (problem) throw new AppError(422, problem, { field: "detractionAccountNumber" }, ERROR_CODES.VALIDATION_ERROR);
+    supplier.detractionAccount = { accountNumber: value, updatedAt: new Date(), updatedBy: user?._id };
+  }
+  if (supplier.detractionSubject && supplier.origin !== "FOREIGN") {
+    const problem = detractionAccountError(supplier.detractionAccount?.accountNumber, { required: true });
+    if (problem) throw new AppError(422, problem, { field: "detractionAccountNumber" }, ERROR_CODES.VALIDATION_ERROR);
+  }
 }
 
 function assertProposalEditable(supplier, user) {
@@ -436,6 +462,7 @@ function serializeBankAccount(account, reveal) {
     ...value,
     accountNumber: maskBankValue(value.accountNumber),
     cci: maskBankValue(value.cci),
+    foreign: value.foreign ? { ...value.foreign, iban: maskBankValue(value.foreign.iban) } : value.foreign,
     verificationComments: undefined,
     verificationDocument: undefined
   };
@@ -530,6 +557,8 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
     protectedBankReviewFields,
     "Bank verification, ownership and preferred-account fields are Finance-controlled."
   );
+  const scope = String(payload.scope || (supplier.origin === "FOREIGN" ? "FOREIGN" : "NATIONAL")).trim().toUpperCase();
+  if (scope === "FOREIGN") return createForeignBankAccountRecord({ supplier, payload, user, req, audit });
   const bank = String(payload.bank || payload.bankName || "").trim().toUpperCase();
   const accountType = String(payload.accountType || "CURRENT").trim().toUpperCase();
   if (!NEW_ACCOUNT_TYPES.includes(accountType)) {
@@ -625,6 +654,83 @@ async function createBankAccountRecord({ supplier, payload, user, req, audit = t
     });
   }
   return { account, warnings };
+}
+
+// An account abroad (pilot "Cuenta en el exterior (SWIFT)"): bank name and country, SWIFT/BIC,
+// IBAN or account number, ABA for banks in the United States, optional intermediary bank. Paid in
+// USD by international transfer; Tesoreria verifies it like any other account before payment.
+async function createForeignBankAccountRecord({ supplier, payload, user, req, audit }) {
+  const foreign = {
+    swift: String(payload.swift || "").replace(/\s+/g, "").toUpperCase(),
+    iban: String(payload.iban || "").replace(/\s+/g, "").toUpperCase(),
+    aba: String(payload.aba || "").replace(/\s+/g, ""),
+    bankCountry: String(payload.bankCountry || supplier.country || "").trim(),
+    bankCity: String(payload.bankCity || "").trim(),
+    bankAddress: String(payload.bankAddress || "").trim(),
+    intermediaryBank: String(payload.intermediaryBank || "").trim(),
+    intermediarySwift: String(payload.intermediarySwift || "").replace(/\s+/g, "").toUpperCase()
+  };
+  const bankOtherName = String(payload.bankOtherName || payload.bankName || "").trim();
+  const accountNumber = String(payload.accountNumber || payload.bankAccount || foreign.iban || "").replace(/\s+/g, "").toUpperCase();
+  const currency = String(payload.accountCurrency || payload.currency || "USD").trim().toUpperCase();
+  const problems = foreignAccountProblems({ ...foreign, bankOtherName, accountNumber, currency });
+  if (problems.length) throw new AppError(422, problems[0], { field: "foreign", problems }, ERROR_CODES.VALIDATION_ERROR);
+  const accountHolderName = String(payload.accountHolderName || supplier.legalName || supplier.name || "").trim();
+  const duplicate = await SupplierBankAccount.findOne({ supplier: supplier._id, scope: "FOREIGN", "foreign.swift": foreign.swift, accountNumber, active: true });
+  if (duplicate) throw new AppError(409, "This active supplier bank account already exists.", { accountId: duplicate._id }, ERROR_CODES.CONFLICT);
+  const now = new Date();
+  const account = await SupplierBankAccount.create({
+    supplier: supplier._id, scope: "FOREIGN", bank: FOREIGN_BANK_CODE, bankOtherName, currency, accountType: "CURRENT",
+    accountHolderName, accountNumber, cci: "", foreign, active: true, preferred: false,
+    verificationStatus: "PENDING", ownershipResult: "NOT_REVIEWED", validFrom: now, createdBy: user._id, changedBy: user._id
+  });
+  supplier.bankName ||= bankOtherName;
+  supplier.bankAccount ||= accountNumber;
+  supplier.bankHistory.push({
+    bankName: bankOtherName, currency, accountType: "CURRENT", accountHolderName, bankAccount: accountNumber, cci: "", status: "ACTIVE",
+    preferred: false, verificationStatus: "PENDING", ownershipResult: "NOT_REVIEWED", validFrom: now, createdBy: user._id, changedBy: user._id
+  });
+  await supplier.save();
+  if (audit) {
+    await recordAudit({
+      entityType: "Supplier", entity: supplier, action: "BANK_ACCOUNT_ADDED", user, req, module: "SUPPLIERS",
+      newValues: { accountId: account._id, scope: "FOREIGN", bankName: bankOtherName, country: foreign.bankCountry, swift: foreign.swift, currency, verificationStatus: "PENDING" }
+    });
+  }
+  return { account, warnings: [] };
+}
+
+// Treasury already gets the review task (notifySupplierApprover). The area that follows supplier
+// registrations (pilot: Control de Gestion, "correoAltas") also gets an email with the summary when
+// SUPPLIER_REGISTRATION_NOTIFY_EMAIL is set (comma-separated) and notification emails are on.
+export function supplierRegistrationEmail(supplier, user) {
+  const national = supplier.origin !== "FOREIGN";
+  const identity = national ? `RUC ${supplier.rucDni}` : `${supplier.country} - ${supplier.foreignTaxId}`;
+  const lines = [
+    `Razon social: ${supplierName(supplier)}`,
+    `${national ? "RUC" : "Pais / identificacion tributaria"}: ${national ? supplier.rucDni : `${supplier.country} / ${supplier.foreignTaxId}`}`,
+    `Tipo: ${supplier.supplyType === "GOODS" ? "Bienes" : supplier.supplyType === "SERVICES" ? "Servicios" : "-"}${national ? ` · Sujeto a detraccion: ${supplier.detractionSubject ? "Si" : "No"}` : " · Proveedor del exterior"}`,
+    `Correo de contacto: ${supplier.email || "-"}`,
+    `Registrado por: ${user?.name || "-"}`,
+    `Motivo: ${supplier.proposalJustification || "-"}`,
+    "",
+    "Pendiente de validacion por Tesoreria."
+  ];
+  return { subject: `Nueva alta de proveedor: ${supplierName(supplier)} (${identity})`, text: lines.join("\n") };
+}
+
+async function notifyResponsibleArea(supplier, user, env = process.env) {
+  const recipients = String(env.SUPPLIER_REGISTRATION_NOTIFY_EMAIL || "").split(",").map((item) => item.trim()).filter(isValidEmail);
+  if (!recipients.length) return false;
+  const config = notificationEmailConfiguration(env);
+  if (!config.enabled) return false;
+  const transport = createEmailTransport(config);
+  try {
+    await transport.send({ from: config.from || "UMA · Gestión Financiera <no-reply@localhost>", replyTo: config.replyTo, to: recipients.join(", "), ...supplierRegistrationEmail(supplier, user) });
+  } finally {
+    transport.close?.();
+  }
+  return true;
 }
 
 export async function reusedBankWarnings({ supplierId, accountNumber, cci }) {
@@ -788,10 +894,27 @@ export async function listSuppliersPage(queryParams, user) {
   return payload;
 }
 
-export async function createSupplierProposal({ payload, files = {}, user, req }) {
+// requireContactEmail: a person registering a supplier gives its contact email (pilot: "Correo de
+// contacto" is required); Tesoreria's Excel import of the existing supplier list may omit it.
+export async function createSupplierProposal({ payload, files = {}, user, req, requireContactEmail = true }) {
   assertFieldsAreNotPresent(payload, protectedSupplierFields, "Supplier review, status and PRV fields are server-controlled.");
   assertFieldsAreNotPresent(payload, protectedBankReviewFields, "Bank review fields are Finance-controlled.");
-  const identifier = assertSupplierIdentifier(payload.rucDni || payload.identifier);
+  // National (RUC, or DNI for a person) or abroad (no domiciliado: country + tax identification).
+  const origin = String(payload.origin || "NATIONAL").trim().toUpperCase() === "FOREIGN" ? "FOREIGN" : "NATIONAL";
+  const country = String(payload.country || "").trim();
+  const foreignTaxId = String(payload.foreignTaxId || "").trim();
+  let identifier;
+  if (origin === "FOREIGN") {
+    if (!country) throw new AppError(422, "Enter the supplier's country.", { field: "country" }, ERROR_CODES.VALIDATION_ERROR);
+    if (!foreignTaxId) throw new AppError(422, "Enter the supplier's tax identification in its country.", { field: "foreignTaxId" }, ERROR_CODES.VALIDATION_ERROR);
+    identifier = foreignSupplierKey(country, foreignTaxId);
+    if (!identifier) throw new AppError(422, "Enter the supplier's tax identification in its country.", { field: "foreignTaxId" }, ERROR_CODES.VALIDATION_ERROR);
+  } else {
+    identifier = assertSupplierIdentifier(payload.rucDni || payload.identifier);
+    if (identifier.length === 11 && !isValidRuc(identifier)) throw new AppError(422, "This RUC is not valid: check its digits.", { field: "rucDni" }, ERROR_CODES.VALIDATION_ERROR);
+  }
+  const contactProblem = emailError(payload.email, { required: requireContactEmail });
+  if (contactProblem) throw new AppError(422, contactProblem, { field: "email" }, ERROR_CODES.VALIDATION_ERROR);
   if (!payload.name && !payload.legalName) {
     throw new AppError(422, "Supplier legal name is required.", { field: "legalName" }, ERROR_CODES.VALIDATION_ERROR);
   }
@@ -805,7 +928,9 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       409,
       otherDepartment
         ? "This supplier is already registered for another area. Ask Treasury to share it with your area."
-        : "A supplier with this RUC/DNI already exists. Open the existing onboarding record instead.",
+        : origin === "FOREIGN"
+          ? "A supplier with this country and tax identification already exists. Open the existing record instead."
+          : "A supplier with this RUC/DNI already exists. Open the existing onboarding record instead.",
       { supplier: duplicate._id, supplierCode: duplicate.supplierCode, homologationStatus: duplicate.homologationStatus, otherDepartment },
       ERROR_CODES.DUPLICATE_SUPPLIER
     );
@@ -820,7 +945,10 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     ? sanitizeDepartments(payload.departments)
     : [userDepartment(user)];
   const supplier = new Supplier({
-    identifierType: identifier.length === 8 ? "DNI" : "RUC",
+    origin,
+    country: origin === "FOREIGN" ? country : "",
+    foreignTaxId: origin === "FOREIGN" ? foreignTaxId : "",
+    identifierType: origin === "FOREIGN" ? "FOREIGN_TAX_ID" : identifier.length === 8 ? "DNI" : "RUC",
     rucDni: identifier,
     normalizedIdentifier: identifier,
     legalName: payload.legalName || payload.name,
@@ -836,6 +964,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     status: "PENDING_VALIDATION"
   });
   applyProposalFields(supplier, payload);
+  applyRegistrationRules(supplier, payload, user);
   // RUC/DNI is the hard duplicate key (checked above); a similar-but-not-identical legal name under a
   // different RUC/DNI is only ever an advisory, manual-review signal (Fix 1) - it never blocks creation.
   const similarNameWarning = await findSimilarNameSupplier(supplier.legalName || supplier.name);
@@ -850,7 +979,7 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
     // One account from the single-account fields, or several (e.g. one in soles and one in dollars).
     const accountPayloads = bankAccounts?.length
       ? bankAccounts.map((account) => ({ ...account, accountNumber: account.accountNumber || account.bankAccount }))
-      : payload.bankName || payload.bank || payload.bankAccount || payload.accountNumber ? [payload] : [];
+      : payload.bankName || payload.bank || payload.bankAccount || payload.accountNumber || payload.iban || payload.swift ? [payload] : [];
     for (const accountPayload of accountPayloads) {
       const result = await createBankAccountRecord({ supplier, payload: accountPayload, user, req });
       bankResult.accounts.push(result.account);
@@ -911,6 +1040,8 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
       }
     }
     // The saved proposal never depends on the notification; the approver also sees it in their tasks.
+    try { await notifyResponsibleArea(supplier, user); }
+    catch (error) { console.warn("[SUPPLIER] Registration notice failed:", error.message); }
     try { await notifySupplierApprover(supplier); }
     catch (error) { console.warn("[SUPPLIER] Approver notification failed:", error.message); }
     return { supplier, warnings, bankAccounts: bankResult.accounts.map((account) => serializeBankAccount(account, true)) };
@@ -923,6 +1054,10 @@ export async function createSupplierProposal({ payload, files = {}, user, req })
 }
 
 export async function updateSupplierProposal({ supplierId, payload, files = {}, user, req }) {
+  if (payload.email !== undefined) {
+    const problem = emailError(payload.email);
+    if (problem) throw new AppError(422, problem, { field: "email" }, ERROR_CODES.VALIDATION_ERROR);
+  }
   if (actsAsSupplierProposer(user)) {
     assertFieldsAreNotPresent(payload, protectedSupplierFields, "Solicitors cannot set supplier review, status or PRV fields.");
     assertFieldsAreNotPresent(payload, protectedBankReviewFields, "Solicitors cannot set bank review fields.");
@@ -936,8 +1071,9 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
     homologationStatus: supplier.homologationStatus,
     jefeApproval: supplier.jefeApproval?.toObject?.() || supplier.jefeApproval
   };
-  if (payload.rucDni && normalizeSupplierIdentifier(payload.rucDni) !== supplier.normalizedIdentifier) {
+  if (payload.rucDni && supplier.origin !== "FOREIGN" && normalizeSupplierIdentifier(payload.rucDni) !== supplier.normalizedIdentifier) {
     const identifier = assertSupplierIdentifier(payload.rucDni);
+    if (identifier.length === 11 && !isValidRuc(identifier)) throw new AppError(422, "This RUC is not valid: check its digits.", { field: "rucDni" }, ERROR_CODES.VALIDATION_ERROR);
     const duplicate = await Supplier.findOne({ _id: { $ne: supplier._id }, $or: [{ normalizedIdentifier: identifier }, { rucDni: identifier }] });
     if (duplicate) {
       throw new AppError(409, "RUC/DNI must be unique.", { supplier: duplicate._id }, ERROR_CODES.DUPLICATE_SUPPLIER);
@@ -946,6 +1082,7 @@ export async function updateSupplierProposal({ supplierId, payload, files = {}, 
     supplier.normalizedIdentifier = identifier;
   }
   applyProposalFields(supplier, payload);
+  applyRegistrationRules(supplier, payload, user);
   // Fix 2: a material fiscal/legal change (RUC/DNI, legal name, person type) on an already-homologated
   // supplier invalidates the jefe's approval and the homologation, so it must be approved again.
   const materialFieldsChanged = MATERIAL_SUPPLIER_FIELDS.some((field) => (supplier[field] || "") !== (oldValues[field] || ""));
@@ -1378,13 +1515,16 @@ export async function evaluateSupplierHomologation(supplierOrId) {
   const accounts = await SupplierBankAccount.find({ supplier: supplier._id, active: true });
   const issues = [];
   const add = (code, field, source, message) => issues.push({ code, field, source, message });
-  const identifier = normalizeSupplierIdentifier(supplier.normalizedIdentifier || supplier.rucDni);
-  if (!/^(\d{8}|\d{11})$/.test(identifier)) add("INVALID_SUPPLIER_IDENTIFIER", "rucDni", "Existing Supplier identifier rule", "A valid 11-digit RUC or supported 8-digit DNI is required.");
+  const foreign = supplier.origin === "FOREIGN";
+  const identifier = foreign ? String(supplier.normalizedIdentifier || supplier.rucDni || "") : normalizeSupplierIdentifier(supplier.normalizedIdentifier || supplier.rucDni);
+  if (foreign) {
+    if (!supplier.country || !supplier.foreignTaxId || !/^EXT-[A-Z0-9]+-[A-Z0-9]+$/.test(identifier)) add("INVALID_SUPPLIER_IDENTIFIER", "foreignTaxId", "Pilot supplier registration", "A supplier abroad needs its country and tax identification.");
+  } else if (!/^(\d{8}|\d{11})$/.test(identifier)) add("INVALID_SUPPLIER_IDENTIFIER", "rucDni", "Existing Supplier identifier rule", "A valid 11-digit RUC or supported 8-digit DNI is required.");
   if (!supplier.legalName && !supplier.name) add("LEGAL_NAME_MISSING", "legalName", "RCO-FOR-002 B9:D9", "Legal name is required.");
   if (!supplier.personType) add("PERSON_TYPE_MISSING", "personType", "RCO-FOR-002 E10:G10", "Person type is required.");
   if (!supplier.fiscalAddress && !supplier.taxAddress) add("FISCAL_ADDRESS_MISSING", "fiscalAddress", "RCO-FOR-002 A11:G11", "Fiscal address is required.");
-  if (!supplier.legalRepresentative) add("LEGAL_REPRESENTATIVE_MISSING", "legalRepresentative", "RCO-FOR-002 A13:D13", "Legal representative is required.");
-  if (!supplier.legalRepresentativeDocument?.type || !supplier.legalRepresentativeDocument?.number) {
+  if (!foreign && !supplier.legalRepresentative) add("LEGAL_REPRESENTATIVE_MISSING", "legalRepresentative", "RCO-FOR-002 A13:D13", "Legal representative is required.");
+  if (!foreign && (!supplier.legalRepresentativeDocument?.type || !supplier.legalRepresentativeDocument?.number)) {
     add("LEGAL_REPRESENTATIVE_DOCUMENT_MISSING", "legalRepresentativeDocument", "RCO-FOR-002 E13:G13", "Legal representative document type and number are required.");
   }
   // The supporting documents (RUC file, representative ID, bank certificate) and the compliance

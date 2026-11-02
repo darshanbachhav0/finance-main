@@ -106,6 +106,9 @@ export default function TreasuryQueue({ historyOnly = false }) {
   const [accountSelections, setAccountSelections] = useState({});
   const [bank, setBank] = useState("BBVA");
   const [currency, setCurrency] = useState("PEN");
+  // BBVA_TXT, or FOREIGN_TRANSFER: suppliers paid abroad (USD, SWIFT) go in their own Excel file.
+  const [fileFormat, setFileFormat] = useState("BBVA_TXT");
+  const foreignFile = currency === "USD" && fileFormat === "FOREIGN_TRANSFER";
   // Payments follow the university cycle (15th / 30th): default to the next cycle date.
   const todayKey = limaDateKey(new Date());
   const [paymentDate, setPaymentDate] = useState(() => nextPaymentCycleDate(new Date()));
@@ -217,6 +220,12 @@ export default function TreasuryQueue({ historyOnly = false }) {
   }
 
   // A bank file holds one currency: changing it clears the selection, so ask first.
+  function changeFileFormat(next) {
+    if (next === fileFormat) return;
+    setSelected([]);
+    setFileFormat(next);
+  }
+
   function changeCurrency(next) {
     if (next === currency) return;
     if (selected.length) setPendingCurrency(next);
@@ -349,7 +358,8 @@ export default function TreasuryQueue({ historyOnly = false }) {
   // Bulk selection: DataTable keys the checkbox column by the CXP id, and only rows with an
   // eligible account in the file currency can be selected.
   const queueRows = useMemo(() => rows.map((row) => ({ ...row, selectionKey: String(payableIdOf(row)) })), [rows]);
-  const isSelectable = (row) => !readOnly && row.paymentEligible !== false && matchingAccounts(row).length > 0;
+  const rowInFile = (row) => (row.paymentFormat === "FOREIGN_TRANSFER") === foreignFile;
+  const isSelectable = (row) => !readOnly && row.paymentEligible !== false && rowInFile(row) && matchingAccounts(row).length > 0;
   // Bank-file steps: 1 file details (an off-cycle date needs a reason), 2 selection, 3 review.
   const advancesOnly = Boolean(review?.advancesOnly);
   // An off-cycle date needs a typed reason, except for a file of advances only (the platform
@@ -360,7 +370,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
   // server refuses one. The readiness check and the file use the same selection.
   const fileAccountSelections = useMemo(() => Object.fromEntries(selected.filter(id => accountSelections[id]).map(id => [id, accountSelections[id]])), [selected, accountSelections]);
 
-  const reviewPayload = { payableIds: selected, currency, accountSelections: fileAccountSelections, paymentDate, paymentDateReason: offCycle && paymentDateReason.trim() ? paymentDateReason : undefined };
+  const reviewPayload = { payableIds: selected, currency, ...(foreignFile ? { format: "FOREIGN_TRANSFER" } : {}), accountSelections: fileAccountSelections, paymentDate, paymentDateReason: offCycle && paymentDateReason.trim() ? paymentDateReason : undefined };
   const reviewKey = JSON.stringify(reviewPayload);
   useEffect(() => {
     if (!selected.length) { setReview(null); return; }
@@ -377,7 +387,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
     try {
       const all = await queueTable.remote.fetchAll(5001);
       if (all.length > 5000) throw new Error(t("Narrow the filters to select up to 5000 payments."));
-      const eligible = all.filter(row => row.paymentEligible === true && matchingAccounts(row).length > 0);
+      const eligible = all.filter(row => row.paymentEligible === true && rowInFile(row) && matchingAccounts(row).length > 0);
       const choices = {};
       for (const row of eligible) {
         if (row.destinationLocked || row.paymentDestination) continue;
@@ -413,6 +423,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
         payableIds: selected,
         bank,
         currency,
+        ...(foreignFile ? { format: "FOREIGN_TRANSFER" } : {}),
         paymentDate,
         paymentDateReason: offCycle && paymentDateReason.trim() ? paymentDateReason : undefined,
         accountSelections: fileAccountSelections
@@ -421,7 +432,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       // The generated CXPs leave the queue; the selection is cleared so none is sent twice.
       setSelected([]);
       setActionError("");
-      notify("Bank TXT instruction created. Payment remains unconfirmed.");
+      notify(foreignFile ? "Transfers abroad file created. Payment remains unconfirmed." : "Bank TXT instruction created. Payment remains unconfirmed.");
       reloadAll();
     } catch (error) {
       setActionError(error.message);
@@ -658,6 +669,7 @@ export default function TreasuryQueue({ historyOnly = false }) {
       <label className="field"><span>{t("Payment period")}</span><select value={filters.datePreset} onChange={event => changeFilter("datePreset",event.target.value)}>{[["","All dates"],["today","Today"],["next7","Next 7 days"],["next15","Next 15 days"],["month","This month"],["custom","Custom range"]].map(([value,label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
       <label className="field"><span>{t("Status")}</span><select value={filters.paymentStatus} onChange={event => changeFilter("paymentStatus",event.target.value)}>{[["","All pending"],["ready","Ready for payment"],["pending","Pending preparation"],["dueSoon","Due soon"],["overdue","Overdue"]].map(([value,label]) => <option key={value} value={value}>{t(label)}</option>)}</select></label>
       <label className="field"><span>{t("Currency")}</span><select value={currency} onChange={event => changeCurrency(event.target.value)}><option value="PEN">PEN</option><option value="USD">USD</option></select></label>
+      {currency === "USD" && <label className="field"><span>{t("File")}</span><select value={fileFormat} onChange={event => changeFileFormat(event.target.value)}><option value="BBVA_TXT">{t("BBVA TXT (accounts in Peru)")}</option><option value="FOREIGN_TRANSFER">{t("Transfers abroad (SWIFT, Excel)")}</option></select></label>}
       {filters.datePreset === "custom" && <><label className="field"><span>{t("From")}</span><DateInput value={filters.dateFrom || ""} onChange={event => changeFilter("dateFrom",event.target.value)} /></label><label className="field"><span>{t("To")}</span><DateInput value={filters.dateTo || ""} onChange={event => changeFilter("dateTo",event.target.value)} /></label></>}
     </div>
     <details className="section-spacer"><summary>{t("More filters")}</summary><div className="treasury-essential-filters">
@@ -677,8 +689,8 @@ export default function TreasuryQueue({ historyOnly = false }) {
       <div className="filter-row"><label className="field"><span>{t("Scheduled payment date")}</span><DateInput min={todayKey} value={paymentDate} onChange={event => setPaymentDate(event.target.value)} /></label>{offCycle && !advancesOnly && <label className="field"><span>{t("Reason for paying off the payment cycle")}</span><input value={paymentDateReason} onChange={event => setPaymentDateReason(event.target.value)} /></label>}</div>
       {reviewBusy && <p role="status">{t("Checking...")}</p>}
       {review?.issues?.length > 0 && <div role="alert"><strong>{t("Correct or exclude these payments")}</strong>{review.issues.map((issue,index) => <p key={index}>{t(issue.message)} {issue.id && <button type="button" className="text-button" onClick={() => setSelected(current => current.filter(id => id !== issue.id))}>{t("Exclude")}</button>}</p>)}</div>}
-      {review?.ready && <p className="cell-note">{t("Invoice references remain separate in the BBVA TXT. The summary groups compatible destinations.")}</p>}
-      <button type="button" className="primary-button" disabled={processing || reviewBusy || !review?.ready || reasonMissing} onClick={generate}><FileDown size={16} /><span>{t("Generate TXT")}</span></button>
+      {review?.ready && <p className="cell-note">{t(foreignFile ? "One sheet per transfer with the beneficiary's SWIFT, IBAN or ABA; charges shared (SHA). It is verified before download, like a TXT." : "Invoice references remain separate in the BBVA TXT. The summary groups compatible destinations.")}</p>}
+      <button type="button" className="primary-button" disabled={processing || reviewBusy || !review?.ready || reasonMissing} onClick={generate}><FileDown size={16} /><span>{foreignFile ? t("Generate transfers abroad file") : t("Generate TXT")}</span></button>
     </div>}
 
     </div>
