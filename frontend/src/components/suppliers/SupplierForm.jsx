@@ -7,8 +7,10 @@ import ConsultaRucLink from "./ConsultaRucLink.jsx";
 import WorkflowStepper from "../WorkflowStepper.jsx";
 import { dniError, identifierError, requiredError } from "../../utils/fieldValidation.js";
 import { homologationChecklist, supplierStepProblems, supplierStepsFor } from "../../utils/supplierProposal.js";
-import { bankAccountLabel, bankAccountPayload, emptyBankAccount } from "../../utils/bankAccounts.js";
+import { bankAccountLabel, bankAccountPayload, emptyBankAccount, emptyForeignBankAccount, foreignBankAccountPayload } from "../../utils/bankAccounts.js";
 import BankAccountFields from "./BankAccountFields.jsx";
+import ForeignBankAccountFields from "./ForeignBankAccountFields.jsx";
+import { detractionAccountError, emailError } from "../../../../shared/supplierRegistration.mjs";
 import CreditDaysField from "./CreditDaysField.jsx";
 import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
 import { representativeDocumentType } from "../../../../shared/supplierSunat.mjs";
@@ -16,7 +18,11 @@ import "../../styles/supplierForm.css";
 
 // Checked when the field is left; Continue and Submit check the whole step (utils/supplierProposal.js).
 const blurChecks = {
-  rucDni: (values) => identifierError(values.rucDni),
+  rucDni: (values) => values.origin === "FOREIGN" ? "" : identifierError(values.rucDni),
+  country: (values) => values.origin === "FOREIGN" ? requiredError(values.country) : "",
+  foreignTaxId: (values) => values.origin === "FOREIGN" ? requiredError(values.foreignTaxId) : "",
+  email: (values) => emailError(values.email, { required: false }),
+  detractionAccountNumber: (values) => values.detractionSubject ? detractionAccountError(values.detractionAccountNumber, { required: true }) : "",
   legalName: (values) => requiredError(values.legalName),
   representativeDocumentNumber: (values) => values.representativeDocumentType === "DNI" ? dniError(values.representativeDocumentNumber, { required: false }) : "",
   proposalJustification: (values) => requiredError(values.proposalJustification)
@@ -29,10 +35,20 @@ function normalizeRepresentativeDocumentType(value) {
   return representativeDocumentType(value);
 }
 
-function initialValues(supplier, identifier, padronLookup) {
+function initialValues(supplier, identifier, padronLookup, origin = "NATIONAL") {
   const padron = padronLookup?.found ? padronLookup.data : null;
+  const foreign = (supplier?.origin || origin) === "FOREIGN";
+  const holder = supplier?.legalName || supplier?.name || padron?.accountHolderName || padron?.legalName || "";
   return {
-    rucDni: supplier?.rucDni || padron?.rucDni || identifier || "",
+    origin: foreign ? "FOREIGN" : "NATIONAL",
+    country: supplier?.country || "",
+    foreignTaxId: supplier?.foreignTaxId || "",
+    supplyType: supplier?.supplyType || "",
+    email: supplier?.email || "",
+    phone: supplier?.phone || "",
+    detractionSubject: Boolean(supplier?.detractionSubject),
+    detractionAccountNumber: supplier?.detractionAccount?.accountNumber || "",
+    rucDni: foreign ? "" : supplier?.rucDni || padron?.rucDni || identifier || "",
     legalName: supplier?.legalName || supplier?.name || padron?.legalName || "",
     commercialName: supplier?.commercialName || padron?.commercialName || "",
     personType: supplier?.personType || padron?.personType || "",
@@ -54,7 +70,7 @@ function initialValues(supplier, identifier, padronLookup) {
     deliveryOther: supplier?.delivery?.other || "",
     proposalJustification: supplier?.proposalJustification || "",
     // A supplier may be paid into more than one account (e.g. one in soles and one in dollars).
-    bankAccounts: [emptyBankAccount(supplier?.legalName || supplier?.name || padron?.accountHolderName || padron?.legalName || "", supplier?.currency || "PEN")]
+    bankAccounts: [foreign ? emptyForeignBankAccount(holder) : emptyBankAccount(holder, supplier?.currency || "PEN")]
   };
 }
 
@@ -131,9 +147,10 @@ function SunatStatus({ padronLookup, representativeLookup, padronData, legalName
   );
 }
 
-export default function SupplierForm({ supplier, identifier, padronLookup = null, representativeLookup = null, onRetryRepresentatives, onVerifiedSunat, includeInitialBank = false, loading = false, draftValue = null, onDraftChange, onSubmit, onCancel }) {
+export default function SupplierForm({ supplier, identifier, origin = "NATIONAL", padronLookup = null, representativeLookup = null, onRetryRepresentatives, onVerifiedSunat, includeInitialBank = false, loading = false, draftValue = null, onDraftChange, onSubmit, onCancel }) {
   const { t } = useLanguage();
-  const [form, setForm] = useState(() => restoredForm(draftValue?.form) || initialValues(supplier, identifier, padronLookup));
+  const [form, setForm] = useState(() => restoredForm(draftValue?.form) || initialValues(supplier, identifier, padronLookup, origin));
+  const foreign = form.origin === "FOREIGN";
   const steps = supplierStepsFor({ includeInitialBank });
   const [step, setStep] = useState(() => steps.includes(draftValue?.step) ? draftValue.step : "identity");
   const [completed, setCompleted] = useState([]);
@@ -216,13 +233,14 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
     setForm((current) => {
       const used = new Set(current.bankAccounts.map((account) => account.accountCurrency));
       const holder = current.bankAccounts[0]?.accountHolderName || current.legalName;
-      return { ...current, bankAccounts: [...current.bankAccounts, emptyBankAccount(holder, used.has("PEN") && !used.has("USD") ? "USD" : "PEN")] };
+      const account = current.origin === "FOREIGN" ? emptyForeignBankAccount(holder, current.country) : emptyBankAccount(holder, used.has("PEN") && !used.has("USD") ? "USD" : "PEN");
+      return { ...current, bankAccounts: [...current.bankAccounts, account] };
     });
   }
 
   function removeAccount(index) {
     setFieldErrors({});
-    setForm((current) => ({ ...current, bankAccounts: current.bankAccounts.length > 1 ? current.bankAccounts.filter((_, position) => position !== index) : [emptyBankAccount(current.legalName, current.currency)] }));
+    setForm((current) => ({ ...current, bankAccounts: current.bankAccounts.length > 1 ? current.bankAccounts.filter((_, position) => position !== index) : [current.origin === "FOREIGN" ? emptyForeignBankAccount(current.legalName, current.country) : emptyBankAccount(current.legalName, current.currency)] }));
   }
 
   const accountErrors = (index) => Object.fromEntries(Object.entries(fieldErrors).filter(([key, value]) => value && key.startsWith(`bankAccounts.${index}.`)).map(([key, value]) => [key.split(".")[2], value]));
@@ -256,30 +274,40 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
     event.preventDefault();
     // A new proposal is sent from the review step only; Enter on an earlier step continues.
     if (!supplier && step !== "review") return next();
-    if (!/^\d{8}$|^\d{11}$/.test(form.rucDni.replace(/\D/g, ""))) return showProblems({ rucDni: "Enter a valid 11-digit RUC or supported 8-digit DNI." }, "identity");
+    if (!foreign && !/^\d{8}$|^\d{11}$/.test(form.rucDni.replace(/\D/g, ""))) return showProblems({ rucDni: "Enter a valid 11-digit RUC or supported 8-digit DNI." }, "identity");
     for (const target of steps) {
-      const problems = supplierStepProblems(target, form, { includeInitialBank });
+      const problems = supplierStepProblems(target, form, { includeInitialBank, newProposal: !supplier });
       if (Object.keys(problems).length) return showProblems(problems, target);
     }
     const payload = new FormData();
-    for (const field of ["rucDni", "legalName", "commercialName", "personType", "fiscalAddress", "website", "legalRepresentative", "currency", "goodsServicesProfile", "proposalJustification"]) payload.append(field, form[field]);
+    if (!supplier) {
+      payload.append("origin", form.origin);
+      if (foreign) { payload.append("country", form.country.trim()); payload.append("foreignTaxId", form.foreignTaxId.trim()); }
+    }
+    for (const field of [...(foreign ? [] : ["rucDni", "legalRepresentative"]), "legalName", "commercialName", "personType", "fiscalAddress", "website", "currency", "goodsServicesProfile", "proposalJustification", "email", "phone", "supplyType"]) payload.append(field, form[field] || "");
+    if (!foreign) {
+      payload.append("detractionSubject", form.detractionSubject ? "true" : "false");
+      if (form.detractionSubject || form.detractionAccountNumber) payload.append("detractionAccountNumber", form.detractionAccountNumber);
+    }
     payload.append("name", form.legalName);
     payload.append("paymentTerms", JSON.stringify(form.paymentTerms?.option ? form.paymentTerms : {}));
     payload.append("location", JSON.stringify({ district: form.district, province: form.province, department: form.department, ubigeo: form.ubigeo }));
-    payload.append("legalRepresentativeDocument", JSON.stringify({ type: form.representativeDocumentType, number: form.representativeDocumentNumber }));
+    if (!foreign) payload.append("legalRepresentativeDocument", JSON.stringify({ type: form.representativeDocumentType, number: form.representativeDocumentNumber }));
     payload.append("commercialContact", JSON.stringify(form.commercialContact));
     payload.append("operationsContact", JSON.stringify(form.operationsContact));
     payload.append("delivery", JSON.stringify({ method: form.deliveryMethod, other: form.deliveryOther }));
     // Every account with a bank chosen is sent (Continue refuses an account started without one,
     // so nothing is dropped silently).
-    const accounts = includeInitialBank ? form.bankAccounts.filter((account) => account.bank).map(bankAccountPayload) : [];
+    const accounts = !includeInitialBank ? [] : foreign
+      ? form.bankAccounts.filter((account) => account.bankOtherName || account.swift).map(foreignBankAccountPayload)
+      : form.bankAccounts.filter((account) => account.bank).map(bankAccountPayload);
     if (accounts.length) payload.append("bankAccounts", JSON.stringify(accounts));
     setError("");
     await onSubmit(payload);
   }
 
   const checklist = homologationChecklist(form);
-  const accounts = form.bankAccounts.filter((account) => account.bank);
+  const accounts = form.bankAccounts.filter((account) => foreign ? account.bankOtherName || account.swift : account.bank);
   const pane = (id) => ({ "data-step": id, hidden: step !== id });
 
   return (
@@ -288,8 +316,8 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       <p className="supplier-form-legend">{t("* Required to submit.")}</p>
 
       <div {...pane("identity")}>
-        {!supplier && <><SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} onRetryRepresentatives={onRetryRepresentatives} onVerifiedSunat={onVerifiedSunat} /><SupplierSunatEvidence lookup={padronLookup} /></>}
-        {!supplier && legalRepresentatives.length > 0 && (
+        {!supplier && !foreign && <><SunatStatus padronLookup={padronLookup} representativeLookup={representativeLookup} padronData={padronData} legalName={form.legalName} onRetryRepresentatives={onRetryRepresentatives} onVerifiedSunat={onVerifiedSunat} /><SupplierSunatEvidence lookup={padronLookup} /></>}
+        {!supplier && !foreign && legalRepresentatives.length > 0 && (
           <details className="sunat-representatives" open={legalRepresentatives.length > 1 || undefined}>
             <summary>{t("Legal representatives of {ruc} - {name}").replace("{ruc}", representativeLookup.data.ruc || "").replace("{name}", representativeLookup.data.legalName || form.legalName)} ({legalRepresentatives.length})</summary>
             <p className="section-note">{t("This is what the taxpayer declared to SUNAT (Consulta RUC). It does not replace the supplier's supporting legal documents.")}</p>
@@ -310,23 +338,37 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
           </details>
         )}
 
-        <Section icon={Building2} title="Legal Identification">
+        <Section icon={Building2} title="Legal Identification" status={foreign ? "Supplier abroad (no domiciliado): paid in dollars by international transfer." : undefined}>
           <div className="form-grid supplier-form-grid">
+            {foreign ? <>
+              <label className={fieldClass("country")}><span>{t("Country")} *</span><input value={form.country} onChange={(event) => setValue("country", event.target.value)} readOnly={Boolean(supplier)} onBlur={() => checkField("country")} aria-invalid={Boolean(fieldErrors.country)} />{fieldMessage("country")}</label>
+              <label className={fieldClass("foreignTaxId")}><span>{t("Tax identification (abroad)")} *</span><input value={form.foreignTaxId} onChange={(event) => setValue("foreignTaxId", event.target.value)} readOnly={Boolean(supplier)} onBlur={() => checkField("foreignTaxId")} aria-invalid={Boolean(fieldErrors.foreignTaxId)} />{fieldMessage("foreignTaxId") || <small className="field-hint">{t("The supplier's tax number in its country (e.g. VAT, EIN, NIF).")}</small>}</label>
+            </> : <>
             <label className={fieldClass("rucDni")}><span>{t("RUC / identifier")} *</span><input value={form.rucDni} onChange={(event) => setValue("rucDni", event.target.value)} inputMode="numeric" readOnly={!supplier && Boolean(identifier)} required onBlur={() => checkField("rucDni")} aria-invalid={Boolean(fieldErrors.rucDni)} />{fieldMessage("rucDni")}</label>
+            </>}
             <label className="field"><span>{t("Person Type")}</span><select value={form.personType} onChange={(event) => setValue("personType", event.target.value)}><option value="">{t("Select")}</option><option value="LEGAL_ENTITY">{t("LEGAL_ENTITY")}</option><option value="NATURAL_PERSON_WITH_BUSINESS">{t("NATURAL_PERSON_WITH_BUSINESS")}</option></select></label>
             <label className={fieldClass("legalName", "field field-span-2")}><span>{t("Legal Name")} *</span><input value={form.legalName} onChange={(event) => setValue("legalName", event.target.value)} required onBlur={() => checkField("legalName")} aria-invalid={Boolean(fieldErrors.legalName)} />{fieldMessage("legalName")}</label>
             <label className="field field-span-2"><span>{t("Commercial Name")}</span><input value={form.commercialName} onChange={(event) => setValue("commercialName", event.target.value)} /></label>
             <label className="field field-span-2"><span>{t("Fiscal Address")}</span><input value={form.fiscalAddress} onChange={(event) => setValue("fiscalAddress", event.target.value)} /></label>
+            <label className={fieldClass("email")}><span>{t("Contact email")}{supplier ? "" : " *"}</span><input type="email" value={form.email} onChange={(event) => setValue("email", event.target.value)} onBlur={() => checkField("email")} aria-invalid={Boolean(fieldErrors.email)} />{fieldMessage("email")}</label>
+            <label className="field"><span>{t("Phone")}</span><input value={form.phone} onChange={(event) => setValue("phone", event.target.value)} inputMode="tel" /></label>
+            <label className={fieldClass("supplyType")}><span>{t("Goods or services")}{supplier ? "" : " *"}</span><select value={form.supplyType} onChange={(event) => setValue("supplyType", event.target.value)} aria-invalid={Boolean(fieldErrors.supplyType)}><option value="">{t("Select")}</option><option value="GOODS">{t("Goods")}</option><option value="SERVICES">{t("Services")}</option></select>{fieldMessage("supplyType")}</label>
+            {!foreign && <label className="field checkbox-field"><input type="checkbox" checked={form.detractionSubject} onChange={(event) => setValue("detractionSubject", event.target.checked)} /><span>{t("Subject to detraccion")}</span></label>}
+            {!foreign && form.detractionSubject && <label className={fieldClass("detractionAccountNumber")}><span>{t("Banco de la Nacion detraccion account")} *</span><input value={form.detractionAccountNumber} onChange={(event) => setValue("detractionAccountNumber", event.target.value)} inputMode="numeric" maxLength="14" onBlur={() => checkField("detractionAccountNumber")} aria-invalid={Boolean(fieldErrors.detractionAccountNumber)} />{fieldMessage("detractionAccountNumber") || <small className="field-hint">{t("11 digits. Treasury deposits the detraccion there.")}</small>}</label>}
+            {!foreign && <>
             <label className="field"><span>{t("District")}</span><input value={form.district} onChange={(event) => setValue("district", event.target.value)} /></label>
             <label className="field"><span>{t("Province")}</span><input value={form.province} onChange={(event) => setValue("province", event.target.value)} /></label>
             <label className="field"><span>{t("Department")}</span><input value={form.department} onChange={(event) => setValue("department", event.target.value)} /></label>
             <label className="field"><span>{t("SUNAT UBIGEO")}</span><input value={form.ubigeo} onChange={(event) => setValue("ubigeo", event.target.value)} inputMode="numeric" maxLength="6" /></label>
+            </>}
             <label className="field"><span>{t("Website")}</span><input type="url" value={form.website} onChange={(event) => setValue("website", event.target.value)} placeholder="https://" /></label>
+            {!foreign && <>
             <label className="field field-span-2"><span>{t("Legal Representative")}</span><input value={form.legalRepresentative} onChange={(event) => setValue("legalRepresentative", event.target.value)} /></label>
             <label className="field"><span>{t("Representative document type")}</span><select value={form.representativeDocumentType} onChange={(event) => setValue("representativeDocumentType", event.target.value)}><option value="">{t("Select")}</option><option value="DNI">DNI</option><option value="CE">CE</option><option value="PASAPORTE">{t("Passport")}</option><option value="RUC">RUC</option></select></label>
             <label className={fieldClass("representativeDocumentNumber")}><span>{t("Representative document number")}</span><input value={form.representativeDocumentNumber} onChange={(event) => setValue("representativeDocumentNumber", event.target.value)} inputMode={form.representativeDocumentType === "DNI" ? "numeric" : undefined} onBlur={() => checkField("representativeDocumentNumber")} aria-invalid={Boolean(fieldErrors.representativeDocumentNumber)} />{fieldMessage("representativeDocumentNumber")}</label>
+            </>}
           </div>
-          <SunatRepresentativeNote representative={legalRepresentatives.find(person => person.fullName === form.legalRepresentative && person.documentNumber === form.representativeDocumentNumber)} queriedAt={representativeLookup?.data?.queriedAt} />
+          {!foreign && <SunatRepresentativeNote representative={legalRepresentatives.find(person => person.fullName === form.legalRepresentative && person.documentNumber === form.representativeDocumentNumber)} queriedAt={representativeLookup?.data?.queriedAt} />}
         </Section>
       </div>
 
@@ -350,16 +392,18 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
       </div>
 
       {includeInitialBank && <div {...pane("bank")}>
-        <Section icon={Landmark} title="Bank accounts" status="Where the supplier is paid. Add one account per currency it is paid in. Accounting verifies each one before Treasury pays it.">
+        <Section icon={Landmark} title="Bank accounts" status={foreign ? "The supplier's account abroad, paid in dollars by SWIFT transfer. Treasury verifies it before paying." : "Where the supplier is paid. Add one account per currency it is paid in. Accounting verifies each one before Treasury pays it."}>
           <div className="bank-account-list">
             {form.bankAccounts.map((account, index) => (
               <div className="bank-account-card" key={account.clientId || index}>
-                <div className="bank-account-card-head"><strong>{t("Account {number}").replace("{number}", index + 1)}</strong>{(form.bankAccounts.length > 1 || account.bank) && <button type="button" className="icon-button quiet danger" onClick={() => removeAccount(index)} title={t("Remove account")} aria-label={`${t("Remove account")} ${index + 1}`}><Trash2 size={15} aria-hidden="true" /></button>}</div>
-                <BankAccountFields value={account} onChange={(patch) => setAccount(index, patch)} errors={accountErrors(index)} />
+                <div className="bank-account-card-head"><strong>{t("Account {number}").replace("{number}", index + 1)}</strong>{(form.bankAccounts.length > 1 || account.bank || account.bankOtherName) && <button type="button" className="icon-button quiet danger" onClick={() => removeAccount(index)} title={t("Remove account")} aria-label={`${t("Remove account")} ${index + 1}`}><Trash2 size={15} aria-hidden="true" /></button>}</div>
+                {foreign
+                  ? <ForeignBankAccountFields value={account} onChange={(patch) => setAccount(index, patch)} errors={accountErrors(index)} />
+                  : <BankAccountFields value={account} onChange={(patch) => setAccount(index, patch)} errors={accountErrors(index)} />}
               </div>
             ))}
           </div>
-          {form.bankAccounts.length < 4 && <button type="button" className="secondary-button" onClick={addAccount}><Plus size={16} aria-hidden="true" /><span>{t("Add another account (e.g. in dollars)")}</span></button>}
+          {form.bankAccounts.length < 4 && <button type="button" className="secondary-button" onClick={addAccount}><Plus size={16} aria-hidden="true" /><span>{t(foreign ? "Add another account" : "Add another account (e.g. in dollars)")}</span></button>}
         </Section>
       </div>}
 
@@ -367,9 +411,13 @@ export default function SupplierForm({ supplier, identifier, padronLookup = null
         <section className="supplier-form-section supplier-review">
           <header><span className="section-icon"><CheckCircle2 size={17} aria-hidden="true" /></span><div><h3>{t("Review and submit")}</h3><small>{t("Accounting reviews suppliers")}</small></div></header>
           <dl className="supplier-detail-grid">
-            <div><dt>{t("RUC / identifier")}</dt><dd>{form.rucDni || "-"}</dd></div>
+            {foreign
+              ? <div><dt>{t("Supplier abroad")}</dt><dd>{[form.country, form.foreignTaxId].filter(Boolean).join(" · ") || "-"}</dd></div>
+              : <div><dt>{t("RUC / identifier")}</dt><dd>{form.rucDni || "-"}</dd></div>}
             <div><dt>{t("Legal Name")}</dt><dd><strong>{form.legalName || "-"}</strong></dd></div>
-            <div><dt>{t("Legal Representative")}</dt><dd>{form.legalRepresentative || "-"}</dd></div>
+            <div><dt>{t("Goods or services")}</dt><dd>{form.supplyType ? t(form.supplyType === "GOODS" ? "Goods" : "Services") : "-"}{!foreign && form.detractionSubject ? ` · ${t("Subject to detraccion")}` : ""}</dd></div>
+            <div><dt>{t("Contact email")}</dt><dd>{[form.email, form.phone].filter(Boolean).join(" · ") || "-"}</dd></div>
+            {!foreign && <div><dt>{t("Legal Representative")}</dt><dd>{form.legalRepresentative || "-"}</dd></div>}
             <div><dt>{t("Commercial Contact")}</dt><dd>{[form.commercialContact.name, form.commercialContact.email].filter(Boolean).join(" · ") || "-"}</dd></div>
             <div><dt>{t("Billing Currency")}</dt><dd>{form.currency}</dd></div>
             {includeInitialBank && <div className="wide"><dt>{t("Bank accounts")}</dt><dd>{accounts.length ? accounts.map((account) => <span className="review-account" key={account.clientId}>{bankAccountLabel({ ...account, currency: account.accountCurrency }, t)}</span>) : t("Add after saving")}</dd></div>}

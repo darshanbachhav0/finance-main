@@ -95,8 +95,8 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     ]);
     const supplier = await Supplier.create({
       identifierType: "RUC",
-      rucDni: "20999999991",
-      normalizedIdentifier: "20999999991",
+      rucDni: "20999999990",
+      normalizedIdentifier: "20999999990",
       legalName: "Lifecycle Supplier SAC",
       name: "Lifecycle Supplier SAC",
       taxpayerStatus: "MANUALLY_VALIDATED",
@@ -187,13 +187,13 @@ test("production financial controls cover the canonical lifecycle", { timeout: 1
     });
 
     await t.test("5. duplicate supplier is blocked", async () => {
-      const payload = { rucDni: "20888888881", legalName: "Duplicate Test", proposalJustification: "Required for a duplicate-control test." };
+      const payload = { rucDni: "20888888889", legalName: "Duplicate Test", email: "contacto@proveedor.pe", proposalJustification: "Required for a duplicate-control test." };
       await createSupplierProposal({ payload, files: {}, user: users.solicitor, req });
       await assert.rejects(() => createSupplierProposal({ payload, files: {}, user: users.solicitor, req }), (error) => error.code === "DUPLICATE_SUPPLIER");
     });
 
     await t.test("6. supplier bank-account history is retained", async () => {
-      const historySupplier = await Supplier.create({ rucDni: "20777777771", name: "Bank History", status: "PENDING_VALIDATION" });
+      const historySupplier = await Supplier.create({ rucDni: "20777777778", name: "Bank History", status: "PENDING_VALIDATION" });
       await replaceActiveBankAccount(historySupplier, { bankName: "BCP", currency: "PEN", bankAccount: "111", cci: "00211100000000000001" }, users.accounting._id);
       await historySupplier.save();
       await replaceActiveBankAccount(historySupplier, { bankName: "BBVA", currency: "PEN", bankAccount: "333", cci: "01133300000000000001" }, users.accounting._id);

@@ -15,6 +15,10 @@ const paymentItemSchema = new mongoose.Schema(
       bankAccountId: mongoose.Schema.Types.ObjectId,
       employeeBankAccountId: mongoose.Schema.Types.ObjectId,
       bank: String,
+      bankOtherName: String,
+      // An account abroad (scope FOREIGN) is paid by SWIFT transfer (transfers-abroad file).
+      scope: String,
+      foreign: { swift: String, iban: String, aba: String, bankCountry: String, bankCity: String, bankAddress: String, intermediaryBank: String, intermediarySwift: String },
       currency: String,
       accountType: String,
       accountHolderName: String,
@@ -60,7 +64,8 @@ const paymentBatchSchema = new mongoose.Schema(
     filePath: { type: String, required: true, select: false },
     url: { type: String, required: true },
     checksum: { type: String, required: true },
-    adapterMode: { type: String, enum: ["DEMO", "CERTIFIED", "FIXED_WIDTH"], default: "DEMO" },
+    // SWIFT_EXCEL: the transfers-abroad Excel file (integrations/banks/ForeignTransferFileAdapter.js).
+    adapterMode: { type: String, enum: ["DEMO", "CERTIFIED", "FIXED_WIDTH", "SWIFT_EXCEL"], default: "DEMO" },
     paymentCount: Number,
     formatSnapshot: mongoose.Schema.Types.Mixed,
     specificationVersion: { type: String, default: "DEMO-1" },

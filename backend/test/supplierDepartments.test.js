@@ -46,12 +46,12 @@ test("one shared supplier list per department: Contabilidad, the other areas and
     const logistica = await user("Solicitante Logistica", ROLES.SOLICITOR, "Logística");
     const requester = await user("Solicitante Salud", ROLES.SOLICITOR, "Ciencias de la Salud");
     const unassigned = await user("Sin Area", ROLES.SOLICITOR);
-    const legacy = await Supplier.create({ rucDni: "20888000001", legalName: "Courier Compartido SAC", name: "Courier Compartido SAC", supplierCode: "PRV-0901", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
-    const propose = (who, ruc, legalName, extra = {}) => createSupplierProposal({ payload: { rucDni: ruc, legalName, proposalJustification: "Servicio requerido por el área", ...extra }, files: {}, user: who, req }).then((result) => result.supplier);
+    const legacy = await Supplier.create({ rucDni: "20888000004", legalName: "Courier Compartido SAC", name: "Courier Compartido SAC", supplierCode: "PRV-0901", homologationStatus: "HOMOLOGATED", status: "ACTIVE", active: true });
+    const propose = (who, ruc, legalName, extra = {}) => createSupplierProposal({ payload: { rucDni: ruc, legalName, email: "contacto@proveedor.pe", proposalJustification: "Servicio requerido por el área", ...extra }, files: {}, user: who, req }).then((result) => result.supplier);
 
     let supplierA;
     await t.test("a Contabilidad employee's supplier is in Contabilidad, without choosing it", async () => {
-      supplierA = await propose(contabilidadA, "20888000010", "Proveedor A Contabilidad SAC", { departments: JSON.stringify(["Logística"]) });
+      supplierA = await propose(contabilidadA, "20888000012", "Proveedor A Contabilidad SAC", { departments: JSON.stringify(["Logística"]) });
       assert.deepEqual(supplierA.departments, ["Contabilidad"], "the department comes from the account; a chosen one is ignored");
       assert.ok(await AuditLog.exists({ entityId: supplierA._id, action: "CREATED_PENDING_VALIDATION", "newValues.departments": ["Contabilidad"] }));
     });
@@ -64,7 +64,7 @@ test("one shared supplier list per department: Contabilidad, the other areas and
       assert.deepEqual(names(logisticaList), ["Courier Compartido SAC"]);
       assert.deepEqual(logisticaList.scope, { scoped: true, department: "Logística" });
       assert.equal((await listSuppliersPage({ search: "Proveedor A", pageSize: 50 }, logistica)).data.length, 0);
-      assert.equal((await lookupSupplierByIdentifier("20888000010", logistica)).restricted, true);
+      assert.equal((await lookupSupplierByIdentifier("20888000012", logistica)).restricted, true);
       const search = await globalSearch("Proveedor A", logistica);
       assert.deepEqual(search.groups.find((group) => group.type === "suppliers").items, []);
       const own = await globalSearch("Proveedor A", contabilidadB);
@@ -72,14 +72,14 @@ test("one shared supplier list per department: Contabilidad, the other areas and
     });
 
     await t.test("the RUC stays unique: another department is told it exists instead of duplicating it", async () => {
-      await assert.rejects(() => propose(logistica, "20888000010", "Duplicado SAC"), (error) => error.code === ERROR_CODES.DUPLICATE_SUPPLIER && error.details.otherDepartment === true);
-      await assert.rejects(() => propose(contabilidadB, "20888000010", "Duplicado SAC"), (error) => error.code === ERROR_CODES.DUPLICATE_SUPPLIER && error.details.otherDepartment === false);
-      assert.equal(await Supplier.countDocuments({ normalizedIdentifier: "20888000010" }), 1);
+      await assert.rejects(() => propose(logistica, "20888000012", "Duplicado SAC"), (error) => error.code === ERROR_CODES.DUPLICATE_SUPPLIER && error.details.otherDepartment === true);
+      await assert.rejects(() => propose(contabilidadB, "20888000012", "Duplicado SAC"), (error) => error.code === ERROR_CODES.DUPLICATE_SUPPLIER && error.details.otherDepartment === false);
+      assert.equal(await Supplier.countDocuments({ normalizedIdentifier: "20888000012" }), 1);
     });
 
     let supplierB;
     await t.test("Logística's supplier is hidden from Contabilidad, also through the API", async () => {
-      supplierB = await propose(logistica, "20888000020", "Proveedor B Logística SAC");
+      supplierB = await propose(logistica, "20888000021", "Proveedor B Logística SAC");
       assert.deepEqual(supplierB.departments, ["Logística"]);
       assert.deepEqual(names(await listSuppliersPage({ pageSize: 50 }, logistica)), ["Courier Compartido SAC", "Proveedor B Logística SAC"]);
       for (const accountant of [contabilidadA, contabilidadB]) {
@@ -123,7 +123,7 @@ test("one shared supplier list per department: Contabilidad, the other areas and
     });
 
     await t.test("Accounting opens the supplier of a submitted request from another department, never of a draft", async () => {
-      const saludSupplier = await propose(requester, "20888000030", "Laboratorio Salud SAC");
+      const saludSupplier = await propose(requester, "20888000039", "Laboratorio Salud SAC");
       assert.deepEqual(saludSupplier.departments, ["Ciencias de la Salud"]);
       await FinancialRequest.collection.insertOne({ requester: requester._id, solicitor: requester._id, supplier: saludSupplier._id, requestNumber: "SOL-2099-00001", flowType: "A1", requestType: "OPEX", currency: "PEN", status: REQUEST_STATUS.DRAFT });
       await assert.rejects(() => getSupplierDetailPayload(saludSupplier._id, contabilidadA), otherDepartment, "a draft is not Accounting's work yet");
@@ -134,7 +134,7 @@ test("one shared supplier list per department: Contabilidad, the other areas and
 
     await t.test("someone nobody gave an area is in General, apart from every other department", async () => {
       assert.equal(userDepartment(unassigned), "General");
-      const general = await propose(unassigned, "20888000040", "Proveedor General SAC");
+      const general = await propose(unassigned, "20888000047", "Proveedor General SAC");
       assert.deepEqual(general.departments, ["General"]);
       assert.ok(!canSeeSupplier(general, contabilidadA));
       assert.ok(canSeeSupplier(general, tesoreria), "Tesorería sees every department");
@@ -162,9 +162,9 @@ test("one shared supplier list per department: Contabilidad, the other areas and
     });
 
     await t.test("Treasury's own supplier is in Treasury's department unless Treasury names others", async () => {
-      assert.deepEqual((await propose(tesoreria, "20888000050", "Proveedor Tesorería SAC")).departments, ["Tesorería"]);
-      assert.deepEqual((await propose(tesoreria, "20888000051", "Proveedor Todas SAC", { departments: JSON.stringify([]) })).departments, []);
-      assert.deepEqual((await propose(tesoreria, "20888000052", "Proveedor Dos Areas SAC", { departments: JSON.stringify(["Logística", "Contabilidad"]) })).departments, ["Logística", "Contabilidad"]);
+      assert.deepEqual((await propose(tesoreria, "20888000055", "Proveedor Tesorería SAC")).departments, ["Tesorería"]);
+      assert.deepEqual((await propose(tesoreria, "20888000063", "Proveedor Todas SAC", { departments: JSON.stringify([]) })).departments, []);
+      assert.deepEqual((await propose(tesoreria, "20888000071", "Proveedor Dos Areas SAC", { departments: JSON.stringify(["Logística", "Contabilidad"]) })).departments, ["Logística", "Contabilidad"]);
     });
   } finally {
     await mongoose.connection.dropDatabase();

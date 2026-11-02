@@ -6,6 +6,7 @@ import { greetingName, greetingTemplate, pendingTaskCount } from "../utils/greet
 import { startTour, tourDone } from "../utils/tour.js";
 import { RECORD_CHANGED_EVENT } from "../hooks/useLiveEvents.js";
 import MyTasks from "../components/MyTasks.jsx";
+import ExchangeRateChip from "../components/ExchangeRateChip.jsx";
 import { CalendarClock, CircleDollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { lazy, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -131,7 +132,7 @@ export default function Dashboard() {
 
   return (
     <section>
-      <PageHeader title={greeting} description={daySummary} actions={<><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
+      <PageHeader title={greeting} description={daySummary} actions={<><ExchangeRateChip /><span className="last-updated">{t("Last updated")}: {summary?.lastUpdated ? formatDateTime(summary.lastUpdated, language) : "-"}</span><button type="button" className="icon-button" onClick={load} disabled={loading} aria-label={t("Refresh")} title={t("Refresh")}><RefreshCw className={loading ? "spin" : ""} size={16} /></button></>} />
       <Message type="error">{error}</Message>
 
       {loading && !summary && (

@@ -9,6 +9,8 @@ process.env.DOTENV_CONFIG_QUIET = "true";
 // The suite never reaches SUNAT: unless a test sets another mode, taxpayer and invoice checks use
 // the offline MOCK provider (the application's own default is SUNAT Consulta RUC).
 process.env.SUNAT_PROVIDER_MODE ||= "MOCK";
+// The suite never reaches the SBS exchange-rate sources either: rates come from fixtures.
+process.env.EXCHANGE_RATE_ONLINE = "false";
 // Test databases restart their bank-file sequences. Give each test process its
 // own storage too, so fixtures cannot collide with each other or real files.
 const storageRoot = new URL(`../../.tmp/backend-tests-${process.pid}-${Date.now()}/`, import.meta.url);

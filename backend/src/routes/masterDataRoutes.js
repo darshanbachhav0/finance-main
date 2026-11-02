@@ -39,7 +39,12 @@ bindCrud(expenseTypeRouter, expenseTypes, [P.ACCOUNTING_CODES_MANAGE], [P.ACCOUN
 
 // Tesorería and Contabilidad register the day's exchange rate.
 export const exchangeRateRouter = Router();
+// Every signed-in user reads the applicable rate; Contabilidad and Tesoreria run a sync and read
+// the synchronization history.
+exchangeRateRouter.get("/applicable", protect, exchangeRates.applicable);
 exchangeRateRouter.get("/current", protect, authorizePermission(P.ACCOUNTING_PROVISION, P.TREASURY_SCHEDULE), exchangeRates.current);
+exchangeRateRouter.post("/sync", protect, authorizePermission(P.ACCOUNTING_CODES_MANAGE, P.TREASURY_SCHEDULE), exchangeRates.sync);
+exchangeRateRouter.get("/sync-runs", protect, authorizePermission(P.ACCOUNTING_CODES_MANAGE, P.TREASURY_SCHEDULE, P.ACCOUNTING_PROVISION), exchangeRates.syncRuns);
 bindCrud(exchangeRateRouter, exchangeRates, [P.ACCOUNTING_CODES_MANAGE, P.TREASURY_SCHEDULE]);
 
 export const projectRouter = Router();

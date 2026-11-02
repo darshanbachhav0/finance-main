@@ -17,17 +17,17 @@ test("multipart supplier proposals accept unfinished person type and independent
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "dev_secret_change_me");
     async function submit(ruc, fields = {}) {
       const form = new FormData();
-      for (const [key, value] of Object.entries({ rucDni: ruc, legalName: "Test supplier", personType: "", currency: "PEN", proposalJustification: "Required services", ...fields })) form.append(key, value);
+      for (const [key, value] of Object.entries({ rucDni: ruc, legalName: "Test supplier", personType: "", currency: "PEN", email: "contacto@proveedor.pe", proposalJustification: "Required services", ...fields })) form.append(key, value);
       const response = await fetch(`http://127.0.0.1:${server.address().port}/api/suppliers`, {
         method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form
       });
       return { status: response.status, body: await response.json() };
     }
-    const withoutBank = await submit("20123456781");
+    const withoutBank = await submit("20123456786");
     assert.equal(withoutBank.status, 201, JSON.stringify(withoutBank));
     assert.equal(withoutBank.body.data.homologationStatus, "PENDING_VALIDATION");
     assert.equal(withoutBank.body.data.active, false);
-    for (const [ruc, accountCurrency] of [["20123456782", "PEN"], ["20123456783", "USD"]]) {
+    for (const [ruc, accountCurrency] of [["20123456794", "PEN"], ["20123456808", "USD"]]) {
       const result = await submit(ruc, { bankName: "BCP", accountType: "CURRENT", bankAccount: "1234567890", cci: "00245678901234567890", accountHolderName: "Test supplier", accountCurrency });
       assert.equal(result.status, 201, JSON.stringify(result));
       const supplier = await Supplier.findOne({ rucDni: ruc });
@@ -36,15 +36,15 @@ test("multipart supplier proposals accept unfinished person type and independent
       assert.equal(bank.currency, accountCurrency);
       assert.equal(bank.verificationStatus, "PENDING");
     }
-    const invalid = await submit("20123456784", { personType: "INVALID" });
+    const invalid = await submit("20123456816", { personType: "INVALID" });
     assert.equal(invalid.status, 422);
     assert.match(invalid.body.message, /person type/);
     assert.equal(invalid.body.details[0].field, "personType");
-    assert.equal(await Supplier.countDocuments({ rucDni: "20123456784" }), 0);
-    const missingCci = await submit("20123456785", { bankName: "BCP", bankAccount: "1234567890", accountCurrency: "PEN" });
+    assert.equal(await Supplier.countDocuments({ rucDni: "20123456816" }), 0);
+    const missingCci = await submit("20123456824", { bankName: "BCP", bankAccount: "1234567890", accountCurrency: "PEN" });
     assert.equal(missingCci.status, 422);
     assert.match(missingCci.body.message, /CCI/);
-    assert.equal(await Supplier.countDocuments({ rucDni: "20123456785" }), 0);
+    assert.equal(await Supplier.countDocuments({ rucDni: "20123456824" }), 0);
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (mongoose.connection.name === db) await mongoose.connection.dropDatabase();

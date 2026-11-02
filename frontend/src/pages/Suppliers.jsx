@@ -1578,7 +1578,9 @@ export default function Suppliers() {
         description={
           drawer.mode ===
           "create"
-            ? "Enter a RUC. UMA retrieves the supplier details automatically from SUNAT."
+            ? lookup.foreign
+              ? "Supplier abroad (no domiciliado): paid in dollars by international transfer."
+              : "Enter a RUC. UMA retrieves the supplier details automatically from SUNAT."
             : "Official supplier onboarding and homologation record."
         }
         onClose={
@@ -1675,6 +1677,13 @@ export default function Suppliers() {
                   }
                 </button>
               </form>
+
+              <div className="supplier-lookup-foreign">
+                <span>{t("Supplier abroad without a RUC (no domiciliado)?")}</span>
+                <button type="button" className="text-button" onClick={() => { lookupSequence.current += 1; setLookup({ ...freshLookupState(), checked: true, foreign: true }); }}>
+                  {t("Register a supplier abroad")}
+                </button>
+              </div>
 
               {
                 lookup.loading && (
@@ -1878,12 +1887,13 @@ export default function Suppliers() {
             <SupplierForm
               draftValue={entry}
               onDraftChange={setEntry}
-              key={`create-${identifier}-${supplierDraft.restoration}`}
+              key={`create-${lookup.foreign ? "abroad" : identifier}-${supplierDraft.restoration}`}
+              origin={lookup.foreign ? "FOREIGN" : "NATIONAL"}
               identifier={
                 identifier
               }
               padronLookup={
-                lookup.padron
+                lookup.foreign ? null : lookup.padron
               }
               representativeLookup={
                 lookup
@@ -2021,7 +2031,7 @@ export default function Suppliers() {
       <div className="page-shell supplier-page supplier-record-page">
         <PageHeader
           title={detail?._id === recordId ? detail.legalName || detail.name : "Supplier record"}
-          description={detail?._id === recordId ? [detail.rucDni && `RUC ${detail.rucDni}`, detail.supplierCode].filter(Boolean).join(" · ") : ""}
+          description={detail?._id === recordId ? [detail.origin === "FOREIGN" ? `${t("Supplier abroad")} · ${detail.country} ${detail.foreignTaxId}` : detail.rucDni && `RUC ${detail.rucDni}`, detail.supplierCode].filter(Boolean).join(" · ") : ""}
           actions={<Link className="text-link back-link" to="/suppliers"><ArrowLeft size={16} aria-hidden="true" /><span>{t("Back to suppliers")}</span></Link>}
         />
         <Message type="error">{drawer.open || confirmation ? "" : actionError}</Message>

@@ -42,7 +42,7 @@ assert.ok(costCenters.includes('key: "area"') && costCenters.includes("organizat
 assert.ok(users.includes("authorizedCostCenters") && users.includes("Default Cost Center"));
 
 const exchangeRates = read("../src/pages/ExchangeRates.jsx");
-assert.ok(exchangeRates.includes("currentEvidence.fallback?.used") && exchangeRates.includes("Official / authoritative"));
+assert.ok(exchangeRates.includes("rate?.fallback?.used") && exchangeRates.includes("Official / authoritative") && exchangeRates.includes("/exchange-rates/applicable"));
 
 const documents = read("../src/pages/RequestDetail.jsx");
 assert.ok(documents.includes("Current document phase") && documents.includes("phaseStatus.requirements") && documents.includes("phaseStatus.missing"));

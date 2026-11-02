@@ -88,7 +88,9 @@ export default function ResourceManager({
   renderDetails,
   detailsTitle = "Record details",
   renderHeaderActions,
-  renderBeforeTable
+  renderBeforeTable,
+  // Rows that are not edited or deactivated here (e.g. official rates), whatever the role.
+  rowLocked
 }) {
   const { t } = useLanguage();
   const { notify } = useToast();
@@ -235,8 +237,8 @@ export default function ResourceManager({
 
   const actions = (row) => [
     ...(renderDetails ? [{ label: "View details", icon: Eye, onClick: () => setDetailRow(row) }] : []),
-    ...(canEdit ? [{ label: "Edit", icon: Pencil, onClick: () => startEdit(row) }] : []),
-    ...(canDelete ? [
+    ...(canEdit && !rowLocked?.(row) ? [{ label: "Edit", icon: Pencil, onClick: () => startEdit(row) }] : []),
+    ...(canDelete && !rowLocked?.(row) ? [
       {
         label: deleteMode === "deactivate" ? "Deactivate" : "Delete permanently",
         icon: Trash2,

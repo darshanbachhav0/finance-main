@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { limaToday } from "../../shared/businessCalendar.mjs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -239,8 +240,9 @@ test("accounting fixes: SUNAT exception, periods, FX, notes, IGV, cancellation, 
       await assert.rejects(() => closeAccountingPeriod({ id: april2026._id, comments: "Attempt", user: accounting, req }), error => error.details.unpostedInvoices === 1 && error.details.incompletePayables === 1 && error.details.sourceDifference === 50);
     });
 
-    await t.test("3. processAccountsPayable uses the invoice-date exchange rate, not the request date", async () => {
-      for (const [date, rate] of [["2026-08-03", 3.7], ["2026-08-20", 3.8]]) {
+    await t.test("3. processAccountsPayable uses the SBS selling rate of the provisioning date (pilot), not the request or invoice date", async () => {
+      const today = limaToday();
+      for (const [date, rate] of [["2026-08-03", 3.7], ["2026-08-20", 3.75], [today, 3.8]]) {
         await ExchangeRate.create({ currency: "USD", date: new Date(`${date}T00:00:00Z`), period: date.slice(0, 7), rate, source: "SUNAT", providerMode: "SUNAT", authoritative: true });
       }
       const request = await makeRequest({ currency: "USD", issueDate: "2026-08-03", lines: [{ costCenter: center._id, expenseType: opex._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }] });

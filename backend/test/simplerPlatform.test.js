@@ -92,17 +92,17 @@ test("imports, payment runs, follow-ups and the weekly report", { timeout: 90000
     await t.test("suppliers: proposals pending approval, never duplicates", async () => {
       const file = await workbook([
         ["RUC/DNI", "Razón social", "Correo", "Justificación"],
-        ["20512345678", "SOFTWARE ANDINO S.A.C.", "ventas@andino.pe", ""],
-        ["20512345678", "SOFTWARE ANDINO S.A.C.", "", ""],
+        ["20512345671", "SOFTWARE ANDINO S.A.C.", "ventas@andino.pe", ""],
+        ["20512345671", "SOFTWARE ANDINO S.A.C.", "", ""],
         ["123", "MAL RUC", "", ""],
-        ["20600000001", "", "", ""]
+        ["20600000005", "", "", ""]
       ]);
       // Supplier validation moved to Treasury, so the supplier import is Treasury's too.
       await assert.rejects(() => runExcelImport({ kind: "suppliers", buffer: file, dryRun: false, user: accounting }), /cannot run this import/);
       const done = await runExcelImport({ kind: "suppliers", buffer: file, dryRun: false, user: treasury });
       assert.deepEqual([done.ok, done.failed], [1, 3]);
       assert.match(done.rows[1].message, /repeats an earlier row|already exists/);
-      const supplier = await Supplier.findOne({ rucDni: "20512345678" }).lean();
+      const supplier = await Supplier.findOne({ rucDni: "20512345671" }).lean();
       assert.equal(supplier.homologationStatus, "PENDING_VALIDATION");
       assert.equal(supplier.active, false, "an imported supplier still needs its approval before it is paid");
     });
@@ -110,7 +110,7 @@ test("imports, payment runs, follow-ups and the weekly report", { timeout: 90000
     await t.test("payment schedule: Treasury's planned date puts the payable into that payment run", async () => {
       const request = await FinancialRequest.collection.insertOne({ requestNumber: "SOL-2031-00001", status: "CONTABILIZADO", flowType: "B", requestType: "OPEX", currency: "PEN", totalAmount: 500, requester: solicitor._id });
       const later = new Date(Date.now() + 120 * DAY);
-      await AccountsPayable.collection.insertOne({ request: request.insertedId, status: "OPEN", currency: "PEN", exchangeRate: 1, penEquivalent: 500, originalAmount: 500, outstandingAmount: 500, supplierIdentifierSnapshot: "20512345678", dueDate: later, paymentPriority: "NORMAL" });
+      await AccountsPayable.collection.insertOne({ request: request.insertedId, status: "OPEN", currency: "PEN", exchangeRate: 1, penEquivalent: 500, originalAmount: 500, outstandingAmount: 500, supplierIdentifierSnapshot: "20512345671", dueDate: later, paymentPriority: "NORMAL" });
       const before = await nextPaymentRunSummary();
       assert.equal(before.count, 0, "due in four months: not in the next run");
       const nextRun = before.date;
@@ -147,7 +147,7 @@ test("imports, payment runs, follow-ups and the weekly report", { timeout: 90000
     await t.test("drafts untouched for 30 days are closed; the owner is warned 5 days before", async () => {
       const period = new Date().toISOString().slice(0, 7);
       await AccountingPeriod.create({ period, status: "OPEN" });
-      const supplier = await Supplier.findOne({ rucDni: "20512345678" }).lean();
+      const supplier = await Supplier.findOne({ rucDni: "20512345671" }).lean();
       const make = async (number, daysAgo) => {
         const request = await FinancialRequest.create({ requestNumber: number, description: "Servicio", supplier: supplier._id, requestType: "OPEX", expenseNature: "SERVICES", issueDate: new Date(), accountingPeriod: period, requester: solicitor._id, solicitor: solicitor._id, currency: "PEN", lines: [{ itemDescription: "Servicio", quantity: 1, unitOfMeasure: "SERVICE", unitPrice: 118, costCenter: center._id, netAmount: 100, igvAmount: 18, totalAmount: 118 }] });
         await FinancialRequest.collection.updateOne({ _id: request._id }, { $set: { updatedAt: new Date(Date.now() - daysAgo * DAY) } });

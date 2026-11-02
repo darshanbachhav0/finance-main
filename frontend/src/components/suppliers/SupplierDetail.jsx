@@ -31,7 +31,8 @@ import EmptyState from "../EmptyState.jsx";
 import ProtectedAssetButton from "../ProtectedAssetButton.jsx";
 import StatusBadge from "../StatusBadge.jsx";
 import BankAccountFields from "./BankAccountFields.jsx";
-import { bankAccountPayload, bankAccountProblems, emptyBankAccount } from "../../utils/bankAccounts.js";
+import ForeignBankAccountFields from "./ForeignBankAccountFields.jsx";
+import { bankAccountPayload, bankAccountProblems, emptyBankAccount, emptyForeignBankAccount, foreignBankAccountPayload, foreignBankAccountProblems } from "../../utils/bankAccounts.js";
 import { bankDisplayName } from "../../../../shared/peruBanks.mjs";
 import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
 import { automaticTaxpayerLookup } from "../../utils/sunatSource.js";
@@ -105,7 +106,9 @@ export default function SupplierDetail({
     });
     return () => cancelAnimationFrame(frame);
   }, [reviewAccount]);
-  const [bankForm, setBankForm] = useState(() => emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN"));
+  const abroad = supplier.origin === "FOREIGN";
+  const freshAccount = () => abroad ? emptyForeignBankAccount(supplier.legalName || supplier.name || "", supplier.country || "") : emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN");
+  const [bankForm, setBankForm] = useState(freshAccount);
   const [bankErrors, setBankErrors] = useState({});
   // Areas that see this supplier in their list (none: every area). Accounting / Admin choose them.
   const [editingAreas, setEditingAreas] = useState(false);
@@ -160,7 +163,7 @@ export default function SupplierDetail({
     && new Date(supplier.homologationValidUntil).getTime() < Date.now();
 
   // Drafts saved before the bank list grew kept "currency" instead of "accountCurrency".
-  const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: (saved) => setBankForm({ ...emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN"), ...saved, accountCurrency: saved?.accountCurrency || saved?.currency || supplier.currency || "PEN" }) });
+  const bankDraft = useWorkDraft({ scope: "supplier-bank", recordId: supplier._id, title: "Supplier bank account", enabled: showBankForm, value: bankForm, restore: (saved) => setBankForm({ ...freshAccount(), ...saved, accountCurrency: abroad ? "USD" : saved?.accountCurrency || saved?.currency || supplier.currency || "PEN" }) });
   const taxDraft = useWorkDraft({ scope: "supplier-tax-review", recordId: supplier._id, title: "Supplier taxpayer review", enabled: (permissions.canValidateTaxpayer || revalidationOpen) && provider.state === "MANUAL", value: taxForm, restore: setTaxForm, sourceVersion: supplier.updatedAt });
   const bankReviewDraft = useWorkDraft({ scope: "supplier-bank-review", recordId: `${supplier._id}~${reviewAccount?._id || "new"}`, title: "Supplier bank review", enabled: permissions.canVerifyBanking && Boolean(reviewAccount), value: bankReview, restore: setBankReview, sourceVersion: reviewAccount?.updatedAt });
   useDraftResume("supplier-bank-review", id => { const account = supplier.bankAccounts?.find(row => row._id === id.split("~")[1]); if (account) setReviewAccount(account); });
@@ -169,10 +172,10 @@ export default function SupplierDetail({
   async function submitBank(event) {
     event.preventDefault();
     if (!bankDraft.ready || bankDraft.status === "conflict") return;
-    const problems = bankAccountProblems(bankForm);
+    const problems = abroad ? foreignBankAccountProblems(bankForm) : bankAccountProblems(bankForm);
     setBankErrors(problems);
     if (Object.keys(problems).length) return;
-    if (await onAddBank(bankAccountPayload(bankForm))) { await bankDraft.complete(); setShowBankForm(false); setBankForm(emptyBankAccount(supplier.legalName || supplier.name || "", supplier.currency || "PEN")); }
+    if (await onAddBank(abroad ? foreignBankAccountPayload(bankForm) : bankAccountPayload(bankForm))) { await bankDraft.complete(); setShowBankForm(false); setBankForm(freshAccount()); }
   }
 
   async function submitBankReview(event) {
@@ -230,7 +233,12 @@ export default function SupplierDetail({
           </div>
         )}
         <DetailGrid>
-          <Detail label="RUC / identifier" value={supplier.rucDni} />
+          {supplier.origin === "FOREIGN"
+            ? <><Detail label="Supplier abroad" value={supplier.country} /><Detail label="Tax identification (abroad)" value={supplier.foreignTaxId} /></>
+            : <Detail label="RUC / identifier" value={supplier.rucDni} />}
+          <Detail label="Goods or services" value={supplier.supplyType ? t(supplier.supplyType === "GOODS" ? "Goods" : "Services") : ""} />
+          <Detail label="Contact email" value={[supplier.email, supplier.phone].filter(Boolean).join(" · ")} />
+          {supplier.origin !== "FOREIGN" && <Detail label="Subject to detraccion" value={supplier.detractionSubject ? `${t("Yes")} · ${t("Banco de la Nacion")} ${supplier.detractionAccount?.accountNumber || "-"}` : t("No")} />}
           <Detail label="Person Type" value={t(supplier.personType || "Not recorded")} />
           <Detail label="Legal Name" value={supplier.legalName || supplier.name} />
           <Detail label="Commercial Name" value={supplier.commercialName} />
@@ -289,7 +297,10 @@ export default function SupplierDetail({
         {showBankForm && (
           <DraftPanel busy={loading} draft={bankDraft} onDiscard={() => setShowBankForm(false)}><form className="supplier-inline-form" onSubmit={submitBank}>
             {/* "Detraction" is not offered here: the Banco de la Nación detracciones account is kept below. */}
-            <BankAccountFields value={bankForm} onChange={(patch) => { setBankErrors((current) => { const next = { ...current }; Object.keys(patch).forEach((key) => delete next[key]); return next; }); setBankForm((current) => ({ ...current, ...patch })); }} errors={bankErrors} />
+            {(() => {
+              const change = (patch) => { setBankErrors((current) => { const next = { ...current }; Object.keys(patch).forEach((key) => delete next[key]); return next; }); setBankForm((current) => ({ ...current, ...patch })); };
+              return abroad ? <ForeignBankAccountFields value={bankForm} onChange={change} errors={bankErrors} /> : <BankAccountFields value={bankForm} onChange={change} errors={bankErrors} />;
+            })()}
             <div className="inline-form-actions"><button type="button" className="secondary-button" onClick={() => setShowBankForm(false)}>{t("Cancel")}</button><button type="submit" className="primary-button" disabled={loading}><Save size={15} /><span>{t("Add pending account")}</span></button></div>
           </form></DraftPanel>
         )}
@@ -297,7 +308,9 @@ export default function SupplierDetail({
         <div className="supplier-bank-list">
           {(supplier.bankAccounts || []).map((account) => (
             <article className={`supplier-bank-row${account.active ? "" : " is-inactive"}`} key={account._id}>
-              <div className="bank-main"><strong>{bankDisplayName(account.bank, account.bankOtherName)} · {t(account.accountType === "SAVINGS" ? "Savings account" : account.accountType === "CURRENT" ? "Current account" : account.accountType)}</strong><span>{account.accountNumber || "-"}</span><small>{t("CCI")}: {account.cci || "-"}</small></div>
+              {account.scope === "FOREIGN"
+                ? <div className="bank-main"><strong>{account.bankOtherName} · {t("Account abroad")} · {account.foreign?.bankCountry}</strong><span>{account.accountNumber || "-"}</span><small>SWIFT: {account.foreign?.swift || "-"}{account.foreign?.aba ? ` · ABA: ${account.foreign.aba}` : ""}{account.foreign?.intermediaryBank ? ` · ${t("Intermediary bank")}: ${account.foreign.intermediaryBank} ${account.foreign.intermediarySwift || ""}` : ""}</small></div>
+                : <div className="bank-main"><strong>{bankDisplayName(account.bank, account.bankOtherName)} · {t(account.accountType === "SAVINGS" ? "Savings account" : account.accountType === "CURRENT" ? "Current account" : account.accountType)}</strong><span>{account.accountNumber || "-"}</span><small>{t("CCI")}: {account.cci || "-"}</small></div>}
               <div className="bank-meta"><span>{account.currency}</span><StatusBadge status={account.verificationStatus} /><StatusBadge status={account.ownershipResult} />{account.preferred && <span className="badge badge-info"><Star size={12} />{t("Preferred")}</span>}</div>
               <div className="bank-review-meta"><small>{t("Account holder")}: {account.accountHolderName || "-"}</small><small>{t("Verification source")}: {account.verificationSource || t("Not reviewed")}</small><small>{displayDate(account.verifiedAt || account.validFrom, language)}</small></div>
               {permissions.canVerifyBanking && account.active && (

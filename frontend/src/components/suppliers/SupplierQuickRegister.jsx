@@ -11,7 +11,8 @@ import ConsultaRucLink from "./ConsultaRucLink.jsx";
 import { supplierCreditDays } from "../../../../shared/invoiceFinance.mjs";
 import { representativeDocumentType } from "../../../../shared/supplierSunat.mjs";
 import SupplierSunatEvidence, { SunatRepresentativeNote } from "./SupplierSunatEvidence.jsx";
-import { dniError } from "../../utils/fieldValidation.js";
+import { dniError, identifierError } from "../../utils/fieldValidation.js";
+import { detractionAccountError, emailError } from "../../../../shared/supplierRegistration.mjs";
 import { lookupSupplierProfile } from "../../utils/supplierProfileLookup.js";
 
 // Registering a supplier without leaving the request (step 1, "Datos de proveedor"): the RUC is
@@ -36,6 +37,8 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
   const [accounts, setAccounts] = useState([emptyBankAccount("", currency)]);
   const [certificate, setCertificate] = useState(null);
   const [paymentTerms, setPaymentTerms] = useState({ option: "", days: "" });
+  // Pilot "Alta de proveedor": contact email, goods or services, and the detraccion account.
+  const [contact, setContact] = useState({ email: "", phone: "", supplyType: "", detractionSubject: false, detractionAccountNumber: "" });
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -160,7 +163,13 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
 
   async function register() {
     const problems = {};
-    if (!/^(\d{8}|\d{11})$/.test(digits(ruc))) problems.ruc = "Enter a valid 11-digit RUC or supported 8-digit DNI.";
+    const rucProblem = identifierError(digits(ruc));
+    if (rucProblem) problems.ruc = rucProblem;
+    const contactProblem = emailError(contact.email);
+    if (contactProblem) problems.email = contactProblem;
+    if (!contact.supplyType) problems.supplyType = "Choose goods or services.";
+    const detractionProblem = contact.detractionSubject ? detractionAccountError(contact.detractionAccountNumber, { required: true }) : "";
+    if (detractionProblem) problems.detractionAccountNumber = detractionProblem;
     if (!legalName.trim()) problems.legalName = "Legal name is required.";
     if (!justification.trim()) problems.justification = "Say why UMA needs this supplier.";
     const documentError = representative.documentType === "DNI" ? dniError(representative.documentNumber, { required: false }) : "";
@@ -184,6 +193,11 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
     data.append("legalRepresentative", representative.fullName.trim());
     if (representative.documentNumber) data.append("legalRepresentativeDocument", JSON.stringify({ type: representative.documentType, number: representative.documentNumber.trim() }));
     data.append("proposalJustification", justification.trim());
+    data.append("email", contact.email.trim());
+    if (contact.phone.trim()) data.append("phone", contact.phone.trim());
+    data.append("supplyType", contact.supplyType);
+    data.append("detractionSubject", contact.detractionSubject ? "true" : "false");
+    if (contact.detractionSubject) data.append("detractionAccountNumber", contact.detractionAccountNumber.trim());
     data.append("currency", accounts[0].accountCurrency || currency);
     if (paymentTerms.option) data.append("paymentTerms", JSON.stringify(paymentTerms));
     if (profile.personType) data.append("personType", profile.personType);
@@ -220,6 +234,7 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
         <input inputMode="numeric" maxLength="11" value={ruc} onChange={(event) => setRuc(digits(event.target.value))} aria-invalid={Boolean(errors.ruc)} placeholder="20XXXXXXXXX" />
         {errors.ruc ? <small className="field-error-text">{t(errors.ruc)}</small> : <small className="field-hint">{t(status === "checking" ? "Checking the registry..." : "We check whether it is already registered and fill its name from SUNAT.")}</small>}
       </label>
+      {status === "idle" && <p className="field-hint">{t("A supplier abroad (no RUC) is registered on the Suppliers page, then chosen here.")}</p>}
 
       {status === "found" && <div className="inline-alert alert-info"><CheckCircle2 size={18} aria-hidden="true" /><div><strong>{t("Already registered")}: {check.data.supplierCode ? `${check.data.supplierCode} · ` : ""}{check.data.legalName}</strong><span><StatusBadge status={check.data.homologationStatus} /></span></div><button type="button" className="primary-button" onClick={() => onUseExisting(check.data)}>{t("Use this supplier")}</button></div>}
       {status === "restricted" && <div className="inline-alert alert-warning"><div><strong>{t("Registered for another area")}: {check.data.supplierCode ? `${check.data.supplierCode} · ` : ""}{check.data.legalName}</strong><span>{t(accessAsked ? "An Admin was asked to share it with your area. You will see it in your list once they do." : "Ask Treasury to share it with your area instead of registering it again.")}</span></div>{!accessAsked && <button type="button" className="secondary-button" onClick={askAccess}>{t("Ask to share it with my area")}</button>}</div>}
@@ -246,6 +261,11 @@ export default function SupplierQuickRegister({ initialRuc = "", need = "", curr
           <label className="field"><span>{t("Representative document type")}</span><select value={representative.documentType} onChange={event => editRepresentative({ documentType: event.target.value })}><option value="">{t("Select")}</option><option value="DNI">DNI</option><option value="CE">CE</option><option value="PASAPORTE">{t("Passport")}</option><option value="RUC">RUC</option></select></label>
           <label className={`field${errors.representativeDocument ? " field-error" : ""}`}><span>{t("Representative document number")}</span><input value={representative.documentNumber} onChange={event => editRepresentative({ documentNumber: event.target.value })} inputMode={representative.documentType === "DNI" ? "numeric" : undefined} aria-invalid={Boolean(errors.representativeDocument)} />{errors.representativeDocument && <small className="field-error-text">{t(errors.representativeDocument)}</small>}</label>
           <div className="form-span-two"><SunatRepresentativeNote representative={representativeLookup.data?.representatives?.find(person => person.fullName === representative.fullName && person.documentNumber === representative.documentNumber)} queriedAt={representativeLookup.data?.queriedAt} /></div>
+          <label className={`field${errors.email ? " field-error" : ""}`}><span>{t("Contact email")} *</span><input type="email" value={contact.email} onChange={(event) => setContact((current) => ({ ...current, email: event.target.value }))} aria-invalid={Boolean(errors.email)} />{errors.email && <small className="field-error-text">{t(errors.email)}</small>}</label>
+          <label className="field"><span>{t("Phone")}</span><input value={contact.phone} inputMode="tel" onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value }))} /></label>
+          <label className={`field${errors.supplyType ? " field-error" : ""}`}><span>{t("Goods or services")} *</span><select value={contact.supplyType} onChange={(event) => setContact((current) => ({ ...current, supplyType: event.target.value }))} aria-invalid={Boolean(errors.supplyType)}><option value="">{t("Select")}</option><option value="GOODS">{t("Goods")}</option><option value="SERVICES">{t("Services")}</option></select>{errors.supplyType && <small className="field-error-text">{t(errors.supplyType)}</small>}</label>
+          <label className="field checkbox-field"><input type="checkbox" checked={contact.detractionSubject} onChange={(event) => setContact((current) => ({ ...current, detractionSubject: event.target.checked }))} /><span>{t("Subject to detraccion")}</span></label>
+          {contact.detractionSubject && <label className={`field form-span-two${errors.detractionAccountNumber ? " field-error" : ""}`}><span>{t("Banco de la Nacion detraccion account")} *</span><input value={contact.detractionAccountNumber} inputMode="numeric" maxLength="14" onChange={(event) => setContact((current) => ({ ...current, detractionAccountNumber: event.target.value }))} aria-invalid={Boolean(errors.detractionAccountNumber)} />{errors.detractionAccountNumber ? <small className="field-error-text">{t(errors.detractionAccountNumber)}</small> : <small className="field-hint">{t("11 digits. Treasury deposits the detraccion there.")}</small>}</label>}
           <label className={`field form-span-two${errors.justification ? " field-error" : ""}`}><span>{t("Reason for registering the supplier")} *</span><textarea rows="2" value={justification} onChange={(event) => setJustification(event.target.value)} aria-invalid={Boolean(errors.justification)} />{errors.justification && <small className="field-error-text">{t(errors.justification)}</small>}</label>
         </div>
 

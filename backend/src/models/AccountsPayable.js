@@ -107,6 +107,10 @@ const accountsPayableSchema = new mongoose.Schema(
       bankAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "SupplierBankAccount" },
       employeeBankAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "EmployeeReimbursementBankAccount" },
       bank: String,
+      bankOtherName: String,
+      // An account abroad (scope FOREIGN) is paid by SWIFT transfer (transfers-abroad file).
+      scope: String,
+      foreign: { swift: String, iban: String, aba: String, bankCountry: String, bankCity: String, bankAddress: String, intermediaryBank: String, intermediarySwift: String },
       currency: String,
       accountType: String,
       accountHolderName: String,

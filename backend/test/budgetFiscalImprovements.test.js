@@ -23,32 +23,34 @@ import { invoiceXml } from "./fiscalFixtures.js";
 import { tempUploadDir } from "../src/services/storageService.js";
 
 test("PEN, authoritative USD, dated fallback and immutable historical exchange evidence", async t => {
-  const unavailable = async () => { throw new Error("unavailable"); };
-  const official = date => ({ rate: 3.75, date, source: "SUNAT", providerMode: "SUNAT", authoritative: true });
+  const now = new Date("2026-09-15T15:00:00Z");
+  const none = async () => null;
+  const quiet = async () => {};
+  const official = date => ({ rate: 3.75, sellRate: 3.75, buyRate: 3.74, date: new Date(`${date}T00:00:00Z`), source: "SUNAT_SBS", providerMode: "SBS", authoritative: true });
   await t.test("PEN requires no provider or conversion", async () => {
-    const result = await resolveExchangeRateSnapshot("PEN", "2026-09-14", { lookup: unavailable, fetchRate: unavailable });
+    const result = await resolveExchangeRateSnapshot("PEN", "2026-09-14", { find: none, syncNow: quiet, now });
     assert.equal(result.rate, 1); assert.equal(result.fallback.used, false);
   });
-  await t.test("USD uses official selling rate and exact evidence", async () => {
-    const result = await resolveExchangeRateSnapshot("USD", "2026-09-14", { lookup: async () => null, fetchRate: async date => official(date) });
+  await t.test("USD uses the official SBS selling rate and exact evidence", async () => {
+    const result = await resolveExchangeRateSnapshot("USD", "2026-09-14", { find: async () => official("2026-09-14"), syncNow: quiet, now });
     assert.equal(result.rate, 3.75); assert.equal(result.authoritative, true); assert.equal(result.fallback.used, false);
   });
-  for (const [name, date, published] of [["weekend", "2026-09-13", "2026-09-11"], ["holiday / missing publication", "2026-09-14", "2026-09-11"]]) {
-    await t.test(name + " uses previous published business day", async () => {
-      const result = await resolveExchangeRateSnapshot("USD", date, { fetchRate: unavailable, lookup: async day => day.toISOString().slice(0, 10) === published ? official(published) : null });
+  for (const [name, date, published] of [["weekend", "2026-09-13", "2026-09-12"], ["Monday", "2026-09-14", "2026-09-12"]]) {
+    await t.test(name + " uses the last published rate (Friday's close, applicable from Saturday)", async () => {
+      const result = await resolveExchangeRateSnapshot("USD", date, { find: async () => official(published), syncNow: quiet, now });
       assert.equal(result.date.toISOString().slice(0, 10), published);
-      assert.equal(result.fallback.used, true); assert.equal(result.fallback.requestedDate, date); assert.equal(result.fallback.source, "SUNAT");
+      assert.equal(result.fallback.used, true); assert.equal(result.fallback.requestedDate, date); assert.equal(result.fallback.source, "SUNAT_SBS");
     });
   }
-  await t.test("BCRP reference is opt-in and never authoritative; stale or future rates fail", async () => {
-    const options = { lookup: async day => ({ rate: 3.7, date: day, source: "BCRP", providerMode: "BCRP_FALLBACK", authoritative: true }), fetchRate: unavailable };
-    await assert.rejects(() => resolveExchangeRateSnapshot("USD", "2026-09-14", { ...options, allowReference: false }), e => e.code === "EXCHANGE_RATE_MISSING");
-    const fallback = await resolveExchangeRateSnapshot("USD", "2026-09-14", { ...options, allowReference: true });
+  await t.test("reference rates are opt-in and never authoritative; stale or future rates fail", async () => {
+    const reference = async (day) => ({ rate: 3.7, date: day, source: "MANUAL", providerMode: "MANUAL", authoritative: false });
+    await assert.rejects(() => resolveExchangeRateSnapshot("USD", "2026-09-14", { find: none, findReference: reference, syncNow: quiet, now, allowReference: false }), e => e.code === "EXCHANGE_RATE_MISSING");
+    const fallback = await resolveExchangeRateSnapshot("USD", "2026-09-14", { find: none, findReference: reference, syncNow: quiet, now, allowReference: true });
     assert.equal(fallback.authoritative, false); assert.equal(fallback.fallback.used, true);
     assert.throws(() => rateSnapshot(official("2026-09-15"), "2026-09-14"));
     assert.equal(rateSnapshot({ ...official("2026-09-14"), source: "BCRP" }, "2026-09-14").authoritative, false);
-    await assert.rejects(() => resolveExchangeRateSnapshot("USD", "2026-09-14", { lookup: async () => null, fetchRate: async () => official("2026-08-01"), allowReference: false }));
-    await assert.rejects(() => fetchSunatSellingRate("2026-09-14", { provider: { getSellingExchangeRate: async () => ({ ...official("2026-09-14"), source: "BCRP" }) } }));
+    await assert.rejects(() => resolveExchangeRateSnapshot("USD", "2026-09-14", { find: async () => official("2026-08-01"), syncNow: quiet, now, allowReference: false }), e => e.code === "EXCHANGE_RATE_MISSING", "an old rate never stands in for a missing publication");
+    await assert.rejects(() => fetchSunatSellingRate("2026-09-14", { provider: { getSellingExchangeRate: async () => ({ ...official("2026-09-14"), date: "2026-09-14", source: "BCRP" }) } }));
   });
   await t.test("existing manual/BCRP snapshots are not rewritten", async () => {
     for (const source of ["MANUAL", "BCRP_FALLBACK"]) {

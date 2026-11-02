@@ -8,8 +8,11 @@ import { runPadronWorker, nextPadronCheckAt } from "../src/workers/padronWorker.
 
 test("in-process workers default on in production and can each be switched off", () => {
   const production = { NODE_ENV: "production", SUNAT_PROVIDER_MODE: "PADRON" };
-  assert.deepEqual(inProcessWorkerFlags(production), { batchInvoice: true, sla: true, padron: true, notificationEmail: false });
-  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", SUNAT_PROVIDER_MODE: "PADRON" }), { batchInvoice: false, sla: false, padron: true, notificationEmail: false });
+  assert.deepEqual(inProcessWorkerFlags(production), { batchInvoice: true, sla: true, padron: true, notificationEmail: false, exchangeRate: true });
+  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", SUNAT_PROVIDER_MODE: "PADRON" }), { batchInvoice: false, sla: false, padron: true, notificationEmail: false, exchangeRate: true });
+  // The official exchange rates are kept current wherever the server runs, unless switched off.
+  assert.equal(inProcessWorkerFlags({ ...production, EXCHANGE_RATE_SYNC_ENABLED: "false" }).exchangeRate, false);
+  assert.equal(inProcessWorkerFlags({ ...production, EXCHANGE_RATE_ONLINE: "false" }).exchangeRate, false);
   assert.equal(inProcessWorkerFlags({ ...production, BATCH_INVOICE_WORKER_ENABLED: "false" }).batchInvoice, false);
   assert.equal(inProcessWorkerFlags({ ...production, SLA_WORKER_ENABLED: "0" }).sla, false);
   assert.equal(inProcessWorkerFlags({ ...production, SUNAT_PADRON_WORKER_ENABLED: "off" }).padron, false);
@@ -26,7 +29,7 @@ test("in-process workers default on in production and can each be switched off",
   // The Padrón refresh only matters in public-Padrón mode.
   assert.equal(inProcessWorkerFlags({ NODE_ENV: "production", SUNAT_PROVIDER_MODE: "MOCK" }).padron, false);
   // Explicit opt-in outside production (the demo launcher sets these).
-  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", BATCH_INVOICE_INLINE_PROCESSING: "false", BATCH_INVOICE_WORKER_ENABLED: "true", SLA_WORKER_ENABLED: "true" }), { batchInvoice: true, sla: true, padron: true, notificationEmail: false });
+  assert.deepEqual(inProcessWorkerFlags({ NODE_ENV: "development", BATCH_INVOICE_INLINE_PROCESSING: "false", BATCH_INVOICE_WORKER_ENABLED: "true", SLA_WORKER_ENABLED: "true" }), { batchInvoice: true, sla: true, padron: true, notificationEmail: false, exchangeRate: true });
 });
 
 test("daily Padrón schedule is 03:00 Lima across midnight, month and year boundaries", () => {
