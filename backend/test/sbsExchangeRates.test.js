@@ -6,7 +6,7 @@ import ExchangeRate from "../src/models/ExchangeRate.js";
 import ExchangeRateSyncRun from "../src/models/ExchangeRateSyncRun.js";
 import Notification from "../src/models/Notification.js";
 import User from "../src/models/User.js";
-import { runExchangeRateFoundationMigration } from "../src/services/exchangeRateFoundationMigrationService.js";
+import { applyExchangeRateFoundationIfPending, runExchangeRateFoundationMigration } from "../src/services/exchangeRateFoundationMigrationService.js";
 import { resolveExchangeRateSnapshot } from "../src/services/exchangeRateService.js";
 import { expectedLatestEffectiveDate, syncOfficialExchangeRates } from "../src/services/exchangeRateSyncService.js";
 import { fetchBcrpSbsRates, fetchSunatPublishedRate, parseBcrpSbsSeries, parseSunatRateText, publishedRate } from "../src/services/sbsExchangeRateProvider.js";
@@ -146,7 +146,11 @@ test("automatic synchronization, history, alerts and the applicable rate", { tim
       const dry = await runExchangeRateFoundationMigration();
       assert.equal(dry.fictionalRatesToDeactivate, 1);
       assert.deepEqual(dry.exchangeMappingsToCreate, ["EXCHANGE_GAIN 776101", "EXCHANGE_LOSS 976101"]);
-      await runExchangeRateFoundationMigration({ apply: true });
+      // The server applies it on start-up; a later start finds nothing pending and writes nothing.
+      assert.equal((await applyExchangeRateFoundationIfPending()).applied, true);
+      const runs = await mongoose.connection.db.collection("migrationruns").find().toArray();
+      assert.equal((await applyExchangeRateFoundationIfPending()).applied, false);
+      assert.deepEqual((await mongoose.connection.db.collection("migrationruns").find().toArray()).map((run) => String(run.updatedAt)), runs.map((run) => String(run.updatedAt)));
       const fictional = await ExchangeRate.findOne({ date: new Date("2026-09-01T00:00:00Z") }).lean();
       assert.deepEqual([fictional.active, fictional.authoritative], [false, false], "kept, not deleted");
       assert.equal(await mongoose.connection.db.collection("accountingmappings").countDocuments({ purpose: { $in: ["EXCHANGE_GAIN", "EXCHANGE_LOSS"] } }), 2);

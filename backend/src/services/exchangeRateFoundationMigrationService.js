@@ -49,3 +49,12 @@ export async function runExchangeRateFoundationMigration({ apply = false, db = m
   await db.collection("migrationruns").updateOne({ key: EXCHANGE_RATE_MIGRATION_KEY }, { $set: { summary, appliedAt: now, updatedAt: now }, $setOnInsert: { createdAt: now } }, { upsert: true });
   return summary;
 }
+
+// Run by the server on start-up (server.js), so a deployment without a shell (Render free plan)
+// still gets it: it checks first and writes only when something is pending, so later starts are
+// no-ops. The exchange-rate worker then stores the official rates.
+export async function applyExchangeRateFoundationIfPending(options = {}) {
+  const pending = await runExchangeRateFoundationMigration({ ...options, apply: false });
+  if (!pending.fictionalRatesToDeactivate && !pending.ratesWithoutSellRate && !pending.exchangeMappingsToCreate.length) return { ...pending, applied: false };
+  return { ...await runExchangeRateFoundationMigration({ ...options, apply: true }), applied: true };
+}

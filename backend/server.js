@@ -12,6 +12,7 @@ import { getSunatProvider } from "./src/services/sunatService.js";
 import app from "./src/app.js";
 import { migrateRetiredRoles } from "./src/services/legacyRoleService.js";
 import { migrateLegacyPriorities } from "./src/services/legacyPriorityService.js";
+import { applyExchangeRateFoundationIfPending } from "./src/services/exchangeRateFoundationMigrationService.js";
 import { removeSignInLockout } from "./src/services/platformSettingsService.js";
 import { repairStoredFileNames } from "./src/services/fileNameRepairService.js";
 import { startInProcessWorkers, usesPublicPadron as usesPublicPadronMode } from "./src/workers/inProcessWorkers.js";
@@ -64,6 +65,10 @@ connectDB()
     const priorities = await migrateLegacyPriorities();
     const movedPriorities = Object.values(priorities).reduce((sum, count) => sum + count, 0);
     if (movedPriorities) console.log(`[PRIORITY] ${movedPriorities} request(s) moved from Alta/Media/Baja to P2/P3.`);
+    // Official SBS exchange rates: fictional seed rates are deactivated (kept) and the 776101 /
+    // 976101 exchange-difference mappings created, once; the exchange-rate worker then syncs.
+    const exchangeRates = await applyExchangeRateFoundationIfPending();
+    if (exchangeRates.applied) console.log(`[EXCHANGE RATES] Migration ${exchangeRates.key}: ${exchangeRates.fictionalRatesToDeactivate} fictional rate(s) deactivated, ${exchangeRates.exchangeMappingsToCreate.length} exchange-difference mapping(s) created.`);
     const fileNames = await repairStoredFileNames();
     if (fileNames.repaired) console.log(`[FILES] Repaired ${fileNames.repaired} uploaded file name(s) stored with the wrong encoding.`);
     const lockout = await removeSignInLockout();
